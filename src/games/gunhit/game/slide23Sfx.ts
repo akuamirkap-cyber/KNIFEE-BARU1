@@ -130,6 +130,7 @@ class Slide23Sfx {
       delay?: number;
       reverb?: number;
       lp?: number;
+      attack?: number;
     } = {},
   ) {
     try {
@@ -144,8 +145,9 @@ class Slide23Sfx {
       }
       const g = ctx.createGain();
       const peak = opts.gain ?? 0.16;
+      const atk = opts.attack ?? 0.007;
       g.gain.setValueAtTime(0.0001, t0);
-      g.gain.linearRampToValueAtTime(peak, t0 + 0.007);
+      g.gain.linearRampToValueAtTime(peak, t0 + atk);
       g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
       if (opts.lp) {
         const flt = ctx.createBiquadFilter();

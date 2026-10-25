@@ -1,25 +1,36 @@
 import React, { useEffect, useState, useRef } from 'react';
 import {
   Flame,
-  Maximize2,
-  Minimize2,
-  RotateCcw,
+  Rocket,
   Disc,
   Zap,
-  Rocket,
-  ChevronLeft,
-  ChevronRight,
+  Target,
+  Sparkles,
+  Shield,
+  Layers,
+  Crosshair,
+  Compass,
+  Wand2,
+  Gamepad2,
+  RotateCcw,
+  Maximize2,
+  Minimize2,
+  ExternalLink,
+  Smartphone,
   Play,
+  Pause,
+  X,
 } from 'lucide-react';
 
 import ScaledFrame from './components/ScaledFrame';
 import { SlideActivityProvider } from './games/shared/SlideActivity';
 import GunHitGame from './games/gunhit/App';
 
-type SlideId = 'gunhit' | 'fireworkgun' | 'rainbow' | 'obliterator';
+type SlideId = 'gunhit' | 'fireworkgun' | 'rainbow' | 'obliterator' | 'game1' | 'game2' | 'game3' | 'game4' | 'game5' | 'game6' | 'game7' | 'game8';
 
-interface GameSlide {
+export interface GameSlide {
   id: SlideId;
+  slideNumber: number;
   name: string;
   fullName: string;
   badge: string;
@@ -29,114 +40,105 @@ interface GameSlide {
   themeColor: string;
   borderColor: string;
   accentBg: string;
+  path?: string;
   render: (active: boolean) => React.ReactNode;
-}
-
-function StandbyCard({
-  name,
-  badge,
-  tagline,
-  weapons,
-  icon: Icon,
-  themeColor,
-  accentBg,
-  onActivate,
-}: {
-  name: string;
-  badge: string;
-  tagline: string;
-  weapons: string[];
-  icon: React.ElementType;
-  themeColor: string;
-  accentBg: string;
-  onActivate: () => void;
-}) {
-  return (
-    <div
-      onClick={onActivate}
-      className="w-full h-full flex flex-col items-center justify-between p-4 sm:p-5 text-center cursor-pointer bg-gradient-to-b from-neutral-900/90 via-neutral-950 to-black select-none group transition-colors hover:from-neutral-900"
-    >
-      <div className="flex flex-col items-center gap-2 mt-3 sm:mt-4">
-        <div
-          className={`w-14 h-14 rounded-2xl ${accentBg} flex items-center justify-center border border-white/10 shadow-lg group-hover:scale-105 group-hover:border-white/30 transition-all`}
-        >
-          <Icon className={`w-7 h-7 ${themeColor}`} />
-        </div>
-        <span className="text-[10px] sm:text-[11px] font-bold tracking-wider uppercase px-2.5 py-0.5 rounded-full bg-white/10 text-white/80 border border-white/10">
-          {badge}
-        </span>
-        <h3 className="text-base sm:text-lg font-black text-white mt-1 leading-tight group-hover:text-amber-300 transition-colors">
-          {name}
-        </h3>
-        <p className="text-[11px] sm:text-xs text-neutral-400 max-w-[220px] leading-relaxed line-clamp-2">
-          {tagline}
-        </p>
-      </div>
-
-      <div className="w-full max-w-[240px] py-2 px-3 rounded-xl bg-white/5 border border-white/5 flex flex-wrap justify-center gap-1 text-[10px] text-neutral-300">
-        {weapons.slice(0, 5).map((w, i) => (
-          <span key={i} className="px-1.5 py-0.5 rounded bg-black/40 border border-white/5 font-mono">
-            {w}
-          </span>
-        ))}
-      </div>
-
-      <div className="mb-3 sm:mb-4 flex flex-col items-center gap-2">
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onActivate();
-          }}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-neutral-950 font-bold text-xs shadow-lg shadow-amber-500/20 active:scale-95 transition-all cursor-pointer"
-        >
-          <Play className="w-3.5 h-3.5 fill-current" />
-          <span>Mainkan Game</span>
-        </button>
-        <span className="text-[10px] text-emerald-400 flex items-center gap-1 font-medium">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-          Standby · 0% CPU & FPS Aman
-        </span>
-      </div>
-    </div>
-  );
 }
 
 export default function App() {
   const [fullscreenId, setFullscreenId] = useState<SlideId | null>(null);
   const [activeId, setActiveId] = useState<SlideId | null>('gunhit');
+  const [columnsMode, setColumnsMode] = useState<'3-col' | '2-col' | '1-col'>('3-col');
   const [pageVisible, setPageVisible] = useState(() => !document.hidden);
+  const slideRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const iframeRefs = useRef<Record<string, HTMLIFrameElement | null>>({});
+
   const [keys, setKeys] = useState<Record<SlideId, number>>({
     gunhit: 0,
     fireworkgun: 0,
     rainbow: 0,
     obliterator: 0,
+    game1: 0,
+    game2: 0,
+    game3: 0,
+    game4: 0,
+    game5: 0,
+    game6: 0,
+    game7: 0,
+    game8: 0,
   });
 
-  const reloadGame = (id: SlideId) => {
+  const selectSlide = (id: SlideId) => {
     setActiveId(id);
+    // Notify all iframes: resume selected, pause others to guarantee 0% CPU & 60 FPS
+    slides.forEach((s) => {
+      const iframe = iframeRefs.current[s.id];
+      if (iframe?.contentWindow) {
+        try {
+          if (s.id === id) {
+            iframe.contentWindow.postMessage('GAME_RESUME', '*');
+          } else {
+            iframe.contentWindow.postMessage('GAME_PAUSE', '*');
+          }
+        } catch {
+          /* ignore cross-window communication errors */
+        }
+      }
+    });
+  };
+
+  const reloadGame = (id: SlideId) => {
+    selectSlide(id);
     setKeys((prev) => ({ ...prev, [id]: (prev[id] || 0) + 1 }));
   };
 
-  const focusGame = (id: SlideId) => {
-    setActiveId(id);
-    setFullscreenId(id);
+  const handleReloadAll = () => {
+    const updatedKeys = { ...keys };
+    (Object.keys(keys) as SlideId[]).forEach((id) => {
+      updatedKeys[id] = (keys[id] || 0) + 1;
+    });
+    setKeys(updatedKeys);
   };
 
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-
-  const scrollLeft = () => {
-    if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollBy({ left: -360, behavior: 'smooth' });
+  const scrollToSlide = (id: SlideId) => {
+    const el = slideRefs.current[id];
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
   };
 
-  const scrollRight = () => {
-    if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollBy({ left: 360, behavior: 'smooth' });
+  // Sync iframe pause/resume whenever activeId changes
+  useEffect(() => {
+    if (!pageVisible) {
+      slides.forEach((s) => {
+        const iframe = iframeRefs.current[s.id];
+        if (iframe?.contentWindow) {
+          try {
+            iframe.contentWindow.postMessage('GAME_PAUSE', '*');
+          } catch {
+            /* ignore */
+          }
+        }
+      });
+      return;
     }
-  };
 
-  // A background browser tab is paused too, including the currently selected game.
+    slides.forEach((s) => {
+      const iframe = iframeRefs.current[s.id];
+      if (iframe?.contentWindow) {
+        try {
+          if (s.id === activeId) {
+            iframe.contentWindow.postMessage('GAME_RESUME', '*');
+          } else {
+            iframe.contentWindow.postMessage('GAME_PAUSE', '*');
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+    });
+  }, [activeId, pageVisible]);
+
+  // Visibility change handling: freeze active game when browser tab is hidden
   useEffect(() => {
     const updateVisibility = () => setPageVisible(!document.hidden);
     document.addEventListener('visibilitychange', updateVisibility);
@@ -157,8 +159,9 @@ export default function App() {
   const slides: GameSlide[] = [
     {
       id: 'gunhit',
-      name: 'SGA',
-      fullName: 'Gun Hit Arcade',
+      slideNumber: 1,
+      name: 'Gun Hit Arcade (SGA)',
+      fullName: 'Gun Hit Arcade (100 Stage Quest)',
       badge: '🎯 100 Stage Quest',
       tagline: 'Game tembak sasaran terkomplit dengan puluhan senjata nyata & bos legendaris.',
       weapons: ['🔫 Pistol', '⚡ Plasma', '🏏 Cricket', '✨ Golden AK', '🤖 Mecha Boss'],
@@ -166,14 +169,17 @@ export default function App() {
       themeColor: 'text-amber-400',
       borderColor: 'border-amber-500/40 hover:border-amber-400/80 shadow-amber-950/40',
       accentBg: 'bg-amber-500/20 text-amber-400',
-      render: () => (
-        <ScaledFrame baseWidth={420} baseHeight={760}>
-          <GunHitGame key={keys.gunhit} />
-        </ScaledFrame>
+      render: (active: boolean) => (
+        <SlideActivityProvider active={active}>
+          <ScaledFrame baseWidth={420} baseHeight={760}>
+            <GunHitGame key={keys.gunhit} />
+          </ScaledFrame>
+        </SlideActivityProvider>
       ),
     },
     {
       id: 'fireworkgun',
+      slideNumber: 2,
       name: 'Firework 8-Gun',
       fullName: 'GUN HIT: 8 Senjata Seru',
       badge: '💥 8 Senjata Seru',
@@ -183,30 +189,23 @@ export default function App() {
       themeColor: 'text-orange-400',
       borderColor: 'border-orange-500/40 hover:border-orange-400/80 shadow-orange-950/40',
       accentBg: 'bg-orange-500/20 text-orange-400',
-      render: (active: boolean) =>
-        active ? (
-          <iframe
-            key={`fireworkgun-${keys.fireworkgun}`}
-            src={`${cleanBase}games/fireworkgun/index.html`}
-            title="GUN HIT: 8 Senjata Seru"
-            className="w-full h-full border-0 bg-black block"
-            allow="autoplay"
-          />
-        ) : (
-          <StandbyCard
-            name="Firework 8-Gun"
-            badge="💥 8 Senjata Seru"
-            tagline="Tembak papan berputar dengan 8 senjata: Meriam Bambu, Bazooka, RPG, Shark, dan lainnya."
-            weapons={['🎆 Firework', '🎋 Bambu', '💥 Bazooka', '🚀 RPG', '🦈 Shark', '🔫 Soaker']}
-            icon={Rocket}
-            themeColor="text-orange-400"
-            accentBg="bg-orange-500/20 text-orange-400"
-            onActivate={() => setActiveId('fireworkgun')}
-          />
-        ),
+      path: `${cleanBase}games/fireworkgun/index.html`,
+      render: (active: boolean) => (
+        <iframe
+          ref={(el) => {
+            iframeRefs.current.fireworkgun = el;
+          }}
+          key={`fireworkgun-${keys.fireworkgun}`}
+          src={`${cleanBase}games/fireworkgun/index.html?standby=${active ? '0' : '1'}`}
+          title="GUN HIT: 8 Senjata Seru"
+          className="w-full h-full border-0 bg-black block"
+          allow="autoplay"
+        />
+      ),
     },
     {
       id: 'rainbow',
+      slideNumber: 3,
       name: 'Rainbow Gun',
       fullName: 'Rainbow Gun Arcade',
       badge: '🌈 Holy Rainbow',
@@ -216,31 +215,24 @@ export default function App() {
       themeColor: 'text-cyan-400',
       borderColor: 'border-cyan-500/40 hover:border-cyan-400/80 shadow-cyan-950/40',
       accentBg: 'bg-cyan-500/20 text-cyan-400',
-      render: (active: boolean) =>
-        active ? (
-          <iframe
-            key={`rainbow-${keys.rainbow}`}
-            src={`${cleanBase}games/rainbow/index.html`}
-            title="Rainbow Gun Arcade"
-            className="w-full h-full border-0 bg-black block"
-            allow="autoplay"
-          />
-        ) : (
-          <StandbyCard
-            name="Rainbow Gun"
-            badge="🌈 Holy Rainbow"
-            tagline="PRISM-07 Holy Railgun dengan cincin pelangi dinamis mode Sway, Pulse & Chaos Boss."
-            weapons={['🌈 Prism Railgun', '🕳️ Void Black Hole']}
-            icon={Disc}
-            themeColor="text-cyan-400"
-            accentBg="bg-cyan-500/20 text-cyan-400"
-            onActivate={() => setActiveId('rainbow')}
-          />
-        ),
+      path: `${cleanBase}games/rainbow/index.html`,
+      render: (active: boolean) => (
+        <iframe
+          ref={(el) => {
+            iframeRefs.current.rainbow = el;
+          }}
+          key={`rainbow-${keys.rainbow}`}
+          src={`${cleanBase}games/rainbow/index.html?standby=${active ? '0' : '1'}`}
+          title="Rainbow Gun Arcade"
+          className="w-full h-full border-0 bg-black block"
+          allow="autoplay"
+        />
+      ),
     },
     {
       id: 'obliterator',
-      name: 'Obliterator',
+      slideNumber: 4,
+      name: 'Obliterator Hit',
       fullName: 'Obliterator Hit: DOOM',
       badge: '💥 Heavy Obliterator',
       tagline: 'Penghancur Inti Argent Core brutal! Kumpulkan gems & aktifkan Overdrive Charge.',
@@ -249,177 +241,576 @@ export default function App() {
       themeColor: 'text-rose-400',
       borderColor: 'border-rose-500/40 hover:border-rose-400/80 shadow-rose-950/40',
       accentBg: 'bg-rose-500/20 text-rose-400',
-      render: (active: boolean) =>
-        active ? (
-          <iframe
-            key={`obliterator-${keys.obliterator}`}
-            src={`${cleanBase}games/obliterator/index.html`}
-            title="Obliterator Hit: DOOM"
-            className="w-full h-full border-0 bg-black block"
-            allow="autoplay"
-          />
-        ) : (
-          <StandbyCard
-            name="Obliterator"
-            badge="💥 Heavy Obliterator"
-            tagline="Penghancur Inti Argent Core brutal! Kumpulkan gems & aktifkan Overdrive Charge."
-            weapons={['💥 BFG 9000', '⚡ Maykr Laser', '🍌 Banana', '🐝 Beehive', '🔮 Crystal']}
-            icon={Zap}
-            themeColor="text-rose-400"
-            accentBg="bg-rose-500/20 text-rose-400"
-            onActivate={() => setActiveId('obliterator')}
-          />
-        ),
+      path: `${cleanBase}games/obliterator/index.html`,
+      render: (active: boolean) => (
+        <iframe
+          ref={(el) => {
+            iframeRefs.current.obliterator = el;
+          }}
+          key={`obliterator-${keys.obliterator}`}
+          src={`${cleanBase}games/obliterator/index.html?standby=${active ? '0' : '1'}`}
+          title="Obliterator Hit: DOOM"
+          className="w-full h-full border-0 bg-black block"
+          allow="autoplay"
+        />
+      ),
+    },
+    {
+      id: 'game1',
+      slideNumber: 5,
+      name: 'Weapon Hit Arena',
+      fullName: 'Weapon Hit Arena — 2D Ballistics',
+      badge: '🎯 Arena Ballistics',
+      tagline: 'Simulasi tembakan multi-senjata dengan putaran roda dan variasi lintasan peluru 2D.',
+      weapons: ['🏹 Serpent Arrow', '⚡ Plasma Disc', '🎯 Crossbow', '🔫 Handgun'],
+      icon: Crosshair,
+      themeColor: 'text-amber-400',
+      borderColor: 'border-amber-500/40 hover:border-amber-400/80 shadow-amber-950/40',
+      accentBg: 'bg-amber-500/20 text-amber-400',
+      path: `${cleanBase}games/game-1/index.html`,
+      render: (active: boolean) => (
+        <iframe
+          ref={(el) => {
+            iframeRefs.current.game1 = el;
+          }}
+          key={`game1-${keys.game1}`}
+          src={`${cleanBase}games/game-1/index.html?standby=${active ? '0' : '1'}`}
+          title="Weapon Hit Arena"
+          className="w-full h-full border-0 bg-black block"
+          allow="autoplay; gamepad"
+        />
+      ),
+    },
+    {
+      id: 'game2',
+      slideNumber: 6,
+      name: 'Wheel Hit Ultra FX',
+      fullName: 'Weapon Wheel Hit — Ultra FX Edition',
+      badge: '🌀 Ultra FX',
+      tagline: 'Efek putaran roda ultra-vibrant dengan impact partikel neon dinamis & ragam peluru.',
+      weapons: ['✨ Neon Pulse', '⚡ Electric Bolt', '🔷 Crystal Dart', '💥 Heavy Shell'],
+      icon: Sparkles,
+      themeColor: 'text-cyan-400',
+      borderColor: 'border-cyan-500/40 hover:border-cyan-400/80 shadow-cyan-950/40',
+      accentBg: 'bg-cyan-500/20 text-cyan-400',
+      path: `${cleanBase}games/game-2/index.html`,
+      render: (active: boolean) => (
+        <iframe
+          ref={(el) => {
+            iframeRefs.current.game2 = el;
+          }}
+          key={`game2-${keys.game2}`}
+          src={`${cleanBase}games/game-2/index.html?standby=${active ? '0' : '1'}`}
+          title="Weapon Wheel Hit"
+          className="w-full h-full border-0 bg-black block"
+          allow="autoplay; gamepad"
+        />
+      ),
+    },
+    {
+      id: 'game3',
+      slideNumber: 7,
+      name: 'Elemental Arsenal',
+      fullName: 'Acid · Air Cannon · Plasma · Black Hole',
+      badge: '🧪 Elemental Weapons',
+      tagline: 'Kategori senjata elemen: Acid, Air Cannon, Plasma, dan Black Hole dengan proyektil khusus.',
+      weapons: ['🧪 Acid Blaster', '💨 Air Cannon', '⚡ Plasma Core', '🕳️ Black Hole'],
+      icon: Shield,
+      themeColor: 'text-emerald-400',
+      borderColor: 'border-emerald-500/40 hover:border-emerald-400/80 shadow-emerald-950/40',
+      accentBg: 'bg-emerald-500/20 text-emerald-400',
+      path: `${cleanBase}games/game-3/index.html`,
+      render: (active: boolean) => (
+        <iframe
+          ref={(el) => {
+            iframeRefs.current.game3 = el;
+          }}
+          key={`game3-${keys.game3}`}
+          src={`${cleanBase}games/game-3/index.html?standby=${active ? '0' : '1'}`}
+          title="Elemental Arsenal"
+          className="w-full h-full border-0 bg-black block"
+          allow="autoplay; gamepad"
+        />
+      ),
+    },
+    {
+      id: 'game4',
+      slideNumber: 8,
+      name: 'Weapon Hit 71 Senjata',
+      fullName: 'Weapon Hit — 71 Senjata (Level 1 FX)',
+      badge: '🔮 71 Senjata',
+      tagline: 'Koleksi komprehensif 71 senjata dengan animasi tembakan, proyektil, recoil, dan audio synth.',
+      weapons: ['🔫 71 Senjata', '💥 Muzzle Flash', '🎵 Synth Audio', '⚡ 7 Tipe Spawn'],
+      icon: Layers,
+      themeColor: 'text-purple-400',
+      borderColor: 'border-purple-500/40 hover:border-purple-400/80 shadow-purple-950/40',
+      accentBg: 'bg-purple-500/20 text-purple-400',
+      path: `${cleanBase}games/game-4/index.html`,
+      render: (active: boolean) => (
+        <iframe
+          ref={(el) => {
+            iframeRefs.current.game4 = el;
+          }}
+          key={`game4-${keys.game4}`}
+          src={`${cleanBase}games/game-4/index.html?standby=${active ? '0' : '1'}`}
+          title="Weapon Hit 71 Senjata"
+          className="w-full h-full border-0 bg-black block"
+          allow="autoplay; gamepad"
+        />
+      ),
+    },
+    {
+      id: 'game5',
+      slideNumber: 9,
+      name: 'Neon Ballistics',
+      fullName: 'ARSENAL - Neon Ballistics (Level 01)',
+      badge: '🔴 Neon Ballistics',
+      tagline: 'Satu roda, tujuh hit bersih, dan 17 senjata 2D dengan animasi presisi dan suara khas.',
+      weapons: ['🎯 17 Senjata', '✨ 7 Clean Hits', '🔊 Sfx Khusus', '📐 Presisi'],
+      icon: Target,
+      themeColor: 'text-rose-400',
+      borderColor: 'border-rose-500/40 hover:border-rose-400/80 shadow-rose-950/40',
+      accentBg: 'bg-rose-500/20 text-rose-400',
+      path: `${cleanBase}games/game-5/index.html`,
+      render: (active: boolean) => (
+        <iframe
+          ref={(el) => {
+            iframeRefs.current.game5 = el;
+          }}
+          key={`game5-${keys.game5}`}
+          src={`${cleanBase}games/game-5/index.html?standby=${active ? '0' : '1'}`}
+          title="Neon Ballistics"
+          className="w-full h-full border-0 bg-black block"
+          allow="autoplay; gamepad"
+        />
+      ),
+    },
+    {
+      id: 'game6',
+      slideNumber: 10,
+      name: 'Arsenal Wheel Hit Range',
+      fullName: 'Arsenal Wheel Hit — 2D Weapon FX Range',
+      badge: '🎯 Range Edition',
+      tagline: 'Galeri tembak presisi Knife Hit dengan senjata elektro, api, sci-fi, dan firearms.',
+      weapons: ['⚡ Electro', '🔥 Fire', '🚀 Sci-Fi', '🔫 Firearms', '🏹 Bow'],
+      icon: Compass,
+      themeColor: 'text-yellow-400',
+      borderColor: 'border-yellow-500/40 hover:border-yellow-400/80 shadow-yellow-950/40',
+      accentBg: 'bg-yellow-500/20 text-yellow-400',
+      path: `${cleanBase}games/game-6/index.html`,
+      render: (active: boolean) => (
+        <iframe
+          ref={(el) => {
+            iframeRefs.current.game6 = el;
+          }}
+          key={`game6-${keys.game6}`}
+          src={`${cleanBase}games/game-6/index.html?standby=${active ? '0' : '1'}`}
+          title="Arsenal Wheel Hit Range"
+          className="w-full h-full border-0 bg-black block"
+          allow="autoplay; gamepad"
+        />
+      ),
+    },
+    {
+      id: 'game7',
+      slideNumber: 11,
+      name: 'Ballistics Lab',
+      fullName: 'Arsenal FX — 2D Ballistics Lab',
+      badge: '🧪 Ballistics Lab',
+      tagline: 'Galeri efek tembakan 2D: bentuk peluru, muzzle flash, impact, dan roda putar.',
+      weapons: ['💥 Shape FX', '⚡ Flash Engine', '💥 Impact Ring', '🎯 Roda Putar'],
+      icon: Target,
+      themeColor: 'text-indigo-400',
+      borderColor: 'border-indigo-500/40 hover:border-indigo-400/80 shadow-indigo-950/40',
+      accentBg: 'bg-indigo-500/20 text-indigo-400',
+      path: `${cleanBase}games/game-7/index.html`,
+      render: (active: boolean) => (
+        <iframe
+          ref={(el) => {
+            iframeRefs.current.game7 = el;
+          }}
+          key={`game7-${keys.game7}`}
+          src={`${cleanBase}games/game-7/index.html?standby=${active ? '0' : '1'}`}
+          title="Ballistics Lab"
+          className="w-full h-full border-0 bg-black block"
+          allow="autoplay; gamepad"
+        />
+      ),
+    },
+    {
+      id: 'game8',
+      slideNumber: 12,
+      name: 'Knife-Hit Arsenal FX',
+      fullName: 'Arsenal FX – Knife-Hit Weapon Effects',
+      badge: '🐉 Knife-Hit FX',
+      tagline: 'Koleksi senjata dragon, plasmacaster, sci-fi, dan firearms dengan efek benturan tajam.',
+      weapons: ['🐉 Dragon Fang', '⚡ Plasmacaster', '🔮 Fantasy Edge', '🚀 Sci-Fi Blade'],
+      icon: Wand2,
+      themeColor: 'text-fuchsia-400',
+      borderColor: 'border-fuchsia-500/40 hover:border-fuchsia-400/80 shadow-fuchsia-950/40',
+      accentBg: 'bg-fuchsia-500/20 text-fuchsia-400',
+      path: `${cleanBase}games/game-8/index.html`,
+      render: (active: boolean) => (
+        <iframe
+          ref={(el) => {
+            iframeRefs.current.game8 = el;
+          }}
+          key={`game8-${keys.game8}`}
+          src={`${cleanBase}games/game-8/index.html?standby=${active ? '0' : '1'}`}
+          title="Knife-Hit Arsenal FX"
+          className="w-full h-full border-0 bg-black block"
+          allow="autoplay; gamepad"
+        />
+      ),
     },
   ];
 
-  const currentSlide = slides.find((s) => s.id === (fullscreenId || activeId));
+  const fullscreenSlide = slides.find((s) => s.id === fullscreenId);
 
   return (
-    <div className="relative w-screen h-screen bg-[#020408] text-white flex flex-col overflow-hidden select-none font-sans">
+    <div className="min-h-screen bg-[#04060c] text-white flex flex-col font-sans selection:bg-amber-500/30 selection:text-amber-200">
+      {/* Ambient background glows */}
       <div className="pointer-events-none fixed -top-32 left-1/4 w-[500px] h-[300px] bg-cyan-500/10 rounded-full blur-3xl" />
       <div className="pointer-events-none fixed -bottom-32 right-1/4 w-[500px] h-[300px] bg-amber-500/10 rounded-full blur-3xl" />
 
-      <header className="h-[36px] flex-shrink-0 z-30 flex items-center justify-between px-2 sm:px-4 bg-neutral-950/95 border-b border-white/10 backdrop-blur-md">
-        <div className="flex items-center gap-2 overflow-hidden">
-          <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-amber-400/20 border border-amber-400/40 text-amber-300 font-bold text-[11px] shrink-0">
-            <span>SGA + 3 SLIDE</span>
-          </span>
-          <span className="text-[11px] text-neutral-300 font-medium truncate hidden md:inline">
-            Slide Aktif: <strong className="text-white">{currentSlide?.name}</strong> · Slide lain otomatis standby (0% CPU, FPS 60 mulus)
-          </span>
+      {/* Top Header Bar */}
+      <header className="sticky top-0 z-40 bg-[#07090e]/95 backdrop-blur-md border-b border-white/10 px-3 sm:px-6 py-3">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+          {/* Brand & Stats */}
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg shadow-orange-500/20 shrink-0">
+              <Gamepad2 className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-base sm:text-lg font-black tracking-tight text-white flex items-center gap-1.5">
+                  GAME ARCADE HUB
+                </h1>
+                <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  12 Slides Live
+                </span>
+              </div>
+              <p className="text-xs text-neutral-400">
+                Semua slide menampilkan grafik asli gamenya · Hanya game aktif yang bergerak (FPS 60 aman & 0% CPU standby)
+              </p>
+            </div>
+          </div>
+
+          {/* Quick Toolbar */}
+          <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end">
+            {/* View Mode Toggle: 3 Kolom (Default), 2 Kolom, 1 Kolom */}
+            <div className="inline-flex rounded-xl bg-slate-900 border border-white/10 p-1">
+              <button
+                onClick={() => setColumnsMode('3-col')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  columnsMode === '3-col'
+                    ? 'bg-amber-400 text-neutral-950 shadow-sm'
+                    : 'text-neutral-400 hover:text-white'
+                }`}
+                title="Tampilkan 3 Kolom ke Kanan (3 baris ke kanan, sisanya ke bawah)"
+              >
+                3 Kolom (Default)
+              </button>
+              <button
+                onClick={() => setColumnsMode('2-col')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  columnsMode === '2-col'
+                    ? 'bg-amber-400 text-neutral-950 shadow-sm'
+                    : 'text-neutral-400 hover:text-white'
+                }`}
+                title="Tampilkan 2 Kolom"
+              >
+                2 Kolom
+              </button>
+              <button
+                onClick={() => setColumnsMode('1-col')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  columnsMode === '1-col'
+                    ? 'bg-amber-400 text-neutral-950 shadow-sm'
+                    : 'text-neutral-400 hover:text-white'
+                }`}
+                title="Tampilkan 1 Kolom Fokus"
+              >
+                1 Kolom
+              </button>
+            </div>
+
+            {/* Reset All */}
+            <button
+              onClick={handleReloadAll}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-white/5 hover:bg-white/10 text-neutral-200 hover:text-white rounded-xl border border-white/10 transition-colors active:scale-95 cursor-pointer"
+              title="Muat ulang seluruh 12 game"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Reset Semua</span>
+            </button>
+          </div>
         </div>
 
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          {fullscreenId !== null ? (
-            <>
-              <span className="text-xs text-amber-300 font-bold hidden sm:inline mr-1">
-                {currentSlide?.fullName}
-              </span>
+        {/* Quick Slide Navigation Bar */}
+        <div className="max-w-7xl mx-auto mt-2 pt-2 border-t border-white/5 flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
+          <span className="text-[11px] font-semibold text-neutral-400 shrink-0 mr-1 flex items-center gap-1">
+            <Layers className="w-3 h-3 text-amber-400" /> Lompat:
+          </span>
+          {slides.map((s) => {
+            const isCur = activeId === s.id;
+            return (
               <button
-                onClick={() => reloadGame(fullscreenId)}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-md border border-white/20 bg-white/10 text-white font-bold text-xs hover:bg-white/20 transition cursor-pointer"
-                title="Restart Game Ini"
+                key={s.id}
+                onClick={() => {
+                  scrollToSlide(s.id);
+                  selectSlide(s.id);
+                }}
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors shrink-0 flex items-center gap-1 cursor-pointer border ${
+                  isCur
+                    ? 'bg-amber-400 text-neutral-950 border-amber-300 shadow-sm'
+                    : 'bg-white/5 hover:bg-white/15 text-neutral-300 hover:text-white border-white/5'
+                }`}
               >
-                <RotateCcw className="w-3 h-3" /> <span className="hidden sm:inline">Restart</span>
-              </button>
-              <button
-                onClick={() => setFullscreenId(null)}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-amber-400 text-neutral-950 font-bold text-xs hover:bg-amber-300 transition cursor-pointer"
-              >
-                <Minimize2 className="w-3 h-3" />
-                <span>Semua Slide</span>
-              </button>
-            </>
-          ) : (
-            <>
-              <div className="flex items-center gap-1 mr-1">
-                <button
-                  onClick={scrollLeft}
-                  className="p-1 rounded bg-white/5 hover:bg-white/15 text-neutral-300 hover:text-white transition cursor-pointer"
-                  title="Geser Kiri"
+                <span
+                  className={`w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-bold ${
+                    isCur ? 'bg-neutral-950 text-amber-400' : 'bg-neutral-800 text-amber-400'
+                  }`}
                 >
-                  <ChevronLeft className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  onClick={scrollRight}
-                  className="p-1 rounded bg-white/5 hover:bg-white/15 text-neutral-300 hover:text-white transition cursor-pointer"
-                  title="Geser Kanan"
-                >
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-              <span className="text-[11px] text-neutral-400 font-mono hidden lg:inline">
-                Pilih slide untuk mainkan · Klik ⤢ untuk perbesar
-              </span>
-            </>
-          )}
+                  {s.slideNumber}
+                </span>
+                <span className="max-w-[100px] truncate">{s.name}</span>
+              </button>
+            );
+          })}
         </div>
       </header>
 
-      {/* Slide Carousel Track: SGA on the far left, followed by the slides to its right */}
-      <main
-        ref={scrollContainerRef}
-        className="relative flex-1 w-full h-[calc(100vh-36px)] p-1.5 sm:p-2 flex items-center justify-start overflow-x-auto overflow-y-hidden scroll-smooth"
-      >
+      {/* Main Content Area: 3 Columns Grid by Default */}
+      <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-5 lg:p-6">
+        {/* Helper Banner */}
+        <div className="mb-6 p-4 rounded-2xl bg-gradient-to-r from-amber-950/30 via-slate-900/60 to-slate-900/40 border border-amber-500/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20 shrink-0">
+              <Smartphone className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-xs sm:text-sm font-bold text-neutral-200">
+                Tampilan Awal Asli di Setiap Slide (3 Baris ke Kanan, Sisanya ke Bawah)
+              </p>
+              <p className="text-xs text-neutral-400 mt-0.5">
+                Setiap slide menampilkan visual awal game yang sebenarnya. Game yang tidak dipencet otomatis diam/standby (0% CPU, FPS aman). Cukup <span className="text-amber-300 font-semibold">klik/pencet slide</span> untuk langsung mulai bermain!
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 text-xs font-mono text-amber-400/90 px-3 py-1.5 rounded-xl bg-black/40 border border-white/5 shrink-0">
+            <span>3 Kolom ke Kanan</span>
+            <span>•</span>
+            <span>Total 12 Game</span>
+          </div>
+        </div>
+
+        {/* The Grid: 3 columns across on desktop/laptop, continuing downwards */}
         <div
-          className="h-full w-max flex-shrink-0 mx-auto flex items-center gap-2 sm:gap-2.5 md:gap-3"
-          style={{ maxHeight: 'calc(100vh - 44px)' }}
+          className={`grid gap-6 sm:gap-7 ${
+            columnsMode === '3-col'
+              ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
+              : columnsMode === '2-col'
+              ? 'grid-cols-1 md:grid-cols-2'
+              : 'grid-cols-1 max-w-xl mx-auto'
+          }`}
         >
-          {slides.map((slide, idx) => {
-            const Icon = slide.icon;
-            const expanded = fullscreenId === slide.id;
-            const active = activeId === slide.id && pageVisible && (fullscreenId === null || expanded);
+          {slides.map((slide) => {
+            const isPlaying = activeId === slide.id && pageVisible;
 
             return (
               <div
                 key={slide.id}
-                onPointerDownCapture={() => setActiveId(slide.id)}
-                onFocusCapture={() => setActiveId(slide.id)}
-                className={`group relative aspect-[9/16] flex-shrink-0 rounded-2xl border-2 ${
-                  expanded
-                    ? 'border-amber-400 shadow-[0_0_80px_rgba(251,191,36,0.3)]'
-                    : active
-                    ? `${slide.borderColor} ring-2 ring-amber-400/50`
-                    : 'border-white/10 hover:border-white/30'
-                } bg-neutral-950 shadow-2xl flex flex-col overflow-hidden transition-[border-color,box-shadow] duration-200`}
-                style={{
-                  height: 'min(calc(100vh - 48px), calc((100vw - 16px) * 16 / 9))',
-                  display: fullscreenId !== null && !expanded ? 'none' : undefined,
+                ref={(el) => {
+                  slideRefs.current[slide.id] = el;
                 }}
+                className={`flex flex-col bg-slate-900/80 rounded-3xl border ${
+                  isPlaying
+                    ? 'border-amber-400 shadow-[0_0_30px_rgba(251,191,36,0.28)] ring-2 ring-amber-400/40'
+                    : 'border-white/10 hover:border-white/30'
+                } overflow-hidden shadow-2xl transition-all duration-200 group`}
               >
-                <div
-                  className={`h-[28px] flex-shrink-0 px-2.5 ${active ? 'bg-neutral-900/95' : 'bg-neutral-950/90'} border-b border-white/10 flex items-center justify-between z-20 text-[11px]`}
-                  style={{ display: expanded ? 'none' : undefined }}
-                >
-                  <div className="flex items-center gap-1.5 truncate">
-                    <span className="text-[10px] font-mono px-1 py-0.2 rounded bg-white/10 text-neutral-300">
-                      #{idx + 1}
+                {/* Slide Header Bar */}
+                <div className="px-3.5 py-2.5 bg-slate-950/90 border-b border-white/10 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="px-2 py-0.5 rounded-md text-[11px] font-mono font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0">
+                      SLIDE {String(slide.slideNumber).padStart(2, '0')}
                     </span>
-                    <Icon className={`w-3.5 h-3.5 ${slide.themeColor} flex-shrink-0`} />
-                    <span
-                      className="font-bold text-white truncate text-xs"
-                      title={slide.fullName}
-                      aria-label={`${slide.fullName} (${slide.name})`}
-                    >
-                      {slide.name}
-                    </span>
-                    {active ? (
-                      <span className="ml-1 h-1.5 w-1.5 rounded-full bg-emerald-400 shrink-0 animate-ping" title="Sedang Aktif" />
-                    ) : (
-                      <span className="ml-1 text-[9px] text-neutral-500 font-mono">standby</span>
-                    )}
+                    <div className="min-w-0">
+                      <h2 className="text-xs sm:text-sm font-bold text-white truncate group-hover:text-amber-300 transition-colors">
+                        {slide.name}
+                      </h2>
+                      <p className="text-[10.5px] text-neutral-400 truncate">
+                        {slide.badge}
+                      </p>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1 flex-shrink-0">
+
+                  {/* Actions for this specific slide */}
+                  <div className="flex items-center gap-1 shrink-0">
                     <button
                       onClick={() => reloadGame(slide.id)}
-                      className="p-1 rounded hover:bg-white/15 text-neutral-400 hover:text-white transition cursor-pointer"
-                      title={`Restart ${slide.fullName}`}
+                      className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-neutral-300 hover:text-white transition-colors cursor-pointer"
+                      title="Reset game ini"
                     >
-                      <RotateCcw className="w-3 h-3" />
+                      <RotateCcw className="w-3.5 h-3.5" />
                     </button>
                     <button
-                      onClick={() => focusGame(slide.id)}
-                      className="p-1 rounded hover:bg-white/15 text-neutral-400 hover:text-white transition cursor-pointer"
-                      title={`Perbesar ${slide.fullName}`}
+                      onClick={() => {
+                        selectSlide(slide.id);
+                        setFullscreenId(slide.id);
+                      }}
+                      className="p-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 hover:text-amber-300 border border-amber-500/20 transition-colors cursor-pointer"
+                      title="Buka Layar Penuh"
                     >
-                      <Maximize2 className="w-3 h-3" />
+                      <Maximize2 className="w-3.5 h-3.5" />
                     </button>
+                    {slide.path && (
+                      <a
+                        href={slide.path}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-neutral-300 hover:text-white transition-colors"
+                        title="Buka di tab baru"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    )}
                   </div>
                 </div>
 
-                <div
-                  className={`relative flex-1 min-h-0 w-full overflow-hidden bg-black flex items-center justify-center ${
-                    active ? '' : 'slide-paused'
-                  }`}
-                >
-                  <SlideActivityProvider active={active}>{slide.render(active)}</SlideActivityProvider>
+                {/* 9:16 Slide Container */}
+                <div className="p-2 sm:p-3 bg-black/40 flex items-center justify-center flex-1">
+                  <div className="w-full max-w-[380px] aspect-[9/16] relative rounded-2xl overflow-hidden shadow-inner border border-white/15 bg-black">
+                    {/* Simulated Phone Bezel Gloss */}
+                    <div className="absolute inset-0 pointer-events-none rounded-2xl ring-1 ring-white/10 z-20" />
+
+                    {/* The Live Interactive Game (Always mounted so the initial canvas visual is rendered!) */}
+                    {slide.render(isPlaying)}
+
+                    {/* Standby Visual Overlay: Transparent so the real game visuals behind it are 100% visible! */}
+                    {!isPlaying && (
+                      <div
+                        onClick={() => selectSlide(slide.id)}
+                        className="absolute inset-0 z-30 cursor-pointer bg-black/25 hover:bg-black/10 transition-colors flex flex-col items-center justify-between p-4 group/standby select-none"
+                      >
+                        {/* Standby Top Indicator */}
+                        <div className="w-full flex justify-between items-center">
+                          <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-black/75 text-amber-300 border border-white/15 backdrop-blur-md shadow-md">
+                            SLIDE {String(slide.slideNumber).padStart(2, '0')}
+                          </span>
+                          <span className="text-[10px] font-semibold text-emerald-300 bg-black/75 px-2.5 py-0.5 rounded-full border border-emerald-500/40 backdrop-blur-md flex items-center gap-1.5 shadow-md">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                            Standby (0% CPU)
+                          </span>
+                        </div>
+
+                        {/* Center Action Prompt Button */}
+                        <div className="flex flex-col items-center gap-2 transform group-hover/standby:scale-105 transition-transform duration-200">
+                          <div className="w-14 h-14 rounded-full bg-gradient-to-r from-amber-400 to-amber-500 text-neutral-950 flex items-center justify-center shadow-[0_0_28px_rgba(251,191,36,0.7)] border-2 border-white/70">
+                            <Play className="w-7 h-7 fill-current ml-0.5" />
+                          </div>
+                          <span className="px-4 py-1.5 rounded-xl bg-black/85 backdrop-blur-md border border-white/20 text-white font-black text-xs tracking-wider uppercase shadow-xl">
+                            Pencet Untuk Main
+                          </span>
+                        </div>
+
+                        {/* Bottom Slide Info Tag */}
+                        <div className="w-full text-center">
+                          <span className="text-[11px] font-semibold text-white/95 bg-black/75 backdrop-blur-md px-3 py-1 rounded-full border border-white/15 truncate max-w-full inline-block shadow-md">
+                            {slide.fullName}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Slide Footer Details */}
+                <div className="px-3.5 py-2.5 bg-slate-950/90 border-t border-white/5 flex items-center justify-between text-xs text-neutral-400">
+                  <span className="inline-flex items-center gap-1.5 truncate max-w-[70%]">
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        isPlaying ? 'bg-emerald-400 animate-pulse' : 'bg-neutral-600'
+                      } shrink-0`}
+                    />
+                    <span className="truncate text-[11px]">
+                      {isPlaying ? '⚡ Sedang Dimainkan' : slide.tagline}
+                    </span>
+                  </span>
+                  <span className="font-mono text-[10px] text-neutral-500 shrink-0">
+                    9:16 PORTRAIT
+                  </span>
                 </div>
               </div>
             );
           })}
         </div>
       </main>
+
+      {/* Fullscreen / Theater Modal */}
+      {fullscreenSlide && (
+        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-2 sm:p-4">
+          <div className="w-full max-w-md flex flex-col bg-slate-900 rounded-3xl border border-white/20 overflow-hidden shadow-2xl relative max-h-[96vh]">
+            {/* Modal Header */}
+            <div className="px-4 py-3 bg-slate-950 border-b border-white/10 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded-md text-xs font-mono font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                  SLIDE {String(fullscreenSlide.slideNumber).padStart(2, '0')}
+                </span>
+                <span className="text-sm font-bold text-white truncate max-w-[180px]">
+                  {fullscreenSlide.fullName}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => reloadGame(fullscreenSlide.id)}
+                  className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-white transition-colors cursor-pointer"
+                  title="Reload Game"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                </button>
+                {fullscreenSlide.path && (
+                  <a
+                    href={fullscreenSlide.path}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-white transition-colors"
+                    title="Buka di tab baru"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
+                )}
+                <button
+                  onClick={() => setFullscreenId(null)}
+                  className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+                  title="Tutup (Esc)"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal 9:16 Frame */}
+            <div className="p-3 bg-black flex items-center justify-center flex-1 overflow-hidden">
+              <div className="w-full max-w-[380px] aspect-[9/16] relative rounded-2xl overflow-hidden border border-white/20 bg-black">
+                {fullscreenSlide.render(true)}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-4 py-2.5 bg-slate-950 border-t border-white/5 flex items-center justify-between text-xs text-neutral-400">
+              <span className="truncate">{fullscreenSlide.tagline}</span>
+              <button
+                onClick={() => setFullscreenId(null)}
+                className="px-2.5 py-1 rounded bg-amber-400 text-neutral-950 font-bold text-xs hover:bg-amber-300 transition-colors cursor-pointer shrink-0 ml-2"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
