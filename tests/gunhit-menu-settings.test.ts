@@ -45,12 +45,12 @@ test('Gun Hit menu uses PERFECT SHOT branding and keeps special-stage picks in S
   assert.match(coinSprite, /false, false/);
 });
 
-test('menu gun preview shifts right 9 percent while its sunburst remains centered', () => {
-  assert.match(app, /className="relative z-10 block translate-x-\[9%\][^"]*"/);
+test('menu gun preview shifts left 8 percent (to 1 percent) to center with its sunburst', () => {
+  assert.match(app, /className="relative z-10 block translate-x-\[1%\][^"]*"/);
   const previewArea = app.slice(app.indexOf('/* Upright gun with a layered'), app.indexOf('{/* Two Main Action Buttons */}'));
   assert.match(previewArea, /SunburstFX size=\{430\}/);
-  assert.match(previewArea, /translate-x-\[9%\]/);
-  assert.doesNotMatch(previewArea.slice(0, previewArea.indexOf('<canvas')), /translate-x-\[9%\]/);
+  assert.match(previewArea, /translate-x-\[1%\]/);
+  assert.doesNotMatch(previewArea.slice(0, previewArea.indexOf('<canvas')), /translate-x-\[1%\]/);
 });
 
 test('menu theme choices default to forest and can switch to morning, town and snow', () => {

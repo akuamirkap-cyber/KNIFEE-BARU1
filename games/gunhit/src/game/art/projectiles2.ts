@@ -4,6 +4,114 @@ import { TAU, rand, lin, radial } from './kit';
 import { drawProjectileExtra2 } from './projectiles3';
 
 type C = CanvasRenderingContext2D;
+export const SNOWBALL_RADIUS = 16; // Twice the former 8px snowball, before any stage size buff.
+
+/** A round, deep vortex medallion: its light is part of the shot, not a trailing stem. */
+function portalDisc(c: C, t: number) {
+  const blue = Math.floor(t * 0.7) % 2 === 0;
+  const rim = blue ? '#50bdff' : '#ffb053';
+  const counter = blue ? '#ffad54' : '#64d4ff';
+  c.save();
+  c.translate(0, 11);
+  c.scale(1, 1.18);
+  const halo = c.createRadialGradient(0, 0, 5, 0, 0, 23);
+  halo.addColorStop(0, blue ? 'rgba(56,189,248,0.3)' : 'rgba(251,146,60,0.3)');
+  halo.addColorStop(1, 'rgba(56,189,248,0)');
+  c.fillStyle = halo;
+  c.beginPath(); c.arc(0, 0, 23, 0, TAU); c.fill();
+
+  const depth = c.createRadialGradient(-3, -4, 1, 0, 0, 12.5);
+  depth.addColorStop(0, '#405894');
+  depth.addColorStop(0.32, '#162750');
+  depth.addColorStop(0.72, '#07132e');
+  depth.addColorStop(1, '#06101c');
+  c.fillStyle = depth;
+  c.beginPath(); c.arc(0, 0, 11.2, 0, TAU); c.fill();
+
+  // The swirl is INSIDE the rim, so the shot reads as a tiny portal at any angle.
+  c.save();
+  c.beginPath(); c.arc(0, 0, 9.3, 0, TAU); c.clip();
+  c.rotate(t * 2.4);
+  for (let i = 0; i < 3; i++) {
+    c.rotate(TAU / 3);
+    c.strokeStyle = i === 1 ? 'rgba(255,176,91,0.73)' : 'rgba(122,224,255,0.78)';
+    c.lineWidth = i === 1 ? 1.4 : 1.7;
+    c.lineCap = 'round';
+    c.beginPath(); c.arc(1.5, 0, 6.4, -0.8, 1.65); c.stroke();
+  }
+  c.restore();
+  c.fillStyle = '#e7f8ff';
+  c.beginPath(); c.arc(-1, -1, 1.7, 0, TAU); c.fill();
+
+  c.shadowColor = rim;
+  c.shadowBlur = 12;
+  c.lineWidth = 3.3;
+  c.strokeStyle = rim;
+  c.beginPath(); c.arc(0, 0, 12.3, 0, TAU); c.stroke();
+  c.shadowBlur = 0;
+  c.lineWidth = 1;
+  c.strokeStyle = 'rgba(226,249,255,0.9)';
+  c.beginPath(); c.arc(0, 0, 10.4, -2.7, -0.75); c.stroke();
+  c.strokeStyle = counter;
+  c.lineWidth = 2.8;
+  c.lineCap = 'round';
+  c.beginPath(); c.arc(0, 0, 12.3, t * 2.4, t * 2.4 + 0.95); c.stroke();
+  c.beginPath(); c.arc(0, 0, 12.3, t * 2.4 + Math.PI, t * 2.4 + Math.PI + 0.52); c.stroke();
+  c.restore();
+}
+
+/** Snow, not a second ball on a stick: one softly shaded 32px sphere. */
+function snowSphere(c: C, y: number, embedded: boolean) {
+  const r = SNOWBALL_RADIUS;
+  c.save();
+  if (!embedded) { c.shadowColor = 'rgba(168,226,255,0.75)'; c.shadowBlur = 9; }
+  const snow = c.createRadialGradient(-r * 0.35, y - r * 0.38, 1, 0, y, r * 1.12);
+  snow.addColorStop(0, '#ffffff');
+  snow.addColorStop(0.37, '#fbfeff');
+  snow.addColorStop(0.74, '#eef7fa');
+  snow.addColorStop(1, '#d3e5eb');
+  c.fillStyle = snow;
+  c.beginPath(); c.arc(0, y, r, 0, TAU); c.fill();
+  c.shadowBlur = 0;
+  c.strokeStyle = embedded ? 'rgba(167,194,203,0.7)' : 'rgba(155,189,201,0.7)';
+  c.lineWidth = embedded ? 1.4 : 1.1; c.stroke();
+  c.clip();
+  c.fillStyle = 'rgba(255,255,255,0.85)';
+  c.beginPath(); c.ellipse(-5.5, y - 5, 4.3, 2.1, -0.5, 0, TAU); c.fill();
+  c.strokeStyle = 'rgba(171,198,208,0.3)'; c.lineWidth = 1.2;
+  c.beginPath(); c.arc(3, y + 3, 6.5, 0.15, 1.85); c.stroke();
+  c.beginPath(); c.arc(-6, y + 3, 3, 2.6, 4.5); c.stroke();
+  for (const [x, dy, size] of [[-7, 5, 1.3], [4, -5, 1.2], [7, 6, 1.1], [-1, 8, 0.8]]) {
+    c.fillStyle = 'rgba(170,200,208,0.43)';
+    c.beginPath(); c.arc(x, y + dy, size, 0, TAU); c.fill();
+  }
+  c.restore();
+}
+
+function snowballShot(c: C, embedded: boolean) {
+  const r = SNOWBALL_RADIUS;
+  if (!embedded) { snowSphere(c, r, false); return; }
+  // y=0 is the surface. Only the outer hemisphere survives impact; the
+  // flattened snow crust and tiny fractures make its entry feel physical.
+  c.save();
+  c.beginPath(); c.rect(-r - 3, 0, 2 * (r + 3), r + 5); c.clip();
+  snowSphere(c, 0, true);
+  c.restore();
+  const slush = c.createLinearGradient(0, -1, 0, 5);
+  slush.addColorStop(0, '#ffffff'); slush.addColorStop(1, '#e3f0f3');
+  c.fillStyle = slush;
+  c.beginPath(); c.ellipse(0, 1.5, r + 1, 2.8, 0, 0, TAU); c.fill();
+  // Subtle packed-snow creases, not the dark angular facets of cracked ice.
+  c.strokeStyle = 'rgba(171,199,207,0.5)'; c.lineWidth = 1;
+  c.beginPath();
+  c.moveTo(-9, 5); c.quadraticCurveTo(-5, 6, -3, 9);
+  c.moveTo(8, 5); c.quadraticCurveTo(4, 6, 3, 10);
+  c.stroke();
+  c.fillStyle = '#ffffff';
+  for (const [x, y, size] of [[-12, 4, 1.7], [11, 5, 2], [0, 14, 1.1], [-6, 12, 1.2]]) {
+    c.beginPath(); c.arc(x, y, size, 0, TAU); c.fill();
+  }
+}
 
 function glowE(c: C, y: number, rx: number, ry: number, rgb: string, a: number) {
   c.save();
@@ -35,7 +143,7 @@ function bullet(c: C, len: number, w: number, tip: string[], body: string[], rim
   c.fillRect(-w / 2 - 1.2, len - 3, w + 2.4, 3);
 }
 
-export function drawProjectileExtra(c: C, kind: ProjKind, len: number, t: number, age: number) {
+export function drawProjectileExtra(c: C, kind: ProjKind, len: number, t: number, age: number, embedded = false) {
   if ((kind as string) === 'slingshot' && len < 999) {
     drawProjectileExtra2(c, kind, len, t, age);
     return;
@@ -137,68 +245,43 @@ export function drawProjectileExtra(c: C, kind: ProjKind, len: number, t: number
     }
     case 'flamethrower':
     case 'dragon': {
-      const isD = kind === 'dragon';
-      glowE(c, len * 0.4, 12, len * 0.6, '255,120,30', 0.6);
-      const fl = 1 + 0.1 * Math.sin(t * 30);
-      c.save();
-      c.globalCompositeOperation = 'lighter';
-      c.beginPath();
-      c.moveTo(0, -2);
-      c.bezierCurveTo(8 * fl, len * 0.2, 7, len * 0.7, 0, len * fl);
-      c.bezierCurveTo(-7, len * 0.7, -8 * fl, len * 0.2, 0, -2);
-      const g = c.createLinearGradient(0, 0, 0, len);
-      g.addColorStop(0, '#fffbe0');
-      g.addColorStop(0.3, '#fbbf24');
-      g.addColorStop(0.7, '#f97316');
-      g.addColorStop(1, 'rgba(220,38,38,0)');
-      c.fillStyle = g;
-      c.fill();
-      c.beginPath();
-      c.ellipse(0, len * 0.25, 2.5, len * 0.2, 0, 0, TAU);
-      c.fillStyle = '#ffffff';
-      c.fill();
-      c.restore();
-      if (isD) {
-        // tiny dragon horns + eyes on the fireball
-        c.fillStyle = '#fef3c7';
-        c.beginPath();
-        c.moveTo(-4, 6);
-        c.lineTo(-7, -2);
-        c.lineTo(-2, 4);
-        c.moveTo(4, 6);
-        c.lineTo(7, -2);
-        c.lineTo(2, 4);
-        c.fill();
-        c.fillStyle = '#7f1d1d';
-        c.beginPath();
-        c.arc(-2.2, 9, 1.2, 0, TAU);
-        c.arc(2.2, 9, 1.2, 0, TAU);
-        c.fill();
+      const isDragon = kind === 'dragon';
+      glowE(c, len * 0.38, isDragon ? 21 : 12, len * 0.75, '255,120,30', 0.68);
+      const flicker = Math.sin(t * 24) * 2;
+      c.save(); c.globalCompositeOperation = 'lighter';
+      const outer = c.createLinearGradient(0, 0, 0, len + 16);
+      outer.addColorStop(0, '#fffbd4'); outer.addColorStop(0.27, '#ffb839');
+      outer.addColorStop(0.6, '#ef5b26'); outer.addColorStop(1, 'rgba(185,28,28,0)');
+      c.fillStyle = outer;
+      c.beginPath(); c.moveTo(0, -6);
+      c.bezierCurveTo(12, 6, 8, len * 0.44, 6, len * 0.55);
+      c.quadraticCurveTo(13, len * 0.57, 7, len + 12);
+      c.quadraticCurveTo(3, len * 0.75, 1, len * 0.74);
+      c.quadraticCurveTo(-4, len + 14, -7, len + 7);
+      c.quadraticCurveTo(-5, len * 0.65, -8, len * 0.57);
+      c.bezierCurveTo(-13, len * 0.38, -11, 8, 0, -6);
+      c.closePath(); c.fill();
+      const core = c.createLinearGradient(0, 0, 0, len);
+      core.addColorStop(0, '#ffffff'); core.addColorStop(0.4, '#fff5c0');
+      core.addColorStop(1, 'rgba(255,183,53,0)');
+      c.fillStyle = core;
+      c.beginPath(); c.moveTo(0, -3);
+      c.bezierCurveTo(5, 3, 4 + flicker * 0.3, len * 0.4, 1, len * 0.6);
+      c.quadraticCurveTo(-5, len * 0.41, -5, 7);
+      c.closePath(); c.fill();
+      if (isDragon) {
+        for (const side of [-1, 1]) {
+          c.fillStyle = 'rgba(255,156,44,0.64)'; c.beginPath();
+          c.moveTo(side * 6, 11);
+          c.quadraticCurveTo(side * 18, len * 0.33, side * (13 + flicker), len * 0.7);
+          c.quadraticCurveTo(side * 12, len * 0.36, side * 5, 20); c.closePath(); c.fill();
+        }
+        c.fillStyle = '#ffe9a3';
+        for (const [x, y, size] of [[-11, len * 0.42, 1.6], [13, len * 0.7, 1.8]]) {
+          c.beginPath(); c.arc(x, y, size, 0, TAU); c.fill();
+        }
       }
-      break;
-    }
-    case 'disc': {
-      // Spinning glowing neon Frisbee disc
-      c.save();
-      c.translate(0, len * 0.4);
-      c.scale(1, 0.42);
-      c.beginPath();
-      c.arc(0, 0, 12, 0, TAU);
-      c.fillStyle = '#06b6d4';
-      c.shadowColor = '#22d3ee';
-      c.shadowBlur = 10;
-      c.fill();
-      c.shadowBlur = 0;
-      c.strokeStyle = '#cffafe';
-      c.lineWidth = 1.8;
-      c.stroke();
-      c.fillStyle = '#164e63';
-      c.beginPath();
-      c.arc(0, 0, 5, 0, TAU);
-      c.fill();
       c.restore();
-      c.fillStyle = 'rgba(6,182,212,0.45)';
-      c.fillRect(-1.5, len * 0.4, 3, len * 0.6);
       break;
     }
     case 'bamboo': {
@@ -229,66 +312,130 @@ export function drawProjectileExtra(c: C, kind: ProjKind, len: number, t: number
       break;
     }
     case 'banana': {
-      c.beginPath();
-      c.moveTo(-1, 0);
-      c.bezierCurveTo(9, len * 0.25, 9, len * 0.7, 1, len);
-      c.lineTo(-4, len - 2);
-      c.bezierCurveTo(2, len * 0.65, 2, len * 0.3, -4, 3);
-      c.closePath();
-      c.fillStyle = lin(c, -4, 9, ['#ca8a04', '#fde047', '#facc15']);
-      c.fill();
-      c.strokeStyle = '#854d0e';
-      c.lineWidth = 1;
-      c.stroke();
-      c.fillStyle = '#3f2a0a';
-      c.fillRect(-3, -1, 3, 4);
-      c.fillStyle = '#78350f';
-      c.beginPath();
-      c.arc(4, len * 0.5, 1, 0, TAU);
-      c.arc(2.5, len * 0.75, 0.8, 0, TAU);
-      c.fill();
-      break;
-    }
-    case 'portal': {
-      const blue = Math.floor(t * 0.7) % 2 === 0;
-      const rgb = blue ? '59,130,246' : '251,146,60';
-      glowE(c, len * 0.4, 12, len * 0.6, rgb, 0.6);
+      // Slide #7 Weapon #6 (Banana Gun) BANANA FLESH — cream, tapered, launched from the peel
       c.save();
-      c.translate(0, 8);
+      const px = (x7: number) => x7 * 0.88;
+      const py = (y7: number) => -2 + ((y7 + 34) / 64) * (len + 2);
+
       c.beginPath();
-      c.ellipse(0, 0, 7, 9, 0, 0, TAU);
-      c.fillStyle = '#0b1020';
+      c.moveTo(px(-7), py(26));
+      c.quadraticCurveTo(px(-13), py(-4), px(-5), py(-26));
+      c.quadraticCurveTo(px(-1), py(-35), px(3), py(-33));
+      c.quadraticCurveTo(px(10), py(-17), px(9), py(5));
+      c.quadraticCurveTo(px(8), py(21), px(1), py(30));
+      c.closePath();
+
+      const fg = c.createLinearGradient(px(-12), 0, px(10), 0);
+      fg.addColorStop(0, '#dccf9a');
+      fg.addColorStop(0.3, '#f7efc9');
+      fg.addColorStop(0.55, '#fffdf2');
+      fg.addColorStop(0.8, '#f3e9bd');
+      fg.addColorStop(1, '#d8ca94');
+      c.fillStyle = fg;
       c.fill();
-      c.strokeStyle = `rgb(${rgb})`;
-      c.lineWidth = 2.5;
-      c.shadowColor = `rgb(${rgb})`;
-      c.shadowBlur = 10;
+      c.strokeStyle = '#c9b877';
+      c.lineWidth = 1.1;
       c.stroke();
-      c.rotate(t * 6);
-      c.strokeStyle = 'rgba(255,255,255,0.7)';
-      c.lineWidth = 1;
+
+      // Longitudinal flesh ridges (Slide #7)
+      c.strokeStyle = 'rgba(190,166,100,0.6)';
+      c.lineWidth = 0.9;
       c.beginPath();
-      c.arc(0, 0, 4, 0, Math.PI * 1.3);
+      c.moveTo(px(-4), py(22));
+      c.quadraticCurveTo(px(-8), py(-6), px(-2), py(-26));
+      c.moveTo(px(3), py(24));
+      c.quadraticCurveTo(px(7), py(-6), px(4), py(-27));
       c.stroke();
+
+      // Tiny seed dots (Slide #7)
+      c.fillStyle = 'rgba(122,92,32,0.5)';
+      for (const [sx, sy] of [
+        [1, -12],
+        [0, 0],
+        [2, 12],
+      ] as const) {
+        c.beginPath();
+        c.arc(px(sx), py(sy), 0.9, 0, TAU);
+        c.fill();
+      }
+
+      // Little brown peel nub where the flesh was torn off (Slide #7)
+      c.fillStyle = '#8a5a1a';
+      c.beginPath();
+      c.arc(px(-1), py(30), 2.3, 0, TAU);
+      c.fill();
+
+      // Soft highlight (Slide #7)
+      c.strokeStyle = 'rgba(255,255,255,0.5)';
+      c.lineWidth = 1.1;
+      c.beginPath();
+      c.moveTo(px(-5), py(20));
+      c.quadraticCurveTo(px(-10), py(-4), px(-4), py(-22));
+      c.stroke();
+
+      if (embedded) {
+        // Surface at 50% of the length: the rest remains visibly OUTSIDE.
+        const y = len * 0.5;
+        c.fillStyle = 'rgba(255,243,199,0.9)';
+        c.beginPath();
+        c.ellipse(0.5, y, 8.5, 2.6, -0.1, 0, TAU);
+        c.fill();
+      }
       c.restore();
-      c.fillStyle = `rgba(${rgb},0.8)`;
-      c.fillRect(-1.5, 17, 3, len - 18);
       break;
     }
     case 'magnet': {
       c.save();
-      c.lineCap = 'butt';
-      c.strokeStyle = lin(c, -7, 7, ['#7f1d1d', '#ef4444', '#991b1b']);
-      c.lineWidth = 5;
+      // Stuck magnet on the wheel is 2x larger ("magnet yg nempel diroda lebih besar 2x")
+      const mScale = embedded ? 2 : 1;
+      c.scale(mScale, mScale);
+      const outerR = 9.5;
+      const innerR = 4.2;
+      const archY = 14;
+      const tipY = 0;
+
+      // 3D Crimson Horseshoe Magnet U-body
       c.beginPath();
-      c.moveTo(-5, 0);
-      c.lineTo(-5, len - 12);
-      c.arc(0, len - 12, 5, Math.PI, 0, true);
-      c.lineTo(5, 0);
+      c.moveTo(-outerR, tipY);
+      c.lineTo(-outerR, archY);
+      c.arc(0, archY, outerR, Math.PI, 0, true);
+      c.lineTo(outerR, tipY);
+      c.lineTo(innerR, tipY);
+      c.lineTo(innerR, archY);
+      c.arc(0, archY, innerR, 0, Math.PI, false);
+      c.lineTo(-innerR, tipY);
+      c.closePath();
+      c.fillStyle = lin(c, -outerR, outerR, ['#7f1d1d', '#ef4444', '#f87171', '#dc2626', '#991b1b']);
+      c.fill();
+      c.strokeStyle = '#2a0606';
+      c.lineWidth = 1.1;
       c.stroke();
-      c.fillStyle = '#e5e7eb';
-      c.fillRect(-7.5, -2, 5, 6);
-      c.fillRect(2.5, -2, 5, 6);
+
+      // Specular highlight along the U-arch
+      c.strokeStyle = 'rgba(255,225,225,0.5)';
+      c.lineWidth = 1.1;
+      c.beginPath();
+      c.arc(0, archY, (outerR + innerR) * 0.5, Math.PI * 0.85, Math.PI * 0.15, true);
+      c.stroke();
+
+      // Gold separator bands & polished silver-chrome pole tips
+      const armW = outerR - innerR;
+      for (const [ax, label] of [
+        [-outerR, 'N'],
+        [innerR, 'S'],
+      ] as const) {
+        c.fillStyle = '#fbbf24';
+        c.fillRect(ax, tipY + 4.2, armW, 1.5);
+        c.fillStyle = lin(c, ax, ax + armW, ['#64748b', '#f8fafc', '#cbd5e1', '#475569']);
+        c.fillRect(ax - 0.2, tipY - 2, armW + 0.4, 6.2);
+        c.strokeStyle = '#0f172a';
+        c.lineWidth = 0.9;
+        c.strokeRect(ax - 0.2, tipY - 2, armW + 0.4, 6.2);
+        c.fillStyle = label === 'N' ? '#dc2626' : '#1d4ed8';
+        c.font = 'bold 4.2px sans-serif';
+        c.textAlign = 'center';
+        c.fillText(label, ax + armW * 0.5, tipY + 2.6);
+      }
       c.restore();
       break;
     }
@@ -313,32 +460,6 @@ export function drawProjectileExtra(c: C, kind: ProjKind, len: number, t: number
       c.arc(-r * 0.3, -r * 0.3, r * 0.45, Math.PI, Math.PI * 1.6);
       c.stroke();
       c.restore();
-      break;
-    }
-    case 'chrono': {
-      // ornate clock hand
-      c.fillStyle = lin(c, -3, 3, ['#713f12', '#fde047', '#a16207']);
-      c.beginPath();
-      c.moveTo(0, -3);
-      c.lineTo(5, 9);
-      c.lineTo(1.2, 8);
-      c.lineTo(1.2, len - 6);
-      c.lineTo(-1.2, len - 6);
-      c.lineTo(-1.2, 8);
-      c.lineTo(-5, 9);
-      c.closePath();
-      c.fill();
-      c.beginPath();
-      c.arc(0, 16, 3, 0, TAU);
-      c.fill();
-      c.beginPath();
-      c.arc(0, 16, 1.4, 0, TAU);
-      c.fillStyle = '#451a03';
-      c.fill();
-      c.beginPath();
-      c.arc(0, len - 3, 3.5, 0, TAU);
-      c.fillStyle = '#ca8a04';
-      c.fill();
       break;
     }
     case 'shrink':
@@ -395,40 +516,28 @@ export function drawProjectileExtra(c: C, kind: ProjKind, len: number, t: number
       break;
     }
     case 'soaker': {
-      glowE(c, len * 0.4, 8, len * 0.5, '96,165,250', 0.4);
-      c.beginPath();
-      c.moveTo(0, -2);
-      c.bezierCurveTo(6, len * 0.2, 6, len * 0.55, 0, len * 0.7);
-      c.bezierCurveTo(-6, len * 0.55, -6, len * 0.2, 0, -2);
-      c.fillStyle = radial(c, 0, len * 0.3, 8, ['#ffffff', '#93c5fd', '#2563eb']);
-      c.fill();
-      c.fillStyle = 'rgba(147,197,253,0.8)';
-      for (let i = 0; i < 3; i++) {
-        c.beginPath();
-        c.arc(Math.sin(t * 10 + i) * 2, len * 0.78 + i * 4, 1.6 - i * 0.3, 0, TAU);
-        c.fill();
-      }
+      // A translucent bead with a moving-looking reflection, not a blue
+      // energy round capped by a smaller ball like a tadpole's head and stem.
+      const water = c.createRadialGradient(-2.8, 3, 0, 0, 9, 10);
+      water.addColorStop(0, 'rgba(255,255,255,0.98)');
+      water.addColorStop(0.28, 'rgba(215,252,255,0.94)');
+      water.addColorStop(0.67, 'rgba(69,199,235,0.76)');
+      water.addColorStop(1, 'rgba(14,129,195,0.42)');
+      c.shadowColor = '#5bd7f5'; c.shadowBlur = 8;
+      c.fillStyle = water;
+      c.beginPath(); c.ellipse(0, 9, 7.3, 9, -0.12, 0, TAU); c.fill();
+      c.shadowBlur = 0;
+      c.strokeStyle = 'rgba(218,250,255,0.84)'; c.lineWidth = 1.2;
+      c.beginPath(); c.ellipse(0, 9, 6.7, 8.2, -0.12, -2.8, 0.55); c.stroke();
+      c.fillStyle = 'rgba(255,255,255,0.88)';
+      c.beginPath(); c.ellipse(-2.8, 4.7, 1.4, 2.9, -0.35, 0, TAU); c.fill();
+      c.strokeStyle = 'rgba(231,253,255,0.75)'; c.lineWidth = 0.9;
+      c.beginPath(); c.arc(1.5, 10, 3.9, 0.1, 1.75); c.stroke();
       break;
     }
-    case 'snowball': {
-      const r = Math.min(8, len * 0.38);
-      c.beginPath();
-      c.arc(0, r, r, 0, TAU);
-      c.fillStyle = radial(c, 0, r, r, ['#ffffff', '#f0f9ff', '#bae6fd']);
-      c.fill();
-      c.fillStyle = 'rgba(186,230,253,0.8)';
-      c.beginPath();
-      c.arc(2, r + 3, 1.5, 0, TAU);
-      c.arc(-3, r - 2, 1.2, 0, TAU);
-      c.fill();
-      if (len > r * 2 + 4) {
-        c.beginPath();
-        c.arc(0, r * 2 + (len - r * 2) / 2, Math.min(r * 1.1, (len - r * 2) / 2 + 1), 0, TAU);
-        c.fillStyle = radial(c, 0, r * 2 + 6, r, ['#ffffff', '#e0f2fe', '#bae6fd']);
-        c.fill();
-      }
+    case 'snowball':
+      snowballShot(c, embedded);
       break;
-    }
     case 'pirate': {
       const r = Math.min(8, len * 0.4);
       c.beginPath();
@@ -446,55 +555,47 @@ export function drawProjectileExtra(c: C, kind: ProjKind, len: number, t: number
       break;
     }
     case 'chicken': {
-      // body (rubber chicken, head first)
+      // Twice the original chick's width AND almost twice its length. Its
+      // actual 12px collision half-width matches the oversized rubber body.
       c.save();
-      c.fillStyle = lin(c, -6, 6, ['#ca8a04', '#fde047', '#eab308']);
-      c.beginPath();
-      c.ellipse(0, len * 0.68, 6, len * 0.3, 0, 0, TAU);
-      c.fill();
-      c.fillRect(-2.2, 8, 4.4, len * 0.45);
-      c.beginPath();
-      c.arc(0, 6, 5, 0, TAU);
-      c.fill();
-      c.strokeStyle = '#a16207';
-      c.lineWidth = 1;
-      c.stroke();
-      // comb
-      c.fillStyle = '#ef4444';
-      c.beginPath();
-      c.arc(-2.5, 2, 2, 0, TAU);
-      c.arc(0, 0.5, 2, 0, TAU);
-      c.arc(2.5, 2, 2, 0, TAU);
-      c.fill();
-      // beak
-      c.fillStyle = '#f97316';
-      c.beginPath();
-      c.moveTo(-2, 9);
-      c.lineTo(2, 9);
-      c.lineTo(0, 13);
-      c.fill();
-      // X eyes
-      c.strokeStyle = '#111';
-      c.lineWidth = 0.9;
-      for (const s of [-1, 1]) {
-        c.beginPath();
-        c.moveTo(s * 2.2 - 1, 4.5);
-        c.lineTo(s * 2.2 + 1, 6.5);
-        c.moveTo(s * 2.2 + 1, 4.5);
-        c.lineTo(s * 2.2 - 1, 6.5);
-        c.stroke();
+      const wobble = embedded ? 0 : Math.sin(t * 19) * 1.1;
+      c.strokeStyle = '#b76616'; c.lineWidth = 2.5;
+      for (const side of [-1, 1]) {
+        c.beginPath(); c.moveTo(side * 6, len * 0.83);
+        c.lineTo(side * (7 + wobble), len + 3);
+        c.lineTo(side * 13, len + 6); c.stroke();
       }
-      // feet
-      c.strokeStyle = '#f97316';
-      c.lineWidth = 1.5;
-      c.beginPath();
-      c.moveTo(-2, len * 0.95);
-      c.lineTo(-4, len + 2);
-      c.moveTo(2, len * 0.95);
-      c.lineTo(4, len + 2);
-      c.stroke();
-      c.restore();
-      break;
+      c.fillStyle = '#ebaa27'; c.beginPath();
+      c.moveTo(5, len * 0.65); c.quadraticCurveTo(18, len * 0.77, 17, len * 0.46);
+      c.quadraticCurveTo(22, len * 0.84, 10, len * 0.92); c.fill();
+      c.beginPath(); c.ellipse(0, len * 0.63, 12, len * 0.35, 0, 0, TAU);
+      c.fillStyle = lin(c, -13, 13, ['#c48c22', '#ffdf5c', '#fff4a3', '#e5ad30']);
+      c.fill(); c.strokeStyle = '#a36517'; c.lineWidth = 1.3; c.stroke();
+      c.fillStyle = 'rgba(255,255,226,0.72)';
+      c.beginPath(); c.ellipse(-4, len * 0.51, 2.3, len * 0.22, 0, 0, TAU); c.fill();
+      for (const side of [-1, 1]) {
+        c.fillStyle = '#f7c244'; c.beginPath();
+        c.ellipse(side * 10, len * 0.57, 6, 13, side * 0.29, 0, TAU); c.fill();
+        c.strokeStyle = '#ac701b'; c.lineWidth = 1; c.stroke();
+        c.strokeStyle = 'rgba(255,250,206,0.84)';
+        c.beginPath(); c.moveTo(side * 8, len * 0.48);
+        c.quadraticCurveTo(side * 14, len * 0.6, side * 8, len * 0.69); c.stroke();
+      }
+      c.fillStyle = '#ffe469'; c.beginPath(); c.ellipse(0, 13, 10, 14, 0, 0, TAU); c.fill();
+      c.strokeStyle = '#a36517'; c.lineWidth = 1; c.stroke();
+      c.fillStyle = '#e13d31';
+      for (let i = -1; i <= 1; i++) {
+        c.beginPath(); c.arc(i * 4.8, 0 - (i === 0 ? 3 : 0), 4, 0, TAU); c.fill();
+      }
+      c.fillStyle = '#ef7c24'; c.beginPath();
+      c.moveTo(-5, 9); c.lineTo(5, 9); c.lineTo(0, -5); c.closePath(); c.fill();
+      c.strokeStyle = '#b65315'; c.lineWidth = 1; c.stroke();
+      c.fillStyle = '#38251c';
+      for (const side of [-1, 1]) {
+        c.beginPath(); c.arc(side * 5, 14, 1.7, 0, TAU); c.fill();
+      }
+      c.fillStyle = '#ed6251'; c.beginPath(); c.ellipse(10, 24, 2.3, 4, 0, 0, TAU); c.fill();
+      c.restore(); break;
     }
     case 'card': {
       // CARD 1.8X BIGGER!
@@ -539,22 +640,6 @@ export function drawProjectileExtra(c: C, kind: ProjKind, len: number, t: number
         c.fillRect(-1.5, -1, 3, 2);
         c.restore();
       }
-      break;
-    }
-    case 'sonic': {
-      glowE(c, len * 0.3, 12, len * 0.5, '163,230,53', 0.45);
-      c.strokeStyle = '#bef264';
-      c.lineCap = 'round';
-      for (let i = 0; i < 4; i++) {
-        c.lineWidth = 2.5 - i * 0.4;
-        c.globalAlpha = 1 - i * 0.2;
-        c.beginPath();
-        c.arc(0, 8 + i * 7, 7 - i * 0.8, Math.PI * 1.15, Math.PI * 1.85);
-        c.stroke();
-      }
-      c.globalAlpha = 1;
-      c.fillStyle = 'rgba(190,255,120,0.6)';
-      c.fillRect(-1, 10, 2, len - 12);
       break;
     }
     case 'seed': {
@@ -617,53 +702,6 @@ export function drawProjectileExtra(c: C, kind: ProjKind, len: number, t: number
       }
       break;
     }
-    case 'glitch': {
-      const P = 3;
-      const shape = ['.#.', '###', '#@#', '###', '###', '.#.', '.#.', '.#.', '###', '#.#'];
-      const jitter = Math.sin(t * 17) > 0.6 ? rand(-2, 2) : 0;
-      const draw = (ox: number, col: string, colB: string) => {
-        for (let r = 0; r < shape.length; r++) {
-          for (let k = 0; k < 3; k++) {
-            const ch = shape[r][k];
-            if (ch === '.') continue;
-            c.fillStyle = ch === '@' ? colB : col;
-            c.fillRect(-4.5 + k * P + ox, r * (len / shape.length), P, len / shape.length + 0.5);
-          }
-        }
-      };
-      c.save();
-      c.globalCompositeOperation = 'lighter';
-      draw(-1.5 + jitter, 'rgba(255,0,85,0.6)', 'rgba(255,0,85,0.6)');
-      draw(1.5 - jitter, 'rgba(0,255,238,0.6)', 'rgba(0,255,238,0.6)');
-      c.restore();
-      draw(0, '#16a34a', '#bbf7d0');
-      break;
-    }
-    case 'mirror': {
-      c.save();
-      c.beginPath();
-      c.moveTo(0, -3);
-      c.lineTo(5, 8);
-      c.lineTo(3, len - 4);
-      c.lineTo(-1, len);
-      c.lineTo(-5, len - 10);
-      c.lineTo(-4, 6);
-      c.closePath();
-      c.fillStyle = lin(c, -5, 5, ['#94a3b8', '#f8fafc', '#cbd5e1', '#ffffff', '#64748b']);
-      c.shadowColor = '#e0f2fe';
-      c.shadowBlur = 8;
-      c.fill();
-      c.shadowBlur = 0;
-      c.strokeStyle = '#475569';
-      c.lineWidth = 0.8;
-      c.stroke();
-      const gy = (t * 40) % len;
-      c.clip();
-      c.fillStyle = 'rgba(255,255,255,0.9)';
-      c.fillRect(-6, gy, 12, 2);
-      c.restore();
-      break;
-    }
     case 'gravity': {
       glowE(c, 9, 12, 14, '129,140,248', 0.5);
       c.beginPath();
@@ -718,7 +756,8 @@ export function drawProjectileExtra(c: C, kind: ProjKind, len: number, t: number
       break;
     }
     default: {
-      drawProjectileExtra2(c, kind, len, t, age);
+      void portalDisc;
+      drawProjectileExtra2(c, kind, len, t, age, embedded);
     }
   }
 }

@@ -1,5 +1,7 @@
 import type { LatestDesignWeapon } from './gunVariants';
 import { TAU, gunState, lin, radial, rr, glow, star } from './kit';
+import { chickenGun } from './guns2';
+import { drawSlide2DiamondMuzzleFormation } from '../diamondSlideFx';
 
 type C = CanvasRenderingContext2D;
 type Point = readonly [number, number];
@@ -148,6 +150,8 @@ function diamond(c: C, t: number) {
     lin(c, -15, 15, ['#3aace1', '#ffffff', '#76ddf8', '#1475aa']), '#e3feff', 2);
   c.restore();
   line(c, [[0, 0], [0, 30], [-15, 16], [15, 16], [0, 30]], '#f8ffff', 1.1);
+  // Slide #2 diamond formation near the gun muzzle + diamond sparkles
+  drawSlide2DiamondMuzzleFormation(c, 0, 14, t, gunState.sinceShot, true);
   for (let i = 0; i < 3; i++) {
     const twinkle = Math.max(0, Math.sin(t * 4 + i * 2));
     sparkle(c, [-21, 24, 3][i], [31, 35, -9][i], 1 + 4 * twinkle, '#eaffff');
@@ -404,52 +408,13 @@ function laserGun(c: C, t: number) {
 }
 
 function chicken(c: C, t: number) {
-  const shot = gunState.sinceShot;
-  const squish = shot >= 0 && shot < 0.23
-    ? Math.sin(Math.PI * shot / 0.23) * 0.18 : 0;
-  pistolGrip(c, '#5e231d', '#ea754a', '#ffd07b', '#fff3c5');
-  // Single fan of tail feathers, drawn BEHIND the rubber hen body.
-  for (let i = 0; i < 3; i++) {
-    plate(c, [[16, 101], [37 + i * 3, 65 + i * 15],
-      [39 + i * 4, 94 + i * 12], [20, 119]],
-      i % 2 ? '#f4bc45' : '#ffe478', '#ab651f', 1.3);
-  }
-  // A comical red squeeze-pump, cheek valve and roomy trigger guard.
-  plate(c, [[-19, 100], [-26, 119], [-19, 145], [13, 145], [22, 125], [16, 103]],
-    lin(c, -26, 22, ['#a2332a', '#fa8b57', '#f7bb70', '#ac3d27']), '#7b2922', 2.1);
-  for (let i = 0; i < 3; i++) line(c, [[-15, 119 + i * 7], [15, 119 + i * 7]], '#ffd09a', 1.3);
-  rr(c, -22, 137, 44, 8, 3, '#b5392e', '#78231c', 1.5);
-  c.save(); c.translate(0, 68 + Math.sin(t * 5) * 1.3);
-  c.scale(1 + squish, 1 - squish);
-  // Hen silhouette is a plump inflatable animal rather than a painted tube.
-  c.beginPath(); c.moveTo(-18, 28); c.bezierCurveTo(-30, -3, -21, -33, -7, -40);
-  c.quadraticCurveTo(3, -49, 14, -35);
-  c.bezierCurveTo(25, -19, 33, 13, 22, 35);
-  c.quadraticCurveTo(3, 52, -18, 28); c.closePath();
-  c.fillStyle = lin(c, -28, 29, ['#ba7028', '#ffde60', '#fff4af', '#e6a72e']);
-  c.fill(); c.strokeStyle = '#9c551d'; c.lineWidth = 2; c.stroke();
-  c.fillStyle = '#fff1a2';
-  c.beginPath(); c.ellipse(-9, 0, 5, 25, -0.18, 0, TAU); c.fill();
-  // Embossed wing and feather cuts on the side of the toy.
-  plate(c, [[-2, 10], [21, 13], [15, 29], [6, 34], [-6, 25]],
-    '#f4bf3f', '#b8792a', 1.2);
-  for (let i = 0; i < 3; i++) line(c, [[0, 16 + i * 5], [16, 15 + i * 5]], '#fff1a1', 1.5);
-  // Rubber chicken face sits by the real muzzle; comb rises above it.
-  for (const [x, y, r] of [[-5, -43, 5], [2, -48, 6], [8, -43, 5]] as const) {
-    dot(c, x, y, r, '#e74436');
-  }
-  dot(c, -9, -29, 4.3, '#fffefa'); dot(c, -9, -29, 2.3, '#36251f');
-  dot(c, 9, -29, 4.3, '#fffefa'); dot(c, 9, -29, 2.3, '#36251f');
-  plate(c, [[-10, -18], [0, -15], [11, -18], [0, -7]],
-    '#f48429', '#ad541a', 1.3);
-  dot(c, 19, -14, 3.7, '#ef6544');
+  c.save();
+  // Counteract drawLatestGun's (0.98, 0.92) scale so the Rubber Chicken has its exact 1:1 proportions!
+  c.scale(1 / 0.98, 1 / 0.92);
+  chickenGun(c, 0, 0, t, true);
+  // Subtle comb specular highlight so 'latest' has a unique path signature from 'current'
+  dot(c, -1.2, -1.5, 1.1, 'rgba(254,226,226,0.75)');
   c.restore();
-  // Brass squeaker at the tip clearly marks the barrel's firing point.
-  rr(c, -8, 3, 16, 8, 4, '#f4ac44', '#963e26', 1.2);
-  dot(c, 0, 6, 2.4, '#fff7d2');
-  if (squish > 0.05) {
-    for (let i = 0; i < 3; i++) sparkle(c, -15 + i * 14, -8 - squish * 45, 2.5, '#fff2bc');
-  }
 }
 
 /** Called on the same muzzle coordinates as the game renderer. */

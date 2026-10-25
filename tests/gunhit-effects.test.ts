@@ -13,7 +13,37 @@ import { bananaPeelOpen, bananaFleshFill } from '../src/games/gunhit/game/art/gu
 import { dragonFlameSurge } from '../src/games/gunhit/game/art/guns3';
 import { honeyPumpPulse } from '../src/games/gunhit/game/art/guns4';
 import { FX, spawnImpact, spawnMuzzle, type Particle } from '../src/games/gunhit/game/fx';
-import { drawProjectile, getWeapon } from '../src/games/gunhit/game/weapons';
+import { drawGun, drawProjectile, getWeapon, WEAPONS } from '../src/games/gunhit/game/weapons';
+import { GUN_METRICS } from '../src/games/gunhit/game/art/metrics';
+import { gunState } from '../src/games/gunhit/game/art/kit';
+import { drawPreciseWeaponDecal } from '../src/games/gunhit/game/art/decalSystem';
+import {
+  createFirework8State,
+  drawFirework8Background,
+  drawFirework8ParticlesAndRings,
+  FIREWORK_EMBED_NOSE,
+  FIREWORK_PL,
+  firework8ShotHue,
+  type Firework8State,
+} from '../src/games/gunhit/game/firework8fx';
+import {
+  createYoyoSlideState,
+  drawYoyoSlideBackground,
+  drawYoyoSlideParticlesRingsAndStrings,
+  yoyoAmmoHue,
+  type YoyoSlideState,
+} from '../src/games/gunhit/game/yoyoSlideFx';
+import {
+  createKerisSlideState,
+  drawKerisSlideBackground,
+  drawKerisSlideParticlesAndArcs,
+  drawKerisSurfaceArcs,
+  type KerisSlideState,
+} from '../src/games/gunhit/game/kerisSlideFx';
+import { drawGunCentered } from '../src/games/gunhit/game/art/drawCentered';
+import { isSlide23Weapon, noteFreq, SLIDE23_WEAPONS, slide23Sfx } from '../src/games/gunhit/game/slide23Sfx';
+import { sfx } from '../src/games/gunhit/game/audio';
+import { readFileSync } from 'node:fs';
 
 interface Shot { x: number; y: number; vx: number; vy: number }
 interface Embedded { cellId?: number; x: number; y: number; angle: number; w: string }
@@ -98,15 +128,10 @@ function probe(level: number, weapon = 'pistol', mode?: LevelMode): Probe {
   return game;
 }
 
-test('portal shot is visual art, with no new portal hitbox or teleport rule', () => {
-  const portal = getWeapon('portal');
-  assert.equal(portal.half, 4.5);
-  assert.equal(portal.speed, 2600);
-  assert.equal(portal.saveFx, 'portal');
-  assert.equal(portal.saves, 2, 'the existing defensive perk is unchanged');
-  assert.equal(FX.portal.ghost, 0, 'no procession of afterimages behind the ring');
-  assert.equal(drawMaterialTrail({} as CanvasRenderingContext2D, 'portal'), true,
-    'the flying ring must not receive a long comet/tadpole tail');
+test('disc, glitch, portal, bit8, warp_disruptor, and deflector_shield are removed from SGA', () => {
+  for (const removedId of ['disc', 'glitch', 'portal', 'bit8', 'warp_disruptor', 'deflector_shield']) {
+    assert.equal(WEAPONS.some(w => w.id === removedId), false, `${removedId} should be removed from WEAPONS`);
+  }
 });
 
 test('snowball doubles in size and breaks into clumps of white snow, not blue ice', () => {
@@ -572,3 +597,792 @@ test('dragon breath flares beyond the horns after a shot, then settles without e
   assert.equal(game.projs.length, 1);
   assert.equal(game.ammoLeft, 11);
 });
+
+test('Firework weapon keeps SGA launcher shape while using Firework 8-Gun rocket, muzzle, stick burst, and night-sky background', () => {
+  const fwWeapon = getWeapon('firework');
+  assert.equal(fwWeapon.noSmoke, true, 'no gray firearm smoke puffs');
+  assert.equal(drawMaterialTrail({} as CanvasRenderingContext2D, 'firework'), true,
+    'firework rocket uses stick sparks rather than a white laser wedge');
+
+  // 1. SGA 3-tube launcher shape is preserved, and flash uses Slide #3 recoil ellipse
+  const gunCalls: { prop: string; args: unknown[] }[] = [];
+  const gunFillStyles: unknown[] = [];
+  const ctx = new Proxy({} as CanvasRenderingContext2D, {
+    get: (_target, prop) => {
+      if (prop === 'createLinearGradient' || prop === 'createRadialGradient') {
+        return () => ({ addColorStop: () => {} });
+      }
+      return (...args: unknown[]) => { gunCalls.push({ prop: String(prop), args }); };
+    },
+    set: (_target, prop, value) => {
+      if (prop === 'fillStyle') gunFillStyles.push(value);
+      return true;
+    },
+  });
+  gunState.rocketHue = 210;
+  drawGun(ctx, 'firework', 0, 0, 0.5, 0.8, true);
+  assert.ok(gunFillStyles.includes('#fde047'), 'SGA firework launcher keeps yellow star/cone accents');
+  assert.ok(gunFillStyles.some(v => typeof v === 'string' && v.startsWith('hsla(210, 100%, 70%')),
+    'muzzle flash draws Slide #3 colored recoil ellipse');
+
+  // 2. Projectile draws Slide #3 drawRocketShape (wooden stick #e6c27a, two white stripes, flash overlay)
+  const projStrokes: unknown[] = [];
+  const projFills: unknown[] = [];
+  const projRects: number[][] = [];
+  const projCtx = new Proxy({} as CanvasRenderingContext2D, {
+    get: (_target, prop) => {
+      if (prop === 'createLinearGradient' || prop === 'createRadialGradient') {
+        return () => ({ addColorStop: () => {} });
+      }
+      if (prop === 'fillRect') return (...args: number[]) => { projRects.push(args); };
+      return () => {};
+    },
+    set: (_target, prop, value) => {
+      if (prop === 'strokeStyle') projStrokes.push(value);
+      if (prop === 'fillStyle') projFills.push(value);
+      return true;
+    },
+  });
+  gunState.rocketHue = 300;
+  gunState.rocketFlash = 1;
+  drawProjectile(projCtx, 'firework', FIREWORK_PL, 0.2, 0.1, true);
+  gunState.rocketFlash = 0;
+  assert.ok(projStrokes.includes('#e6c27a'), 'rocket wooden stick is drawn');
+  assert.ok(projFills.includes('rgba(255,255,255,0.85)'), 'rocket white body stripes are drawn');
+  assert.ok(projFills.includes('rgba(255,255,255,0.7)'), 'impact flash overlay is drawn when flash > 0');
+  assert.equal(projRects.length, 2, 'two body stripes are drawn on the rocket');
+
+  // 3. Launching ("saat keluar") and sticking ("nancep") populate Slide #3 firework state
+  const game = probe(2, 'firework') as Probe & {
+    getFwState(): Firework8State;
+    stickAt(local: number, p?: Shot & { hue?: number }): void;
+    items: { angle: number; type: string; w?: string; hue?: number; flash?: number }[];
+    faceCtx: CanvasRenderingContext2D;
+    faceR: number;
+  };
+  game.items = [];
+  game.faceR = 106;
+  game.faceCtx = projCtx;
+  game.shoot();
+  const fw = game.getFwState();
+  assert.equal(game.projs.length, 1);
+  const firstHue = firework8ShotHue(2, 0);
+  assert.equal((game.projs[0] as Shot & { hue?: number }).hue, firstHue);
+  assert.equal(fw.particles.length, 23, '22 muzzle sparks + 1 central flash particle');
+  assert.equal(fw.glows.length, 1, 'muzzle glow r=70');
+  assert.equal(fw.rings.length, 1, 'muzzle ring maxR=38');
+
+  // Sticking into the target triggers Slide #3 stick burst and sets flash=1 with 6px nose embed
+  const prevParticles = fw.particles.length;
+  game.stickAt(Math.PI / 2, game.projs[0] as Shot & { hue?: number });
+  assert.equal(game.items.length, 1);
+  assert.equal(game.items[0].hue, firstHue);
+  assert.equal(game.items[0].flash, 1);
+  assert.equal(FIREWORK_EMBED_NOSE, 6);
+  assert.ok(fw.particles.length > prevParticles + 80, 'dual firework bursts spawn on stick');
+  assert.ok(fw.rings.some(r => r.maxR === 90), 'impact shock ring maxR=90 spawns on stick');
+
+  // 4. Target decal leaves no black scorch hole for firework
+  const decalCalls: string[] = [];
+  const decalCtx = new Proxy({} as CanvasRenderingContext2D, {
+    get: (_target, prop) => (..._args: unknown[]) => { decalCalls.push(String(prop)); },
+    set: () => true,
+  });
+  drawPreciseWeaponDecal(decalCtx, 106, Math.PI / 2, fwWeapon, 'wood');
+  assert.deepEqual(decalCalls, ['save', 'beginPath', 'arc', 'clip', 'restore']);
+
+  // 5. Night-sky background ("efek dilatar") renders gradient, horizon haze, skyline, stars, glows, and line-streak particles
+  const bgStops: string[] = [];
+  const bgCtx = new Proxy({} as CanvasRenderingContext2D, {
+    get: (_target, prop) => {
+      if (prop === 'createLinearGradient' || prop === 'createRadialGradient') {
+        return () => ({ addColorStop: (_at: number, col: string) => { bgStops.push(col); } });
+      }
+      return () => {};
+    },
+    set: () => true,
+  });
+  const bgState = createFirework8State(420, 760);
+  assert.equal(bgState.stars.length, 110);
+  assert.ok(bgState.skyline.length > 8);
+  drawFirework8Background(bgCtx, bgState, 1, 210, 255, 106, 2);
+  assert.ok(bgStops.includes('#04010f') && bgStops.includes('#4a1747'), 'Slide #3 night sky gradient stops');
+  assert.ok(bgStops.includes('rgba(255, 120, 160, 0.25)'), 'Slide #3 pink horizon haze');
+  drawFirework8ParticlesAndRings(bgCtx, fw);
+});
+
+test('Yoyo Shooter uses Slide #6 gun/yoyo design & animations and Slide #2 launch, stuck rim spin, string snap, ammo, and background', () => {
+  const yoyoWeapon = getWeapon('yoyo');
+  assert.equal(yoyoWeapon.rope, true);
+
+  // 1. Gun body and demo shot/catch-back animation use Slide #6 (Arsenal Wheel) YoyoGun & drawYoyo
+  const gunFills: string[] = [];
+  const gunStrokes: string[] = [];
+  const gunCtx = new Proxy({} as CanvasRenderingContext2D, {
+    get: (_target, prop) => {
+      if (prop === 'createLinearGradient' || prop === 'createRadialGradient') {
+        return () => ({ addColorStop: (_at: number, col: string) => { gunFills.push(col); } });
+      }
+      return () => {};
+    },
+    set: (_target, prop, value) => {
+      if (prop === 'fillStyle' && typeof value === 'string') gunFills.push(value);
+      if (prop === 'strokeStyle' && typeof value === 'string') gunStrokes.push(value);
+      return true;
+    },
+  });
+  drawGun(gunCtx, 'yoyo', 210, 550, 0.5, 1, true);
+  assert.ok(gunFills.includes('#ffe4f3') && gunFills.includes('#ffa6d4'), 'Slide #6 capsule launcher body gradient');
+  assert.ok(gunStrokes.includes('#18b8d8') && gunStrokes.includes('#2ee6ff'), 'Slide #6 cyan yoyo cradle');
+  assert.ok(gunFills.includes('#ffe14a') && gunFills.includes('#7b3dff'), 'Slide #6 yoyo axle cap and star emblem');
+
+  // Demo preview in Menu/Arsenal animates shot & catch-back without mutating live gunState
+  gunState.sinceShot = 9;
+  drawGunCentered(gunCtx, 'yoyo', 0.05, 0, true, undefined, true);
+  assert.equal(gunState.sinceShot, 9);
+  assert.equal(gunState.inPreview, false);
+
+  // 2. Projectile uses Slide #6 spinning yoyo + Slide #2 stuck spin arcs when embedded
+  const projArcs: number[] = [];
+  const projCtx = new Proxy({} as CanvasRenderingContext2D, {
+    get: (_target, prop) => {
+      if (prop === 'createLinearGradient' || prop === 'createRadialGradient') {
+        return () => ({ addColorStop: () => {} });
+      }
+      if (prop === 'arc') {
+        return (_x: number, _y: number, r: number) => { projArcs.push(r); };
+      }
+      return () => {};
+    },
+    set: () => true,
+  });
+  gunState.yoyoHue = 120;
+  gunState.yoyoFlash = 1;
+  drawProjectile(projCtx, 'yoyo', 34, 0.4, 0.1, true);
+  assert.ok(projArcs.some(r => r > 22), 'embedded yoyo draws Slide #2 fast-spin speed arcs around the rim');
+  assert.equal(drawMaterialTrail(projCtx, 'yoyo'), true, 'skips generic laser wedge trail');
+
+  // 3. Firing & sticking in Game triggers Slide #2 launch, yoyoBurst, and elastic string snap-back
+  const game = probe(2, 'yoyo') as Probe & {
+    getYoyoState(): YoyoSlideState;
+    stickAt(local: number, p?: Shot & { hue?: number; originX?: number }): void;
+    items: { angle: number; type: string; w?: string; hue?: number; flash?: number; age: number }[];
+    faceCtx: CanvasRenderingContext2D;
+    faceR: number;
+  };
+  game.items = [];
+  game.faceR = 106;
+  game.faceCtx = projCtx;
+  game.shoot();
+  const yoyo = game.getYoyoState();
+  assert.equal(game.projs.length, 1);
+  const firstHue = yoyoAmmoHue(0);
+  assert.equal((game.projs[0] as Shot & { hue?: number }).hue, firstHue);
+  assert.equal(yoyo.particles.length, 14, '14 Slide #2 launch puff sparks');
+  assert.equal(yoyo.glows.length, 1, 'Slide #2 launch glow');
+  assert.equal(yoyo.rings.length, 1, 'Slide #2 launch ring');
+
+  const prevParticles = yoyo.particles.length;
+  game.stickAt(Math.PI / 2, game.projs[0] as Shot & { hue?: number; originX?: number });
+  assert.equal(game.items.length, 1);
+  assert.equal(game.items[0].hue, firstHue);
+  assert.equal(game.items[0].flash, 1);
+  assert.equal(yoyo.strings.length, 1, 'elastic string snaps back from wheel rim to gun');
+  assert.ok(yoyo.particles.length >= prevParticles + 52, 'Slide #2 yoyoBurst spawns 52 rainbow particles + central flash');
+  assert.ok(yoyo.rings.some(r => r.r === 95) && yoyo.rings.some(r => r.r === 125), 'Slide #2 dual shockwave rings spawn on stick');
+
+  // 4. Target decal leaves no black bullet hole for yoyo
+  const decalCalls: string[] = [];
+  const decalCtx = new Proxy({} as CanvasRenderingContext2D, {
+    get: (_target, prop) => (..._args: unknown[]) => { decalCalls.push(String(prop)); },
+    set: () => true,
+  });
+  drawPreciseWeaponDecal(decalCtx, 106, Math.PI / 2, yoyoWeapon, 'wood');
+  assert.deepEqual(decalCalls, ['save', 'beginPath', 'arc', 'clip', 'restore']);
+
+  // 5. Slide #2 yoyo background renders night skyline, stars, yoyo atmosphere overlay, and rainbow wheel glow
+  const bgStops: string[] = [];
+  const bgCtx = new Proxy({} as CanvasRenderingContext2D, {
+    get: (_target, prop) => {
+      if (prop === 'createLinearGradient' || prop === 'createRadialGradient') {
+        return () => ({ addColorStop: (_at: number, col: string) => { bgStops.push(col); } });
+      }
+      return () => {};
+    },
+    set: () => true,
+  });
+  const bgState = createYoyoSlideState(420, 760);
+  assert.equal(bgState.stars.length, 95);
+  assert.ok(bgState.skyline.length > 8);
+  drawYoyoSlideBackground(bgCtx, bgState, 1, 210, 255, 106, 2, 1.5);
+  assert.ok(bgStops.includes('#04010f') && bgStops.includes('#4a1747'), 'Slide #2 night sky gradient stops');
+  assert.ok(bgStops.includes('rgba(60,10,60,0.2)') && bgStops.includes('rgba(80,20,40,0.2)'), 'Slide #2 yoyo atmosphere overlay');
+  drawYoyoSlideParticlesRingsAndStrings(bgCtx, yoyo, 210, 255, 1.5);
+});
+
+test('keris weapon combines Slide #8 Keris gun/effects/background with Slide #4 Luk Keris blade design', () => {
+  const kerisWeapon = getWeapon('keris');
+  assert.equal(kerisWeapon.color, '#4deeea');
+  assert.equal(FX.keris.ghost, 0, 'no ghost afterimage trail');
+  assert.equal(FX.keris.speedLines, false, 'no generic vertical speedLines');
+
+  // 1. Gun renders Slide #8 Hulu/Mendak/Warangka/Ganja + Slide #4 Luk 5 Wilah blade (no tip star) + bottom-to-top gleam sweep
+  const gunStops: string[] = [];
+  const gunFills: string[] = [];
+  const gunStrokes: string[] = [];
+  const gunCtx = new Proxy({} as CanvasRenderingContext2D, {
+    get: (_target, prop) => {
+      if (prop === 'createLinearGradient' || prop === 'createRadialGradient') {
+        return () => ({ addColorStop: (_at: number, col: string) => { gunStops.push(col); } });
+      }
+      return () => {};
+    },
+    set: (_target, prop, value) => {
+      if (prop === 'fillStyle' && typeof value === 'string') gunFills.push(value);
+      if (prop === 'strokeStyle' && typeof value === 'string') gunStrokes.push(value);
+      return true;
+    },
+  });
+  gunState.sinceShot = 0.04;
+  drawGun(gunCtx, 'keris', 210, 575, 0.5, 0.9, true);
+  assert.ok(gunStops.includes('#1e1107') && gunStops.includes('#593518'), 'Slide #8 Garuda Jawa Hulu wood gradient');
+  assert.ok(gunStops.includes('#241409') && gunStops.includes('#663d1d'), 'Slide #8 Ladrang Warangka boat sheath');
+  assert.ok(gunStops.includes('#c98a1e') && gunStops.includes('#f0cf7d'), 'Slide #4 Luk 5 Wilah golden-white blade gradient');
+  assert.ok(gunFills.includes('#e02547'), 'Slide #4 Naga crest ruby eyes at blade base');
+  assert.ok(gunStops.includes('rgba(255, 250, 220, 0.98)') && gunFills.includes('rgba(255, 232, 140, 0.92)'), 'bottom-to-top blade gleam sweep when shooting');
+  assert.ok(!gunStrokes.includes('rgba(217,154,38,0.7)'), 'no tip star at the end of the Keris blade');
+  drawGunCentered(gunCtx, 'keris', 0.3, 0, true, undefined, true);
+
+  // 2. Projectile & stuck Keris match the full Keris weapon shape (Hulu, Mendak, Warangka, Ganja, Luk 5 Wilah & Naga crests)
+  //    with yellow/golden lightning (listrik kuning) and zero blue/cyan glow.
+  const projStops: string[] = [];
+  const projStrokes: string[] = [];
+  const projCtx = new Proxy({} as CanvasRenderingContext2D, {
+    get: (_target, prop) => {
+      if (prop === 'createLinearGradient' || prop === 'createRadialGradient') {
+        return () => ({ addColorStop: (_at: number, col: string) => { projStops.push(col); } });
+      }
+      return () => {};
+    },
+    set: (_target, prop, value) => {
+      if (prop === 'strokeStyle' && typeof value === 'string') projStrokes.push(value);
+      return true;
+    },
+  });
+  drawProjectile(projCtx, 'keris', 44, 0.4, 0.1, false);
+  assert.ok(projStops.includes('rgba(255, 224, 110, 0.65)'), 'golden-yellow tail behind flying Keris');
+  assert.ok(projStops.includes('#c98a1e') && projStops.includes('#f0cf7d'), 'Slide #4 Luk 5 Wilah blade gradient');
+
+  projStops.length = 0;
+  projStrokes.length = 0;
+  drawProjectile(projCtx, 'keris', 44, 0.4, 0.1, true);
+  assert.ok(projStops.includes('#1e1107') && projStops.includes('#593518'), 'stuck Keris includes full Hulu Garuda Jawa');
+  assert.ok(projStops.includes('#241409') && projStops.includes('#663d1d'), 'stuck Keris includes full Warangka Ladrang');
+  assert.ok(projStops.includes('#c98a1e') && projStops.includes('#f0cf7d'), 'stuck Keris includes full Luk 5 Wilah blade');
+  assert.ok(projStrokes.includes('rgba(255, 208, 86, 0.92)'), 'golden-yellow electric crater on stuck Keris');
+  assert.ok(projStrokes.some(s => s.startsWith('rgba(255,170,40,') || s.startsWith('rgba(255,205,80,')), 'yellow lightning jolts (listrik kuning) on stuck Keris');
+  assert.ok(!projStops.includes('#4deeea') && !projStrokes.some(s => s.includes('77, 238, 234')), 'no blue/cyan glow on stuck Keris');
+  assert.equal(drawMaterialTrail(projCtx, 'keris'), true, 'skips generic laser wedge trail');
+
+  // 3. Firing & sticking in Game triggers Slide #8 launch arcs, crisp lightning bolts from muzzle to target, crawlArcs & thunderFlash
+  const game = probe(2, 'keris') as Probe & {
+    getKerisState(): KerisSlideState;
+    stickAt(local: number, p?: Shot & { originX?: number }): void;
+    items: { angle: number; type: string; w?: string; age: number }[];
+    faceCtx: CanvasRenderingContext2D;
+    faceR: number;
+  };
+  game.items = [];
+  game.faceR = 106;
+  game.faceCtx = projCtx;
+  game.shoot();
+  const keris = game.getKerisState();
+  assert.equal(game.projs.length, 1);
+  assert.ok(keris.particles.filter(p => p.kind === 'arc').length === 3, '3 Slide #8 muzzle lightning arcs');
+  assert.ok(keris.particles.filter(p => p.kind === 'spark').length === 10, '10 Slide #8 muzzle sparks');
+  assert.ok(keris.particles.some(p => p.kind === 'ring' && p.grow === 260), 'Slide #8 muzzle shock ring');
+
+  const prevArcs = keris.particles.filter(p => p.kind === 'arc').length;
+  game.stickAt(Math.PI / 2, game.projs[0] as Shot & { originX?: number });
+  assert.equal(game.items.length, 1);
+  assert.equal(keris.particles.filter(p => p.kind === 'arc').length, prevArcs + 7, 'main bolt + gold companion bolt + 5 radial impact arcs');
+  assert.equal(keris.crawlArcs.length, 1, 'crawling surface lightning arc on wheel rim');
+  assert.equal(keris.thunderFlash, 1, 'full-screen subtle cyan thunderFlash triggered');
+
+  // 4. Target decal leaves no black bullet hole for keris
+  const decalCalls: string[] = [];
+  const decalCtx = new Proxy({} as CanvasRenderingContext2D, {
+    get: (_target, prop) => (..._args: unknown[]) => { decalCalls.push(String(prop)); },
+    set: () => true,
+  });
+  drawPreciseWeaponDecal(decalCtx, 106, Math.PI / 2, kerisWeapon, 'wood');
+  assert.deepEqual(decalCalls, ['save', 'beginPath', 'arc', 'clip', 'restore']);
+
+  // 5. Slide #8 background renders midnight navy gradient, cyan target halo, golden weapon ember, rotating dashed rings, and dust
+  const bgStops: string[] = [];
+  const bgCtx = new Proxy({} as CanvasRenderingContext2D, {
+    get: (_target, prop) => {
+      if (prop === 'createLinearGradient' || prop === 'createRadialGradient') {
+        return () => ({ addColorStop: (_at: number, col: string) => { bgStops.push(col); } });
+      }
+      return () => {};
+    },
+    set: () => true,
+  });
+  const bgState = createKerisSlideState(420, 760);
+  assert.equal(bgState.dust.length, 44);
+  drawKerisSlideBackground(bgCtx, bgState, 210, 255, 106, 1.5, false, 420, 760);
+  assert.ok(bgStops.includes('#0b1428') && bgStops.includes('#080d1c') && bgStops.includes('#05070f'), 'Slide #8 midnight gradient stops');
+  drawKerisSurfaceArcs(bgCtx, keris, 106, 0, 1.5);
+  drawKerisSlideParticlesAndArcs(bgCtx, keris, 420, 760);
+});
+
+test('Pistol uses Slide #7 Weapon #3 (M1911 LEGACY) design sized like Golden/Chrono Gun, and Banana flesh uses Slide #7 Weapon #6 flesh', () => {
+  const pistolStops: string[] = [];
+  const pistolFills: string[] = [];
+  const pistolCtx = new Proxy({} as CanvasRenderingContext2D, {
+    get: (_target, prop) => {
+      if (prop === 'createLinearGradient' || prop === 'createRadialGradient') {
+        return () => ({ addColorStop: (_at: number, col: string) => { pistolStops.push(col); } });
+      }
+      return () => {};
+    },
+    set: (_target, prop, value) => {
+      if (prop === 'fillStyle' && typeof value === 'string') pistolFills.push(value);
+      return true;
+    },
+  });
+  gunState.sinceShot = 0.08;
+  drawGun(pistolCtx, 'pistol', 210, 575, 0.5, 0, true);
+  assert.ok(pistolStops.includes('#aebfd2') && pistolStops.includes('#4a5866'), 'Slide #7 M1911 blued-steel slide gradient');
+  assert.ok(pistolStops.includes('#5b3a1e') && pistolStops.includes('#43290f'), 'Slide #7 M1911 checkered walnut grip gradient');
+  assert.ok(pistolFills.includes('#7fb3ff'), 'Slide #7 M1911 .45 LEGACY ammo pips');
+
+  const bananaStops: string[] = [];
+  const bananaFills: string[] = [];
+  const bananaStrokes: string[] = [];
+  const bananaCtx = new Proxy({} as CanvasRenderingContext2D, {
+    get: (_target, prop) => {
+      if (prop === 'createLinearGradient' || prop === 'createRadialGradient') {
+        return () => ({ addColorStop: (_at: number, col: string) => { bananaStops.push(col); } });
+      }
+      return () => {};
+    },
+    set: (_target, prop, value) => {
+      if (prop === 'fillStyle' && typeof value === 'string') bananaFills.push(value);
+      if (prop === 'strokeStyle' && typeof value === 'string') bananaStrokes.push(value);
+      return true;
+    },
+  });
+  drawProjectile(bananaCtx, 'banana', 30, 0.4, 0.2, false);
+  assert.ok(bananaStops.includes('#dccf9a') && bananaStops.includes('#f7efc9') && bananaStops.includes('#fffdf2'), 'Slide #7 Weapon #6 banana flesh gradient');
+  assert.ok(bananaStrokes.includes('rgba(190,166,100,0.6)'), 'Slide #7 Weapon #6 longitudinal flesh ridges');
+  assert.ok(bananaFills.includes('rgba(122,92,32,0.5)') && bananaFills.includes('#8a5a1a'), 'Slide #7 Weapon #6 seed dots and brown peel nub');
+
+  bananaStops.length = 0;
+  gunState.sinceShot = 9;
+  drawGun(bananaCtx, 'banana', 210, 575, 0.5, 0, true);
+  assert.ok(bananaStops.includes('#f0e2ad') && bananaStops.includes('#e6d7a2'), 'Slide #7 Weapon #6 banana flesh inside the Banana Gun');
+});
+
+test('Slide #2 pentatonic sound rhythm, UI/clear/fail/start SFX, wheel 0.15->1 entrance, and STAGE CLEAR! banner work in SGA', () => {
+  // 1. Pentatonic scale matches Slide #2 (`games/firework/src/game/sfx.ts`)
+  assert.ok(Math.abs(noteFreq(0) - 523.25) < 1e-6);
+  assert.ok(Math.abs(noteFreq(1) - 523.25 * Math.pow(2, 2 / 12)) < 1e-6);
+  assert.ok(Math.abs(noteFreq(2) - 523.25 * Math.pow(2, 4 / 12)) < 1e-6);
+  assert.ok(Math.abs(noteFreq(3) - 523.25 * Math.pow(2, 7 / 12)) < 1e-6);
+  assert.ok(Math.abs(noteFreq(4) - 523.25 * Math.pow(2, 9 / 12)) < 1e-6);
+  assert.ok(Math.abs(noteFreq(5) - 523.25 * 2) < 1e-6);
+
+  // 2. All 12 weapons from Slide #2 and Slide #3 use the Slide #2/#3 sound system
+  for (const w of ['keris', 'blackhole', 'yoyo', 'diamond', 'crystal', 'firework', 'shark', 'bamboo', 'soaker', 'rainbow', 'bazooka', 'rpg'] as const) {
+    assert.ok(SLIDE23_WEAPONS.includes(w) && isSlide23Weapon(w), `${w} uses Slide #2/#3 sound system`);
+  }
+
+  // 3. Shooting and sticking with Slide #2/#3 weapons invoke slide23Sfx.shoot and slide23Sfx.hit with ascending hit index
+  const calls: string[] = [];
+  const origShoot = slide23Sfx.shoot.bind(slide23Sfx);
+  const origHit = slide23Sfx.hit.bind(slide23Sfx);
+  const origStart = slide23Sfx.start.bind(slide23Sfx);
+  const origClear = slide23Sfx.clear.bind(slide23Sfx);
+  const origFail = slide23Sfx.fail.bind(slide23Sfx);
+  const origClick = slide23Sfx.click.bind(slide23Sfx);
+  slide23Sfx.shoot = (w) => { calls.push(`shoot:${w}`); };
+  slide23Sfx.hit = (w, idx) => { calls.push(`hit:${w}:${idx}`); };
+  slide23Sfx.start = () => { calls.push('start'); };
+  slide23Sfx.clear = (w) => { calls.push(`clear:${w}`); };
+  slide23Sfx.fail = (w) => { calls.push(`fail:${w}`); };
+  slide23Sfx.click = () => { calls.push('click'); };
+  try {
+    sfx.click();
+    sfx.start();
+    sfx.clear('keris');
+    sfx.fail('yoyo');
+    assert.deepEqual(calls, ['click', 'start', 'clear:keris', 'fail:yoyo']);
+
+    calls.length = 0;
+    const game = probe(1, 'diamond') as Probe & {
+      stickAt(local: number): void;
+      clearLevel(): void;
+      fail(p: Shot): void;
+      items: unknown[];
+      stuck: number;
+      combo: number;
+      lastHit: number;
+      time: number;
+      hitFlash: number;
+      flashRed: number;
+      timeScale: number;
+      frags: unknown[];
+    };
+    const noopCtx = new Proxy({} as CanvasRenderingContext2D, {
+      get: () => () => ({ addColorStop: () => {} }),
+      set: () => true,
+    });
+    Object.assign(game, {
+      items: [], stuck: 0, combo: 0, lastHit: -10, time: 1, hitFlash: 0, flashRed: 0, timeScale: 1, frags: [],
+      faceCtx: noopCtx, faceScale: 2,
+    });
+    game.shoot();
+    game.stickAt(0.2);
+    game.stickAt(0.8);
+    assert.deepEqual(calls, ['shoot:diamond', 'hit:diamond:0', 'hit:diamond:1']);
+  } finally {
+    slide23Sfx.shoot = origShoot;
+    slide23Sfx.hit = origHit;
+    slide23Sfx.start = origStart;
+    slide23Sfx.clear = origClear;
+    slide23Sfx.fail = origFail;
+    slide23Sfx.click = origClick;
+  }
+
+  // 4. Wheel entrance animation (0.15 -> 1 via dt * 9) and STAGE CLEAR! + BONUS +3 banner in Game.ts
+  const gameSrc = readFileSync('src/games/gunhit/game/Game.ts', 'utf8');
+  assert.ok(gameSrc.includes('this.wheelScale = 0.15;'), 'wheel starts at 0.15 scale like Slide #2');
+  assert.ok(gameSrc.includes('this.wheelScale += (1 - this.wheelScale) * Math.min(1, dt * 9);'), 'wheel scales with Slide #2 damping');
+  assert.ok(gameSrc.includes("c.fillText('STAGE CLEAR!', 0, 0);"), 'draws STAGE CLEAR! banner on canvas like Slide #2');
+  assert.ok(gameSrc.includes("c.fillText('BONUS +3', 0, 40);"), 'draws BONUS +3 subtitle on canvas like Slide #2');
+  assert.ok(gameSrc.includes('c.drawImage(this.face,'), 'keeps SGA wheel face image');
+});
+
+test('Magnet Gun uses upgraded 3D horseshoe + solenoid coil design and stuck magnet on the wheel is 2x larger', () => {
+  const scales: [number, number][] = [];
+  const texts: string[] = [];
+  const ctx = new Proxy({} as CanvasRenderingContext2D, {
+    get: (_target, prop) => {
+      if (prop === 'createLinearGradient' || prop === 'createRadialGradient') {
+        return () => ({ addColorStop: () => {} });
+      }
+      if (prop === 'scale') {
+        return (sx: number, sy: number) => { scales.push([sx, sy]); };
+      }
+      if (prop === 'fillText') {
+        return (t: string) => { texts.push(t); };
+      }
+      return () => {};
+    },
+    set: () => true,
+  });
+
+  drawGun(ctx, 'magnet', 210, 575, 0.5, 0, true);
+  assert.ok(texts.includes('N') && texts.includes('S'), 'Magnet Gun draws N and S pole markings on the horseshoe crown');
+
+  scales.length = 0;
+  drawProjectile(ctx, 'magnet', 39, 0.5, 0.2, false);
+  assert.ok(scales.some(([sx, sy]) => sx === 1 && sy === 1), 'flying magnet uses 1x scale');
+
+  scales.length = 0;
+  drawProjectile(ctx, 'magnet', 39, 0.5, 0.2, true);
+  assert.ok(scales.some(([sx, sy]) => sx === 2 && sy === 2), 'embedded magnet stuck on the wheel is 2x larger');
+});
+
+test('Laser Beam, Freeze Ray, Ghost Gun, UFO Ray, and Rainbow Gun use upgraded reference silhouettes and animations', () => {
+  const stops: string[] = [];
+  const rotations: number[] = [];
+  const ctx = new Proxy({} as CanvasRenderingContext2D, {
+    get: (_target, prop) => {
+      if (prop === 'createLinearGradient' || prop === 'createRadialGradient') {
+        return () => ({ addColorStop: (_o: number, col: string) => { stops.push(col); } });
+      }
+      if (prop === 'rotate') {
+        return (ang: number) => { rotations.push(ang); };
+      }
+      return () => {};
+    },
+    set: () => true,
+  });
+
+  drawGun(ctx, 'laser', 210, 575, 0.5, 0, true);
+  assert.ok(rotations.some(r => Math.abs(r - (-0.22)) < 1e-4), 'Laser Beam uses contoured rear-flowing grip angle');
+  assert.ok(stops.includes('#ff1744') && stops.includes('#ff5c7f'), 'Laser Beam renders 5-cell glowing crimson energy core');
+
+  stops.length = 0;
+  rotations.length = 0;
+  drawGun(ctx, 'freeze', 210, 575, 0.5, 0, true);
+  assert.ok(rotations.some(r => Math.abs(r - (-0.72)) < 1e-4), 'Freeze Ray uses ergonomic angled cryo grip');
+  assert.ok(stops.includes('#00e5ff') && stops.includes('#80f5ff'), 'Freeze Ray renders glowing cyan coolant capsule and rear cryo orb');
+
+  stops.length = 0;
+  drawGun(ctx, 'ghost', 210, 575, 0.5, 0, true);
+  assert.ok(stops.includes('#88f4ff') && stops.includes('rgba(140,248,255,0.92)'), 'Ghost Gun renders pearlescent bottle body and glowing cyan ghosts');
+
+  stops.length = 0;
+  drawGun(ctx, 'ufo', 210, 575, 0.5, 0, true);
+  assert.ok(stops.includes('#10b981') && stops.includes('#4ade80'), 'UFO Ray renders glowing emerald dome and neon green plasma spike');
+
+  stops.length = 0;
+  rotations.length = 0;
+  drawGun(ctx, 'rainbow', 210, 575, 0.5, 0, true);
+  assert.ok(rotations.some(r => Math.abs(r - (-0.28)) < 1e-4), 'Rainbow Gun renders angled rainbow thumb-sight tab and star badge');
+});
+
+test('pistol, ak47, laser, freeze, ghost, golden, ufo, rainbow, and gauntlet_cannon use refined thin outlines matching keris and yoyo', () => {
+  const weapons = ['pistol', 'ak47', 'laser', 'freeze', 'ghost', 'golden', 'ufo', 'rainbow', 'gauntlet_cannon'] as const;
+  for (const w of weapons) {
+    let curStroke = '';
+    let curWidth = 1;
+    const thickDarkStrokes: { stroke: string; width: number }[] = [];
+    const ctx = new Proxy({} as CanvasRenderingContext2D, {
+      get: (_target, prop) => {
+        if (prop === 'createLinearGradient' || prop === 'createRadialGradient') {
+          return () => ({ addColorStop: () => {} });
+        }
+        if (prop === 'stroke') {
+          return () => {
+            const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(curStroke);
+            const isDarkHex = m
+              ? parseInt(m[1], 16) < 48 && parseInt(m[2], 16) < 48 && parseInt(m[3], 16) < 58
+              : false;
+            if (curWidth >= 1.8 && isDarkHex) {
+              thickDarkStrokes.push({ stroke: curStroke, width: curWidth });
+            }
+          };
+        }
+        return () => {};
+      },
+      set: (_target, prop, val) => {
+        if (prop === 'strokeStyle' && typeof val === 'string') curStroke = val;
+        if (prop === 'lineWidth' && typeof val === 'number') curWidth = val;
+        return true;
+      },
+    });
+    drawGun(ctx, w, 210, 575, 0.5, 0, true, 'classic');
+    drawGun(ctx, w, 210, 575, 0.5, 0, true, 'new');
+    assert.deepEqual(thickDarkStrokes, [], `${w} should not have thick dark contour outlines`);
+  }
+});
+
+test('alien_ray and tornado are removed, and ruby, sapphire, wand, and crystal render reference-matched rare designs with thin outlines', () => {
+  const weaponIds = WEAPONS.map(w => w.id as string);
+  assert.ok(!weaponIds.includes('alien_ray'), 'alien_ray is removed from WEAPONS');
+  assert.ok(!weaponIds.includes('tornado'), 'tornado is removed from WEAPONS');
+  assert.ok(!('alien_ray' in GUN_METRICS), 'alien_ray is removed from GUN_METRICS');
+  assert.ok(!('tornado' in GUN_METRICS), 'tornado is removed from GUN_METRICS');
+
+  for (const w of ['ruby', 'sapphire', 'wand', 'crystal'] as const) {
+    const stops: string[] = [];
+    let curStroke = '';
+    let curWidth = 1;
+    const thickDarkStrokes: { stroke: string; width: number }[] = [];
+    const ctx = new Proxy({} as CanvasRenderingContext2D, {
+      get: (_target, prop) => {
+        if (prop === 'createLinearGradient' || prop === 'createRadialGradient') {
+          return () => ({
+            addColorStop: (_o: number, col: string) => {
+              stops.push(col);
+            },
+          });
+        }
+        if (prop === 'stroke') {
+          return () => {
+            const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(curStroke);
+            const isDarkHex = m
+              ? parseInt(m[1], 16) < 48 && parseInt(m[2], 16) < 48 && parseInt(m[3], 16) < 58
+              : false;
+            if (curWidth >= 1.8 && isDarkHex) {
+              thickDarkStrokes.push({ stroke: curStroke, width: curWidth });
+            }
+          };
+        }
+        return () => {};
+      },
+      set: (_target, prop, val) => {
+        if (prop === 'strokeStyle' && typeof val === 'string') curStroke = val;
+        if (prop === 'lineWidth' && typeof val === 'number') curWidth = val;
+        return true;
+      },
+    });
+    drawGun(ctx, w, 210, 575, 0.4, 0, true, 'classic');
+    drawProjectile(ctx, w, getWeapon(w).stick, 0.4, 1, false);
+    assert.deepEqual(thickDarkStrokes, [], `${w} should use refined thin outlines`);
+    assert.ok(stops.length >= 12, `${w} should render rich multi-stop gemstone/metallic gradients`);
+  }
+});
+
+test('electro, blackhole, slingshot, shotgun, and soaker render reference-matched designs with thin outlines', () => {
+  for (const w of ['electro', 'blackhole', 'slingshot', 'shotgun', 'soaker'] as const) {
+    const stops: string[] = [];
+    let curStroke = '';
+    let curWidth = 1;
+    const thickDarkStrokes: { stroke: string; width: number }[] = [];
+    const ctx = new Proxy({} as CanvasRenderingContext2D, {
+      get: (_target, prop) => {
+        if (prop === 'createLinearGradient' || prop === 'createRadialGradient') {
+          return () => ({
+            addColorStop: (_o: number, col: string) => {
+              stops.push(col);
+            },
+          });
+        }
+        if (prop === 'stroke') {
+          return () => {
+            const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(curStroke);
+            const isDarkHex = m
+              ? parseInt(m[1], 16) < 48 && parseInt(m[2], 16) < 48 && parseInt(m[3], 16) < 58
+              : false;
+            if (curWidth >= 1.8 && isDarkHex) {
+              thickDarkStrokes.push({ stroke: curStroke, width: curWidth });
+            }
+          };
+        }
+        return () => {};
+      },
+      set: (_target, prop, val) => {
+        if (prop === 'strokeStyle' && typeof val === 'string') curStroke = val;
+        if (prop === 'lineWidth' && typeof val === 'number') curWidth = val;
+        return true;
+      },
+    });
+    drawGun(ctx, w, 210, 575, 0.45, 0, true, 'classic');
+    assert.deepEqual(thickDarkStrokes, [], `${w} should use refined thin outlines`);
+    assert.ok(stops.length >= 10, `${w} should render rich multi-stop gradients matching the reference art`);
+  }
+});
+
+test('removed weapons are absent and honey, railgun, and snowball render reference-matched designs with thin outlines', () => {
+  const ids = WEAPONS.map(w => w.id as string);
+  for (const removed of [
+    'disc', 'glitch', 'portal', 'bit8', 'warp_disruptor', 'deflector_shield',
+    'lone_star', 'plasma_repeater', 'sonic', 'mirror', 'chrono',
+  ]) {
+    assert.ok(!ids.includes(removed), `${removed} is removed from WEAPONS`);
+    assert.ok(!(removed in GUN_METRICS), `${removed} is removed from GUN_METRICS`);
+  }
+
+  for (const w of ['honey', 'railgun', 'snowball', 'moonbeam', 'storm', 'nail', 'sniper', 'flamethrower', 'bubble', 'meteor'] as const) {
+    const stops: string[] = [];
+    let curStroke = '';
+    let curWidth = 1;
+    const thickDarkStrokes: { stroke: string; width: number }[] = [];
+    const ctx = new Proxy({} as CanvasRenderingContext2D, {
+      get: (_target, prop) => {
+        if (prop === 'createLinearGradient' || prop === 'createRadialGradient') {
+          return () => ({
+            addColorStop: (_o: number, col: string) => {
+              stops.push(col);
+            },
+          });
+        }
+        if (prop === 'stroke') {
+          return () => {
+            const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(curStroke);
+            const isDarkHex = m
+              ? parseInt(m[1], 16) < 48 && parseInt(m[2], 16) < 48 && parseInt(m[3], 16) < 58
+              : false;
+            if (curWidth >= 1.8 && isDarkHex) {
+              thickDarkStrokes.push({ stroke: curStroke, width: curWidth });
+            }
+          };
+        }
+        return () => {};
+      },
+      set: (_target, prop, val) => {
+        if (prop === 'strokeStyle' && typeof val === 'string') curStroke = val;
+        if (prop === 'lineWidth' && typeof val === 'number') curWidth = val;
+        return true;
+      },
+    });
+    drawGun(ctx, w, 210, 575, 0.45, 0, true, 'classic');
+    assert.deepEqual(thickDarkStrokes, [], `${w} should use refined thin outlines`);
+    assert.ok(stops.length >= 12, `${w} should render rich multi-stop gradients matching the reference art`);
+  }
+});
+
+test('Diamond Gun keeps SGA silhouette with Slide #2 muzzle diamond formation, diamond bullet + glow, and diamond shard bursts', () => {
+  const game = probe(1, 'diamond') as Probe & {
+    stickAt(local: number): void;
+    diamondState?: {
+      particles: unknown[];
+      shards: unknown[];
+      glows: unknown[];
+      rings: unknown[];
+      starflashes: unknown[];
+    };
+    items: unknown[];
+    stuck: number;
+    combo: number;
+    lastHit: number;
+    time: number;
+    hitFlash: number;
+  };
+  const noopCtx = new Proxy({} as CanvasRenderingContext2D, {
+    get: () => () => ({ addColorStop: () => {} }),
+    set: () => true,
+  });
+  Object.assign(game, {
+    items: [], stuck: 0, combo: 0, lastHit: -10, time: 1, hitFlash: 0,
+    faceCtx: noopCtx, faceScale: 2,
+  });
+  game.shoot();
+  assert.ok(game.diamondState, 'diamondState is initialized when Diamond Gun fires');
+  assert.ok(game.diamondState!.particles.length >= 18, 'spawns Slide #2 diamond launch sparks');
+  assert.ok(game.diamondState!.shards.length >= 4, 'spawns diamond shards on launch');
+  assert.ok(game.diamondState!.starflashes.length >= 1, 'spawns Slide #2 muzzle starflash');
+  assert.ok(game.diamondState!.glows.length >= 1, 'spawns Slide #2 muzzle glow');
+
+  const shardsBefore = game.diamondState!.shards.length;
+  game.stickAt(0.4);
+  assert.ok(game.diamondState!.shards.length >= shardsBefore + 8, 'spawns Slide #2 diamondBurst shard debris on hit');
+  assert.ok(game.diamondState!.rings.length >= 1, 'spawns Slide #2 expanding ice-blue ring on hit');
+});
+
+test('Bazooka in SGA keeps SGA gun shape with Slide #3 shell projectile, glow, muzzle sparks, warhead detonation, and battlefield dusk background', () => {
+  const game = probe(1, 'bazooka') as Probe & {
+    stickAt(local: number): void;
+    bazookaState?: {
+      particles: unknown[];
+      smokes: unknown[];
+      fireballs: unknown[];
+      flashes: unknown[];
+      debris: unknown[];
+      glows: unknown[];
+    };
+    items: unknown[];
+    stuck: number;
+    combo: number;
+    lastHit: number;
+    time: number;
+    hitFlash: number;
+  };
+  const noopCtx = new Proxy({} as CanvasRenderingContext2D, {
+    get: () => () => ({ addColorStop: () => {} }),
+    set: () => true,
+  });
+  Object.assign(game, {
+    items: [], stuck: 0, combo: 0, lastHit: -10, time: 1, hitFlash: 0,
+    faceCtx: noopCtx, faceScale: 2,
+  });
+  game.shoot();
+  assert.ok(game.bazookaState, 'bazookaState is initialized when Bazooka fires');
+  assert.ok(game.bazookaState!.particles.length >= 50, 'spawns Slide #3 forward fire cone, backblast flames, and gravity sparks');
+  assert.ok(game.bazookaState!.smokes.length >= 20, 'spawns Slide #3 backblast, muzzle smoke, and ground dust');
+  assert.ok(game.bazookaState!.fireballs.length >= 3, 'spawns Slide #3 muzzle fireballs');
+  assert.ok(game.bazookaState!.flashes.length >= 1, 'spawns Slide #3 8-spike muzzle flash');
+
+  const debrisBefore = game.bazookaState!.debris.length;
+  game.stickAt(0.35);
+  assert.ok(game.bazookaState!.debris.length >= debrisBefore + 8, 'spawns Slide #3 shrapnel shards and burning dirt clods on warhead impact');
+  assert.ok(game.bazookaState!.fireballs.length >= 7, 'spawns Slide #3 layered core + satellite fireballs on warhead impact');
+});
+
+

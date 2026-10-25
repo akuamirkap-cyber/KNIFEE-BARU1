@@ -216,6 +216,7 @@ export default function App({ onExit }: { onExit?: () => void }) {
     if (changed) {
       const current = questStateRef.current;
       saveQuests({ ...current, weaponEquips: current.weaponEquips + 1 });
+      sfx.click();
     }
     sfx.unlock();
   };
@@ -496,7 +497,10 @@ export default function App({ onExit }: { onExit?: () => void }) {
 
   // The menu, results and modal screens use their own lightweight effects;
   // the heavy level canvas has nothing to simulate behind those overlays.
-  useEffect(() => { gameRef.current?.setActive(active && screen === 'playing'); }, [active, screen]);
+  useEffect(() => {
+    if (screen === 'menu') gameRef.current?.toIdle();
+    gameRef.current?.setActive(active && screen === 'playing');
+  }, [active, screen]);
 
   // Floating upright weapon preview on main menu (matching Screenshot 1)
   useEffect(() => {
@@ -593,10 +597,10 @@ export default function App({ onExit }: { onExit?: () => void }) {
   const beginStage = (level: number) => {
     startingLevelRef.current = level;
     setMapOpen(false);
-    setTransitioning(true);
-    setTransText('READY?');
-    setTransitionStep(1);
-    sfx.start();
+    setTransitioning(false);
+    setTransitionStep(0);
+    gameRef.current?.startAtLevel(level);
+    setScreen('playing');
   };
 
   const play = () => beginStage(1);
@@ -641,7 +645,7 @@ export default function App({ onExit }: { onExit?: () => void }) {
     const m = !muted;
     setMuted(m);
     setMutedState(m);
-    if (!m) sfx.coin();
+    if (!m) sfx.click();
   };
 
   const chooseMenuTheme = (theme: MenuEnvironmentTheme) => {
@@ -650,7 +654,14 @@ export default function App({ onExit }: { onExit?: () => void }) {
   };
 
   return (
-    <div className="gunhit-sga font-game flex h-full w-full select-none items-center justify-center bg-[#071318] relative">
+    <div
+      className="gunhit-sga font-game flex h-full w-full select-none items-center justify-center bg-[#071318] relative"
+      onClickCapture={(e) => {
+        if ((e.target as HTMLElement | null)?.closest('button, [role="button"]')) {
+          sfx.click();
+        }
+      }}
+    >
       {onExit && (
         <button
           onClick={onExit}
@@ -837,8 +848,11 @@ export default function App({ onExit }: { onExit?: () => void }) {
                 <canvas
                   ref={previewCanvasRef}
                   style={{ width: '100%', height: '100%' }}
-                  className="relative z-10 block translate-x-[9%] filter drop-shadow-[0_16px_30px_rgba(0,0,0,0.85)] cursor-pointer hover:scale-105 transition-transform"
-                  onClick={() => setArsenalOpen(true)}
+                  className="relative z-10 block translate-x-[1%] filter drop-shadow-[0_16px_30px_rgba(0,0,0,0.85)] cursor-pointer hover:scale-105 transition-transform"
+                  onClick={() => {
+                    sfx.click();
+                    setArsenalOpen(true);
+                  }}
                 />
               </div>
             </div>

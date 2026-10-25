@@ -201,7 +201,7 @@ test('themed grips use distinct silhouettes and palettes while leaning like the 
   const actualBlackHole: string[] = [];
   drawGunCentered(canvasArt(actualBlackHole), 'blackhole', 0);
   assert.ok(actualBlackHole.some(event => event.startsWith('rotate(-0.72')), 'the active Black Hole renderer uses its angled violet grip');
-  for (const id of ['portal', 'chrono', 'freeze', 'fish', 'electro'] as const) {
+  for (const id of ['freeze', 'fish', 'electro'] as const) {
     const events: string[] = [];
     drawGunCentered(canvasArt(events), id, 0);
     assert.ok(events.some(event => event.startsWith('rotate(-0.72')), `${id} renderer uses its angled themed grip`);

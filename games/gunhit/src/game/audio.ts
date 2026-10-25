@@ -1,3 +1,5 @@
+import { slide23Sfx } from './slide23Sfx';
+
 let actx: AudioContext | null = null;
 let master: GainNode | null = null;
 let noiseBuf: AudioBuffer | null = null;
@@ -5,6 +7,7 @@ let muted = false;
 
 export function setMuted(m: boolean) {
   muted = m;
+  slide23Sfx.setMuted(m);
   if (master) master.gain.value = m ? 0 : 0.55;
 }
 
@@ -72,6 +75,10 @@ export function tone(f0: number, f1: number, dur: number, type: OscillatorType, 
 export const sfx = {
   unlock() {
     ac();
+    slide23Sfx.unlock();
+  },
+  click() {
+    slide23Sfx.click();
   },
   shoot() {
     noise(0.2, 5000, 0.9, 'lowpass', 250);
@@ -192,11 +199,14 @@ export const sfx = {
     tone(620, 590, 0.6, 'triangle', 0.25);
     noise(0.18, 5000, 0.6, 'highpass');
   },
-  shatter() {
-    noise(0.8, 3500, 1, 'lowpass', 150);
-    tone(150, 32, 0.55, 'sine', 0.9);
-    tone(85, 30, 0.6, 'square', 0.18);
-    noise(0.3, 6000, 0.3, 'highpass', 2000, 0.05);
+  shatter(w?: string) {
+    slide23Sfx.clear(w);
+  },
+  clear(w?: string) {
+    slide23Sfx.clear(w);
+  },
+  fail(w?: string) {
+    slide23Sfx.fail(w);
   },
   coin() {
     tone(988, 988, 0.08, 'square', 0.13);
@@ -213,12 +223,9 @@ export const sfx = {
     tone(87, 80, 0.9, 'sawtooth', 0.22, 0.55);
   },
   start() {
-    tone(440, 880, 0.14, 'square', 0.12);
-    tone(660, 1320, 0.2, 'square', 0.1, 0.1);
+    slide23Sfx.start();
   },
   level() {
-    tone(523, 523, 0.1, 'square', 0.1);
-    tone(659, 659, 0.1, 'square', 0.1, 0.09);
-    tone(784, 784, 0.18, 'square', 0.1, 0.18);
+    slide23Sfx.start();
   },
 };

@@ -24,6 +24,12 @@ export function drawPreciseWeaponDecal(
   c.arc(0, 0, R, 0, TAU);
   c.clip();
 
+  // Slide #3 Firework 8-Gun rockets, Slide #2 Yoyo wheels, and Slide #8 Keris stick cleanly onto the rim without a black hole.
+  if (w.id === 'firework' || w.id === 'yoyo' || w.id === 'keris') {
+    c.restore();
+    return;
+  }
+
   // Celestial/prismatic shots leave a tiny constellation, not a black laser
   // entry hole. This imprint survives after the particle aura has faded.
   if (w.id === 'moonbeam' || w.id === 'rainbow') {
@@ -52,6 +58,34 @@ export function drawPreciseWeaponDecal(
     }
     c.closePath(); c.fill();
     c.restore(); c.restore(); return;
+  }
+
+  // Gauntlet Cannon leaves a heavy scorched knuckle-impact crater with golden-crimson fracture lines
+  if (w.id === 'gauntlet_cannon') {
+    c.save();
+    c.translate(x, y);
+    c.rotate(inward - Math.PI / 2);
+
+    const craterG = c.createRadialGradient(0, 2, 1, 0, 2, 16);
+    craterG.addColorStop(0, 'rgba(254,240,138,0.9)');
+    craterG.addColorStop(0.45, 'rgba(239,68,68,0.55)');
+    craterG.addColorStop(1, 'rgba(69,10,10,0)');
+    c.fillStyle = craterG;
+    c.beginPath();
+    c.arc(0, 2, 16, 0, TAU);
+    c.fill();
+
+    c.strokeStyle = 'rgba(250,204,21,0.85)';
+    c.lineWidth = 1.4;
+    c.beginPath();
+    c.moveTo(-3, 1); c.lineTo(-11, 7);
+    c.moveTo(0, 2); c.lineTo(0, 11);
+    c.moveTo(3, 1); c.lineTo(11, 7);
+    c.stroke();
+
+    c.restore();
+    c.restore();
+    return;
   }
 
   // 1. SENJATA LASER / PLASMA / ENERGI (Seperti di screenshot kamu: Plasma/Laser Gun!)
@@ -123,9 +157,9 @@ export function drawPreciseWeaponDecal(
     c.restore(); c.restore(); return;
   }
 
-  // 2. SENJATA TAJAM / SLIT (Pisau, Kunai, Crossbow, Nail Gun, Kartu, Jarum Sumpit)
+  // 2. SENJATA TAJAM / SLIT (Pisau, Crossbow, Nail Gun, Kartu, Jarum Sumpit)
   // Menghasilkan sayatan tipis bersih (Clean Blade Slit)
-  if (w.half <= 3.2 || w.id === 'bee' || w.id === 'kunai' || w.id === 'nail' || w.id === 'crossbow' || w.id === 'card' || w.id === 'blowgun' || w.id === 'pencil') {
+  if (w.half <= 3.2 || w.id === 'bee' || w.id === 'nail' || w.id === 'crossbow' || w.id === 'card' || w.id === 'blowgun' || w.id === 'pencil') {
     c.save();
     c.translate(x, y);
     c.rotate(inward);
@@ -242,16 +276,14 @@ export function drawPreciseWeaponDecal(
     c.restore(); c.restore(); return;
   }
 
-  // 3. SENJATA CAIRAN / BUAH / ORGANIK (Fish, Ink, Paintball, Coconut)
-  if (w.id === 'paintball' || w.id === 'fish' || w.id === 'ink' || w.id === 'coconut') {
+  // 3. SENJATA CAIRAN / BUAH / ORGANIK (Fish, Paintball, Coconut)
+  if (w.id === 'paintball' || w.id === 'fish' || w.id === 'coconut') {
     c.save();
     c.translate(x, y);
     c.rotate(inward);
 
     const fluidCol =
-      w.id === 'ink'
-        ? 'rgba(30, 20, 60, 0.75)'
-        : w.id === 'paintball'
+      w.id === 'paintball'
         ? `rgba(${w.trail || '244,63,94'}, 0.75)`
         : 'rgba(56, 189, 248, 0.5)';
 

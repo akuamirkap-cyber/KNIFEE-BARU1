@@ -82,7 +82,6 @@ export const FX: Record<WeaponId, FxProfile> = {
   snowball: P('snow', 'snow', 'soft', '230,245,255', 80, { kick: 2 }),
   sniper: P('heavy', 'bigHole', 'fire', '255,220,160', 200, { hitstop: 0.09, kick: 10, speedLines: true, streak: 1.6, tint: 0.12 }),
   flamethrower: P('fire', 'burn', 'fire', '255,140,40', 120, { hitstop: 0, kick: 1.5 }),
-  disc: P('energy', 'glow', 'energy', '34,211,238', 120, { hitstop: 0.03, kick: 4, ghost: 4 }),
   bamboo: P('explosive', 'scorch', 'fire', '255,240,200', 260, { hitstop: 0.09, kick: 11, tint: 0.3 }),
   banana: P('water', 'paint', 'soft', '255,230,80', 70, { kick: 2, decalColors: ['rgba(250,204,21,0.5)', 'rgba(254,240,138,0.5)'] }),
   bubble: P('water', 'none', 'soft', '220,200,255', 80, { kick: 1, ghost: 2 }),
@@ -98,11 +97,6 @@ export const FX: Record<WeaponId, FxProfile> = {
   grow: P('energy', 'glow', 'energy', '251,146,60', 140, { kick: 4, ghost: 3, decalColors: ['#431407', '#fb923c'] }),
   pirate: P('heavy', 'bigHole', 'fire', '255,180,90', 220, { hitstop: 0.08, kick: 11, tint: 0.15 }),
   card: P('blade', 'slit', 'quiet', '255,255,255', 50, { hitstop: 0.01, kick: 1, ghost: 2 }),
-  sonic: P('sonic', 'dent', 'energy', '190,255,120', 150, { hitstop: 0.03, kick: 5 }),
-  mirror: P('glass', 'slit', 'energy', '230,240,255', 130, { kick: 2, ghost: 3 }),
-  portal: P('magic', 'glow', 'energy', '80,170,255', 140, { kick: 3, decalColors: ['#0b1020', '#fb923c'] }),
-  chrono: P('magic', 'glow', 'energy', '250,220,120', 140, { kick: 3, ghost: 4, decalColors: ['#422006', '#facc15'] }),
-  glitch: P('pixel', 'pixel', 'energy', '34,255,136', 130, { hitstop: 0.04, kick: 3, ghost: 3 }),
   dragon: P('fire', 'burn', 'fire', '255,110,40', 180, { hitstop: 0.04, kick: 5, tint: 0.15, ghost: 2 }),
   gravity: P('void', 'glow', 'energy', '129,140,248', 160, { hitstop: 0.04, kick: 4, ghost: 3, decalColors: ['#0f0a2e', '#818cf8'] }),
 
@@ -111,12 +105,10 @@ export const FX: Record<WeaponId, FxProfile> = {
   coconut: P('water', 'dent', 'soft', '217,249,157', 90, { hitstop: 0.04, kick: 6 }),
   angklung: P('magic', 'glow', 'soft', '253,230,138', 90, { kick: 2, decalColors: ['#451a03', '#fbbf24'] }),
   bee: P('blade', 'slit', 'quiet', '250,204,21', 50, { hitstop: 0, kick: 1 }),
-  ink: P('water', 'paint', 'soft', '124,58,237', 80, { kick: 2, decalColors: ['rgba(15,10,40,0.75)', 'rgba(49,46,129,0.65)'] }),
-  yoyo: P('slingshot', 'dent', 'quiet', '255,140,140', 70, { kick: 2, ghost: 3 }),
+  yoyo: P('slingshot', 'dent', 'quiet', '255,140,140', 70, { kick: 2.5 }),
   sakura: P('nature', 'paint', 'quiet', '249,168,212', 80, { kick: 1.5, ghost: 2, decalColors: ['rgba(249,168,212,0.55)', 'rgba(251,207,232,0.6)'] }),
   acid: P('water', 'burn', 'soft', '163,230,53', 90, { kick: 2, tint: 0.08 }),
-  keris: P('gold', 'slit', 'energy', '255,215,120', 160, { hitstop: 0.05, kick: 5, ghost: 4, speedLines: true, tint: 0.12 }),
-  tornado: P('sonic', 'dent', 'soft', '203,213,225', 120, { hitstop: 0.03, kick: 4, ghost: 3 }),
+  keris: P('electric', 'slit', 'energy', '77,238,234', 160, { hitstop: 0.04, kick: 5, ghost: 0, speedLines: false, tint: 0.08 }),
   firework: P('confetti', 'scorch', 'fire', '255,180,200', 200, { hitstop: 0.06, kick: 6, tint: 0.15 }),
   anchor: P('heavy', 'bigHole', 'quiet', '180,190,210', 160, { hitstop: 0.09, kick: 11 }),
   shark: P('water', 'bigHole', 'soft', '125,211,252', 110, { hitstop: 0.05, kick: 6, decalColors: ['rgba(14,165,233,0.35)'] }),
@@ -144,19 +136,12 @@ export const FX: Record<WeaponId, FxProfile> = {
   unicorn: P('unicorn', 'paint', 'energy', '250,190,240', 180, { hitstop: 0.04, kick: 3, ghost: 5, tint: 0.15,
     decalColors: ['rgba(248,113,113,0.5)', 'rgba(250,204,21,0.5)', 'rgba(74,222,128,0.5)', 'rgba(96,165,250,0.5)', 'rgba(192,132,252,0.5)'] }),
   obliterator: P('obliterator', 'scorch', 'energy', '74,222,128', 340, { hitstop: 0.16, kick: 18, ghost: 5, tint: 0.45, streak: 1.6 }),
-  bit8: P('pixel', 'pixel', 'energy', '34,197,94', 120, { hitstop: 0.03, kick: 3, ghost: 3 }),
   coingun: P('gold', 'dent', 'soft', '250,204,21', 140, { hitstop: 0.03, kick: 3, ghost: 2, tint: 0.1 }),
-  kunai: P('blade', 'slit', 'quiet', '226,232,240', 60, { hitstop: 0.02, kick: 2, speedLines: true, streak: 1.3 }),
   blaster: P('energy', 'scorch', 'energy', '239,68,68', 220, { hitstop: 0.05, kick: 5, speedLines: true, tint: 0.18, decalColors: ['#450a0a', '#ef4444'] }),
 
-  // ---------------------------------------------------------------- 11 SCI-FI / WESTERN
-  lone_star: P('gold', 'hole', 'fire', '255,200,120', 200, { hitstop: 0.04, kick: 8, tint: 0.12 }),
+  // ---------------------------------------------------------------- SCI-FI
   photon_saber: P('energy', 'glow', 'energy', '34,211,238', 220, { hitstop: 0.05, kick: 5, ghost: 3, tint: 0.18, decalColors: ['#083344', '#22d3ee'] }),
-  plasma_repeater: P('energy', 'glow', 'energy', '244,63,94', 160, { hitstop: 0.025, kick: 3, ghost: 3, tint: 0.12, decalColors: ['#4c0519', '#f43f5e'] }),
-  warp_disruptor: P('obliterator', 'scorch', 'energy', '74,222,128', 420, { hitstop: 0.18, kick: 18, ghost: 6, tint: 0.5, speedLines: true, streak: 1.6 }),
-  deflector_shield: P('electric', 'glow', 'energy', '129,140,248', 180, { hitstop: 0.03, kick: 3, ghost: 3, tint: 0.12, decalColors: ['#0f0a2e', '#818cf8'] }),
-  gauntlet_cannon: P('energy', 'glow', 'energy', '239,68,68', 260, { hitstop: 0.07, kick: 8, ghost: 4, tint: 0.25, decalColors: ['#450a0a', '#ef4444'] }),
-  alien_ray: P('energy', 'glow', 'energy', '74,222,128', 160, { hitstop: 0.03, kick: 3, ghost: 3, tint: 0.12, decalColors: ['#052e16', '#4ade80'] }),
+  gauntlet_cannon: P('energy', 'scorch', 'energy', '251,146,60', 340, { hitstop: 0.095, kick: 13, ghost: 5, speedLines: true, streak: 1.5, tint: 0.34, decalColors: ['#450a0a', '#ef4444', '#facc15'] }),
   pulse_rifle: P('electric', 'glow', 'energy', '56,189,248', 160, { hitstop: 0.02, kick: 3, ghost: 2, tint: 0.12, decalColors: ['#082f49', '#38bdf8'] }),
   cryo_blaster: P('ice', 'frost', 'energy', '103,232,249', 190, { hitstop: 0.04, kick: 3, ghost: 3, tint: 0.15 }),
   hyperdrive: P('energy', 'glow', 'energy', '96,165,250', 220, { hitstop: 0.04, kick: 4, ghost: 4, speedLines: true, tint: 0.18, decalColors: ['#1e3a8a', '#60a5fa'] }),
@@ -198,7 +183,14 @@ export function spawnMuzzle(s: FxSink, prof: FxProfile, w: Weapon, x: number, y:
       break;
     }
     case 'energy': {
-      for (let i = 0; i < (w.id === 'moonbeam' ? 8 : 4); i++) {
+      if (w.id === 'gauntlet_cannon') {
+        s.push(mk(x, y - 6, 0, 0, 0.24, 44, '250,204,21', 'shock'));
+        for (let i = 0; i < 10; i++) {
+          const [vx, vy] = cone(0, -1, 0.65, 160, 480);
+          s.push(mk(x, y - 6, vx, vy, rand(0.16, 0.32), rand(1.6, 2.8), pick(['#ffffff', '#fef08a', '#facc15', '#f97316', '#ef4444']), 'spark', { g: 420, drag: 1.8 }));
+        }
+      }
+      for (let i = 0; i < (w.id === 'moonbeam' || w.id === 'gauntlet_cannon' ? 8 : 4); i++) {
         const [vx, vy] = cone(0, -1, 0.8, 60, 200);
         s.push(mk(x, y - 4, vx, vy, rand(0.2, 0.4), rand(3, 5), `rgb(${prof.light})`, 'star', { drag: 3 }));
       }
@@ -398,6 +390,24 @@ export function spawnImpact(s: FxSink, prof: FxProfile, w: Weapon, x: number, y:
       if (w.energy) glows(10, [w.trail, '255,255,255'], 220);
       break;
     case 'energy':
+      if (w.id === 'gauntlet_cannon') {
+        // Heavy mecha-punch impact: double concentric golden & crimson shockwaves, crackling energy bolts, heavy sparks & target chips
+        s.push(mk(x, y, 0, 0, 0.36, 74, '239,68,68', 'shock'));
+        s.push(mk(x, y, 0, 0, 0.26, 46, '250,204,21', 'shock'));
+        for (let i = 0; i < 7; i++) {
+          const ang = Math.atan2(ny, nx) + rand(-1.35, 1.35);
+          const dist = rand(24, 62);
+          s.push(mk(x, y, 0, 0, rand(0.14, 0.28), 2.4,
+            pick(['#fef08a', '#facc15', '#f97316', '#ef4444']), 'bolt',
+            { tx: x + Math.cos(ang) * dist, ty: y + Math.sin(ang) * dist }));
+        }
+        sparks(18, ['#ffffff', '#fef08a', '#facc15', '#f97316', '#ef4444'], 260, 720, 1.25, 650);
+        glows(14, ['250,204,21', '249,115,22', '239,68,68', '255,255,255'], 260, 0, [3.5, 7]);
+        stars(9, ['#ffffff', '#fef08a', '#f97316', '#ef4444'], 240, [4, 7.5]);
+        chipBurst(10, chips, 'chip', 340);
+        dust(6, 'rgba(251,146,60,', [7, 14]);
+        break;
+      }
       glows(14, [w.trail, '255,255,255'], 220);
       stars(6, ['#ffffff', lightCss]);
       sparks(6, [lightCss, '#ffffff'], 200, 500, 1.1, 200);

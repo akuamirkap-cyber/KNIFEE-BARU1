@@ -1,4 +1,5 @@
 import { sfx } from './audio';
+import { isSlide23Weapon, slide23Sfx } from './slide23Sfx';
 import { sfx2 } from './sfx2';
 import { sfx3 } from './sfx3';
 import { sfx4 } from './sfx4';
@@ -22,6 +23,75 @@ import { drawBreakerCoin } from '../../shared/coinArt';
 import { getBossDef, type BossType } from './bossRoster';
 import { drawBossProjectile } from './bossProjectileArt';
 import { getExactBossRadius, onBossAssetsLoaded } from './bossAssetProcessor';
+import {
+  createFirework8State,
+  drawFirework8Background,
+  drawFirework8GunGlow,
+  drawFirework8ParticlesAndRings,
+  FIREWORK_EMBED_NOSE,
+  FIREWORK_PL,
+  firework8ShotHue,
+  hsl,
+  launchFirework8Sky,
+  spawnFirework8ClearFinale,
+  spawnFirework8FailBurst,
+  spawnFirework8FlightSparks,
+  spawnFirework8Muzzle,
+  spawnFirework8StickBurst,
+  updateFirework8State,
+  type Firework8State,
+} from './firework8fx';
+import {
+  createYoyoSlideState,
+  drawSlide6String,
+  drawSlide6Yoyo,
+  drawYoyoSlideBackground,
+  drawYoyoSlideGunGlow,
+  drawYoyoSlideParticlesRingsAndStrings,
+  spawnYoyoClearFinale,
+  spawnYoyoFailBurst,
+  spawnYoyoFlightSparks,
+  spawnYoyoLaunch,
+  spawnYoyoStickBurst,
+  updateYoyoSlideState,
+  yoyoAmmoHue,
+  type YoyoSlideState,
+} from './yoyoSlideFx';
+import {
+  createKerisSlideState,
+  drawKerisAimGuide,
+  drawKerisSlideBackground,
+  drawKerisSlideMini,
+  drawKerisSlideParticlesAndArcs,
+  drawKerisStuckCrater,
+  drawKerisSurfaceArcs,
+  KERIS_GLEAM_DUR,
+  spawnKerisFlightSparks,
+  spawnKerisImpact,
+  spawnKerisLaunch,
+  updateKerisSlideState,
+  type KerisSlideState,
+} from './kerisSlideFx';
+import {
+  createDiamondSlideState,
+  drawDiamondSlideBackground,
+  drawDiamondSlideForeground,
+  drawDiamondSlideGunGlow,
+  drawSlide2DiamondBullet,
+  spawnDiamondClearFinale,
+  spawnDiamondFailBurst,
+  spawnDiamondFlightSparks,
+  spawnDiamondLaunch,
+  spawnDiamondStickBurst,
+  updateDiamondSlideState,
+  type DiamondSlideState,
+} from './diamondSlideFx';
+import {
+  BAZOOKA_HUES,
+  BazookaSlideFx,
+  drawSlide3BazookaShell,
+  drawSlide3BazookaStuckCrater,
+} from './bazookaSlideFx';
 
 export const W = 420;
 export const H = 760;
@@ -106,40 +176,40 @@ const pick = <T,>(arr: T[]) => arr[Math.floor(Math.random() * arr.length)];
 const FIRE_SFX: Record<WeaponId, () => void> = {
   pistol: sfx.shoot, ak47: sfx.shootAk, plasma: sfx.shootPlasma, laser: sfx.shootLaser,
   cricket: sfx.shootCricket, electro: sfx.shootElectro, nail: sfx.shootNail, fish: sfx.shootFish,
-  crossbow: sfx.shootCrossbow, bazooka: sfx.shootBazooka, rpg: sfx.shootRpg, freeze: sfx.shootFreeze,
-  golden: sfx.shootGolden, blackhole: sfx.shootBlackHole,
+  crossbow: sfx.shootCrossbow, bazooka: () => slide23Sfx.shoot('bazooka'), rpg: () => slide23Sfx.shoot('rpg'), freeze: sfx.shootFreeze,
+  golden: sfx.shootGolden, blackhole: () => slide23Sfx.shoot('blackhole'),
   shotgun: sfx2.shotgun, sniper: sfx2.sniper, minigun: sfx2.minigun, railgun: sfx2.railgun,
-  flamethrower: sfx2.flame, disc: sfx5.disc, slingshot: sfx2.slingshot, blowgun: sfx2.blowgun,
-  bamboo: sfx2.bamboo, banana: sfx2.banana, portal: sfx2.portal, magnet: sfx2.magnet, bubble: sfx2.bubble,
-  chrono: sfx2.chrono, shrink: sfx2.shrink, grow: sfx2.grow, harpoon: sfx2.harpoon, soaker: sfx2.soaker,
+  flamethrower: sfx2.flame, slingshot: sfx2.slingshot, blowgun: sfx2.blowgun,
+  bamboo: () => slide23Sfx.shoot('bamboo'), banana: sfx2.banana, magnet: sfx2.magnet, bubble: sfx2.bubble,
+  shrink: sfx2.shrink, grow: sfx2.grow, harpoon: sfx2.harpoon, soaker: () => slide23Sfx.shoot('soaker'),
   snowball: sfx2.snowball, pirate: sfx2.pirate, chicken: sfx2.chicken, card: sfx2.card, confetti: sfx2.confetti,
-  sonic: sfx2.sonic, seed: sfx2.seed, glitch: sfx2.glitch, dragon: sfx2.dragon, mirror: sfx2.mirror,
+  seed: sfx2.seed, dragon: sfx2.dragon,
   gravity: sfx2.gravity, pizza: sfx2.pizza,
-  honey: sfx3.honey, coconut: sfx3.coconut, angklung: sfx3.angklung, bee: sfx3.bee, ink: sfx3.ink, yoyo: sfx3.yoyo,
-  sakura: sfx3.sakura, acid: sfx3.acid, keris: sfx3.keris, tornado: sfx3.tornado, firework: sfx3.firework, anchor: sfx3.anchor,
-  shark: sfx3.shark, ghost: sfx3.ghost, ufo: sfx3.ufo, rainbow: sfx3.rainbow, meteor: sfx3.meteor, diamond: sfx3.diamond,
+  honey: sfx3.honey, coconut: sfx3.coconut, angklung: sfx3.angklung, bee: sfx3.bee, yoyo: () => slide23Sfx.shoot('yoyo'),
+  sakura: sfx3.sakura, acid: sfx3.acid, keris: () => slide23Sfx.shoot('keris'), firework: () => slide23Sfx.shoot('firework'), anchor: sfx3.anchor,
+  shark: () => slide23Sfx.shoot('shark'), ghost: sfx3.ghost, ufo: sfx3.ufo, rainbow: () => slide23Sfx.shoot('rainbow'), meteor: sfx3.meteor, diamond: () => slide23Sfx.shoot('diamond'),
   moonbeam: sfx3.moonbeam, storm: sfx3.storm,
   obliterator: sfx4.obliterator, buster: sfx4.busterSmall, paintball: sfx4.paintball, holy: sfx4.holy, beerifle: sfx4.beeRifle,
-  emerald: sfx4.emerald, ruby: sfx4.ruby, sapphire: sfx4.sapphire, crystal: sfx4.crystal, unicorn: sfx4.unicorn,
+  emerald: sfx4.emerald, ruby: sfx4.ruby, sapphire: sfx4.sapphire, crystal: () => slide23Sfx.shoot('crystal'), unicorn: sfx4.unicorn,
   pencil: sfx4.pencil, sandal: sfx4.sandal, wand: sfx4.wand,
-  bit8: sfx5.bit8, coingun: sfx5.coinGun, kunai: sfx5.kunai, blaster: sfx5.blaster,
-  lone_star: sfx6.revolver, photon_saber: sfx6.saberShoot, plasma_repeater: sfx6.blaster,
-  warp_disruptor: sfx6.superlaser, deflector_shield: sfx6.shield, gauntlet_cannon: sfx6.gauntlet,
-  alien_ray: sfx6.alien, pulse_rifle: sfx6.pulse, cryo_blaster: sfx6.cryo, hyperdrive: sfx6.hyper,
+  coingun: sfx5.coinGun, blaster: sfx5.blaster,
+  photon_saber: sfx6.saberShoot,
+  gauntlet_cannon: sfx6.gauntlet,
+  pulse_rifle: sfx6.pulse, cryo_blaster: sfx6.cryo, hyperdrive: sfx6.hyper,
   quantum_destabilizer: sfx6.quantum,
 };
 const HIT_SFX: Partial<Record<WeaponId, () => void>> = {
-  disc: sfx5.discHit, bit8: sfx5.bit8Hit, coingun: sfx.coin, kunai: sfx2.metal, blaster: sfx5.blasterHit,
-  lone_star: sfx6.revolverHit, photon_saber: sfx6.saberHit, plasma_repeater: sfx6.blasterHit,
-  warp_disruptor: sfx6.superlaserHit, deflector_shield: sfx6.shieldHit, gauntlet_cannon: sfx6.gauntletHit,
-  alien_ray: sfx6.alienHit, pulse_rifle: sfx6.pulseHit, cryo_blaster: sfx6.cryoHit, hyperdrive: sfx6.hyperHit,
+  coingun: sfx.coin, blaster: sfx5.blasterHit,
+  photon_saber: sfx6.saberHit,
+  gauntlet_cannon: sfx6.gauntletHit,
+  pulse_rifle: sfx6.pulseHit, cryo_blaster: sfx6.cryoHit, hyperdrive: sfx6.hyperHit,
   quantum_destabilizer: sfx6.quantumHit,
   chicken: sfx2.squeak, bubble: sfx2.pop, card: sfx2.card, snowball: sfx2.thud, soaker: sfx2.splat,
   pizza: sfx2.splat, banana: sfx2.splat, seed: sfx2.seed, slingshot: sfx2.thud, pirate: sfx2.crash,
-  mirror: sfx2.metal, portal: sfx2.warp, glitch: sfx2.glitch, chrono: sfx2.ding, magnet: sfx2.metal,
-  shrink: sfx2.shrink, grow: sfx2.grow, sonic: sfx2.sonic, gravity: sfx2.gravity, railgun: sfx.zap,
-  honey: sfx2.splat, coconut: sfx3.coconutHit, bee: sfx3.sting, ink: sfx2.splat, yoyo: sfx3.bloop, sakura: sfx3.chime,
-  acid: sfx3.sizzle, keris: sfx2.metal, tornado: sfx2.boomerang, anchor: sfx3.clank, shark: sfx3.chomp, ghost: sfx3.wail,
+  magnet: sfx2.metal,
+  shrink: sfx2.shrink, grow: sfx2.grow, gravity: sfx2.gravity, railgun: sfx.zap,
+  honey: sfx2.splat, coconut: sfx3.coconutHit, bee: sfx3.sting, yoyo: sfx3.bloop, sakura: sfx3.chime,
+  acid: sfx3.sizzle, keris: sfx3.kerisStick, anchor: sfx3.clank, shark: sfx3.chomp, ghost: sfx3.wail,
   ufo: sfx.zap, rainbow: sfx3.chime, diamond: sfx3.chime, moonbeam: sfx3.chime, storm: sfx3.thunder,
   obliterator: sfx4.obliteratorHit, paintball: sfx4.paintSplat, holy: sfx4.purify, emerald: sfx3.chime, ruby: sfx2.metal,
   sapphire: sfx.ice, crystal: sfx4.shatter, unicorn: sfx4.magic, pencil: sfx4.scribble, sandal: sfx4.plak, wand: sfx4.magic,
@@ -147,19 +217,19 @@ const HIT_SFX: Partial<Record<WeaponId, () => void>> = {
 const PAINT = ['244,63,94', '250,204,21', '34,211,238', '168,85,247', '74,222,128', '251,146,60'];
 
 type ItemType = 'bullet' | 'old' | 'spike' | 'coin' | 'diamond_chest';
-interface Item { angle: number; type: ItemType; age: number; w?: WeaponId; scale?: number; vel?: number; harvested?: boolean; tint?: string; big?: number; hits?: number }
-interface Proj { x: number; y: number; vx: number; vy: number; originX?: number; pierced?: number; hist?: { x: number; y: number }[]; tint?: string; big?: number; mini?: boolean; giant?: boolean }
+interface Item { angle: number; type: ItemType; age: number; w?: WeaponId; scale?: number; vel?: number; harvested?: boolean; tint?: string; big?: number; hits?: number; hue?: number; flash?: number }
+interface Proj { x: number; y: number; vx: number; vy: number; originX?: number; pierced?: number; hist?: { x: number; y: number }[]; tint?: string; big?: number; mini?: boolean; giant?: boolean; hue?: number; flash?: number; spawnDelay?: number }
 type StepRes = { res: 'none' | 'stick' | 'fail' | 'hit'; spike?: boolean; local?: number };
 interface Light { x: number; y: number; r: number; rgb: string; life: number; max: number }
 interface Fragment { x: number; y: number; vx: number; vy: number; rot: number; vr: number; a0: number; a1: number }
-interface Flyer { x: number; y: number; vx: number; vy: number; rot: number; vr: number; kind: ItemType; w?: WeaponId }
+interface Flyer { x: number; y: number; vx: number; vy: number; rot: number; vr: number; kind: ItemType; w?: WeaponId; hue?: number }
 interface Beam { x: number; y: number; life: number; max: number; rgb: string }
 interface Portal { x: number; y: number; life: number; max: number; rgb: string }
 interface BossProjectile { x: number; y: number; vx: number; vy: number; rot: number; type: BossType }
 
 interface RockFragment { x: number; y: number; vx: number; vy: number; rot: number; vr: number; size: number; seed: number; life: number; max: number }
 /** Coordinates and angle are local to a rock cell (or to the open chest). */
-interface EmbeddedShot { x: number; y: number; angle: number; age: number; w: WeaponId; scale: number; big: number; tint?: string; cellId?: number }
+interface EmbeddedShot { x: number; y: number; angle: number; age: number; w: WeaponId; scale: number; big: number; tint?: string; cellId?: number; hue?: number; flash?: number }
 interface FallingCell { id: number; cx: number; cy: number; x: number; y: number; vx: number; vy: number; rot: number; vr: number; life: number; bullets: EmbeddedShot[] }
 interface Star { x: number; y: number; r: number; vx: number; baseY: number; age: number; life: number; max: number }
 interface BonusCoin { angle: number; radius: number; phase: number; taken: boolean }
@@ -304,6 +374,7 @@ export class Game {
   private bump = 0;
   private hitFlash = 0;
   private introT = 0;
+  private wheelScale = 1;
   private stateT = 0;
   private recoil = 0;
   private muzzle = 0;
@@ -377,6 +448,46 @@ export class Game {
   private chargeStage = 0;
   private lastPaint = '';
   private stretchPlayed = true;
+  private fwState?: Firework8State;
+
+  private getFwState(): Firework8State {
+    if (!this.fwState) {
+      this.fwState = createFirework8State(W, H);
+    }
+    return this.fwState;
+  }
+  private yoyoState?: YoyoSlideState;
+
+  private getYoyoState(): YoyoSlideState {
+    if (!this.yoyoState) {
+      this.yoyoState = createYoyoSlideState(W, H);
+    }
+    return this.yoyoState;
+  }
+  private kerisState?: KerisSlideState;
+
+  private getKerisState(): KerisSlideState {
+    if (!this.kerisState) {
+      this.kerisState = createKerisSlideState(W, H);
+    }
+    return this.kerisState;
+  }
+  private diamondState?: DiamondSlideState;
+
+  private getDiamondState(): DiamondSlideState {
+    if (!this.diamondState) {
+      this.diamondState = createDiamondSlideState(W, H);
+    }
+    return this.diamondState;
+  }
+  private bazookaState?: BazookaSlideFx;
+
+  private getBazookaState(): BazookaSlideFx {
+    if (!this.bazookaState) {
+      this.bazookaState = new BazookaSlideFx();
+    }
+    return this.bazookaState;
+  }
   private hitStop = 0;
   private camY = 0;
   private tintA = 0;
@@ -556,7 +667,6 @@ export class Game {
 
   private startRun(level: number, forcedMode?: LevelMode) {
     sfx.unlock();
-    sfx.start();
     this.score = 0;
     this.coins = 0;
     this.bankedCoins = 0;
@@ -583,6 +693,16 @@ export class Game {
     this.items = [];
     this.projs = [];
     this.bossProjs = [];
+    this.particles = [];
+    this.frags = [];
+    this.flyers = [];
+    this.portals = [];
+    this.lights = [];
+    this.fwState = undefined;
+    this.yoyoState = undefined;
+    this.kerisState = undefined;
+    this.diamondState = undefined;
+    this.bazookaState = undefined;
     this.rock = null;
     this.chest = null;
     this.bonusCoins = [];
@@ -596,8 +716,21 @@ export class Game {
     this.choosingBuff = false;
     this.twinGuns = false;
     this.star = null;
+    this.flashWhite = 0;
+    this.flashRed = 0;
+    this.tintA = 0;
+    this.shake = 0;
+    this.bump = 0;
+    this.wheelScale = 1;
+    this.camY = 0;
+    this.bannerT = 0;
+    this.glitchT = 0;
+    this.aiming = false;
+    this.holding = false;
+    this.charging = false;
     this.placeObstacles();
     this.buildFace();
+    this.render();
   }
 
   continueAfterBoss() { this.loadLevel(this.level.n + 1); }
@@ -748,6 +881,7 @@ export class Game {
     this.levelTime = 0;
     this.state = 'intro';
     this.introT = 0;
+    this.wheelScale = 0.15;
     this.bannerT = 1.8;
     this.timeScale = 1;
     this.slowT = 0;
@@ -760,14 +894,30 @@ export class Game {
     this.portals = [];
     this.bossProjs = [];
     this.bossShootTimer = 1.8;
+    const fw = this.getFwState();
+    fw.shotIdx = 0;
+    fw.impactIdx = 0;
+    if (this.weapon.id === 'firework') {
+      for (let i = 0; i < 2; i++) launchFirework8Sky(fw, true);
+    }
+    const yoyo = this.getYoyoState();
+    yoyo.shotIdx = 0;
+    yoyo.strings = [];
+    const keris = this.getKerisState();
+    keris.crawlArcs = [];
+    keris.thunderFlash = 0;
+    const diamond = this.getDiamondState();
+    diamond.shotIdx = 0;
+    const bazooka = this.getBazookaState();
+    bazooka.shotHueIdx = 0;
     if (this.level.boss) {
       this.bossMaxHp = this.level.ammo * 10;
       this.bossHp = this.bossMaxHp;
       this.bossHpRed = this.bossMaxHp;
     }
     if (!isSpecial(this.level.mode)) this.buildFace();
+    sfx.start();
     if (this.level.boss) sfx.boss();
-    else if (n > 1) sfx.level();
   }
 
   private buildBonusCoins(): BonusCoin[] {
@@ -849,20 +999,61 @@ export class Game {
     const vy = -w.speed * this.speedMult;
     const offsets = this.gunOffsets;
     const sizeBuff = { mini: this.treasureBuff === 'mini', giant: this.treasureBuff === 'giant' };
+    const fw = w.id === 'firework' ? this.getFwState() : null;
+    const yoyo = w.id === 'yoyo' ? this.getYoyoState() : null;
+    const keris = w.id === 'keris' ? this.getKerisState() : null;
+    const diamond = w.id === 'diamond' ? this.getDiamondState() : null;
+    const bazooka = w.id === 'bazooka' ? this.getBazookaState() : null;
     for (const ox of offsets) {
-      if (n === 1) this.projs.push({ x: CX + ox, originX: CX + ox, y: GUN_Y - 4, vx, vy, big, tint, ...sizeBuff });
+      const shotHue = fw
+        ? firework8ShotHue(this.level?.n ?? 1, fw.shotIdx++)
+        : yoyo
+          ? yoyoAmmoHue(yoyo.shotIdx++)
+          : diamond
+            ? 205 + ((diamond.shotIdx++ * 13) % 22)
+            : bazooka
+              ? bazooka.nextHue()
+              : undefined;
+      const spawnDelay = w.id === 'keris' ? KERIS_GLEAM_DUR : undefined;
+      if (fw && shotHue !== undefined) gunState.rocketHue = shotHue;
+      if (yoyo && shotHue !== undefined) gunState.yoyoHue = shotHue;
+      if (bazooka && shotHue !== undefined) gunState.bazookaHue = shotHue;
+      if (n === 1) this.projs.push({ x: CX + ox, originX: CX + ox, y: GUN_Y - 4, vx, vy, big, tint, hue: shotHue, spawnDelay, ...sizeBuff });
       else {
         const travel = GUN_Y - (this.targetY + this.level.radius);
         for (let i = 0; i < n; i++) {
           const off = (i - (n - 1) / 2) * 26;
-          this.projs.push({ x: CX + ox, originX: CX + ox, y: GUN_Y - 4, vx: vx + (off * w.speed) / travel, vy, big, tint, ...sizeBuff });
+          this.projs.push({ x: CX + ox, originX: CX + ox, y: GUN_Y - 4, vx: vx + (off * w.speed) / travel, vy, big, tint, hue: shotHue, spawnDelay, ...sizeBuff });
         }
+      }
+      if (fw && shotHue !== undefined) {
+        spawnFirework8Muzzle(fw, CX + ox, GUN_Y - 6, shotHue);
+        this.sink.light(CX + ox, GUN_Y - 6, 70, '255,180,220', 0.25);
+        this.sink.push({ x: CX + ox, y: GUN_Y - 6, vx: 0, vy: 0, life: 0.3, max: 0.3, size: 38, color: '#ff80bf', kind: 'ring', rot: 0, vr: 0, g: 0 });
+      }
+      if (yoyo && shotHue !== undefined) {
+        spawnYoyoLaunch(yoyo, CX + ox, GUN_Y - 6, shotHue);
+        this.sink.light(CX + ox, GUN_Y - 6, 70, '255,160,220', 0.25);
+      }
+      if (keris) {
+        spawnKerisLaunch(keris, CX + ox, GUN_Y - 6);
+        this.sink.light(CX + ox, GUN_Y - 6, 70, '77,238,234', 0.25);
+      }
+      if (diamond) {
+        spawnDiamondLaunch(diamond, CX + ox, GUN_Y - 6);
+        this.sink.light(CX + ox, GUN_Y - 6, 75, '165,243,252', 0.28);
+      }
+      if (bazooka) {
+        bazooka.onShoot(CX + ox, GUN_Y - 6, H);
+        this.sink.light(CX + ox, GUN_Y - 6, 120, '255,150,55', 0.35);
       }
     }
     this.recoil = w.recoil;
     this.muzzle = 0.07;
     const fxp = FX[w.id];
-    for (const ox of offsets) spawnMuzzle(this.sink, fxp, w, CX + ox, GUN_Y - 6);
+    if (w.id !== 'firework' && w.id !== 'yoyo' && w.id !== 'keris' && w.id !== 'diamond' && w.id !== 'bazooka') {
+      for (const ox of offsets) spawnMuzzle(this.sink, fxp, w, CX + ox, GUN_Y - 6);
+    }
     this.camY += fxp.kick * 0.5;
     if (fxp.speedLines) for (const ox of offsets) {
       spawnSpeedLines(this.sink, CX + ox, this.targetY + this.level.radius + 20, GUN_Y - 30, w.trail);
@@ -1089,8 +1280,10 @@ export class Game {
     if (w.slow) {
       const water = w.id === 'soaker' || w.slowStyle === 'water';
       const honey = w.slowStyle === 'honey';
-      if (water || honey) sfx2.splat();
-      else sfx.ice();
+      if (!isSlide23Weapon(w.id)) {
+        if (water || honey) sfx2.splat();
+        else sfx.ice();
+      }
       if (this.slowT <= 0) this.addText(w.slowText ?? '❄ BEKU!', hx + rand(-40, 40), hy + 60,
         honey ? '#ffd56c' : water ? '#93c5fd' : '#bff1ff', 24);
       this.applySlow(w.slowTime ?? 1.3, w.slowFactor ?? 0.3, w.slowRgb ?? '170,230,255',
@@ -1113,7 +1306,7 @@ export class Game {
     this.applyNewPerks(w, hx, hy, R);
     if (w.id === 'fish') sfx.splash();
     if (w.pullCoins) {
-      sfx.suck();
+      if (!isSlide23Weapon(w.id)) sfx.suck();
       const coins = this.items.filter((it) => it.type === 'coin');
       for (const it of coins) {
         const wa = it.angle + this.rot;
@@ -1141,8 +1334,13 @@ export class Game {
       this.fireworkAt(x, y);
       return;
     }
+    if (this.weapon.id === 'bazooka') {
+      this.shake = Math.max(this.shake, 12 * big);
+      this.addText('DUAR!', x + rand(-30, 30), y + 50, '#ff9f1c', 30);
+      return;
+    }
     const white = fx === 'white';
-    sfx.explosion();
+    if (!isSlide23Weapon(this.weapon.id)) sfx.explosion();
     this.shake = Math.max(this.shake, 12 * big);
     this.flashWhite = Math.max(this.flashWhite, white ? 0.5 : 0.3);
     for (let i = 0; i < 30 * big; i++) {
@@ -1168,36 +1366,14 @@ export class Game {
     this.addText(white ? 'DUARR!!' : 'DUAR!', x + rand(-30, 30), y + 50, white ? '#ffffff' : '#ff9f1c', white ? 36 : 30);
   }
 
-  private fireworkAt(x: number, y: number) {
-    sfx3.fireworkBoom();
+  private fireworkAt(x: number, y: number, hue?: number) {
+    if (!isSlide23Weapon(this.weapon.id)) sfx3.fireworkBoom();
     this.shake = Math.max(this.shake, 8);
-    const palettes = [
-      ['#f43f5e', '#fda4af', '#ffffff'], ['#facc15', '#fef08a', '#ffffff'], ['#22d3ee', '#a5f3fc', '#ffffff'],
-      ['#a855f7', '#e9d5ff', '#ffffff'], ['#4ade80', '#bbf7d0', '#ffffff'],
-    ];
-    const bursts = [
-      { bx: x, by: y + 20, n: 28, sp: 300 },
-      { bx: x - 70, by: y + 80, n: 18, sp: 220 },
-      { bx: x + 70, by: y + 70, n: 18, sp: 220 },
-    ];
-    // Grand floral chrysanthemum firework spectacle!
-    bursts.forEach((b, bi) => {
-      const pal = palettes[bi % palettes.length];
-      this.sink.light(b.bx, b.by, 220, pal[0] === '#f43f5e' ? '244,63,94' : '255,230,160', 0.55);
-      this.sink.push({ x: b.bx, y: b.by, vx: 0, vy: 0, life: 0.35, max: 0.35, size: 45, color: '255,240,220', kind: 'shock', rot: 0, vr: 0, g: 0 });
-      for (let i = 0; i < b.n; i++) {
-        const a = (i / b.n) * TAU + bi * 0.4;
-        const v = b.sp * rand(0.85, 1.15);
-        // Cascading sparkling willows
-        this.sink.push({ x: b.bx, y: b.by, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: rand(1.0, 1.6), max: 1.6, size: rand(4.5, 8), color: pick(pal), kind: 'star', rot: rand(0, TAU), vr: 0, g: 220, drag: 1.4 });
-        this.sink.push({ x: b.bx, y: b.by, vx: Math.cos(a) * v * 0.75, vy: Math.sin(a) * v * 0.75, life: rand(0.7, 1.1), max: 1.1, size: 2.0, color: '#fef08a', kind: 'spark', rot: 0, vr: 0, g: 240, drag: 1.3 });
-      }
-      for (let k = 0; k < 6; k++) {
-        const [vx, vy] = [rand(-120, 120), rand(-180, 40)];
-        this.sink.push({ x: b.bx, y: b.by, vx, vy, life: rand(0.5, 0.9), max: 0.9, size: rand(5, 10), color: 'rgba(255,255,255,', kind: 'smoke', rot: 0, vr: 0, g: -30, drag: 2.2 });
-      }
-    });
-    this.addText('DORR! 🎆', x + rand(-30, 30), y + 60, '#fde047', 30);
+    const fw = this.getFwState();
+    const h = hue ?? gunState.rocketHue ?? firework8ShotHue(this.level?.n ?? 1, fw.impactIdx);
+    spawnFirework8StickBurst(fw, x, y, h);
+    this.sink.light(x, y + 20, 140, '255,180,220', 0.35);
+    this.sink.push({ x, y, vx: 0, vy: 0, life: 0.35, max: 0.35, size: 90, color: '#ff80bf', kind: 'ring', rot: 0, vr: 0, g: 0 });
   }
 
   private applySlow(time: number, factor: number, rgb: string, kind: 'ice' | 'water' | 'honey' | 'time') {
@@ -1215,7 +1391,7 @@ export class Game {
   }
 
   private applyNewPerks(w: Weapon, hx: number, hy: number, R: number) {
-    if (HIT_SFX[w.id]) HIT_SFX[w.id]!();
+    if (!isSlide23Weapon(w.id) && HIT_SFX[w.id]) HIT_SFX[w.id]!();
     const isPerk = (k: number) => this.perkCount > 0 && this.perkCount % k === 0;
     this.perkCount++;
     const ring = (color: string, size: number) =>
@@ -1334,7 +1510,7 @@ export class Game {
         this.particles.push({ x: hx + rand(-10, 10), y: hy, vx: rand(-120, 120), vy: rand(-200, 40), life: rand(0.3, 0.6), max: 0.6, size: rand(5, 10), color: pick(['255,200,80', '255,120,30', '255,60,20']), kind: 'glow', rot: 0, vr: 0, g: -200 });
       }
     }
-    if (w.rope) ring('#a5f3fc', 70);
+    if (w.rope && w.id !== 'yoyo') ring('#a5f3fc', 70);
 
     // ---------- wave 3 perks ----------
     if (w.notes) {
@@ -1499,7 +1675,20 @@ export class Game {
     const w = this.weapon;
     const big = p?.big ?? 0;
     const tint = p?.tint;
-    this.items.push({ angle: local, type: 'bullet', age: 0, w: w.id, big, tint, scale: big ? embeddedProjectileScale(big) : undefined });
+    const hue = p?.hue ?? (w.id === 'firework' ? gunState.rocketHue : w.id === 'yoyo' ? gunState.yoyoHue : undefined);
+    if (w.id === 'firework' && hue !== undefined) gunState.rocketHue = hue;
+    if (w.id === 'yoyo' && hue !== undefined) gunState.yoyoHue = hue;
+    this.items.push({
+      angle: local,
+      type: 'bullet',
+      age: 0,
+      w: w.id,
+      big,
+      tint,
+      hue,
+      flash: w.id === 'firework' || w.id === 'yoyo' || w.id === 'diamond' || w.id === 'bazooka' ? 1 : undefined,
+      scale: big ? embeddedProjectileScale(big) : undefined,
+    });
     this.stuck++;
     if (this.time - this.lastHit < (w.comboWindow ?? 0.5)) this.combo++;
     else this.combo = 1;
@@ -1541,15 +1730,50 @@ export class Game {
     this.hitFlash = 1;
     this.shake = Math.max(this.shake, 6);
     this.crack(local, tint);
-    sfx.hit();
-    if (w.energy && !w.slow && !w.pullCoins && !HIT_SFX[w.id]) sfx.zap();
+    if (isSlide23Weapon(w.id)) {
+      const hitIdx = Math.max(0, this.stuck - 1);
+      if (w.id === 'yoyo') slide23Sfx.hit('yoyo-spin', 0);
+      slide23Sfx.hit(w.id, hitIdx);
+      if (w.id === 'firework' && hitIdx % 3 === 2) slide23Sfx.boom(1.05);
+    } else {
+      sfx.hit();
+      if (w.energy && !w.slow && !w.pullCoins && !HIT_SFX[w.id]) sfx.zap();
+    }
     const hp = this.worldPos(local, R);
     const hx = hp.x;
     const hy = hp.y;
     const cols = STYLE_COLORS[this.level.style].chips;
     this.applyPerks(w, hx, hy, R);
+    if (w.id === 'yoyo') {
+      spawnYoyoStickBurst(
+        this.getYoyoState(),
+        hx,
+        hy,
+        hue ?? gunState.yoyoHue,
+        p?.originX ?? CX,
+        GUN_Y - 10,
+      );
+    }
+    if (w.id === 'keris') {
+      spawnKerisImpact(
+        this.getKerisState(),
+        hx,
+        hy,
+        p?.originX ?? CX,
+        GUN_Y - 6,
+        local,
+      );
+    }
+    if (w.id === 'diamond') {
+      spawnDiamondStickBurst(this.getDiamondState(), hx, hy, 1);
+    }
+    if (w.id === 'bazooka') {
+      this.getBazookaState().onHit(hx, hy, 1.05);
+    }
     const fxp = FX[w.id];
-    spawnImpact(this.sink, fxp, w, hx, hy, (hx - CX) / R, (hy - this.targetY) / R, cols);
+    if (w.id !== 'firework' && w.id !== 'yoyo' && w.id !== 'keris' && w.id !== 'diamond' && w.id !== 'bazooka') {
+      spawnImpact(this.sink, fxp, w, hx, hy, (hx - CX) / R, (hy - this.targetY) / R, cols);
+    }
     this.hitStop = Math.max(this.hitStop, fxp.hitstop);
     this.camY -= fxp.kick;
     this.shake = Math.max(this.shake, 3 + fxp.kick * 0.8);
@@ -1635,8 +1859,20 @@ export class Game {
     this.projs = [];
     this.holding = false;
     this.beams = [];
-    this.flyers.push({ x: p.x, y: p.y + BLEN / 2, vx: rand(-260, 260), vy: rand(380, 520), rot: 0, vr: rand(14, 24) * (Math.random() < 0.5 ? -1 : 1), kind: 'bullet', w: this.weapon.id });
-    sfx.clang();
+    this.flyers.push({ x: p.x, y: p.y + BLEN / 2, vx: rand(-260, 260), vy: rand(380, 520), rot: 0, vr: rand(14, 24) * (Math.random() < 0.5 ? -1 : 1), kind: 'bullet', w: this.weapon.id, hue: p.hue });
+    if (this.weapon.id === 'firework') {
+      spawnFirework8FailBurst(this.getFwState(), p.x, p.y, p.hue ?? gunState.rocketHue);
+    }
+    if (this.weapon.id === 'yoyo') {
+      spawnYoyoFailBurst(this.getYoyoState(), p.x, p.y, p.hue ?? gunState.yoyoHue);
+    }
+    if (this.weapon.id === 'diamond') {
+      spawnDiamondFailBurst(this.getDiamondState(), p.x, p.y);
+    }
+    if (this.weapon.id === 'bazooka') {
+      this.getBazookaState().onHit(p.x, p.y, 1.45);
+    }
+    sfx.fail(this.weapon.id);
     this.shake = 16;
     this.flashRed = 1;
     this.timeScale = 0.12;
@@ -1680,8 +1916,20 @@ export class Game {
       const v = rand(350, 650);
       this.flyers.push({
         x: CX + Math.cos(wa) * R, y: this.targetY + Math.sin(wa) * R, vx: Math.cos(wa) * v, vy: Math.sin(wa) * v - 200,
-        rot: wa - Math.PI / 2, vr: rand(-14, 14), kind: it.type, w: it.w,
+        rot: wa - Math.PI / 2, vr: rand(-14, 14), kind: it.type, w: it.w, hue: it.hue,
       });
+    }
+    if (this.weapon.id === 'firework') {
+      spawnFirework8ClearFinale(this.getFwState(), CX, this.targetY, this.level?.n ?? 1);
+    }
+    if (this.weapon.id === 'yoyo') {
+      spawnYoyoClearFinale(this.getYoyoState(), CX, this.targetY);
+    }
+    if (this.weapon.id === 'diamond') {
+      spawnDiamondClearFinale(this.getDiamondState(), CX, this.targetY);
+    }
+    if (this.weapon.id === 'bazooka') {
+      this.getBazookaState().onStageClear(CX, this.targetY);
     }
     this.items = [];
     const cols = STYLE_COLORS[this.level.style].chips;
@@ -1700,7 +1948,7 @@ export class Game {
       });
     }
     this.particles.push({ x: CX, y: this.targetY, vx: 0, vy: 0, life: 0.5, max: 0.5, size: R * 2.4, color: '#ffffff', kind: 'ring', rot: 0, vr: 0, g: 0 });
-    sfx.shatter();
+    sfx.clear(this.weapon.id);
     this.shake = 18;
     this.flashWhite = 0.7;
     this.timeScale = 0.35;
@@ -1723,7 +1971,7 @@ export class Game {
       this.score += 5;
       this.addText('BOS KALAH! +5 💰', CX, this.targetY + 20, '#ffd23f', 28);
     } else {
-      this.addText(pick(PRAISE), CX, this.targetY + 10, '#ffffff', 40);
+      this.score += 3;
     }
   }
 
@@ -1959,8 +2207,8 @@ export class Game {
         }
         this.burstSpecial(x, y, 'rock', 3);
       }
-      sfx4.shatter();
-    } else sfx.hit();
+      if (!isSlide23Weapon(this.weapon.id)) sfx4.shatter();
+    } else if (!isSlide23Weapon(this.weapon.id)) sfx.hit();
     if (hit.remaining === 0 && mode === 'boulder') this.finishSpecialStage();
     return { res: 'hit' };
   }
@@ -1970,13 +2218,15 @@ export class Game {
     this.flyers.push({
       x: CX + shot.x, y: this.targetY + 15 + shot.y + BLEN / 2,
       vx: side * rand(100, 240), vy: rand(-160, 50), rot: 0, vr: side * rand(7, 14),
-      kind: 'bullet', w: shot.w,
+      kind: 'bullet', w: shot.w, hue: shot.hue,
     });
   }
 
   private makeEmbeddedShot(p: Proj, x: number, y: number, angle: number, cellId?: number): EmbeddedShot {
     return {
       x, y, angle, cellId, age: 0, w: this.weapon.id, big: p.big ?? 0, tint: p.tint,
+      hue: p.hue ?? (this.weapon.id === 'firework' ? gunState.rocketHue : this.weapon.id === 'yoyo' ? gunState.yoyoHue : undefined),
+      flash: this.weapon.id === 'firework' || this.weapon.id === 'yoyo' || this.weapon.id === 'diamond' || this.weapon.id === 'bazooka' ? 1 : undefined,
       scale: (1 + (p.big ?? 0) * 0.3) * projectileSizeMultiplier(this.weapon.id, !!p.mini, !!p.giant),
     };
   }
@@ -2016,7 +2266,21 @@ export class Game {
     const chips = material === 'rock' ? ['#aab6c6', '#627388', '#e1ebf7']
       : material === 'diamond' ? ['#a5f3fc', '#67e8f9', '#e0f2fe']
         : ['#fbbf24', '#fde68a', '#a16207'];
-    spawnImpact(this.sink, fx, w, x, y, dx / dist, dy / dist, chips);
+    if (w.id !== 'firework' && w.id !== 'yoyo' && w.id !== 'keris' && w.id !== 'diamond' && w.id !== 'bazooka') {
+      spawnImpact(this.sink, fx, w, x, y, dx / dist, dy / dist, chips);
+    }
+    if (w.id === 'yoyo') {
+      spawnYoyoStickBurst(this.getYoyoState(), x, y, gunState.yoyoHue, CX, GUN_Y - 10);
+    }
+    if (w.id === 'keris') {
+      spawnKerisImpact(this.getKerisState(), x, y, CX, GUN_Y - 6);
+    }
+    if (w.id === 'diamond') {
+      spawnDiamondStickBurst(this.getDiamondState(), x, y, 1);
+    }
+    if (w.id === 'bazooka') {
+      this.getBazookaState().onHit(x, y, 1.05);
+    }
     this.hitStop = Math.max(this.hitStop, fx.hitstop);
     this.camY -= fx.kick;
     this.bump = Math.max(this.bump, material === 'rock' ? 0.55 : 0.2);
@@ -2025,8 +2289,16 @@ export class Game {
       this.tintA = Math.max(this.tintA, fx.tint);
       this.tintRgb = fx.light;
     }
-    if (HIT_SFX[w.id]) HIT_SFX[w.id]!();
-    else if (w.energy && !w.slow && !w.pullCoins) sfx.zap();
+    if (isSlide23Weapon(w.id)) {
+      const hitIdx = (this.perkCount = (this.perkCount || 0) + 1) - 1;
+      if (w.id === 'yoyo') slide23Sfx.hit('yoyo-spin', 0);
+      slide23Sfx.hit(w.id, hitIdx);
+      if (w.id === 'firework' && hitIdx % 3 === 2) slide23Sfx.boom(1.05);
+    } else if (HIT_SFX[w.id]) {
+      HIT_SFX[w.id]!();
+    } else if (w.energy && !w.slow && !w.pullCoins) {
+      sfx.zap();
+    }
     // Reuse the weapon's normal-stage signature effects without importing
     // classic-target perks (which would alter special-stage coin accounting).
     if (w.explode) this.explodeAt(x, y, w.id === 'bazooka' ? 1.3 : w.id === 'bamboo' ? 1.2 : 1, w.explodeFx ?? 'fire');
@@ -2048,7 +2320,7 @@ export class Game {
         size: rand(3, 6), color: pick(['#f43f5e', '#facc15', '#22d3ee', '#a855f7', '#4ade80', '#fb923c']),
         kind: 'chip', rot: rand(0, TAU), vr: rand(-25, 25), g: 350 });
     }
-    if (w.rope) this.sink.push({ x, y, vx: 0, vy: 0, life: 0.45, max: 0.45, size: 70, color: '#a5f3fc', kind: 'ring', rot: 0, vr: 0, g: 0 });
+    if (w.rope && w.id !== 'yoyo') this.sink.push({ x, y, vx: 0, vy: 0, life: 0.45, max: 0.45, size: 70, color: '#a5f3fc', kind: 'ring', rot: 0, vr: 0, g: 0 });
     if (w.notes) {
       sfx3.note(this.perkCount++ % 10);
       for (let i = 0; i < 3; i++) this.sink.push({ x: x + rand(-20, 20), y, vx: rand(-60, 60), vy: rand(-160, -80),
@@ -2084,13 +2356,46 @@ export class Game {
     if (surfaceAligned) c.translate(0, surfaceOffset - (getWeapon(shot.w).stick + EMBED)
       * (shot.w === 'moonbeam' ? 0.53 : 0.5));
     if (shot.w === 'snowball') c.translate(0, surfaceOffset);
+    if (shot.w === 'firework') {
+      c.translate(0, surfaceOffset - FIREWORK_EMBED_NOSE);
+      gunState.rocketHue = shot.hue ?? 340;
+      gunState.rocketFlash = shot.flash ?? 0;
+    }
+    if (shot.w === 'yoyo') {
+      c.translate(0, surfaceOffset + 4);
+      gunState.yoyoHue = shot.hue ?? 0;
+      gunState.yoyoFlash = shot.flash ?? 0;
+    }
+    if (shot.w === 'diamond') {
+      c.translate(0, surfaceOffset + 9);
+      gunState.diamondFlash = shot.flash ?? 0;
+      gunState.diamondSeed = (shot.x + shot.y) * 0.1;
+    }
+    if (shot.w === 'bazooka') {
+      c.translate(0, surfaceOffset - 5);
+      gunState.bazookaHue = shot.hue ?? 45;
+      gunState.bazookaFlash = shot.flash ?? 0;
+      gunState.bazookaSeed = (shot.x + shot.y) * 0.1;
+      gunState.bazookaBite = Math.max(0.38, 1 - shot.age * 0.8);
+    }
+    if (shot.w === 'gauntlet_cannon') {
+      c.translate(0, surfaceOffset - 5.5);
+    }
+    if (shot.w === 'magnet') {
+      c.translate(0, surfaceOffset - 4);
+    }
     c.scale(shot.scale, shot.scale);
     const oldBig = gunState.bigShot, oldTint = gunState.tint;
     gunState.bigShot = shot.big;
     if (shot.tint) gunState.tint = shot.tint;
-    this.drawProj(c, shot.w, undefined, shot.age, shot.w === 'snowball' || surfaceAligned);
+    this.drawProj(c, shot.w, undefined, shot.age, shot.w === 'snowball' || surfaceAligned || shot.w === 'firework' || shot.w === 'yoyo' || shot.w === 'diamond' || shot.w === 'bazooka' || shot.w === 'gauntlet_cannon' || shot.w === 'magnet');
     gunState.bigShot = oldBig;
     gunState.tint = oldTint;
+    gunState.rocketFlash = 0;
+    gunState.yoyoFlash = 0;
+    gunState.diamondFlash = 0;
+    gunState.diamondSeed = 0;
+    gunState.bazookaFlash = 0;
     c.restore();
   }
 
@@ -2150,7 +2455,7 @@ export class Game {
     this.payStageReward();
     this.sink.light(CX, this.targetY, 250, mode === 'boulder' ? '125,230,255' : '255,213,74', 0.8);
     this.burstSpecial(CX, this.targetY, mode === 'boulder' ? 'diamond' : 'gold', 38);
-    sfx4.match();
+    sfx.clear(this.weapon?.id);
   }
 
   private updateTreasureShower(dt: number) {
@@ -2200,7 +2505,7 @@ export class Game {
           this.projs = [];
           this.holding = false;
           this.addText('WAKTU HABIS!', CX, this.targetY + 185, '#fb7185', 26);
-          sfx.clang();
+          sfx.fail(this.weapon?.id);
         } else this.finishSpecialStage();
       }
     }
@@ -2512,6 +2817,7 @@ export class Game {
       }
     }
 
+    this.wheelScale += (1 - this.wheelScale) * Math.min(1, dt * 9);
     if (this.state === 'intro') {
       this.introT += dt;
       if (this.introT >= 0.5) this.state = 'play';
@@ -2526,9 +2832,26 @@ export class Game {
     }
     const tw = this.weapon;
     for (const p of this.projs) {
-      // The portal is a self-contained vortex. Even isolated glow motes in a
-      // straight line make it read as a round head with a tadpole's tail.
-      if (tw.id === 'portal') continue;
+      if (p.spawnDelay && p.spawnDelay > 0) continue;
+      if (tw.id === 'firework') {
+        spawnFirework8FlightSparks(this.getFwState(), p.x, p.y, p.hue ?? gunState.rocketHue);
+        continue;
+      }
+      if (tw.id === 'yoyo') {
+        spawnYoyoFlightSparks(this.getYoyoState(), p.x, p.y, p.hue ?? gunState.yoyoHue);
+        continue;
+      }
+      if (tw.id === 'keris') {
+        spawnKerisFlightSparks(this.getKerisState(), p.x, p.y);
+        continue;
+      }
+      if (tw.id === 'diamond') {
+        spawnDiamondFlightSparks(this.getDiamondState(), p.x, p.y);
+        continue;
+      }
+      if (tw.id === 'bazooka') {
+        continue;
+      }
       const px = p.x + rand(-4, 4);
       const py = p.y + rand(20, 46);
       if (tw.id === 'snowball') {
@@ -2613,11 +2936,170 @@ export class Game {
     this.shake *= Math.exp(-dt * 9);
     this.flashWhite = Math.max(0, this.flashWhite - dt * 2.5);
     this.flashRed = Math.max(0, this.flashRed - dt * 1.8);
-    for (const it of this.items) it.age += s;
+    for (const it of this.items) {
+      it.age += s;
+      if (it.flash) it.flash = Math.max(0, it.flash - dt * 3.5);
+    }
+    for (const b of this.rockBullets) {
+      b.age += s;
+      if (b.flash) b.flash = Math.max(0, b.flash - dt * 3.5);
+    }
+    for (const b of this.chestBullets) {
+      b.age += s;
+      if (b.flash) b.flash = Math.max(0, b.flash - dt * 3.5);
+    }
+    if (this.weapon.id === 'firework' || (this.fwState && (this.fwState.particles.length > 0 || this.fwState.glows.length > 0 || this.fwState.rings.length > 0 || this.fwState.sky.length > 0))) {
+      const fw = this.getFwState();
+      const stuckPins: { x: number; y: number; worldA: number; hue: number }[] = [];
+      for (const it of this.items) {
+        if (it.type === 'bullet' && it.w === 'firework') {
+          const worldA = it.angle + this.rot;
+          const dist = this.level.radius - FIREWORK_EMBED_NOSE + FIREWORK_PL;
+          stuckPins.push({
+            x: CX + Math.cos(worldA) * dist,
+            y: this.targetY + Math.sin(worldA) * dist,
+            worldA,
+            hue: it.hue ?? 340,
+          });
+        }
+      }
+      updateFirework8State(fw, dt, stuckPins);
+    }
+    if (
+      this.weapon.id === 'yoyo' ||
+      (this.yoyoState &&
+        (this.yoyoState.particles.length > 0 ||
+          this.yoyoState.glows.length > 0 ||
+          this.yoyoState.rings.length > 0 ||
+          this.yoyoState.strings.length > 0 ||
+          this.yoyoState.timers.length > 0 ||
+          this.yoyoState.flash > 0.01 ||
+          this.yoyoState.wpulse > 0.01))
+    ) {
+      const yoyo = this.getYoyoState();
+      const stuckPins: { x: number; y: number; hue: number; age: number }[] = [];
+      for (const it of this.items) {
+        if (it.type === 'bullet' && it.w === 'yoyo') {
+          const worldA = it.angle + this.rot;
+          const itemR = this.level.boss
+            ? getExactBossRadius(this.level.style as BossType, it.angle, this.level.radius)
+            : this.level.radius;
+          const dist = itemR + 4;
+          stuckPins.push({
+            x: CX + Math.cos(worldA) * dist,
+            y: this.targetY + Math.sin(worldA) * dist,
+            hue: it.hue ?? 0,
+            age: it.age,
+          });
+        }
+      }
+      updateYoyoSlideState(yoyo, dt, stuckPins);
+    }
+    if (
+      this.weapon.id === 'keris' ||
+      (this.kerisState &&
+        (this.kerisState.particles.length > 0 ||
+          this.kerisState.crawlArcs.length > 0 ||
+          this.kerisState.thunderFlash > 0.01))
+    ) {
+      updateKerisSlideState(
+        this.getKerisState(),
+        dt,
+        this.time,
+        CX,
+        GUN_Y + this.recoil * 22,
+        this.weapon.id === 'keris' && (this.state === 'play' || this.state === 'intro'),
+      );
+    }
+    if (
+      this.weapon.id === 'diamond' ||
+      (this.diamondState &&
+        (this.diamondState.particles.length > 0 ||
+          this.diamondState.shards.length > 0 ||
+          this.diamondState.glows.length > 0 ||
+          this.diamondState.rings.length > 0 ||
+          this.diamondState.starflashes.length > 0 ||
+          this.diamondState.timers.length > 0 ||
+          this.diamondState.flash > 0.01 ||
+          this.diamondState.wpulse > 0.01))
+    ) {
+      const diamond = this.getDiamondState();
+      const stuckPins: { x: number; y: number }[] = [];
+      for (const it of this.items) {
+        if (it.type === 'bullet' && it.w === 'diamond') {
+          const worldA = it.angle + this.rot;
+          const itemR = this.level.boss
+            ? getExactBossRadius(this.level.style as BossType, it.angle, this.level.radius)
+            : this.level.radius;
+          const dist = itemR + 14;
+          stuckPins.push({
+            x: CX + Math.cos(worldA) * dist,
+            y: this.targetY + Math.sin(worldA) * dist,
+          });
+        }
+      }
+      updateDiamondSlideState(
+        diamond,
+        dt,
+        stuckPins,
+        this.weapon.id === 'diamond' && (this.state === 'play' || this.state === 'intro'),
+        CX,
+        GUN_Y,
+      );
+    }
+    if (
+      this.weapon.id === 'bazooka' ||
+      (this.bazookaState &&
+        (this.bazookaState.particles.length > 0 ||
+          this.bazookaState.smokes.length > 0 ||
+          this.bazookaState.fireballs.length > 0 ||
+          this.bazookaState.flashes.length > 0 ||
+          this.bazookaState.debris.length > 0 ||
+          this.bazookaState.glows.length > 0 ||
+          this.bazookaState.timers.length > 0 ||
+          this.bazookaState.screenFlash > 0.01))
+    ) {
+      const bazooka = this.getBazookaState();
+      const flyingShots =
+        this.weapon.id === 'bazooka'
+          ? this.projs
+              .filter((p) => !p.spawnDelay || p.spawnDelay <= 0)
+              .map((p) => ({ x: p.x, y: p.y }))
+          : [];
+      bazooka.update(
+        dt,
+        this.weapon.id === 'bazooka' && (this.state === 'play' || this.state === 'intro'),
+        CX,
+        GUN_Y,
+        flyingShots,
+        H,
+      );
+    }
 
     // projectiles
     for (let i = this.projs.length - 1; i >= 0; i--) {
       const p = this.projs[i];
+      if (p.spawnDelay && p.spawnDelay > 0) {
+        p.spawnDelay -= s;
+        if (p.spawnDelay > 0) continue;
+        if (this.weapon.id === 'keris') {
+          this.sink.light(p.x, GUN_Y - 6, 80, '255,224,110', 0.28);
+          this.sink.push({
+            x: p.x,
+            y: GUN_Y - 6,
+            vx: 0,
+            vy: 0,
+            life: 0.24,
+            max: 0.24,
+            size: 32,
+            color: '#ffd056',
+            kind: 'ring',
+            rot: 0,
+            vr: 0,
+            g: 0,
+          });
+        }
+      }
       const ghostN = FX[this.weapon.id].ghost;
       if (ghostN) {
         p.hist = p.hist ?? [];
@@ -2714,7 +3196,7 @@ export class Game {
 
     if (this.state === 'clear') {
       this.stateT += dt;
-      if (this.stateT > 1.3 && this.time >= this.diamondHoldUntil && (this.level.mode !== 'treasure' || this.stageRewardPaid)) {
+      if (this.stateT > 1.75 && this.time >= this.diamondHoldUntil && (this.level.mode !== 'treasure' || this.stageRewardPaid)) {
         if (this.level.boss && this.events.onBossDefeated) {
           this.state = 'idle';
           this.bankedCoins += 5; // the boss reward was already included in this.coins
@@ -2885,22 +3367,53 @@ export class Game {
 
   private drawProj(c: CanvasRenderingContext2D, kind: ProjKind, len?: number, age = 99, embedded = false) {
     const l = len ?? (kind === 'old' ? BLEN : getWeapon(kind).stick + EMBED);
-    drawProjectile(c, kind, l, this.time, age, embedded);
+    drawProjectile(c, kind, l, this.time, age, embedded, kind === 'diamond' ? 'new' : undefined);
   }
 
   private drawGunNow(c: CanvasRenderingContext2D) {
-    const ry = this.recoil * 22 - (this.state === 'idle' ? Math.sin(this.time * 2) * 3 : 0);
+    const sinceShot = this.state === 'idle' ? 9 : this.rt - this.lastShotRT;
+    const kerisCharging =
+      this.weapon.id === 'keris' && sinceShot >= 0 && sinceShot < KERIS_GLEAM_DUR;
+    const ry = kerisCharging
+      ? -3.5 * Math.sin((sinceShot / KERIS_GLEAM_DUR) * Math.PI)
+      : this.recoil * 22 - (this.state === 'idle' ? Math.sin(this.time * 2) * 3 : 0);
     const y0 = GUN_Y + ry;
     const R = this.level.radius;
 
     // Two upright barrels get two straight sights; a star never steers either.
     if (this.state === 'play' || this.state === 'intro') {
-      const lg = c.createLinearGradient(0, y0, 0, this.targetY);
-      lg.addColorStop(0, this.weapon.color + '66');
-      lg.addColorStop(1, this.weapon.color + '00');
-      c.fillStyle = lg;
-      for (const ox of this.gunOffsets) {
-        c.fillRect(CX + ox - 0.75, this.targetY + R, 1.5, y0 - this.targetY - R);
+      if (this.weapon.id === 'firework' || this.weapon.id === 'yoyo') {
+        const nextHue =
+          this.weapon.id === 'firework'
+            ? firework8ShotHue(this.level?.n ?? 1, this.getFwState().shotIdx)
+            : yoyoAmmoHue(this.getYoyoState().shotIdx);
+        const lg = c.createLinearGradient(0, y0, 0, this.targetY + R);
+        lg.addColorStop(0, hsl(nextHue, 100, 70, 0.35));
+        lg.addColorStop(1, 'rgba(255,255,255,0)');
+        c.save();
+        c.strokeStyle = lg;
+        c.setLineDash([4, 7]);
+        c.lineWidth = 1.5;
+        for (const ox of this.gunOffsets) {
+          c.beginPath();
+          c.moveTo(CX + ox, y0);
+          c.lineTo(CX + ox, this.targetY + R + 6);
+          c.stroke();
+        }
+        c.setLineDash([]);
+        c.restore();
+      } else if (this.weapon.id === 'keris') {
+        for (const ox of this.gunOffsets) {
+          drawKerisAimGuide(c, CX + ox, y0, this.targetY + R, this.time);
+        }
+      } else {
+        const lg = c.createLinearGradient(0, y0, 0, this.targetY);
+        lg.addColorStop(0, this.weapon.color + '66');
+        lg.addColorStop(1, this.weapon.color + '00');
+        c.fillStyle = lg;
+        for (const ox of this.gunOffsets) {
+          c.fillRect(CX + ox - 0.75, this.targetY + R, 1.5, y0 - this.targetY - R);
+        }
       }
     }
 
@@ -2966,10 +3479,42 @@ export class Game {
 
     const ready = this.state === 'idle' || this.state === 'intro'
       || (this.cooldown <= 0 && this.reloadT === 0 && this.ammoLeft > 0
-        && (this.weapon.id !== 'snowball' || this.snowLoaded > 0));
+        && (this.weapon.id !== 'snowball' || this.snowLoaded > 0)
+        && (this.weapon.id !== 'yoyo' || this.projs.length === 0));
     gunState.sinceShot = this.state === 'idle' ? 9 : this.rt - this.lastShotRT;
     gunState.reloadT = this.reloadT;
     const flash = Math.max(0, this.muzzle / 0.07);
+    if (this.weapon.id === 'firework') {
+      const fw = this.getFwState();
+      const nextHue = firework8ShotHue(this.level?.n ?? 1, fw.shotIdx);
+      gunState.rocketHue = nextHue;
+      for (const ox of this.gunOffsets) {
+        drawFirework8GunGlow(c, CX + ox, y0 + 50, nextHue, 0);
+      }
+    }
+    if (this.weapon.id === 'yoyo') {
+      const yoyo = this.getYoyoState();
+      const nextHue = yoyoAmmoHue(yoyo.shotIdx);
+      gunState.yoyoHue = nextHue;
+      for (const ox of this.gunOffsets) {
+        drawYoyoSlideGunGlow(c, CX + ox, y0 + 60, nextHue, this.recoil);
+      }
+    }
+    if (this.weapon.id === 'keris') {
+      c.save();
+      c.fillStyle = 'rgba(0,0,0,0.42)';
+      for (const ox of this.gunOffsets) {
+        c.beginPath();
+        c.ellipse(CX + ox, GUN_Y + 172, 44, 9, 0, 0, TAU);
+        c.fill();
+      }
+      c.restore();
+    }
+    if (this.weapon.id === 'diamond') {
+      for (const ox of this.gunOffsets) {
+        drawDiamondSlideGunGlow(c, CX + ox, y0 + 70, this.recoil);
+      }
+    }
 
     if (this.hasTwinGuns) {
       // Left gun mirrored and right gun normal: their grips/magazines face OUT,
@@ -2994,6 +3539,62 @@ export class Game {
   private forestBackdropKey = '';
 
   private drawForestBackground(c: CanvasRenderingContext2D, pal: (typeof STYLE_COLORS)[Style], R: number) {
+    if (this.state !== 'idle' && this.weapon.id === 'firework') {
+      drawFirework8Background(
+        c,
+        this.getFwState(),
+        this.dpr,
+        CX,
+        this.targetY - this.bump * 9,
+        R,
+        this.level?.n ?? 1,
+      );
+      return;
+    }
+    if (this.state !== 'idle' && this.weapon.id === 'yoyo') {
+      drawYoyoSlideBackground(
+        c,
+        this.getYoyoState(),
+        this.dpr,
+        CX,
+        this.targetY - this.bump * 9,
+        R,
+        this.level?.n ?? 1,
+        this.time,
+      );
+      return;
+    }
+    if (this.state !== 'idle' && this.weapon.id === 'keris') {
+      drawKerisSlideBackground(
+        c,
+        this.getKerisState(),
+        CX,
+        this.targetY - this.bump * 9,
+        R,
+        this.time,
+        this.level?.boss ?? false,
+        W,
+        H,
+      );
+      return;
+    }
+    if (this.state !== 'idle' && this.weapon.id === 'diamond') {
+      drawDiamondSlideBackground(
+        c,
+        this.getDiamondState(),
+        this.dpr,
+        CX,
+        this.targetY - this.bump * 9,
+        R,
+        this.level?.n ?? 1,
+        this.time,
+      );
+      return;
+    }
+    if (this.state !== 'idle' && this.weapon.id === 'bazooka') {
+      this.getBazookaState().drawBackground(c, W, H);
+      return;
+    }
     // Sky, silhouettes and target lighting do not change each frame. Cache
     // them at retina resolution; keep the drifting fireflies and grass live.
     const key = `${this.level.style}:${R}:${this.targetY}:${this.dpr}`;
@@ -3159,15 +3760,10 @@ export class Game {
 
     // Keep the clean diamond / chest visible through the special-stage celebration.
     if (this.state !== 'idle' && (this.state !== 'clear' || isSpecial(this.level.mode))) {
-      let sc = 1;
-      if (this.state === 'intro') {
-        const t = Math.min(1, this.introT / 0.5);
-        const c1 = 1.70158;
-        const c3 = c1 + 1;
-        sc = 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
-      }
+      const wScale = this.wheelScale ?? 1;
+      const sc = wScale * (1 + this.bump * 0.035);
       c.save();
-      c.translate(CX, this.targetY - this.bump * 9);
+      c.translate(CX, this.targetY + this.bump * 7);
       c.scale(sc, sc);
       // Ordinary round targets keep their drop shadow. The special rock and
       // treasure chest must NOT sit on a large black disk as chunks fall away.
@@ -3205,19 +3801,53 @@ export class Game {
           const pencilEmbedBonus = it.w === 'pencil' ? Math.sin(it.angle * 13) * 5 : 0;
           const itemR = this.level.boss ? getExactBossRadius(this.level.style as BossType, it.angle, R) : R;
           const snowball = it.type === 'bullet' && it.w === 'snowball';
-          const portal = it.type === 'bullet' && it.w === 'portal';
-          // Place the snowy hemisphere or portal ring at the hit surface. The
-          // target hides their inner halves without any new portal physics.
-          c.translate(0, snowball ? itemR + sink : portal ? itemR - 11 * sc + sink
+          const firework = it.type === 'bullet' && it.w === 'firework';
+          const yoyo = it.type === 'bullet' && it.w === 'yoyo';
+          const keris = it.type === 'bullet' && it.w === 'keris';
+          const diamond = it.type === 'bullet' && it.w === 'diamond';
+          const bazooka = it.type === 'bullet' && it.w === 'bazooka';
+          const gauntlet = it.type === 'bullet' && it.w === 'gauntlet_cannon';
+          const magnet = it.type === 'bullet' && it.w === 'magnet';
+          // Place the snowy hemisphere, firework rocket nose, yoyo, keris, diamond, bazooka, gauntlet knuckles, or 2x horseshoe magnet at the hit surface.
+          c.translate(0, snowball || keris ? itemR + sink
+            : firework ? itemR - FIREWORK_EMBED_NOSE * sc + sink
+            : yoyo ? itemR + 4 * sc + sink
+            : diamond ? itemR + 9 * sc + sink
+            : bazooka ? itemR - 5 * sc + sink
+            : gauntlet ? itemR - 5.5 * sc + sink
+            : magnet ? itemR - 4 * sc + sink
             : itemR - (embedDepth + pencilEmbedBonus) * sc + sink);
           c.scale(sc, sc);
           gunState.bigShot = it.big ?? 0;
           if (it.tint) gunState.tint = it.tint;
+          if (firework) {
+            gunState.rocketHue = it.hue ?? 340;
+            gunState.rocketFlash = it.flash ?? 0;
+          }
+          if (yoyo) {
+            gunState.yoyoHue = it.hue ?? 0;
+            gunState.yoyoFlash = it.flash ?? 0;
+          }
+          if (diamond) {
+            gunState.diamondFlash = it.flash ?? 0;
+            gunState.diamondSeed = it.angle * 3.7;
+          }
+          if (bazooka) {
+            gunState.bazookaHue = it.hue ?? 45;
+            gunState.bazookaFlash = it.flash ?? 0;
+            gunState.bazookaSeed = it.angle * 3.7;
+            gunState.bazookaBite = Math.max(0.38, 1 - it.age * 0.8);
+          }
           this.drawProj(c, it.type === 'old' ? 'old' : it.w || 'pistol', len, it.age,
-            snowball || it.w === 'honey' || it.w === 'banana'
+            snowball || firework || yoyo || keris || diamond || bazooka || gauntlet || magnet || it.w === 'honey' || it.w === 'banana'
               || it.w === 'bee' || it.w === 'moonbeam' || it.w === 'plasma' || it.w === 'blackhole'
               || it.w === 'nail');
           gunState.bigShot = 0;
+          gunState.rocketFlash = 0;
+          gunState.yoyoFlash = 0;
+          gunState.diamondFlash = 0;
+          gunState.diamondSeed = 0;
+          gunState.bazookaFlash = 0;
           c.restore();
         } else if (it.type === 'spike') {
           c.save();
@@ -3246,6 +3876,31 @@ export class Game {
         c.restore();
       } else {
         c.drawImage(this.face, -R - facePad, -R - facePad, (R + facePad) * 2, (R + facePad) * 2);
+      }
+      // Slide #8 Keris & Slide #3 Bazooka rim crater on top of target face
+      for (const it of this.items) {
+        if (it.type === 'bullet' && it.w === 'keris') {
+          c.save();
+          c.rotate(it.angle - Math.PI / 2);
+          const sink = Math.max(0, 1 - it.age * 12) * 6;
+          const itemR = this.level.boss ? getExactBossRadius(this.level.style as BossType, it.angle, R) : R;
+          c.translate(0, itemR + sink);
+          if (it.scale) c.scale(it.scale, it.scale);
+          drawKerisStuckCrater(c, 0, this.time);
+          c.restore();
+        } else if (it.type === 'bullet' && it.w === 'bazooka') {
+          c.save();
+          c.rotate(it.angle - Math.PI / 2);
+          const sink = Math.max(0, 1 - it.age * 12) * 6;
+          const itemR = this.level.boss ? getExactBossRadius(this.level.style as BossType, it.angle, R) : R;
+          c.translate(0, itemR - 3 + sink);
+          if (it.scale) c.scale(it.scale, it.scale);
+          drawSlide3BazookaStuckCrater(c, this.time, it.angle * 3.7, Math.max(0.38, 1 - it.age * 0.8));
+          c.restore();
+        }
+      }
+      if (this.kerisState && this.kerisState.crawlArcs.length > 0) {
+        drawKerisSurfaceArcs(c, this.kerisState, R, 0, this.time);
       }
       if (this.hitFlash > 0 && !isSpecial(this.level.mode)) {
         c.beginPath();
@@ -3403,6 +4058,14 @@ export class Game {
       else if (f.kind === 'coin') this.drawCoin(c, this.time);
       else if (f.kind === 'diamond_chest') this.drawEmbeddedDiamond(c, this.time, 1);
       else {
+        if (f.w === 'firework') {
+          gunState.rocketHue = f.hue ?? 340;
+          gunState.rocketFlash = 0;
+        }
+        if (f.w === 'yoyo') {
+          gunState.yoyoHue = f.hue ?? 0;
+          gunState.yoyoFlash = 0;
+        }
         c.translate(0, -BLEN / 2);
         this.drawProj(c, f.kind === 'old' ? 'old' : f.w || 'pistol');
       }
@@ -3411,20 +4074,37 @@ export class Game {
 
     // projectiles
     for (const p of this.projs) {
+      if (p.spawnDelay && p.spawnDelay > 0) continue;
       const wid = this.weapon.id;
       const trailCol = this.weapon.trail;
       const ang = Math.atan2(p.vx, this.weapon.speed);
       if (this.weapon.rope) {
-        c.strokeStyle = 'rgba(254,243,199,0.9)';
-        c.lineWidth = 1.2;
-        c.beginPath();
-        c.moveTo((p.originX ?? CX) - 14, GUN_Y + 198 + this.recoil * 22);
-        c.quadraticCurveTo((p.originX ?? CX) + 10, (p.y + GUN_Y) / 2 + 30, p.x, p.y + 40);
-        c.stroke();
+        if (wid === 'yoyo') {
+          const gunX = p.originX ?? CX;
+          const gunY = GUN_Y + this.recoil * 22 + 24;
+          drawSlide6String(
+            c,
+            { x: gunX - 18, y: gunY + 46 },
+            { x: p.x, y: p.y + 15 },
+            7,
+            4,
+            this.time * 32,
+            0,
+            1,
+            p.hue ?? gunState.yoyoHue,
+          );
+        } else {
+          c.strokeStyle = 'rgba(254,243,199,0.9)';
+          c.lineWidth = 1.2;
+          c.beginPath();
+          c.moveTo((p.originX ?? CX) - 14, GUN_Y + 198 + this.recoil * 22);
+          c.quadraticCurveTo((p.originX ?? CX) + 10, (p.y + GUN_Y) / 2 + 30, p.x, p.y + 40);
+          c.stroke();
+        }
       }
       const fxp = FX[wid];
       // afterimages
-      if (fxp.ghost && p.hist) {
+      if (fxp.ghost && wid !== 'diamond' && p.hist) {
         for (let gi = 0; gi < p.hist.length; gi++) {
           const h = p.hist[gi];
           c.save();
@@ -3447,7 +4127,7 @@ export class Game {
       c.rotate(-ang);
       // Water/snow have material trails, and a portal must remain a compact
       // ring; the usual white laser wedge made all three look like tadpoles.
-      if (!drawMaterialTrail(c, wid)) {
+      if (!drawMaterialTrail(c, wid, wid === 'diamond' ? 'new' : undefined)) {
         const tl = Math.min(260, 50 + this.weapon.speed * 0.045) * fxp.streak;
         const tw = Math.max(2, this.weapon.half) * 1.25
           * projectileSizeMultiplier(wid, !!p.mini, !!p.giant);
@@ -3479,9 +4159,25 @@ export class Game {
         c.fill();
         c.globalCompositeOperation = 'source-over';
       }
-      if (wid === 'disc') c.rotate(this.time * 30);
       gunState.bigShot = p.big ?? 0;
       if (p.tint) gunState.tint = p.tint;
+      if (wid === 'firework') {
+        gunState.rocketHue = p.hue ?? 340;
+        gunState.rocketFlash = p.flash ?? 0;
+      }
+      if (wid === 'yoyo') {
+        gunState.yoyoHue = p.hue ?? 0;
+        gunState.yoyoFlash = p.flash ?? 0;
+      }
+      if (wid === 'diamond') {
+        gunState.diamondFlash = p.flash ?? 0;
+        gunState.diamondSeed = (p.hue ?? 205) * 0.13;
+      }
+      if (wid === 'bazooka') {
+        gunState.bazookaHue = p.hue ?? 45;
+        gunState.bazookaFlash = p.flash ?? 0;
+        gunState.bazookaSeed = (p.hue ?? 45) * 0.13;
+      }
       if (p.big) c.scale(1 + p.big * 0.3, 1 + p.big * 0.3);
       const sizeMultiplier = projectileSizeMultiplier(wid, !!p.mini, !!p.giant);
       if (sizeMultiplier !== 1) c.scale(sizeMultiplier, sizeMultiplier);
@@ -3492,6 +4188,11 @@ export class Game {
         c.translate(0, -l2 / 2);
       }
       this.drawProj(c, wid);
+      gunState.rocketFlash = 0;
+      gunState.yoyoFlash = 0;
+      gunState.diamondFlash = 0;
+      gunState.diamondSeed = 0;
+      gunState.bazookaFlash = 0;
       c.restore();
     }
     void this.failProjAngle;
@@ -3647,6 +4348,57 @@ export class Game {
           drawFxParticle(c, p, this.time);
           break;
       }
+    }
+
+    if (this.state !== 'idle' && (this.weapon.id === 'firework' || (this.fwState && (this.fwState.particles.length > 0 || this.fwState.rings.length > 0)))) {
+      drawFirework8ParticlesAndRings(c, this.getFwState());
+    }
+    if (
+      this.state !== 'idle' &&
+      (this.weapon.id === 'yoyo' ||
+        (this.yoyoState &&
+          (this.yoyoState.particles.length > 0 ||
+            this.yoyoState.rings.length > 0 ||
+            this.yoyoState.strings.length > 0 ||
+            this.yoyoState.flash > 0.01 ||
+            this.yoyoState.wpulse > 0.01)))
+    ) {
+      drawYoyoSlideParticlesRingsAndStrings(c, this.getYoyoState(), CX, this.targetY, this.time);
+    }
+    if (
+      this.state !== 'idle' &&
+      (this.weapon.id === 'keris' ||
+        (this.kerisState &&
+          (this.kerisState.particles.length > 0 ||
+            this.kerisState.thunderFlash > 0.01)))
+    ) {
+      drawKerisSlideParticlesAndArcs(c, this.getKerisState(), W, H);
+    }
+    if (
+      this.state !== 'idle' &&
+      (this.weapon.id === 'diamond' ||
+        (this.diamondState &&
+          (this.diamondState.particles.length > 0 ||
+            this.diamondState.shards.length > 0 ||
+            this.diamondState.rings.length > 0 ||
+            this.diamondState.starflashes.length > 0 ||
+            this.diamondState.flash > 0.01 ||
+            this.diamondState.wpulse > 0.01)))
+    ) {
+      drawDiamondSlideForeground(c, this.getDiamondState(), CX, this.targetY);
+    }
+    if (
+      this.state !== 'idle' &&
+      (this.weapon.id === 'bazooka' ||
+        (this.bazookaState &&
+          (this.bazookaState.particles.length > 0 ||
+            this.bazookaState.smokes.length > 0 ||
+            this.bazookaState.fireballs.length > 0 ||
+            this.bazookaState.flashes.length > 0 ||
+            this.bazookaState.debris.length > 0 ||
+            this.bazookaState.screenFlash > 0.01)))
+    ) {
+      this.getBazookaState().drawForeground(c, W, H);
     }
 
     // dynamic lights (bloom-like)
@@ -3929,14 +4681,41 @@ export class Game {
       const x = 30;
       const y = H - 40 - i * spacing;
       c.save();
-      c.translate(x, y - 14);
-      c.scale(0.5, 0.5);
-      if (i < this.ammoLeft) {
-        this.drawProj(c, this.weapon.id);
+      if (this.weapon.id === 'yoyo') {
+        const used = i >= this.ammoLeft;
+        const k = total - 1 - i;
+        c.globalAlpha = used ? 0.18 : 1;
+        c.translate(x, y - 6);
+        drawSlide6Yoyo(c, 0, 0, 8, this.time * 4 + k * 1.6, 0, used ? 200 : yoyoAmmoHue(k));
+      } else if (this.weapon.id === 'keris') {
+        const used = i >= this.ammoLeft;
+        const bob = used ? 0 : Math.sin(this.time * 2.4 + i * 0.5) * 1.4;
+        c.translate(x, y - 6 + bob);
+        c.scale(0.68, 0.68);
+        drawKerisSlideMini(c, this.time + i * 0.3, used);
+      } else if (this.weapon.id === 'diamond') {
+        const used = i >= this.ammoLeft;
+        const k = total - 1 - i;
+        c.globalAlpha = used ? 0.18 : 1;
+        c.translate(x, y - 6);
+        drawSlide2DiamondBullet(c, 7.5, this.time, k * 1.5, 0);
+      } else if (this.weapon.id === 'bazooka') {
+        const used = i >= this.ammoLeft;
+        const k = total - 1 - i;
+        c.globalAlpha = used ? 0.18 : 1;
+        c.translate(x, y - 16);
+        c.scale(0.45, 0.45);
+        drawSlide3BazookaShell(c, BAZOOKA_HUES[k % BAZOOKA_HUES.length], this.time, k * 1.5, 0, 0);
       } else {
-        c.globalAlpha = 0.25;
-        c.fillStyle = '#000';
-        c.fillRect(-6, 0, 12, BLEN);
+        c.translate(x, y - 14);
+        c.scale(0.5, 0.5);
+        if (i < this.ammoLeft) {
+          this.drawProj(c, this.weapon.id);
+        } else {
+          c.globalAlpha = 0.25;
+          c.fillStyle = '#000';
+          c.fillRect(-6, 0, 12, BLEN);
+        }
       }
       c.restore();
     }
@@ -4024,6 +4803,65 @@ export class Game {
         const hint = this.weapon.charge ? 'TAP = TEMBAK, TAHAN = CHARGE x4!' : this.weapon.scope ? 'TAHAN = BIDIK SLOW-MO, LEPAS = TEMBAK' : this.weapon.spinup ? 'TAHAN LAYAR UNTUK MEMUTAR LARAS!' : 'TAHAN LAYAR / SPASI = AUTO-FIRE';
         c.fillText(hint, 0, 40);
       }
+      c.restore();
+    }
+
+    // Slide #2 exact "STAGE CLEAR!" + "BONUS +3" banner (`games/firework/src/game/engine.ts` lines 3469–3515)
+    if (this.state === 'clear' && !isSpecial(this.level.mode)) {
+      const t = this.stateT;
+      const sc =
+        t < 0.35
+          ? 0.4 + 0.6 * Math.pow(t / 0.35, 0.6) * (1 + 0.25 * Math.sin((t / 0.35) * Math.PI))
+          : 1;
+      const a = t > 1.35 ? Math.max(0, 1 - (t - 1.35) / 0.4) : 1;
+      const clearFont = "Bungee, Impact, 'Arial Black', sans-serif";
+      const w = this.weapon.id;
+      c.save();
+      c.globalAlpha = a;
+      c.translate(CX, 330);
+      c.scale(sc, sc);
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      c.font = `700 46px ${clearFont}`;
+      const g = c.createLinearGradient(-140, -20, 140, 20);
+      if (w === 'keris') {
+        g.addColorStop(0, '#ffe9a8');
+        g.addColorStop(0.5, '#ffd75e');
+        g.addColorStop(1, '#ff8a3d');
+        c.shadowColor = 'rgba(255,190,80,0.95)';
+      } else if (w === 'blackhole') {
+        g.addColorStop(0, '#b46bff');
+        g.addColorStop(0.5, '#7ad7ff');
+        g.addColorStop(1, '#f0e6ff');
+        c.shadowColor = 'rgba(140,80,255,0.95)';
+      } else if (w === 'yoyo') {
+        g.addColorStop(0, '#ff5f8f');
+        g.addColorStop(0.5, '#ffd75e');
+        g.addColorStop(1, '#5fe7ff');
+        c.shadowColor = 'rgba(255,150,120,0.95)';
+      } else if (w === 'diamond') {
+        g.addColorStop(0, '#ffffff');
+        g.addColorStop(0.5, '#bfe6ff');
+        g.addColorStop(1, '#7ab8ff');
+        c.shadowColor = 'rgba(200,235,255,0.95)';
+      } else if (w === 'bazooka') {
+        g.addColorStop(0, '#ffe27a');
+        g.addColorStop(0.5, '#ff9d2e');
+        g.addColorStop(1, '#ff5a2e');
+        c.shadowColor = 'rgba(255,140,40,0.95)';
+      } else {
+        g.addColorStop(0, '#ffb0e6');
+        g.addColorStop(0.5, '#8adcff');
+        g.addColorStop(1, '#c77dff');
+        c.shadowColor = 'rgba(220,150,255,0.95)';
+      }
+      c.shadowBlur = 24;
+      c.fillStyle = g;
+      c.fillText('STAGE CLEAR!', 0, 0);
+      c.shadowBlur = 0;
+      c.font = `700 18px ${clearFont}`;
+      c.fillStyle = '#fff';
+      c.fillText('BONUS +3', 0, 40);
       c.restore();
     }
   }

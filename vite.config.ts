@@ -22,14 +22,9 @@ export default defineConfig(() => {
       rollupOptions: {
         input: {
           main: path.resolve(process.cwd(), 'index.html'),
-          firework: path.resolve(process.cwd(), 'games/firework/index.html'),
           fireworkgun: path.resolve(process.cwd(), 'games/fireworkgun/index.html'),
-          keris: path.resolve(process.cwd(), 'games/keris/index.html'),
           rainbow: path.resolve(process.cwd(), 'games/rainbow/index.html'),
-          weaponskins: path.resolve(process.cwd(), 'games/weaponskins/index.html'),
           obliterator: path.resolve(process.cwd(), 'games/obliterator/index.html'),
-          gunhitdev: path.resolve(process.cwd(), 'games/gunhitdev/index.html'),
-          sharkgun: path.resolve(process.cwd(), 'games/sharkgun/index.html'),
         },
       },
     },

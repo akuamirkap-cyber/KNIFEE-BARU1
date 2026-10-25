@@ -5,6 +5,47 @@ type C = CanvasRenderingContext2D;
 
 /** Material trails for shots that should not have the ordinary sharp laser wedge. */
 export function drawMaterialTrail(c: C, kind: ProjKind, effect: GunEffect = getGunEffect(kind)): boolean {
+  if (kind === 'firework' || kind === 'yoyo' || kind === 'keris' || kind === 'bazooka') return true;
+  if (kind === 'diamond' && effect !== 'original') return true;
+  if (kind === 'gauntlet_cannon') {
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    // Roaring golden-solar & crimson-plasma thruster jet plume behind the flying Gauntlet
+    const plume = c.createLinearGradient(0, 48, 0, 132);
+    plume.addColorStop(0, 'rgba(255,255,255,0.92)');
+    plume.addColorStop(0.22, 'rgba(254,240,138,0.85)');
+    plume.addColorStop(0.55, 'rgba(249,115,22,0.58)');
+    plume.addColorStop(1, 'rgba(220,38,38,0)');
+    c.fillStyle = plume;
+    c.beginPath();
+    c.moveTo(-7.5, 50);
+    c.bezierCurveTo(-13, 72, -5, 96, 0, 132);
+    c.bezierCurveTo(5, 96, 13, 72, 7.5, 50);
+    c.closePath();
+    c.fill();
+
+    // Supersonic Mach shock-rings along the thruster wake
+    c.strokeStyle = 'rgba(254,240,138,0.68)';
+    c.lineWidth = 1.6;
+    c.beginPath();
+    c.ellipse(0, 62, 11, 3.2, 0, 0, Math.PI * 2);
+    c.stroke();
+    c.strokeStyle = 'rgba(239,68,68,0.48)';
+    c.lineWidth = 1.3;
+    c.beginPath();
+    c.ellipse(0, 82, 8.5, 2.5, 0, 0, Math.PI * 2);
+    c.stroke();
+
+    // Trailing golden-crimson ember sparks
+    c.fillStyle = '#fef08a';
+    for (const [x, y, r] of [[-9, 66, 2.2], [9, 76, 2.0], [-5, 96, 1.7], [4, 110, 1.4]] as const) {
+      c.beginPath();
+      c.arc(x, y, r, 0, Math.PI * 2);
+      c.fill();
+    }
+    c.restore();
+    return true;
+  }
   // Classic shots keep the old simple tapered trail. This is strictly visual;
   // it does not alter the projectile's velocity, collision, or embedded depth.
   if (effect === 'original' || isFixedClassicGun(kind)) return false;
@@ -23,11 +64,6 @@ export function drawMaterialTrail(c: C, kind: ProjKind, effect: GunEffect = getG
       c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill();
     }
     c.restore(); return true;
-  }
-  if (kind === 'portal') {
-    // Its revolving rim and faint afterimages are the whole effect. In
-    // particular, a white taper behind it turns the portal into a tadpole.
-    return true;
   }
   if (kind === 'honey') {
     // A slow elastic strand breaking into amber beads, not a laser wedge.
