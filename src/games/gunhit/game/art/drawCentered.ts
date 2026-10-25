@@ -22,7 +22,7 @@ export function drawGunCentered(
   const m = getGunMetrics(id, variant);
   // Offsetting by (-centerOffsetX, -centerOffsetY) shifts the true visual center directly to (0, 0)!
   const x = -m.centerOffsetX, y = -m.centerOffsetY;
-  if (!demo || !isCommonGun(id)) {
+  if (!demo || (!isCommonGun(id) && id !== 'yoyo' && id !== 'keris')) {
     drawGun(c, id, x, y, t, flash, ready, undefined, variant);
     return;
   }
@@ -30,17 +30,19 @@ export function drawGunCentered(
   // A short fire/reload demonstration in the menu and the selected Arsenal
   // canvases. Never leak this synthetic shot into a live game or another gun.
   const state = commonGunPreviewState(t);
-  const previousShot = gunState.sinceShot, previousReload = gunState.reloadT;
+  const previousShot = gunState.sinceShot, previousReload = gunState.reloadT, previousPreview = gunState.inPreview;
   try {
     gunState.sinceShot = state.sinceShot;
     gunState.reloadT = state.reloadT;
+    gunState.inPreview = true;
     const snowLoaded = id === 'snowball' && !state.ready ? SNOWBALL_MAG_SIZE - 1 : undefined;
     // The slingshot completes its own band-draw by 0.36s; do not reset its
     // pouch while the rest of the showcase is still displaying the reload.
-    const demoReady = state.ready || (id === 'slingshot' && state.sinceShot >= 0.36);
+    const demoReady = state.ready || id === 'yoyo' || id === 'keris' || (id === 'slingshot' && state.sinceShot >= 0.36);
     drawGun(c, id, x, y, t, Math.max(flash, state.flash), ready && demoReady, snowLoaded, variant);
   } finally {
     gunState.sinceShot = previousShot;
     gunState.reloadT = previousReload;
+    gunState.inPreview = previousPreview;
   }
 }

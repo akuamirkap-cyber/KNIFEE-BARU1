@@ -74,14 +74,16 @@ export const sfx6 = {
 
   // GAUNTLET CANNON
   gauntlet() {
-    tone(500, 120, 0.16, 'square', 0.16);
-    noise(0.14, 3000, 0.4, 'lowpass', 500);
-    tone(80, 26, 0.3, 'sine', 0.85);
+    tone(620, 110, 0.18, 'sawtooth', 0.22);
+    tone(280, 65, 0.24, 'square', 0.24);
+    noise(0.18, 3200, 0.5, 'lowpass', 650);
+    tone(95, 24, 0.36, 'sine', 0.95);
   },
   gauntletHit() {
-    tone(220, 70, 0.18, 'square', 0.28);
-    noise(0.24, 2600, 0.5, 'bandpass', 400);
-    tone(90, 30, 0.35, 'sine', 0.85);
+    tone(320, 55, 0.24, 'sawtooth', 0.34);
+    tone(180, 42, 0.28, 'square', 0.32);
+    noise(0.28, 2800, 0.65, 'bandpass', 480);
+    tone(110, 22, 0.42, 'sine', 0.98);
   },
 
   // ALIEN RAY

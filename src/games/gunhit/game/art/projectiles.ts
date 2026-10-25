@@ -2,6 +2,8 @@ import type { ProjKind } from '../weapons';
 import { drawProjectileExtra } from './projectiles2';
 import { getGunEffect, isFixedClassicGun, supportsGunVariants, type GunEffect } from './gunVariants';
 import { drawClassicProjectile } from './classicProjectiles';
+import { drawSlide3BazookaEmbedded, drawSlide3BazookaShell } from '../bazookaSlideFx';
+import { gunState } from './kit';
 
 const TAU = Math.PI * 2;
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
@@ -24,7 +26,7 @@ export function drawProjectile(c: CanvasRenderingContext2D, kind: ProjKind, len:
     case 'nail': nail(c, len, embedded); break;
     case 'fish': fish(c, len, t); break;
     case 'crossbow': bolt(c, len); break;
-    case 'bazooka': rocket(c, len); break;
+    case 'bazooka': bazookaShell(c, t, embedded); break;
     case 'rpg': rpg(c, len); break;
     case 'freeze': shard(c, len, t); break;
     default: drawProjectileExtra(c, kind, len, t, age, embedded); break;
@@ -349,30 +351,15 @@ function bolt(c: CanvasRenderingContext2D, len: number) {
   c.fillRect(-2, len - 2, 4, 2);
 }
 
-function rocket(c: CanvasRenderingContext2D, len: number) {
-  // fins
-  c.fillStyle = '#3d4a24';
-  for (const s of [-1, 1]) {
-    c.beginPath();
-    c.moveTo(s * 6, len - 14);
-    c.lineTo(s * 11, len);
-    c.lineTo(s * 6, len - 2);
-    c.closePath();
-    c.fill();
+function bazookaShell(c: CanvasRenderingContext2D, t: number, embedded: boolean) {
+  const hue = gunState.bazookaHue || 45;
+  const seed = gunState.bazookaSeed || 1.7;
+  const flash = gunState.bazookaFlash || 0;
+  if (embedded) {
+    drawSlide3BazookaEmbedded(c, hue, t, seed, flash, gunState.bazookaBite || 0.6);
+  } else {
+    drawSlide3BazookaShell(c, hue, t, seed, flash, 1);
   }
-  c.fillStyle = lin(c, -6.5, 6.5, ['#2f3a1e', '#93a35e', '#2f3a1e']);
-  c.fillRect(-6.5, 14, 13, len - 16);
-  c.fillStyle = '#e0c040';
-  c.fillRect(-6.5, 20, 13, 3);
-  c.fillStyle = lin(c, -6.5, 6.5, ['#7a0f0f', '#ff6b5a', '#7a0f0f']);
-  c.beginPath();
-  c.moveTo(-6.5, 15);
-  c.quadraticCurveTo(-6, 2, 0, -2);
-  c.quadraticCurveTo(6, 2, 6.5, 15);
-  c.closePath();
-  c.fill();
-  c.fillStyle = '#1a1a1a';
-  c.fillRect(-4, len - 3, 8, 3);
 }
 
 function rpg(c: CanvasRenderingContext2D, len: number) {

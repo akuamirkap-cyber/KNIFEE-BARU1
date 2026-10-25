@@ -138,38 +138,108 @@ export function drawChronoGrip(c: CanvasRenderingContext2D, cx: number, y: numbe
   c.restore();
 }
 
-/** Freeze Ray grip: angled ice-blue palm swell with frosted ridges and snowflake. */
+/** Freeze Ray grip: ergonomic dark slate-navy handle with 5 molded ribs, glowing cyan energy channel, power jewel, and silver heel cap. */
 export function drawFreezeGrip(c: CanvasRenderingContext2D, cx: number, y: number) {
   beginGoldenAngleGrip(c, cx, y);
+
+  // Main ergonomic dark slate-navy handle body
   c.beginPath();
-  c.moveTo(cx - 9, y + 18); c.lineTo(cx + 9, y + 18);
-  c.lineTo(cx + 13, y + 31); c.lineTo(cx + 11, y + 79);
-  c.lineTo(cx + 8, y + 89); c.lineTo(cx + 1, y + 99);
-  c.lineTo(cx - 9, y + 90); c.lineTo(cx - 12, y + 78);
-  c.lineTo(cx - 13, y + 32); c.closePath();
-  c.fillStyle = lin(c, cx - 13, cx + 13, ['#083344', '#0e7490', '#67e8f9', '#a5f3fc', '#164e63']);
-  c.fill(); c.strokeStyle = '#164e63'; c.lineWidth = 2.2; c.stroke();
-  // Deep-teal grip panel makes the cryogenic handle read clearly against
-  // the white receiver; the narrow luminous core keeps the rare-weapon feel.
-  c.beginPath(); c.roundRect(cx - 4, y + 41, 8, 43, 3);
-  c.fillStyle = '#075985'; c.fill();
-  c.fillStyle = '#67e8f9'; c.beginPath(); c.roundRect(cx - 1.5, y + 44, 3, 37, 1.5); c.fill();
-  c.beginPath(); c.moveTo(cx - 8, y + 29); c.lineTo(cx - 4, y + 27);
-  c.lineTo(cx - 6, y + 86); c.lineTo(cx - 10, y + 80); c.closePath();
-  c.fillStyle = 'rgba(255,255,255,0.88)'; c.fill();
-  for (const gy of [y + 43, y + 57, y + 71, y + 84]) {
-    c.strokeStyle = 'rgba(8,51,68,0.88)'; c.lineWidth = 1.7;
-    c.beginPath(); c.moveTo(cx - 9, gy); c.quadraticCurveTo(cx, gy + 3, cx + 9, gy); c.stroke();
-    c.strokeStyle = 'rgba(224,251,255,0.92)'; c.lineWidth = 1;
-    c.beginPath(); c.moveTo(cx - 7, gy + 2); c.lineTo(cx + 7, gy + 2); c.stroke();
+  c.moveTo(cx - 11, y + 18);
+  c.lineTo(cx + 11, y + 18);
+  c.lineTo(cx + 15, y + 31);
+  c.lineTo(cx + 13, y + 79);
+  c.lineTo(cx + 10, y + 89);
+  c.lineTo(cx + 1, y + 99);
+  c.lineTo(cx - 10, y + 90);
+  c.lineTo(cx - 13, y + 78);
+  c.lineTo(cx - 14, y + 32);
+  c.closePath();
+  c.fillStyle = lin(c, cx - 14, cx + 15, ['#0f1a26', '#2b4057', '#3f5a75', '#1d2d3e', '#0d1620']);
+  c.fill();
+  c.strokeStyle = 'rgba(15,28,42,0.68)';
+  c.lineWidth = 0.85;
+  c.stroke();
+
+  // Deep-teal palm panel & glowing cryogenic cyan front channel (preserves #075985 and #67e8f9)
+  c.beginPath();
+  c.roundRect(cx - 12, y + 32, 7.5, 48, 3);
+  c.fillStyle = '#075985';
+  c.fill();
+  c.strokeStyle = 'rgba(15,28,42,0.55)';
+  c.lineWidth = 0.7;
+  c.stroke();
+
+  c.save();
+  c.shadowColor = '#00e5ff';
+  c.shadowBlur = 6;
+  c.fillStyle = '#67e8f9';
+  c.beginPath();
+  c.roundRect(cx - 10.2, y + 34, 4, 44, 2);
+  c.fill();
+  c.restore();
+
+  // Segmented horizontal bars across the cyan front channel (like image 1)
+  c.strokeStyle = 'rgba(15,37,55,0.75)';
+  c.lineWidth = 0.9;
+  for (const sy of [y + 42, y + 50, y + 58, y + 66, y + 74]) {
+    c.beginPath();
+    c.moveTo(cx - 12, sy);
+    c.lineTo(cx - 4.5, sy);
+    c.stroke();
   }
-  c.strokeStyle = '#f0fbff'; c.lineWidth = 2;
-  c.beginPath(); c.moveTo(cx, y + 30); c.lineTo(cx, y + 41); c.moveTo(cx - 5, y + 35.5); c.lineTo(cx + 5, y + 35.5);
-  c.moveTo(cx - 3.5, y + 32); c.lineTo(cx + 3.5, y + 39); c.moveTo(cx + 3.5, y + 32); c.lineTo(cx - 3.5, y + 39); c.stroke();
-  c.fillStyle = '#dff8ff'; c.strokeStyle = '#0e7490'; c.lineWidth = 1.2;
-  c.beginPath(); c.moveTo(cx - 9, y + 89); c.lineTo(cx + 1, y + 97);
-  c.lineTo(cx + 9, y + 89); c.lineTo(cx + 6, y + 95);
-  c.lineTo(cx + 1, y + 99); c.lineTo(cx - 7, y + 93); c.closePath(); c.fill(); c.stroke();
+
+  // 5 horizontal dark ergonomic grip ribs on the rear/side palm swell
+  for (const gy of [y + 36, y + 45, y + 54, y + 63, y + 72]) {
+    c.fillStyle = '#13202e';
+    c.beginPath();
+    c.roundRect(cx - 2, gy, 12.5, 6.2, 2);
+    c.fill();
+    c.strokeStyle = 'rgba(9,17,25,0.6)';
+    c.lineWidth = 0.7;
+    c.stroke();
+    c.strokeStyle = 'rgba(165,243,252,0.38)';
+    c.lineWidth = 0.75;
+    c.beginPath();
+    c.moveTo(cx - 0.5, gy + 1.2);
+    c.lineTo(cx + 9, gy + 1.2);
+    c.stroke();
+  }
+
+  // Glowing cyan hexagonal/round power jewel near bottom of grip
+  c.save();
+  c.shadowColor = '#00e5ff';
+  c.shadowBlur = 8;
+  c.fillStyle = '#00e5ff';
+  c.beginPath();
+  c.arc(cx + 1.5, y + 83, 3.6, 0, TAU);
+  c.fill();
+  c.fillStyle = '#e0fbff';
+  c.beginPath();
+  c.arc(cx + 0.8, y + 82.2, 1.6, 0, TAU);
+  c.fill();
+  c.restore();
+
+  // Clean silver-white beveled heel cap / buttplate at the bottom
+  c.fillStyle = lin(c, cx - 10, cx + 10, ['#9bb3c9', '#ffffff', '#d8e8f5', '#6c859c']);
+  c.strokeStyle = 'rgba(15,28,42,0.65)';
+  c.lineWidth = 0.85;
+  c.beginPath();
+  c.moveTo(cx - 10, y + 88);
+  c.lineTo(cx + 1, y + 94);
+  c.lineTo(cx + 10, y + 88);
+  c.lineTo(cx + 7, y + 95);
+  c.lineTo(cx + 1, y + 99);
+  c.lineTo(cx - 8, y + 93);
+  c.closePath();
+  c.fill();
+  c.stroke();
+
+  // Small dark accent slot on the silver heel cap
+  c.fillStyle = '#162433';
+  c.beginPath();
+  c.roundRect(cx - 3.5, y + 92.5, 5, 2.3, 1);
+  c.fill();
+
   c.restore();
 }
 

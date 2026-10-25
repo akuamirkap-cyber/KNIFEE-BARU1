@@ -43,7 +43,7 @@ function gemShard(c: C, len: number, a: string, b: string, d: string) {
   c.stroke();
 }
 
-export function drawProjectileExtra3(c: C, kind: ProjKind, len: number, t: number) {
+export function drawProjectileExtra3(c: C, kind: ProjKind, len: number, t: number, embedded = false) {
   switch (kind) {
     case 'pencil': {
       c.fillStyle = '#1f2937';
@@ -96,63 +96,110 @@ export function drawProjectileExtra3(c: C, kind: ProjKind, len: number, t: numbe
       break;
     }
     case 'wand': {
-      glowE(c, len * 0.3, 10, len * 0.5, '233,213,255', 0.55);
+      glowE(c, len * 0.35, 11, len * 0.55, '250,204,21', 0.58);
+      glowE(c, len * 0.65, 9, len * 0.45, '216,180,254', 0.48);
+      // Swirling golden & violet stardust tail
+      c.strokeStyle = 'rgba(232,121,249,0.75)';
+      c.lineWidth = 1.6;
+      c.beginPath();
+      c.moveTo(0, 8);
+      c.bezierCurveTo(5, len * 0.35, -5, len * 0.68, 0, len);
+      c.stroke();
+
+      // 8-pointed faceted golden star tip
       c.save();
       c.translate(0, 7);
-      c.rotate(t * 8);
+      c.rotate(t * 7);
       c.shadowColor = '#fde047';
       c.shadowBlur = 10;
-      star(c, 0, 0, 7.5, '#fde047');
+      star(c, 0, 0, 8.5, '#fde047', 8);
       c.shadowBlur = 0;
-      star(c, 0, 0, 3.5, '#ffffff');
+      star(c, 0, 0, 4.5, '#ffffff', 8);
       c.restore();
+
       for (let i = 0; i < 4; i++) {
         const tw = 0.5 + 0.5 * Math.sin(t * 20 + i * 2);
-        star(c, Math.sin(t * 6 + i) * 3, 16 + i * ((len - 16) / 4), 2 + tw * 1.5, i % 2 ? '#f5d0fe' : '#ffffff', 4);
+        star(c, Math.sin(t * 6 + i) * 3.2, 16 + i * ((len - 16) / 4), 2 + tw * 1.5, i % 2 ? '#f5d0fe' : '#fef08a', 4);
       }
       break;
     }
     case 'ruby': {
+      glowE(c, len * 0.32, 9, len * 0.55, '244,63,94', 0.52);
+      // Faceted ruby crystal warhead with fiery amber heart
       c.beginPath();
-      c.moveTo(-4.5, len * 0.4);
-      c.lineTo(-4.5, 6);
-      c.quadraticCurveTo(-4, -1, 0, -2);
-      c.quadraticCurveTo(4, -1, 4.5, 6);
-      c.lineTo(4.5, len * 0.4);
+      c.moveTo(0, -3.5);
+      c.lineTo(5, len * 0.22);
+      c.lineTo(4.6, len * 0.46);
+      c.lineTo(-4.6, len * 0.46);
+      c.lineTo(-5, len * 0.22);
       c.closePath();
-      c.fillStyle = radial(c, -1, 6, 8, ['#fecdd3', '#e11d48', '#4c0519']);
+      c.fillStyle = radial(c, -1, len * 0.22, 9, ['#fff1f2', '#fb7185', '#e11d48', '#881337']);
       c.fill();
-      c.fillStyle = lin(c, -5, 5, ['#713f12', '#fde68a', '#a16207']);
-      c.fillRect(-5, len * 0.4, 10, len * 0.6 - 3);
-      c.fillStyle = '#ca8a04';
-      c.fillRect(-6, len - 3, 12, 3);
+      c.strokeStyle = 'rgba(255,228,236,0.8)';
+      c.lineWidth = 0.72;
+      c.stroke();
+      // Facet ridge on ruby warhead
+      c.beginPath();
+      c.moveTo(0, -3.5);
+      c.lineTo(0, len * 0.46);
+      c.moveTo(-5, len * 0.22);
+      c.lineTo(5, len * 0.22);
+      c.stroke();
+
+      // 24K Gold engraved casing
+      c.fillStyle = lin(c, -5, 5, ['#78350f', '#fde047', '#fef9c3', '#ca8a04', '#78350f']);
+      c.beginPath();
+      c.roundRect(-4.8, len * 0.45, 9.6, len * 0.55 - 2.5, 1.5);
+      c.fill();
+      c.strokeStyle = 'rgba(120,53,15,0.68)';
+      c.lineWidth = 0.72;
+      c.stroke();
+      // Flared gold rim
+      c.fillStyle = lin(c, -6, 6, ['#92400e', '#fef08a', '#b45309']);
+      c.beginPath();
+      c.roundRect(-5.8, len - 3, 11.6, 3, 1);
+      c.fill();
       break;
     }
     case 'emerald':
       glowE(c, len / 2, 8, len * 0.6, '52,211,153', 0.5);
       gemShard(c, len, '#d1fae5', '#10b981', '#064e3b');
       break;
-    case 'sapphire':
-      glowE(c, len / 2, 8, len * 0.6, '96,165,250', 0.45);
-      gemShard(c, len, '#dbeafe', '#3b82f6', '#1e3a8a');
+    case 'sapphire': {
+      glowE(c, len / 2, 10, len * 0.65, '56,189,248', 0.55);
+      c.save();
+      c.shadowColor = '#38bdf8';
+      c.shadowBlur = 9;
+      gemShard(c, len, '#ffffff', '#38bdf8', '#1e3a8a');
+      c.restore();
+      // Twin flanking frost-sapphire sub-shards
+      for (const s of [-1, 1]) {
+        c.save();
+        c.translate(s * 4.5, len * 0.55);
+        c.rotate(s * 0.28);
+        gemShard(c, len * 0.38, '#e0f2fe', '#0ea5e9', '#1e3a8a');
+        c.restore();
+      }
       break;
+    }
     case 'crystal': {
-      glowE(c, len / 2, 12, len * 0.6, '240,171,252', 0.55);
+      glowE(c, len / 2, 13, len * 0.65, '232,121,249', 0.6);
       c.save();
       c.shadowColor = '#f0abfc';
-      c.shadowBlur = 10;
-      gemShard(c, len, '#fdf4ff', '#e879f9', '#86198f');
+      c.shadowBlur = 11;
+      gemShard(c, len, '#ffffff', '#e879f9', '#7e22ce');
       c.restore();
       c.save();
-      c.translate(-5, len * 0.55);
-      c.rotate(-0.4);
-      gemShard(c, len * 0.4, '#f3e8ff', '#a855f7', '#581c87');
+      c.translate(-5.2, len * 0.54);
+      c.rotate(-0.38);
+      gemShard(c, len * 0.42, '#fae8ff', '#c084fc', '#581c87');
       c.restore();
       c.save();
-      c.translate(5, len * 0.6);
-      c.rotate(0.4);
-      gemShard(c, len * 0.35, '#f3e8ff', '#c084fc', '#6b21a8');
+      c.translate(5.2, len * 0.58);
+      c.rotate(0.38);
+      gemShard(c, len * 0.38, '#fae8ff', '#d946ef', '#6b21a8');
       c.restore();
+      star(c, -1, len * 0.28, 3.8, '#ffffff', 4);
       break;
     }
     case 'beerifle': {
@@ -340,20 +387,6 @@ export function drawProjectileExtra3(c: C, kind: ProjKind, len: number, t: numbe
       c.restore();
       break;
     }
-    case 'bit8': {
-      // 8-bit chunky green pixel bolt
-      const P = 3.5;
-      c.fillStyle = '#22c55e';
-      c.fillRect(-2 * P, 0, 4 * P, len);
-      c.fillStyle = '#86efac';
-      c.fillRect(-P, 2, 2 * P, len - 4);
-      c.fillStyle = '#ffffff';
-      c.fillRect(-P / 2, 2, P, 6);
-      c.strokeStyle = '#052e16';
-      c.lineWidth = 1.2;
-      c.strokeRect(-2 * P, 0, 4 * P, len);
-      break;
-    }
     case 'coingun': {
       // Shiny solid gold coin projectile with bevel and dollar mark
       c.save();
@@ -379,33 +412,6 @@ export function drawProjectileExtra3(c: C, kind: ProjKind, len: number, t: numbe
       c.fillRect(-1.5, 14, 3, len - 14);
       break;
     }
-    case 'kunai': {
-      // Slender steel kunai dagger with cloth ring handle
-      c.beginPath();
-      c.moveTo(0, -4);
-      c.lineTo(4.5, 10);
-      c.lineTo(1.8, 14);
-      c.lineTo(1.8, len - 8);
-      c.lineTo(-1.8, len - 8);
-      c.lineTo(-1.8, 14);
-      c.lineTo(-4.5, 10);
-      c.closePath();
-      c.fillStyle = lin(c, -4.5, 4.5, ['#475569', '#f8fafc', '#94a3b8']);
-      c.fill();
-      c.strokeStyle = '#1e293b';
-      c.lineWidth = 0.8;
-      c.stroke();
-      // Handle wrap
-      c.fillStyle = '#f8fafc';
-      c.fillRect(-1.8, 14, 3.6, len - 22);
-      // Ring pommel
-      c.beginPath();
-      c.arc(0, len - 4, 3.5, 0, TAU);
-      c.strokeStyle = '#334155';
-      c.lineWidth = 1.8;
-      c.stroke();
-      break;
-    }
     case 'blaster': {
       // Star Wars bright red glowing laser plasma bolt
       glowE(c, len * 0.45, 9, len * 0.65, '239,68,68', 0.85);
@@ -424,6 +430,6 @@ export function drawProjectileExtra3(c: C, kind: ProjKind, len: number, t: numbe
       break;
     }
     default:
-      drawProjectileExtra4(c, kind, len, t);
+      drawProjectileExtra4(c, kind, len, t, embedded);
   }
 }

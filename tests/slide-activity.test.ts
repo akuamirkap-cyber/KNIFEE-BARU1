@@ -1,9 +1,30 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import test from 'node:test';
 import { Game as GunHit } from '../src/games/gunhit/game/Game';
 import { Game as RifleRock } from '../src/games/rifle-rock/game/engine';
 import { GUN_SUNBURST_RGB, gunSunburstColor } from '../src/games/gunhit/game/sunburstPalette';
 import { getWeapon, type Rarity } from '../src/games/gunhit/game/weapons';
+
+test('Every iframe slide game has its own index.html, main.tsx, and App.tsx so it never falls back to root index.html', () => {
+  const iframeSlides = [
+    'fireworkgun',
+    'rainbow',
+    'obliterator',
+  ];
+  for (const id of iframeSlides) {
+    const dir = path.resolve(process.cwd(), 'games', id);
+    const htmlPath = path.join(dir, 'index.html');
+    const mainPath = path.join(dir, 'src', 'main.tsx');
+    const appPath = path.join(dir, 'src', 'App.tsx');
+    assert.ok(fs.existsSync(htmlPath), `Missing ${htmlPath}`);
+    assert.ok(fs.existsSync(mainPath), `Missing ${mainPath}`);
+    assert.ok(fs.existsSync(appPath), `Missing ${appPath}`);
+    const html = fs.readFileSync(htmlPath, 'utf8');
+    assert.match(html, /src=["']\.\/src\/main\.tsx["']/);
+  }
+});
 
 test('Gun Hit tiers have their own FX Lab rays, including every equipped weapon', () => {
   const tiers: Rarity[] = ['UMUM', 'LANGKA', 'EPIC', 'LEGENDARIS'];

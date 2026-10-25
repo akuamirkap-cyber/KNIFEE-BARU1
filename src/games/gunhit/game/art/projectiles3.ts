@@ -1,5 +1,9 @@
 import type { ProjKind } from '../weapons';
-import { TAU, rand, lin, radial, star } from './kit';
+import { TAU, rand, lin, radial, star, gunState } from './kit';
+import { drawFirework8Projectile } from '../firework8fx';
+import { drawSlide6Yoyo, drawYoyoSlideStuckSpinFx } from '../yoyoSlideFx';
+import { drawKerisSlideProjectile } from '../kerisSlideFx';
+import { drawSlide2DiamondBullet } from '../diamondSlideFx';
 
 import { drawProjectileExtra3 } from './projectiles4';
 
@@ -180,49 +184,16 @@ export function drawProjectileExtra2(c: C, kind: ProjKind, len: number, t: numbe
       c.restore();
       break;
     }
-    case 'ink': {
-      glowE(c, len * 0.4, 9, len * 0.5, '124,58,237', 0.4);
-      c.beginPath();
-      c.moveTo(0, -2);
-      c.bezierCurveTo(7, len * 0.15, 7, len * 0.55, 0, len * 0.7);
-      c.bezierCurveTo(-7, len * 0.55, -7, len * 0.15, 0, -2);
-      c.fillStyle = radial(c, -1, len * 0.3, 8, ['#6d28d9', '#1e1b4b', '#020617']);
-      c.fill();
-      c.fillStyle = 'rgba(196,181,253,0.6)';
-      c.beginPath();
-      c.ellipse(-2, len * 0.22, 1.2, 3, 0.2, 0, TAU);
-      c.fill();
-      c.fillStyle = 'rgba(30,27,75,0.7)';
-      for (let i = 0; i < 3; i++) {
-        c.beginPath();
-        c.arc(Math.sin(t * 9 + i) * 3, len * 0.8 + i * 5, 2 - i * 0.4, 0, TAU);
-        c.fill();
-      }
-      break;
-    }
     case 'yoyo': {
-      c.save();
-      c.translate(0, 9);
-      c.rotate(t * 25);
-      c.beginPath();
-      c.arc(0, 0, 8, 0, TAU);
-      c.fillStyle = radial(c, 0, 0, 8, ['#fecaca', '#ef4444', '#7f1d1d']);
-      c.fill();
-      c.strokeStyle = 'rgba(255,255,255,0.8)';
-      c.lineWidth = 1.5;
-      c.beginPath();
-      c.arc(0, 0, 5, 0, 1.2);
-      c.stroke();
-      c.beginPath();
-      c.arc(0, 0, 5, Math.PI, Math.PI + 1.2);
-      c.stroke();
-      c.restore();
-      c.strokeStyle = '#fef3c7';
-      c.lineWidth = 1;
-      c.beginPath();
-      c.moveTo(0, 17);
-      c.lineTo(0, len + 4);
-      c.stroke();
+      const hue = gunState.yoyoHue ?? 0;
+      const flash = gunState.yoyoFlash ?? 0;
+      const spin = embedded ? Math.max(0, 1 - age * 0.9) : (gunState.yoyoSpin || 0.5);
+      const rot = t * (2 + spin * 22);
+      const cy = embedded ? 0 : 12.5;
+      if (embedded && age < 0.55) {
+        drawYoyoSlideStuckSpinFx(c, 0, cy, 12.5, age, t, hue);
+      }
+      drawSlide6Yoyo(c, 0, cy, 12.5, rot, spin, hue, flash);
       break;
     }
     case 'sakura': {
@@ -279,83 +250,11 @@ export function drawProjectileExtra2(c: C, kind: ProjKind, len: number, t: numbe
       break;
     }
     case 'keris': {
-      glowE(c, len * 0.4, 8, len * 0.6, '255,215,120', 0.35);
-      const bl = len - 8;
-      c.beginPath();
-      c.moveTo(0, -3);
-      for (let i = 0; i <= 7; i++) {
-        const y = (i / 7) * bl;
-        c.lineTo(Math.sin(i * 1.4) * 2 + 1 + (i / 7) * 2.5, y);
-      }
-      for (let i = 7; i >= 0; i--) {
-        const y = (i / 7) * bl;
-        c.lineTo(Math.sin(i * 1.4) * 2 - 1 - (i / 7) * 2.5, y);
-      }
-      c.closePath();
-      c.fillStyle = lin(c, -4, 4, ['#1f2937', '#d1d5db', '#4b5563']);
-      c.fill();
-      c.strokeStyle = 'rgba(229,231,235,0.7)';
-      c.lineWidth = 0.6;
-      c.beginPath();
-      for (let i = 0; i <= 7; i++) c.lineTo(Math.sin(i * 1.4) * 2, (i / 7) * bl);
-      c.stroke();
-      c.fillStyle = lin(c, -5, 5, ['#713f12', '#fde68a', '#a16207']);
-      c.beginPath();
-      c.roundRect(-5, bl - 1, 10, 3, 1);
-      c.fill();
-      c.fillStyle = lin(c, -3, 3, ['#3f1d0b', '#a16207', '#3f1d0b']);
-      c.fillRect(-2.5, bl + 2, 5, 6);
-      break;
-    }
-    case 'tornado': {
-      for (let i = 0; i < 7; i++) {
-        const k = i / 6;
-        const w = 2 + (1 - k) * 8;
-        const ox = Math.sin(t * 14 + i) * (1 + k * 2);
-        c.beginPath();
-        c.ellipse(ox, k * len, w, 2 + (1 - k), 0, 0, TAU);
-        c.strokeStyle = `rgba(226,232,240,${0.9 - k * 0.4})`;
-        c.lineWidth = 1.6;
-        c.stroke();
-      }
-      c.fillStyle = 'rgba(148,163,184,0.25)';
-      c.beginPath();
-      c.moveTo(-10, 0);
-      c.lineTo(10, 0);
-      c.lineTo(1, len);
-      c.lineTo(-1, len);
-      c.closePath();
-      c.fill();
+      drawKerisSlideProjectile(c, t, embedded);
       break;
     }
     case 'firework': {
-      c.fillStyle = lin(c, -4.5, 4.5, ['#9f1239', '#fb7185', '#9f1239']);
-      c.fillRect(-4.5, 6, 9, len - 12);
-      c.fillStyle = '#facc15';
-      c.fillRect(-4.5, 12, 9, 2);
-      c.fillStyle = '#22d3ee';
-      c.fillRect(-4.5, len * 0.6, 9, 2);
-      c.beginPath();
-      c.moveTo(-5, 7);
-      c.lineTo(0, -4);
-      c.lineTo(5, 7);
-      c.closePath();
-      c.fillStyle = '#fde047';
-      c.fill();
-      c.strokeStyle = '#a16207';
-      c.lineWidth = 1.5;
-      c.beginPath();
-      c.moveTo(0, len - 6);
-      c.lineTo(0, len + 4);
-      c.stroke();
-      if (age > 50) {
-        for (let i = 0; i < 3; i++) {
-          c.fillStyle = ['#fde047', '#fb923c', '#ffffff'][i];
-          c.beginPath();
-          c.arc(rand(-2, 2), len + 4 + i * 3, 2 - i * 0.5, 0, TAU);
-          c.fill();
-        }
-      }
+      drawFirework8Projectile(c, gunState.rocketHue, gunState.rocketFlash);
       break;
     }
     case 'anchor': {
@@ -544,26 +443,18 @@ export function drawProjectileExtra2(c: C, kind: ProjKind, len: number, t: numbe
       break;
     }
     case 'diamond': {
-      glowE(c, 13, 16, 25, '125,232,249', 0.45);
-      c.save(); c.shadowColor = '#a5f3fc'; c.shadowBlur = 14;
-      c.beginPath(); c.moveTo(0, -5); c.lineTo(6, 5);
-      c.lineTo(8, len * 0.48); c.lineTo(0, len * 0.8);
-      c.lineTo(-8, len * 0.48); c.lineTo(-6, 5); c.closePath();
-      c.fillStyle = lin(c, -8, 8, ['#2ba3cc', '#baf4ff', '#ffffff', '#5dcbe8', '#2686b6']);
-      c.fill(); c.shadowBlur = 0;
-      c.strokeStyle = '#e7fbff'; c.lineWidth = 1; c.stroke();
-      c.fillStyle = 'rgba(255,255,255,0.69)';
-      c.beginPath(); c.moveTo(0, -5); c.lineTo(-3, 5);
-      c.lineTo(0, len * 0.8); c.lineTo(3, 5); c.closePath(); c.fill();
-      c.strokeStyle = '#61a9cf'; c.lineWidth = 0.9;
-      c.beginPath(); c.moveTo(-6, 5); c.lineTo(6, 5);
-      c.moveTo(-8, len * 0.48); c.lineTo(8, len * 0.48);
-      c.moveTo(-3, 5); c.lineTo(-8, len * 0.48); c.lineTo(0, len * 0.8);
-      c.moveTo(3, 5); c.lineTo(8, len * 0.48); c.lineTo(0, len * 0.8); c.stroke();
+      c.save();
+      if (!embedded) {
+        c.rotate(Math.sin(t * 3 + gunState.diamondSeed) * 0.2);
+      }
+      drawSlide2DiamondBullet(
+        c,
+        embedded ? 11.5 : 12,
+        t,
+        gunState.diamondSeed,
+        gunState.diamondFlash,
+      );
       c.restore();
-      c.fillStyle = lin(c, -3, 3, ['#244e70', '#f0fcff', '#447194']);
-      c.fillRect(-2.5, len * 0.79, 5, len * 0.21);
-      if (Math.sin(t * 7) > -0.2) star(c, 6, 6, 3.5, '#ffffff', 4);
       break;
     }
     case 'moonbeam': {
@@ -611,6 +502,6 @@ export function drawProjectileExtra2(c: C, kind: ProjKind, len: number, t: numbe
       break;
     }
     default:
-      drawProjectileExtra3(c, kind, len, t);
+      drawProjectileExtra3(c, kind, len, t, embedded);
   }
 }

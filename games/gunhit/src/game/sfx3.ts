@@ -43,8 +43,9 @@ export const sfx3 = {
     tone(90, 50, 0.2, 'triangle', 0.2, 0.05);
   },
   yoyo() {
-    tone(420, 900, 0.18, 'triangle', 0.18);
-    noise(0.2, 2400, 0.25, 'bandpass', 4200);
+    tone(280, 950, 0.14, 'triangle', 0.3);
+    noise(0.12, 2400, 0.25, 'bandpass', 3600);
+    tone(160, 420, 0.28, 'sawtooth', 0.05, 0.03);
   },
   sakura() {
     [1568, 1760, 2093, 2349].forEach((f, i) => tone(f, f, 0.4, 'sine', 0.06, i * 0.05));
@@ -59,11 +60,20 @@ export const sfx3 = {
     tone(1900, 1500, 0.3, 'sine', 0.03);
   },
   keris() {
-    // metallic shing + gong undertone
-    noise(0.25, 7000, 0.45, 'highpass', 3500);
-    tone(2400, 1900, 0.4, 'sine', 0.12);
-    tone(110, 104, 1.1, 'sine', 0.4);
-    tone(220, 214, 0.9, 'triangle', 0.12);
+    // Slide #8 Sambaran Halilintar Mahadahsyat: Snap Tajam + Dentum Sub + Gemuruh Petir
+    noise(0.18, 8500, 0.35, 'highpass', 1800);
+    tone(3400, 280, 0.12, 'sawtooth', 0.14);
+    tone(210, 38, 0.38, 'sawtooth', 0.22);
+    tone(90, 30, 0.5, 'sine', 0.36, 0.01);
+    noise(0.42, 420, 0.22, 'lowpass', 80, 0.01);
+  },
+  kerisStick() {
+    // Slide #8 Ledakan Tumbukan Petir: Retakan Listrik + Dentum Guntur + Sisa Sizzling
+    noise(0.12, 5200, 0.32, 'highpass');
+    tone(2900, 180, 0.14, 'sawtooth', 0.16);
+    tone(160, 40, 0.45, 'sine', 0.32, 0.01);
+    noise(0.55, 240, 0.2, 'lowpass', 60, 0.02);
+    noise(0.08, 6800, 0.14, 'highpass', undefined, 0.11);
   },
   tornado() {
     noise(0.7, 500, 0.8, 'bandpass', 2600);
@@ -150,6 +160,9 @@ export const sfx3 = {
     noise(0.1, 6000, 0.6, 'highpass');
   },
   bloop() {
-    tone(300, 600, 0.08, 'sine', 0.25);
+    tone(340, 140, 0.16, 'sine', 0.35);
+    tone(200, 420, 0.14, 'sine', 0.22, 0.08);
+    noise(0.06, 1800, 0.25, 'bandpass', 900);
+    tone(659, 659, 0.28, 'sine', 0.12, 0.05);
   },
 };

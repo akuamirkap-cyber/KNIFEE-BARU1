@@ -4,13 +4,8 @@ import {
   Maximize2,
   Minimize2,
   RotateCcw,
-  Sparkles,
-  Sword,
   Disc,
-  Shield,
   Zap,
-  Target,
-  Waves,
   Rocket,
   ChevronLeft,
   ChevronRight,
@@ -21,7 +16,7 @@ import ScaledFrame from './components/ScaledFrame';
 import { SlideActivityProvider } from './games/shared/SlideActivity';
 import GunHitGame from './games/gunhit/App';
 
-type SlideId = 'gunhit' | 'firework' | 'fireworkgun' | 'keris' | 'rainbow' | 'weaponskins' | 'obliterator' | 'gunhitdev' | 'sharkgun';
+type SlideId = 'gunhit' | 'fireworkgun' | 'rainbow' | 'obliterator';
 
 interface GameSlide {
   id: SlideId;
@@ -112,14 +107,9 @@ export default function App() {
   const [pageVisible, setPageVisible] = useState(() => !document.hidden);
   const [keys, setKeys] = useState<Record<SlideId, number>>({
     gunhit: 0,
-    firework: 0,
     fireworkgun: 0,
-    keris: 0,
     rainbow: 0,
-    weaponskins: 0,
     obliterator: 0,
-    gunhitdev: 0,
-    sharkgun: 0,
   });
 
   const reloadGame = (id: SlideId) => {
@@ -183,39 +173,6 @@ export default function App() {
       ),
     },
     {
-      id: 'firework',
-      name: 'Firework',
-      fullName: 'Gun Hit: Firework & Gems',
-      badge: '🎆 Firework & Gems',
-      tagline: '5 Senjata Neon Berkilau dengan ledakan kembang api spektakuler.',
-      weapons: ['🗡️ Keris Emas', '🕳️ Black Hole', '🪀 Yoyo', '💎 Diamond', '🔮 Crystal'],
-      icon: Sparkles,
-      themeColor: 'text-amber-300',
-      borderColor: 'border-amber-400/40 hover:border-amber-300/80 shadow-amber-950/40',
-      accentBg: 'bg-amber-500/20 text-amber-300',
-      render: (active: boolean) =>
-        active ? (
-          <iframe
-            key={`firework-${keys.firework}`}
-            src={`${cleanBase}games/firework/index.html`}
-            title="Gun Hit: Firework"
-            className="w-full h-full border-0 bg-black block"
-            allow="autoplay"
-          />
-        ) : (
-          <StandbyCard
-            name="Firework"
-            badge="🎆 Firework & Gems"
-            tagline="5 Senjata Neon Berkilau dengan ledakan kembang api spektakuler."
-            weapons={['🗡️ Keris Emas', '🕳️ Black Hole', '🪀 Yoyo', '💎 Diamond', '🔮 Crystal']}
-            icon={Sparkles}
-            themeColor="text-amber-300"
-            accentBg="bg-amber-500/20 text-amber-300"
-            onActivate={() => setActiveId('firework')}
-          />
-        ),
-    },
-    {
       id: 'fireworkgun',
       name: 'Firework 8-Gun',
       fullName: 'GUN HIT: 8 Senjata Seru',
@@ -245,39 +202,6 @@ export default function App() {
             themeColor="text-orange-400"
             accentBg="bg-orange-500/20 text-orange-400"
             onActivate={() => setActiveId('fireworkgun')}
-          />
-        ),
-    },
-    {
-      id: 'keris',
-      name: 'Keris Sakti',
-      fullName: 'Keris Sakti: Gun Hit',
-      badge: '🗡️ Keris Sakti',
-      tagline: 'Kuasai kekuatan pusaka mistis Jawa bertuah di setiap tingkatan level bos kuno.',
-      weapons: ['🗡️ Keris Naga', '🗡️ Keris Brojol', '🗡️ Pusaka Emas'],
-      icon: Sword,
-      themeColor: 'text-yellow-400',
-      borderColor: 'border-yellow-500/40 hover:border-yellow-400/80 shadow-yellow-950/40',
-      accentBg: 'bg-yellow-500/20 text-yellow-400',
-      render: (active: boolean) =>
-        active ? (
-          <iframe
-            key={`keris-${keys.keris}`}
-            src={`${cleanBase}games/keris/index.html`}
-            title="Keris Sakti: Gun Hit"
-            className="w-full h-full border-0 bg-black block"
-            allow="autoplay"
-          />
-        ) : (
-          <StandbyCard
-            name="Keris Sakti"
-            badge="🗡️ Keris Sakti"
-            tagline="Kuasai kekuatan pusaka mistis Jawa bertuah di setiap tingkatan level bos kuno."
-            weapons={['🗡️ Keris Naga', '🗡️ Keris Brojol', '🗡️ Pusaka Emas']}
-            icon={Sword}
-            themeColor="text-yellow-400"
-            accentBg="bg-yellow-500/20 text-yellow-400"
-            onActivate={() => setActiveId('keris')}
           />
         ),
     },
@@ -315,39 +239,6 @@ export default function App() {
         ),
     },
     {
-      id: 'weaponskins',
-      name: 'Arsenal Wheel',
-      fullName: 'Arsenal Skins & Wheel',
-      badge: '⚙️ 11 Arsenal Skins',
-      tagline: 'Eksplorasi 11 skin senjata dengan recoil partikel dan tantangan Wheel Challenge.',
-      weapons: ['🗡️ Keris', '🕳️ Hole', '🪀 Yoyo', '💎 Diamond', '🔮 Crystal', '❄️ Snow', '💧 Water', '🎉 Party'],
-      icon: Shield,
-      themeColor: 'text-purple-400',
-      borderColor: 'border-purple-500/40 hover:border-purple-400/80 shadow-purple-950/40',
-      accentBg: 'bg-purple-500/20 text-purple-400',
-      render: (active: boolean) =>
-        active ? (
-          <iframe
-            key={`weaponskins-${keys.weaponskins}`}
-            src={`${cleanBase}games/weaponskins/index.html`}
-            title="Arsenal Skins & Wheel"
-            className="w-full h-full border-0 bg-black block"
-            allow="autoplay"
-          />
-        ) : (
-          <StandbyCard
-            name="Arsenal Wheel"
-            badge="⚙️ 11 Arsenal Skins"
-            tagline="Eksplorasi 11 skin senjata dengan recoil partikel dan tantangan Wheel Challenge."
-            weapons={['🗡️ Keris', '🕳️ Hole', '🪀 Yoyo', '💎 Diamond', '🔮 Crystal', '❄️ Snow']}
-            icon={Shield}
-            themeColor="text-purple-400"
-            accentBg="bg-purple-500/20 text-purple-400"
-            onActivate={() => setActiveId('weaponskins')}
-          />
-        ),
-    },
-    {
       id: 'obliterator',
       name: 'Obliterator',
       fullName: 'Obliterator Hit: DOOM',
@@ -380,72 +271,6 @@ export default function App() {
           />
         ),
     },
-    {
-      id: 'gunhitdev',
-      name: 'Tap & Stick',
-      fullName: 'Gun Hit: Tap & Stick',
-      badge: '🎯 Tap & Stick',
-      tagline: 'Hypercasual 2D tap shooter: putar, bidik waktu, dan tancapkan ke target berputar.',
-      weapons: ['🗡️ Keris Jawa', '🕳️ Black Hole', '🪀 Yoyo Neon', '💎 Diamond Gun', '🔮 Crystal Prism'],
-      icon: Target,
-      themeColor: 'text-emerald-400',
-      borderColor: 'border-emerald-500/40 hover:border-emerald-400/80 shadow-emerald-950/40',
-      accentBg: 'bg-emerald-500/20 text-emerald-400',
-      render: (active: boolean) =>
-        active ? (
-          <iframe
-            key={`gunhitdev-${keys.gunhitdev}`}
-            src={`${cleanBase}games/gunhitdev/index.html`}
-            title="Gun Hit: Tap & Stick"
-            className="w-full h-full border-0 bg-black block"
-            allow="autoplay"
-          />
-        ) : (
-          <StandbyCard
-            name="Tap & Stick"
-            badge="🎯 Tap & Stick"
-            tagline="Hypercasual 2D tap shooter: putar, bidik waktu, dan tancapkan ke target berputar."
-            weapons={['🗡️ Keris Jawa', '🕳️ Black Hole', '🪀 Yoyo Neon', '💎 Diamond Gun']}
-            icon={Target}
-            themeColor="text-emerald-400"
-            accentBg="bg-emerald-500/20 text-emerald-400"
-            onActivate={() => setActiveId('gunhitdev')}
-          />
-        ),
-    },
-    {
-      id: 'sharkgun',
-      name: 'Shark Predator',
-      fullName: 'Shark Gun: Predator',
-      badge: '🦈 Apex Shark',
-      tagline: 'Kuasai predator puncak samudra, kumpulkan sirip emas, dan taklukkan Kraken!',
-      weapons: ['🦈 Great White', '🦈 Megalodon', '🦈 Hammerhead', '🦈 Mako', '🦈 Tiger Shark'],
-      icon: Waves,
-      themeColor: 'text-sky-400',
-      borderColor: 'border-sky-500/40 hover:border-sky-400/80 shadow-sky-950/40',
-      accentBg: 'bg-sky-500/20 text-sky-400',
-      render: (active: boolean) =>
-        active ? (
-          <iframe
-            key={`sharkgun-${keys.sharkgun}`}
-            src={`${cleanBase}games/sharkgun/index.html`}
-            title="Shark Gun: Predator"
-            className="w-full h-full border-0 bg-black block"
-            allow="autoplay"
-          />
-        ) : (
-          <StandbyCard
-            name="Shark Predator"
-            badge="🦈 Apex Shark"
-            tagline="Kuasai predator puncak samudra, kumpulkan sirip emas, dan taklukkan Kraken!"
-            weapons={['🦈 Great White', '🦈 Megalodon', '🦈 Hammerhead', '🦈 Mako']}
-            icon={Waves}
-            themeColor="text-sky-400"
-            accentBg="bg-sky-500/20 text-sky-400"
-            onActivate={() => setActiveId('sharkgun')}
-          />
-        ),
-    },
   ];
 
   const currentSlide = slides.find((s) => s.id === (fullscreenId || activeId));
@@ -458,7 +283,7 @@ export default function App() {
       <header className="h-[36px] flex-shrink-0 z-30 flex items-center justify-between px-2 sm:px-4 bg-neutral-950/95 border-b border-white/10 backdrop-blur-md">
         <div className="flex items-center gap-2 overflow-hidden">
           <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-amber-400/20 border border-amber-400/40 text-amber-300 font-bold text-[11px] shrink-0">
-            <span>SGA + 8 SLIDE</span>
+            <span>SGA + 3 SLIDE</span>
           </span>
           <span className="text-[11px] text-neutral-300 font-medium truncate hidden md:inline">
             Slide Aktif: <strong className="text-white">{currentSlide?.name}</strong> · Slide lain otomatis standby (0% CPU, FPS 60 mulus)

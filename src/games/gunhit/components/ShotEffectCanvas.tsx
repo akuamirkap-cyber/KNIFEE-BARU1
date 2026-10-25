@@ -3,6 +3,8 @@ import type { Weapon } from '../game/weapons';
 import { drawProjectile } from '../game/art/projectiles';
 import { drawMaterialTrail } from '../game/art/projectileTrails';
 import { drawClassicBeam, drawLaserBeam, drawVoidTether } from '../game/art/beamEffects';
+import { drawSlide6String } from '../game/yoyoSlideFx';
+import { createCrispBolt, renderCrispBolt } from '../game/kerisSlideFx';
 import { star } from '../game/art/kit';
 import { useSlideActive } from '../../shared/SlideActivity';
 import type { GunEffect } from '../game/art/gunVariants';
@@ -46,6 +48,12 @@ export default function ShotEffectCanvas({ weapon, effect }: { weapon: Weapon; e
           c.scale(1.15, 1.1);
           if (weapon.id === 'blackhole' && effect === 'new') {
             drawVoidTether(c, 0, 7, 0, 83, t);
+          }
+          if (weapon.id === 'yoyo') {
+            drawSlide6String(c, { x: 0, y: 78 }, { x: 0, y: 18 }, 4, 3, t * 22, 0, 1);
+          }
+          if (weapon.id === 'keris') {
+            renderCrispBolt(c, createCrispBolt(0, 74, 0, -4, { sway: 5, steps: 5, branchChance: 0.25 }), '#4deeea', 6);
           }
           if (!drawMaterialTrail(c, weapon.id, effect)) {
             const trail = c.createLinearGradient(0, 14, 0, 80);

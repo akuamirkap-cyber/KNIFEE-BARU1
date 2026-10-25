@@ -1,18 +1,18 @@
 export type WeaponId =
   | 'pistol' | 'ak47' | 'plasma' | 'laser' | 'cricket' | 'electro' | 'nail'
   | 'fish' | 'crossbow' | 'bazooka' | 'rpg' | 'freeze' | 'golden' | 'blackhole'
-  | 'shotgun' | 'sniper' | 'minigun' | 'railgun' | 'flamethrower' | 'disc'
-  | 'slingshot' | 'blowgun' | 'bamboo' | 'banana' | 'portal' | 'magnet' | 'bubble'
-  | 'chrono' | 'shrink' | 'grow' | 'harpoon' | 'soaker' | 'snowball' | 'pirate'
-  | 'chicken' | 'card' | 'confetti' | 'sonic' | 'seed' | 'glitch' | 'dragon'
-  | 'mirror' | 'gravity' | 'pizza'
-  | 'honey' | 'coconut' | 'angklung' | 'bee' | 'ink' | 'yoyo' | 'sakura' | 'acid' | 'keris' | 'tornado'
+  | 'shotgun' | 'sniper' | 'minigun' | 'railgun' | 'flamethrower'
+  | 'slingshot' | 'blowgun' | 'bamboo' | 'banana' | 'magnet' | 'bubble'
+  | 'shrink' | 'grow' | 'harpoon' | 'soaker' | 'snowball' | 'pirate'
+  | 'chicken' | 'card' | 'confetti' | 'seed' | 'dragon'
+  | 'gravity' | 'pizza'
+  | 'honey' | 'coconut' | 'angklung' | 'bee' | 'yoyo' | 'sakura' | 'acid' | 'keris'
   | 'firework' | 'anchor' | 'shark' | 'ghost' | 'ufo' | 'rainbow' | 'meteor' | 'diamond' | 'moonbeam' | 'storm'
   | 'obliterator' | 'buster' | 'paintball' | 'holy' | 'beerifle' | 'emerald' | 'ruby' | 'sapphire' | 'crystal'
   | 'unicorn' | 'pencil' | 'sandal' | 'wand'
-  | 'bit8' | 'coingun' | 'kunai' | 'blaster'
-  | 'lone_star' | 'photon_saber' | 'plasma_repeater' | 'warp_disruptor' | 'deflector_shield'
-  | 'gauntlet_cannon' | 'alien_ray' | 'pulse_rifle' | 'cryo_blaster' | 'hyperdrive' | 'quantum_destabilizer';
+  | 'coingun' | 'blaster'
+  | 'photon_saber'
+  | 'gauntlet_cannon' | 'pulse_rifle' | 'cryo_blaster' | 'hyperdrive' | 'quantum_destabilizer';
 export type ProjKind = WeaponId | 'old';
 export type Rarity = 'UMUM' | 'LANGKA' | 'EPIC' | 'LEGENDARIS';
 export type TrailFx = 'none' | 'glow' | 'smoke' | 'spark' | 'bubble' | 'frost' | 'gold' | 'void' | 'fire' | 'pixel' | 'confetti' | 'rainbow' | 'petal' | 'note';
@@ -46,7 +46,7 @@ export interface Weapon {
   ejectY?: number;
   explode?: boolean;
   explodeFx?: 'fire' | 'white' | 'firework';
-  slowStyle?: 'ice' | 'water' | 'stun';
+  slowStyle?: 'ice' | 'water' | 'honey';
   charge?: boolean;
   paint?: boolean;
   meltEvery?: number;
@@ -122,15 +122,15 @@ const CONF = ['#f43f5e', '#facc15', '#22d3ee', '#a855f7', '#4ade80', '#fb923c'];
 export const WEAPONS: Weapon[] = [
   // ======================== ORIGINAL 14 ========================
   { ...base, id: 'pistol', name: 'PISTOL', emoji: '🔫', rarity: 'UMUM', perk: 'SEIMBANG', desc: 'Pistol klasik, seimbang di semua hal.',
-    speed: 2700, cooldown: 0.12, shake: 2.5, color: '#ff3030', trail: '255,230,150', sparks: FIRE, casing: '#e0ad40', ejectY: 48, stats: { rate: 3, speed: 3, power: 3 } },
+    speed: 2700, cooldown: 0.12, shake: 2.5, stick: 17, color: '#ff3030', trail: '255,230,150', sparks: FIRE, casing: '#e0ad40', ejectY: 48, stats: { rate: 3, speed: 3, power: 3 } },
   { ...base, id: 'ak47', name: 'AK-47', emoji: '🪖', rarity: 'UMUM', perk: 'AUTO-FIRE', desc: 'Senapan serbu legendaris. Tahan layar untuk tembak otomatis!',
-    speed: 3200, cooldown: 0.085, auto: true, recoil: 1.3, shake: 4.5, color: '#ff3030', trail: '255,230,150', sparks: FIRE, casing: '#8f9a62', ejectY: 128,
+    speed: 3200, cooldown: 0.085, auto: true, recoil: 1.3, shake: 4.5, stick: 17, color: '#ff3030', trail: '255,230,150', sparks: FIRE, casing: '#8f9a62', ejectY: 128,
     previewLen: 262, previewScale: 0.86, previewY: 38, stats: { rate: 5, speed: 4, power: 4 } },
   { ...base, id: 'nail', name: 'NAIL GUN', emoji: '🔩', rarity: 'UMUM', perk: 'TIPIS & AUTO', desc: 'Paku super tipis, muat di celah sempit. Tahan untuk tembak beruntun!',
-    speed: 3000, cooldown: 0.07, auto: true, recoil: 0.6, shake: 1.5, half: 2.4, color: '#ffc400', trail: '220,225,230', sparks: ['#ffffff', '#d8dde3', '#ffd23f'],
+    speed: 3000, cooldown: 0.07, auto: true, recoil: 0.6, shake: 1.5, half: 2.4, stick: 18, color: '#ffc400', trail: '220,225,230', sparks: ['#ffffff', '#d8dde3', '#ffd23f'],
     previewLen: 200, previewScale: 0.8, previewY: 50, stats: { rate: 5, speed: 3, power: 2 } },
   { ...base, id: 'crossbow', name: 'CROSSBOW', emoji: '🏹', rarity: 'UMUM', perk: 'PRESISI', desc: 'Panah baja yang cepat dan ramping. Hitbox kecil, cocok buat yang presisi.',
-    speed: 3600, cooldown: 0.22, recoil: 0.7, shake: 2, half: 3.2, noSmoke: true, unlockLevel: 2, color: '#ff3030', trail: '255,255,255', sparks: ['#ffffff', '#ffd23f', '#d8a060'],
+    speed: 3600, cooldown: 0.22, recoil: 0.7, shake: 2, half: 3.2, stick: 18, noSmoke: true, unlockLevel: 2, color: '#ff3030', trail: '255,255,255', sparks: ['#ffffff', '#ffd23f', '#d8a060'],
     previewLen: 220, previewScale: 0.85, previewY: 64, stats: { rate: 2, speed: 5, power: 3 } },
   { ...base, id: 'plasma', name: 'PLASMA GUN', emoji: '🟢', rarity: 'LANGKA', perk: '2X POIN', desc: 'Peluru plasma lebih lambat, tapi tiap kena dapat 2 poin & koin ikut tertarik.',
     speed: 1700, cooldown: 0.16, points: 2, coinRadius: 30, recoil: 0.8, half: 5, energy: true, unlockLevel: 6, color: '#39ff9c', trail: '57,255,156', trailFx: 'glow',
@@ -168,17 +168,17 @@ export const WEAPONS: Weapon[] = [
     speed: 2900, cooldown: 0.36, recoil: 0.2, shake: 3, half: 4, stick: 14, noSmoke: true, spinFly: true, color: '#c0803f', trail: '210,200,190', sparks: ['#ffffff', '#c8c0b0', '#8b7d6b'],
     previewLen: 150, previewScale: 1.05, previewY: 32, stats: { rate: 3, speed: 3, power: 2 } },
   { ...base, id: 'blowgun', name: 'SUMPIT DAYAK', emoji: '🎋', rarity: 'UMUM', perk: 'SENYAP & TIPIS', desc: 'Sumpitan tradisional Dayak lengkap dengan mata tombak. Jarumnya paling tipis di game!',
-    speed: 3300, cooldown: 0.16, recoil: 0.3, shake: 0.8, half: 1.5, noSmoke: true, color: '#9ccc65', trail: '230,255,210', sparks: ['#ffffff', '#e8f5c8', '#9ccc65'],
+    speed: 3300, cooldown: 0.16, recoil: 0.3, shake: 0.8, half: 1.5, stick: 16, noSmoke: true, color: '#9ccc65', trail: '230,255,210', sparks: ['#ffffff', '#e8f5c8', '#9ccc65'],
     previewLen: 290, previewScale: 0.78, previewY: 28, stats: { rate: 4, speed: 4, power: 1 } },
   { ...base, id: 'shotgun', name: 'SHOTGUN', emoji: '💥', rarity: 'UMUM', perk: 'TIGA SEKALIGUS', desc: '3 peluru menyebar sekaligus. Cepat selesai, tapi berisiko kena peluru lain!',
-    speed: 2700, cooldown: 0.55, recoil: 2, shake: 8, half: 4.5, burst: 3, color: '#ff4d2e', trail: '255,200,120', sparks: FIRE, casing: '#d62828', ejectY: 96,
+    speed: 2700, cooldown: 0.55, recoil: 2, shake: 8, half: 4.5, burst: 3, stick: 17, color: '#ff4d2e', trail: '255,200,120', sparks: FIRE, casing: '#d62828', ejectY: 96,
     previewLen: 250, previewScale: 0.82, previewY: 46, stats: { rate: 2, speed: 3, power: 5 } },
   { ...base, id: 'soaker', name: 'SUPER SOAKER', emoji: '💦', rarity: 'UMUM', perk: 'BASAH', desc: 'Pistol air neon. Target yang basah berputar lebih lambat. Tahan untuk semprot!',
-    speed: 2300, cooldown: 0.11, auto: true, recoil: 0.4, shake: 1.2, half: 4.5, noSmoke: true, color: '#3b82f6', trail: '120,190,255', trailFx: 'bubble',
+    speed: 2300, cooldown: 0.11, auto: true, recoil: 0.4, shake: 1.2, half: 4.5, stick: 17, noSmoke: true, color: '#3b82f6', trail: '120,190,255', trailFx: 'bubble',
     sparks: ['#ffffff', '#bfdbfe', '#60a5fa'], slow: true, slowFactor: 0.6, slowTime: 1.5, slowRgb: '80,160,255', slowText: '💦 BASAH!',
     burstFx: { colors: ['#93c5fd', '#dbeafe', '#ffffff'], n: 8, g: 700, spd: 180 }, previewLen: 190, previewY: 40, stats: { rate: 5, speed: 3, power: 2 } },
   { ...base, id: 'snowball', name: 'SNOWBALL CANNON', emoji: '⛄', rarity: 'UMUM', perk: 'MANUSIA SALJU', desc: 'Bola salju bertumpuk. Tiap 3 bola salju menempel, muncul manusia salju dan bonus +3 poin!',
-    speed: 2000, cooldown: 0.2, recoil: 0.9, shake: 2.5, half: 6.5, stick: 16, noSmoke: true, color: '#e0f2fe', trail: '230,245,255', trailFx: 'frost',
+    speed: 2000, cooldown: 0.2, recoil: 0.9, shake: 2.5, half: 13, stick: 16, noSmoke: true, color: '#e0f2fe', trail: '230,245,255', trailFx: 'frost',
     sparks: ['#ffffff', '#e0f2fe', '#bae6fd'], snowman: true, burstFx: { colors: ['#ffffff', '#e0f2fe'], n: 12, g: 500, spd: 160 }, previewLen: 200, previewY: 48, stats: { rate: 3, speed: 2, power: 3 } },
   { ...base, id: 'sniper', name: 'SNIPER AWP', emoji: '🎯', rarity: 'LANGKA', perk: 'SLOW-MO SCOPE', desc: 'TAHAN layar untuk membidik dalam slow-motion, LEPAS untuk menembak. 2 poin tiap kena!',
     speed: 7000, cooldown: 0.5, points: 2, recoil: 2.2, shake: 7, half: 3.6, scope: true, color: '#ff2020', trail: '255,240,200', sparks: FIRE, casing: '#e0ad40', ejectY: 150,
@@ -187,23 +187,20 @@ export const WEAPONS: Weapon[] = [
     speed: 1900, cooldown: 0.13, auto: true, recoil: 0.3, shake: 1.5, half: 5.5, noSmoke: true, burn: true, color: '#ff7a00', trail: '255,140,40', trailFx: 'fire',
     sparks: ['#fff3b0', '#ff9f1c', '#ff4500'], burstFx: { colors: ['255,200,80', '255,120,30', '255,60,20'], n: 8, glow: true, g: -100, spd: 140, size: 8 },
     previewLen: 200, previewY: 34, stats: { rate: 5, speed: 2, power: 3 } },
-  { ...base, id: 'disc', name: 'DISC GUN', emoji: '🥏', rarity: 'LANGKA', perk: 'CAKRAM PANTUL', desc: 'Menembakkan cakram energi neon yang berputar kencang! 2 poin dan bisa memantul aman 1x per level.',
-    speed: 2600, cooldown: 0.2, points: 2, half: 6.5, stick: 20, recoil: 0.7, noSmoke: true, saves: 1, saveFx: 'return', saveText: '🥏 CAKRAM PANTUL!', spinFly: true, color: '#06b6d4', trail: '34,211,238', trailFx: 'glow',
-    sparks: ['#ffffff', '#a5f3fc', '#06b6d4'], previewLen: 180, previewY: 30, stats: { rate: 3, speed: 4, power: 4 } },
   { ...base, id: 'bubble', name: 'BUBBLE GUN', emoji: '🫧', rarity: 'LANGKA', perk: 'PERISAI AIR', desc: 'Pistol gelembung sabun warna-warni nan indah mengkilap! Tiap gelembung memberi perisai aman 1x per level.',
     speed: 1600, cooldown: 0.18, recoil: 0.5, shake: 1.5, half: 6.5, stick: 20, noSmoke: true, saves: 1, saveFx: 'bubble', saveText: '🫧 GELEMBUNG AMAN!', color: '#f472b6', trail: '255,200,240', trailFx: 'bubble',
     sparks: ['#ffffff', '#fbcfe8', '#a5f3fc'], burstFx: { colors: ['220,240,255', '255,200,240', '254,240,138'], n: 12, glow: true, g: -40, spd: 130, size: 4 }, previewY: 34, stats: { rate: 3, speed: 2, power: 2 } },
   { ...base, id: 'bamboo', name: 'MERIAM BAMBU', emoji: '🎍', rarity: 'LANGKA', perk: 'DUARR LEBARAN', desc: 'Meriam bambu khas Lebaran! Petasan meledak DUARR dengan asap putih tebal, 2 poin.',
     speed: 1600, cooldown: 0.5, points: 2, recoil: 1.7, shake: 10, half: 5, color: '#7cb342', trail: '240,240,240', trailFx: 'smoke',
     sparks: ['#ffffff', '#fde68a', '#f87171'], explode: true, explodeFx: 'white', previewLen: 230, previewScale: 0.86, previewY: 40, stats: { rate: 1, speed: 2, power: 5 } },
-  { ...base, id: 'banana', name: 'BANANA GUN', emoji: '🍌', rarity: 'LANGKA', perk: 'TERPELESET', desc: '45% kemungkinan target terpeleset kulit pisang dan berbalik arah putar!',
-    speed: 2000, cooldown: 0.2, recoil: 0.8, half: 5.5, noSmoke: true, reverseChance: 0.45, color: '#ffe135', trail: '255,230,80',
+  { ...base, id: 'banana', name: 'BANANA GUN', emoji: '🍌', rarity: 'LANGKA', perk: 'TERPELESET', desc: 'Daging pisang melesat, tertancap separuh dan memercikkan sari buah. Kulit menutup kembali saat isi ulang; 45% peluang membalik putaran!',
+    speed: 2000, cooldown: 0.2, recoil: 0.8, half: 5.5, noSmoke: true, reverseChance: 0.45, color: '#fff0b3', trail: '255,238,190',
     sparks: ['#fffbe0', '#ffe135', '#c8a000'], previewLen: 180, previewY: 30, stats: { rate: 3, speed: 2, power: 3 } },
   { ...base, id: 'harpoon', name: 'HARPOON GUN', emoji: '🔱', rarity: 'LANGKA', perk: 'TALI PENARIK', desc: 'Tombak bertali. Talinya ikut menarik koin di sekitar titik kena.',
     speed: 2600, cooldown: 0.3, recoil: 0.9, half: 3, noSmoke: true, rope: true, coinRadius: 44, color: '#22d3ee', trail: '200,240,255',
     sparks: ['#ffffff', '#a5f3fc', '#22d3ee'], previewLen: 270, previewScale: 0.8, previewY: 30, stats: { rate: 2, speed: 4, power: 3 } },
-  { ...base, id: 'chicken', name: 'RUBBER CHICKEN', emoji: '🐔', rarity: 'LANGKA', perk: 'KWEK!', desc: 'Menembak ayam karet yang berbunyi. Tiap kena dapat poin bonus acak 0 sampai 5!',
-    speed: 1800, cooldown: 0.22, recoil: 0.8, half: 6, stick: 32, noSmoke: true, randomBonus: 5, color: '#fde047', trail: '255,240,150',
+  { ...base, id: 'chicken', name: 'RUBBER CHICKEN', emoji: '🐔', rarity: 'LANGKA', perk: 'KWEK!', desc: 'Ayam karet 2× lebih besar melesat sambil berbunyi. Tiap kena dapat poin bonus acak 0 sampai 5!',
+    speed: 1800, cooldown: 0.22, recoil: 0.8, half: 12, stick: 70, noSmoke: true, randomBonus: 5, color: '#fde047', trail: '255,240,150',
     sparks: ['#ffffff', '#fde047', '#ef4444'], burstFx: { colors: ['#ffffff', '#fef9c3'], n: 8, g: 200, spd: 120 }, previewLen: 190, previewY: 44, stats: { rate: 3, speed: 2, power: 3 } },
   { ...base, id: 'confetti', name: 'CONFETTI CANNON', emoji: '🎉', rarity: 'LANGKA', perk: 'PESTA COMBO', desc: 'Setiap tembakan pesta konfeti! Waktu combo jauh lebih panjang.',
     speed: 2200, cooldown: 0.18, recoil: 0.8, half: 5, noSmoke: true, confetti: true, comboWindow: 1.3, color: '#f472b6', trail: '255,180,220', trailFx: 'confetti',
@@ -235,21 +232,6 @@ export const WEAPONS: Weapon[] = [
   { ...base, id: 'card', name: 'CARD GUN', emoji: '🃏', rarity: 'EPIC', perk: 'JACKPOT AS', desc: 'Kartu remi setajam silet. 15% kemungkinan keluar kartu As dan dapat JACKPOT +8 koin!',
     speed: 3200, cooldown: 0.14, recoil: 0.4, shake: 1.2, half: 3, noSmoke: true, jackpot: 0.15, color: '#dc2626', trail: '255,255,255',
     sparks: ['#ffffff', '#fecaca', '#111111'], previewY: 30, stats: { rate: 4, speed: 4, power: 2 } },
-  { ...base, id: 'sonic', name: 'SONIC BLASTER', emoji: '🔊', rarity: 'EPIC', perk: 'GELOMBANG SUARA', desc: 'Gelombang suara bass yang membuat duri jebakan TERTARIK MASUK selama 2 detik!',
-    speed: 2600, cooldown: 0.22, half: 5, energy: true, spikeOff: 2.2, color: '#a3e635', trail: '190,255,120', trailFx: 'glow',
-    sparks: ['#ffffff', '#d9f99d', '#84cc16'], previewY: 30, stats: { rate: 3, speed: 3, power: 4 } },
-  { ...base, id: 'mirror', name: 'MIRROR GUN', emoji: '🪞', rarity: 'EPIC', perk: 'MEMANTUL', desc: 'Pecahan cermin yang memantul dari DURI tanpa gagal (3x per level).',
-    speed: 2800, cooldown: 0.18, half: 4, energy: true, saves: 3, saveFx: 'mirror', saveSpikeOnly: true, color: '#e2e8f0', trail: '230,240,255', trailFx: 'spark',
-    sparks: ['#ffffff', '#e2e8f0', '#93c5fd'], previewY: 30, stats: { rate: 3, speed: 4, power: 3 } },
-  { ...base, id: 'portal', name: 'PORTAL GUN', emoji: '🌌', rarity: 'LEGENDARIS', perk: 'TELEPORT', desc: 'Kalau akan menabrak, peluru masuk portal dan keluar di titik AMAN (2x per level).',
-    speed: 2600, cooldown: 0.2, half: 4.5, energy: true, saves: 2, saveFx: 'portal', color: '#ff9a1f', trail: '80,170,255', trailFx: 'glow',
-    sparks: ['#ffffff', '#93c5fd', '#fb923c'], previewY: 30, stats: { rate: 3, speed: 3, power: 4 } },
-  { ...base, id: 'chrono', name: 'CHRONO GUN', emoji: '⏱️', rarity: 'LEGENDARIS', perk: 'STOP WAKTU', desc: 'Setiap 3 kali kena, waktu BERHENTI selama 1,2 detik!',
-    speed: 2600, cooldown: 0.2, half: 3.5, energy: true, chronoEvery: 3, color: '#facc15', trail: '250,220,120', trailFx: 'gold',
-    sparks: ['#ffffff', '#fef08a', '#ca8a04'], previewY: 34, stats: { rate: 3, speed: 3, power: 4 } },
-  { ...base, id: 'glitch', name: 'GLITCH GUN', emoji: '👾', rarity: 'LEGENDARIS', perk: 'LAG SELAMAT', desc: 'Peluru pixel yang ngelag. 1x per level, kalau akan menabrak, peluru ter-teleport ke tempat aman. 2 poin.',
-    speed: 2800, cooldown: 0.18, points: 2, half: 4.5, energy: true, saves: 1, saveFx: 'glitch', color: '#22ff88', trail: '0,255,140', trailFx: 'pixel',
-    sparks: ['#ff0055', '#00ffee', '#22ff88'], previewY: 30, stats: { rate: 3, speed: 4, power: 4 } },
   { ...base, id: 'dragon', name: 'DRAGON BREATH', emoji: '🐉', rarity: 'LEGENDARIS', perk: 'PEMBURU BOS', desc: 'Naga api mini yang membakar target. Poin 2x lipat saat melawan BOSS!',
     speed: 2200, cooldown: 0.22, points: 2, recoil: 1, shake: 4, half: 6, noSmoke: true, burn: true, bossMult: 2, color: '#ef4444', trail: '255,120,40', trailFx: 'fire',
     sparks: ['#fff3b0', '#ff9f1c', '#ef4444'], burstFx: { colors: ['255,200,80', '255,120,30', '255,40,20'], n: 14, glow: true, g: -80, spd: 200, size: 9 },
@@ -259,8 +241,8 @@ export const WEAPONS: Weapon[] = [
     sparks: ['#ffffff', '#c7d2fe', '#6366f1'], previewY: 34, stats: { rate: 3, speed: 3, power: 4 } },
 
   // ======================== 20 NEW (wave 3) ========================
-  { ...base, id: 'honey', name: 'HONEY BLASTER', emoji: '🍯', rarity: 'UMUM', perk: 'LENGKET', desc: 'Gumpalan madu kental. Target jadi lengket dan berputar jauh lebih lambat!',
-    speed: 1900, cooldown: 0.18, half: 5.5, stick: 22, recoil: 0.7, noSmoke: true, slow: true, slowFactor: 0.5, slowTime: 1.6, slowRgb: '245,158,11', slowText: '🍯 LENGKET!', slowStyle: 'water',
+  { ...base, id: 'honey', name: 'HONEY BLASTER', emoji: '🍯', rarity: 'UMUM', perk: 'LENGKET', desc: 'Madu kental memercik, menempel di papan, dan memperlambat putarannya!',
+    speed: 1900, cooldown: 0.18, half: 5.5, stick: 22, recoil: 0.7, noSmoke: true, slow: true, slowFactor: 0.5, slowTime: 1.6, slowRgb: '245,158,11', slowText: '🍯 LENGKET!', slowStyle: 'honey',
     color: '#f59e0b', trail: '255,190,60', trailFx: 'glow', sparks: ['#fff7d6', '#fbbf24', '#b45309'],
     burstFx: { colors: ['#fbbf24', '#f59e0b', '#fde68a'], n: 8, g: 900, spd: 150 }, previewY: 34, stats: { rate: 3, speed: 2, power: 2 } },
   { ...base, id: 'coconut', name: 'MERIAM KELAPA', emoji: '🥥', rarity: 'UMUM', perk: 'KELAPA MUDA', desc: 'Peluncur kelapa muda khas pantai tropis! Kelapa pecah dan menyiram air segar, 2 poin.',
@@ -269,12 +251,9 @@ export const WEAPONS: Weapon[] = [
   { ...base, id: 'angklung', name: 'ANGKLUNG', emoji: '🎶', rarity: 'LANGKA', perk: 'NADA COMBO', desc: 'Alat musik bambu Sunda yang menembakkan not balok. Tiap kena memainkan nada pentatonik dan waktu combo lebih panjang!',
     speed: 2300, cooldown: 0.16, half: 4, noSmoke: true, notes: true, comboWindow: 1.2, color: '#d97706', trail: '255,220,150', trailFx: 'note',
     sparks: ['#ffffff', '#fde68a', '#d97706'], previewY: 36, stats: { rate: 4, speed: 3, power: 2 } },
-  { ...base, id: 'bee', name: 'BEE HIVE GUN', emoji: '🐝', rarity: 'LANGKA', perk: 'SENGAT', desc: 'Sarang lebah yang menembakkan lebah marah. Tahan untuk tembak beruntun, target disengat dan memberi poin tiap detik!',
+  { ...base, id: 'bee', name: 'BEE HIVE GUN', emoji: '🐝', rarity: 'LANGKA', perk: 'SENGAT', desc: 'Hornet bersengat tajam menancap di papan. Tahan untuk tembak beruntun; sengatnya terus memberi poin!',
     speed: 2100, cooldown: 0.1, auto: true, half: 3.5, stick: 24, recoil: 0.4, shake: 1.2, noSmoke: true, burn: true, burnText: '🐝 DISENGAT!', burnIcon: '🐝',
     color: '#facc15', trail: '250,204,21', sparks: ['#ffffff', '#fde047', '#111111'], previewY: 36, stats: { rate: 5, speed: 3, power: 2 } },
-  { ...base, id: 'ink', name: 'TINTA GURITA', emoji: '🐙', rarity: 'LANGKA', perk: 'SEMBUR TINTA', desc: 'Semburan tinta gurita menutupi duri jebakan selama 2 detik, jadi duri tidak berbahaya!',
-    speed: 2000, cooldown: 0.2, half: 5.5, noSmoke: true, spikeOff: 2, spikeText: '🐙 DURI TERTUTUP!', color: '#7c3aed', trail: '70,40,110', trailFx: 'glow',
-    sparks: ['#c4b5fd', '#4c1d95', '#111111'], burstFx: { colors: ['#1e1b4b', '#312e81', '#4c1d95'], n: 10, g: 600, spd: 160 }, previewY: 36, stats: { rate: 3, speed: 2, power: 3 } },
   { ...base, id: 'yoyo', name: 'YOYO SHOOTER', emoji: '🪀', rarity: 'LANGKA', perk: 'TALI AJAIB', desc: 'Yoyo bertali ajaib. Kalau akan menabrak, yoyo ditarik balik dan kamu selamat (2x per level).',
     speed: 2400, cooldown: 0.22, half: 5.5, stick: 22, noSmoke: true, saves: 2, saveFx: 'return', saveText: '🪀 TARIK BALIK!', rope: true,
     color: '#ef4444', trail: '255,140,140', sparks: ['#ffffff', '#fecaca', '#ef4444'], previewY: 34, stats: { rate: 3, speed: 3, power: 2 } },
@@ -285,13 +264,10 @@ export const WEAPONS: Weapon[] = [
     speed: 2100, cooldown: 0.22, half: 5, noSmoke: true, meltOld: true, color: '#a3e635', trail: '163,230,53', trailFx: 'glow',
     sparks: ['#ffffff', '#d9f99d', '#65a30d'], burstFx: { colors: ['163,230,53', '190,242,100'], n: 8, glow: true, g: 300, spd: 140, size: 5 }, previewY: 34, stats: { rate: 3, speed: 2, power: 3 } },
   { ...base, id: 'keris', name: 'KERIS SAKTI', emoji: '🗡️', rarity: 'EPIC', perk: 'TEMBUS GAIB', desc: 'Keris pusaka Jawa berlekuk 7 yang ditembakkan dengan tenaga dalam. Tembus 1 peluru berkarat dan 2 poin!',
-    speed: 3000, cooldown: 0.25, points: 2, half: 3, stick: 32, noSmoke: true, pierceOld: true, color: '#fbbf24', trail: '255,215,120', trailFx: 'gold',
-    sparks: ['#ffffff', '#fde68a', '#b45309'], previewLen: 220, previewY: 36, stats: { rate: 2, speed: 4, power: 4 } },
-  { ...base, id: 'tornado', name: 'TORNADO GUN', emoji: '🌪️', rarity: 'EPIC', perk: 'PUSARAN', desc: 'Menembak angin puting beliung yang menyedot semua koin dan mendorong duri menjauh!',
-    speed: 1900, cooldown: 0.25, half: 5.5, noSmoke: true, pullCoins: true, pushSpikes: true, color: '#94a3b8', trail: '200,210,225', trailFx: 'frost',
-    sparks: ['#ffffff', '#e2e8f0', '#94a3b8'], previewY: 34, stats: { rate: 2, speed: 2, power: 4 } },
+    speed: 3000, cooldown: 0.25, points: 2, half: 3, stick: 32, shake: 6.5, noSmoke: true, pierceOld: true, color: '#4deeea', trail: '77,238,234', trailFx: 'gold',
+    sparks: ['#ffffff', '#4deeea', '#ffd056', '#a5f5ff'], previewLen: 220, previewY: 36, stats: { rate: 2, speed: 4, power: 4 } },
   { ...base, id: 'firework', name: 'FIREWORK LAUNCHER', emoji: '🎆', rarity: 'EPIC', perk: 'KEMBANG API', desc: 'Roket kembang api yang meledak jadi bunga api warna-warni di langit! 2 poin.',
-    speed: 1700, cooldown: 0.4, points: 2, recoil: 1.3, shake: 6, half: 5, explode: true, explodeFx: 'firework', color: '#f43f5e', trail: '255,200,120', trailFx: 'confetti',
+    speed: 1700, cooldown: 0.4, points: 2, recoil: 1.3, shake: 6, half: 5, noSmoke: true, explode: true, explodeFx: 'firework', color: '#f43f5e', trail: '255,200,120', trailFx: 'confetti',
     sparks: ['#f43f5e', '#facc15', '#22d3ee', '#a855f7', '#4ade80'], previewLen: 220, previewY: 36, stats: { rate: 2, speed: 2, power: 4 } },
   { ...base, id: 'anchor', name: 'ANCHOR CANNON', emoji: '⚓', rarity: 'EPIC', perk: 'JANGKAR KAPAL', desc: 'Jangkar kapal raksasa berantai yang menghancurkan 1 duri setiap kena! 2 poin.',
     speed: 1600, cooldown: 0.45, points: 2, recoil: 1.8, shake: 9, half: 7.5, stick: 22, noSmoke: true, breakSpike: true, rope: true,
@@ -314,7 +290,7 @@ export const WEAPONS: Weapon[] = [
   { ...base, id: 'diamond', name: 'DIAMOND GUN', emoji: '💎', rarity: 'LEGENDARIS', perk: 'BERLIAN', desc: 'Pistol kristal yang menembakkan berlian. Koin 2x dan 25% kemungkinan JACKPOT +8 koin!',
     speed: 3400, cooldown: 0.16, half: 3, coinValue: 2, jackpot: 0.25, jackpotText: '💎 BERLIAN! +8 💰', noSmoke: true, color: '#67e8f9', trail: '200,250,255', trailFx: 'gold',
     sparks: ['#ffffff', '#cffafe', '#67e8f9'], previewY: 30, stats: { rate: 3, speed: 4, power: 4 } },
-  { ...base, id: 'moonbeam', name: 'MOONBEAM', emoji: '🌙', rarity: 'LEGENDARIS', perk: 'CAHAYA BULAN', desc: 'Sinar bulan purnama yang instan. 2 poin dan 30% kemungkinan dapat koin bulan!',
+  { ...base, id: 'moonbeam', name: 'MOONBEAM', emoji: '🌙', rarity: 'LEGENDARIS', perk: 'CAHAYA BULAN', desc: 'Tongkat bulan menembakkan bintang-bintang beraura kuat secepat kilat. 2 poin dan 30% peluang koin bulan!',
     speed: 14000, cooldown: 0.18, points: 2, half: 4, energy: true, beam: true, luckyCoin: 0.3, luckyText: '🌙 +1 💰', color: '#c4b5fd', trail: '210,200,255',
     sparks: ['#ffffff', '#ede9fe', '#a78bfa'], previewY: 34, stats: { rate: 3, speed: 5, power: 4 } },
   { ...base, id: 'storm', name: 'STORM CALLER', emoji: '🌩️', rarity: 'LEGENDARIS', perk: 'BADAI PETIR', desc: 'Memanggil badai! Petir menyambar ke peluru lain, menghancurkan 1 duri, dan combo lebih mudah.',
@@ -323,11 +299,10 @@ export const WEAPONS: Weapon[] = [
 
   // ======================== 13 NEW (wave 4) ========================
   { ...base, id: 'pencil', name: 'PENCIL GUN', emoji: '✏️', rarity: 'UMUM', perk: 'PENGHAPUS', desc: 'Pensil raksasa yang tajam dan tipis! Setiap 3 kali kena, penghapusnya MENGHAPUS 1 peluru berkarat.',
-    speed: 2900, cooldown: 0.17, half: 2.6, stick: 32, recoil: 0.5, shake: 1.5, noSmoke: true, meltEvery: 3, meltText: '✏️ DIHAPUS!', meltColors: ['255,182,193', '255,228,225', '250,204,21'],
+    speed: 2900, cooldown: 0.17, half: 2.6, stick: 20, recoil: 0.5, shake: 1.5, noSmoke: true, meltEvery: 3, meltText: '✏️ DIHAPUS!', meltColors: ['255,182,193', '255,228,225', '250,204,21'],
     color: '#facc15', trail: '255,240,180', sparks: ['#ffffff', '#fde047', '#374151'], previewLen: 210, previewY: 36, stats: { rate: 3, speed: 4, power: 2 } },
-  { ...base, id: 'sandal', name: 'SANDAL JEPIT', emoji: '🩴', rarity: 'UMUM', perk: 'PLAK!', desc: 'Senjata legendaris emak-emak Indonesia! Sandal jepit berputar dan bikin target PUSING melambat, 2 poin.',
-    speed: 2000, cooldown: 0.24, points: 2, half: 6, stick: 18, recoil: 0.8, shake: 3, noSmoke: true, spinFly: true,
-    slow: true, slowFactor: 0.45, slowTime: 1.1, slowRgb: '255,240,150', slowText: '💫 PUSING!', slowStyle: 'stun',
+  { ...base, id: 'sandal', name: 'SANDAL JEPIT', emoji: '🩴', rarity: 'UMUM', perk: 'PLAK!', desc: 'Sandal jepit besar melesat lurus dan memberi 2 poin tiap kena.',
+    speed: 2000, cooldown: 0.24, points: 2, half: 6, stick: 18, recoil: 0.8, shake: 3, noSmoke: true,
     color: '#3b82f6', trail: '200,220,255', sparks: ['#ffffff', '#93c5fd', '#1d4ed8'], previewY: 38, stats: { rate: 3, speed: 2, power: 3 } },
   { ...base, id: 'paintball', name: 'PAINTBALL GUN', emoji: '🎨', rarity: 'UMUM', perk: 'WARNA SAMA', desc: 'Bola cat warna acak, tahan untuk tembak beruntun! Kena dengan warna yang SAMA berturut-turut dapat bonus +3.',
     speed: 2600, cooldown: 0.12, auto: true, half: 4.5, stick: 12, recoil: 0.5, shake: 1.5, noSmoke: true, paint: true,
@@ -364,33 +339,15 @@ export const WEAPONS: Weapon[] = [
     sparks: ['#ffffff', '#bbf7d0', '#22c55e'], previewLen: 230, previewScale: 0.82, previewY: 40, stats: { rate: 1, speed: 1, power: 5 } },
 
   // ======================== NEW 4 REQUESTED WEAPONS ========================
-  { ...base, id: 'bit8', name: '8-BIT RETRO GUN', emoji: '👾', rarity: 'LANGKA', perk: 'RETRO ARCADE', desc: 'Pistol pixel retro 8-bit klasik! Suara chiptune pew-pew khas ding-dong dengan 2x poin dan glitch pixel!',
-    speed: 3100, cooldown: 0.14, points: 2, half: 4, stick: 24, noSmoke: true, color: '#22c55e', trail: '34,197,94', trailFx: 'pixel',
-    sparks: ['#22c55e', '#3b82f6', '#facc15', '#ef4444'], previewLen: 180, previewY: 34, stats: { rate: 4, speed: 4, power: 3 } },
   { ...base, id: 'coingun', name: 'COIN GUN', emoji: '🪙', rarity: 'EPIC', perk: 'PABRIK KOIN', desc: 'Menembakkan koin emas berkilau murni! Tiap tembakan yang nancep memberi +1 Koin langsung dan koin bernilai 2x!',
     speed: 2800, cooldown: 0.16, half: 5.5, stick: 18, recoil: 0.7, noSmoke: true, luckyCoin: 1.0, coinValue: 2, luckyText: '🪙 +1 KOIN EMAS!',
     color: '#eab308', trail: '250,204,21', trailFx: 'gold', sparks: ['#ffffff', '#fef08a', '#eab308'], previewLen: 190, previewY: 34, stats: { rate: 4, speed: 3, power: 4 } },
-  { ...base, id: 'lone_star', name: 'REVOLVER KELANA', emoji: '🤠', rarity: 'EPIC', perk: 'LONE STAR', desc: 'Revolver koboi paling ikonik! Drum peluru berputar, gagang kayu ukir, dan bunyi "BANG!" khas Far West.',
-    speed: 3400, cooldown: 0.2, points: 2, recoil: 1.9, shake: 6, half: 3.6, color: '#d97706', trail: '255,220,150', sparks: ['#ffffff', '#fde68a', '#d97706'],
-    casing: '#e0ad40', ejectY: 84, previewLen: 195, previewY: 36, stats: { rate: 4, speed: 4, power: 4 } },
   { ...base, id: 'photon_saber', name: 'PHOTON SABER', emoji: '🌟', rarity: 'LEGENDARIS', perk: 'PEDANG CAHAYA', desc: 'Pedang energi plasma bercahaya khas film galaksi! Menembakkan bilah cahaya mematikan. 3 poin!',
     speed: 5200, cooldown: 0.26, points: 3, half: 3, stick: 34, energy: true, recoil: 1, shake: 3, color: '#22d3ee', trail: '120,240,255', trailFx: 'glow',
     sparks: ['#ffffff', '#a5f3fc', '#22d3ee'], previewLen: 230, previewY: 40, stats: { rate: 3, speed: 5, power: 5 } },
-  { ...base, id: 'plasma_repeater', name: 'PLASMA REPEATER', emoji: '🔫', rarity: 'EPIC', perk: 'BLASTER BERUNTUN', desc: 'Blaster plasma futuristik khas film luar angkasa! Tahan layar untuk menembakkan deret plasma.',
-    speed: 3100, cooldown: 0.1, auto: true, half: 3.2, energy: true, recoil: 0.6, shake: 2, color: '#f43f5e', trail: '255,120,140', trailFx: 'glow',
-    sparks: ['#ffffff', '#fecdd3', '#f43f5e'], previewLen: 200, previewY: 44, stats: { rate: 5, speed: 4, power: 3 } },
-  { ...base, id: 'warp_disruptor', name: 'WARP DISRUPTOR', emoji: '🌀', rarity: 'LEGENDARIS', perk: 'SINAR SUPER', desc: 'Stasiun senjata superlaser raksasa! Sinar hijau menghancurkan total, 4 poin dan ledakan besar.',
-    speed: 1500, cooldown: 0.75, points: 4, half: 6, energy: true, recoil: 3, shake: 13, coinRadius: 30, color: '#22c55e', trail: '74,222,128', trailFx: 'glow',
-    sparks: ['#ffffff', '#bbf7d0', '#22c55e'], previewLen: 260, previewScale: 0.85, previewY: 44, stats: { rate: 1, speed: 2, power: 5 } },
-  { ...base, id: 'deflector_shield', name: 'DEFLECTOR SHIELD', emoji: '🛡️', rarity: 'LANGKA', perk: 'PERISAI BADAI', desc: 'Peluncur perisai deflektor khas sci-fi! 2x per level kamu terlindung dari peluru lain.',
-    speed: 2400, cooldown: 0.2, half: 4, energy: true, recoil: 0.6, shake: 2, saves: 2, saveFx: 'bubble', saveText: '🛡️ DEFLEKTOR!', color: '#818cf8', trail: '165,180,252', trailFx: 'spark',
-    sparks: ['#ffffff', '#c7d2fe', '#818cf8'], previewLen: 180, previewY: 34, stats: { rate: 3, speed: 3, power: 3 } },
-  { ...base, id: 'gauntlet_cannon', name: 'GAUNTLET CANNON', emoji: '🦾', rarity: 'LEGENDARIS', perk: 'TELAPAK BESI', desc: 'Meriam telapak tangan robotik raksasa! Menembakkan bola energi dari telapak bercahaya, 3 poin.',
-    speed: 2100, cooldown: 0.3, points: 3, half: 6.5, energy: true, recoil: 1.6, shake: 7, color: '#ef4444', trail: '255,140,120', trailFx: 'glow',
-    sparks: ['#ffffff', '#fecaca', '#ef4444'], previewLen: 190, previewY: 44, stats: { rate: 2, speed: 3, power: 5 } },
-  { ...base, id: 'alien_ray', name: 'ALIEN RAY', emoji: '👽', rarity: 'LANGKA', perk: 'SINAR LUAR ANGKASA', desc: 'Pistol sinar alien hijau berkilau khas invasi! 35% kemungkinan menculik peluru berkarat.',
-    speed: 2800, cooldown: 0.18, half: 3.5, energy: true, recoil: 0.6, shake: 2, luckyCoin: 0.35, luckyText: '👽 CULIK KOIN!', color: '#4ade80', trail: '134,239,172', trailFx: 'glow',
-    sparks: ['#ffffff', '#bbf7d0', '#4ade80'], previewLen: 185, previewY: 36, stats: { rate: 4, speed: 4, power: 3 } },
+  { ...base, id: 'gauntlet_cannon', name: 'GAUNTLET CANNON', emoji: '🦾', rarity: 'LEGENDARIS', perk: 'TELAPAK BESI', desc: 'Meriam telapak tangan robotik raksasa! Meluncurkan tinju gauntlet berenergi surya dengan hantaman super kuat, 3 poin.',
+    speed: 2200, cooldown: 0.3, points: 3, half: 7.5, stick: 42, energy: true, recoil: 2.3, shake: 11, color: '#ef4444', trail: '251,146,60', trailFx: 'glow',
+    sparks: ['#ffffff', '#fef08a', '#f97316', '#ef4444'], previewLen: 196, previewY: 44, stats: { rate: 2, speed: 3, power: 5 } },
   { ...base, id: 'pulse_rifle', name: 'PULSE RIFLE', emoji: '⚡', rarity: 'LANGKA', perk: 'TEMBAK LISTRIK', desc: 'Senapan pulsa listrik futuristik! Tembakan listrik cepat dengan kilatan biru elektrik.',
     speed: 3600, cooldown: 0.14, half: 3.2, energy: true, recoil: 0.7, shake: 2.5, color: '#38bdf8', trail: '125,211,252', trailFx: 'spark',
     sparks: ['#ffffff', '#bae6fd', '#38bdf8'], previewLen: 250, previewScale: 0.82, previewY: 46, stats: { rate: 4, speed: 5, power: 3 } },
@@ -403,9 +360,6 @@ export const WEAPONS: Weapon[] = [
   { ...base, id: 'quantum_destabilizer', name: 'QUANTUM DESTABILIZER', emoji: '🔮', rarity: 'EPIC', perk: 'KACAUKUANTUM', desc: 'Senjata destabilisasi kuantum! Peluru portal acak yang menembus peluru berkarat. 2 poin.',
     speed: 4200, cooldown: 0.24, points: 2, half: 3.4, energy: true, pierceOld: true, recoil: 1, shake: 4, color: '#a855f7', trail: '216,180,254', trailFx: 'void',
     sparks: ['#ffffff', '#e9d5ff', '#a855f7'], previewLen: 210, previewY: 38, stats: { rate: 3, speed: 5, power: 4 } },
-  { ...base, id: 'kunai', name: 'KUNAI SHURIKEN', emoji: '🗡️', rarity: 'LANGKA', perk: 'NINJA CEPAT', desc: 'Senjata ninja legendaris! Kunai baja tipis dengan jangkauan presisi super ramping & kecepatan tinggi.',
-    speed: 4200, cooldown: 0.15, half: 2.2, stick: 30, recoil: 0.4, noSmoke: true, color: '#e2e8f0', trail: '241,245,249',
-    sparks: ['#ffffff', '#cbd5e1', '#94a3b8'], previewLen: 210, previewY: 30, stats: { rate: 4, speed: 5, power: 3 } },
   { ...base, id: 'blaster', name: 'WARS BLASTER', emoji: '⚡', rarity: 'LEGENDARIS', perk: 'LASER GALAXY', desc: 'Blaster energi galaksi ala Star Wars! Baut plasma merah terang dengan suara tembakan sci-fi otentik, 3 poin!',
     speed: 8500, cooldown: 0.18, points: 3, half: 3.8, stick: 26, energy: true, recoil: 1.2, shake: 4, color: '#ef4444', trail: '239,68,68', trailFx: 'glow',
     sparks: ['#ffffff', '#fca5a5', '#ef4444'], previewLen: 220, previewY: 34, stats: { rate: 4, speed: 5, power: 5 } },
@@ -420,9 +374,34 @@ export const RARITY_COLOR: Record<Rarity, string> = {
 
 export const getWeapon = (id: string) => WEAPONS.find((w) => w.id === id) || WEAPONS[0];
 
-export function isWeaponUnlocked(_w: Weapon, _ownedIds?: string[], _highestLevel?: number): boolean {
-  // Semua senjata terbuka 100%!
-  return true;
+export function isWeaponUnlocked(w: Weapon, ownedIds: string[] = [], _highestLevel?: number): boolean {
+  // Senjata LANGKA hanya terbuka setelah dibeli dengan diamond di Arsenal.
+  return w.rarity !== 'LANGKA' || ownedIds.includes(w.id);
+}
+
+/** Peluang rarity untuk kotak hadiah boss (%). */
+export const GIFT_RARITY_WEIGHT: Record<Rarity, number> = {
+  UMUM: 45,
+  LANGKA: 27,
+  EPIC: 17,
+  LEGENDARIS: 11,
+};
+
+/**
+ * Roll satu senjata Gun Hit untuk kotak hadiah boss.
+ * Senjata yang sedang dipakai (excludeId) dikecualikan supaya hadiah terasa baru.
+ */
+export function rollGiftWeapon(excludeId?: string): Weapon {
+  // Kotak hadiah tidak dapat melewati syarat pembelian senjata LANGKA.
+  const pool = WEAPONS.filter((w) => w.id !== excludeId && w.rarity !== 'LANGKA');
+  const source = pool.length > 0 ? pool : WEAPONS;
+  const total = source.reduce((s, w) => s + GIFT_RARITY_WEIGHT[w.rarity], 0);
+  let r = Math.random() * total;
+  for (const w of source) {
+    r -= GIFT_RARITY_WEIGHT[w.rarity];
+    if (r <= 0) return w;
+  }
+  return source[source.length - 1];
 }
 
 export { drawGun } from './art/guns';
