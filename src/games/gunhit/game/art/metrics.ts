@@ -22,9 +22,10 @@ export interface GunInkBox {
 }
 
 const GUN_INK_BOX: Partial<Record<WeaponId, GunInkBox>> = {
-  // Measured at rest (no recoil/charge) from drawGun().
-  xeno: { x0: -104, y0: -41, x1: 74, y1: 398 },
-  dora: { x0: -86, y0: -85, x1: 39, y1: 249 },
+  // Measured at rest (no recoil/charge) from drawGun(), re-measured whenever the
+  // art changes (the Air Cannon lost its arm, the Xenomorph got a real neck).
+  xeno: { x0: -104, y0: -41, x1: 48, y1: 415 },
+  dora: { x0: -40, y0: -85, x1: 39, y1: 102 },
   pred: { x0: -101, y0: -85, x1: 100, y1: 240 },
 };
 
@@ -137,12 +138,12 @@ export const GUN_METRICS: Partial<Record<WeaponId, Partial<GunMetrics>>> = {
   hyperdrive: { totalLen: 166, centerOffsetY: 78, centerOffsetX: 8, span: 174 },
   quantum_destabilizer: { totalLen: 195, centerOffsetY: 94, centerOffsetX: 12, span: 200 },
   // ---------------------------------------------------------- ELEMENTAL ARSENAL (slide 7)
-  // Measured silhouettes (w×h at rest): xeno 178×439, dora 125×334, pred 201×325.
+  // Measured silhouettes (w×h at rest): xeno 152×456, dora 79×187, pred 201×325.
   // `span` is the box diagonal after the 45° showcase rotation, i.e.
   // (w + h) / √2 — the old 135/165/200 values were far too small, so every
   // menu scaled these three up until they were cropped.
-  xeno: { totalLen: 439, centerOffsetY: 179, centerOffsetX: -15, span: 437 },
-  dora: { totalLen: 334, centerOffsetY: 82, centerOffsetX: -24, span: 325 },
+  xeno: { totalLen: 456, centerOffsetY: 187, centerOffsetX: -28, span: 430 },
+  dora: { totalLen: 187, centerOffsetY: 9, centerOffsetX: -1, span: 188 },
   pred: { totalLen: 325, centerOffsetY: 78, centerOffsetX: -1, span: 372 },
 };
 
