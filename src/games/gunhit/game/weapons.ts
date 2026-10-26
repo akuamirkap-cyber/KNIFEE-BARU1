@@ -12,10 +12,11 @@ export type WeaponId =
   | 'unicorn' | 'pencil' | 'sandal' | 'wand'
   | 'coingun' | 'blaster'
   | 'photon_saber'
-  | 'gauntlet_cannon' | 'pulse_rifle' | 'cryo_blaster' | 'hyperdrive' | 'quantum_destabilizer';
+  | 'gauntlet_cannon' | 'pulse_rifle' | 'cryo_blaster' | 'hyperdrive' | 'quantum_destabilizer'
+  | 'xeno' | 'dora' | 'pred';
 export type ProjKind = WeaponId | 'old';
 export type Rarity = 'UMUM' | 'LANGKA' | 'EPIC' | 'LEGENDARIS';
-export type TrailFx = 'none' | 'glow' | 'smoke' | 'spark' | 'bubble' | 'frost' | 'gold' | 'void' | 'fire' | 'pixel' | 'confetti' | 'rainbow' | 'petal' | 'note';
+export type TrailFx = 'none' | 'glow' | 'smoke' | 'spark' | 'bubble' | 'frost' | 'gold' | 'void' | 'fire' | 'pixel' | 'confetti' | 'rainbow' | 'petal' | 'note' | 'acid' | 'air' | 'plasma';
 export type SaveFx = 'return' | 'bubble' | 'portal' | 'glitch' | 'mirror';
 
 export interface BurstFx { colors: string[]; n: number; glow?: boolean; g?: number; spd?: number; size?: number }
@@ -363,6 +364,19 @@ export const WEAPONS: Weapon[] = [
   { ...base, id: 'blaster', name: 'WARS BLASTER', emoji: '⚡', rarity: 'LEGENDARIS', perk: 'LASER GALAXY', desc: 'Blaster energi galaksi ala Star Wars! Baut plasma merah terang dengan suara tembakan sci-fi otentik, 3 poin!',
     speed: 8500, cooldown: 0.18, points: 3, half: 3.8, stick: 26, energy: true, recoil: 1.2, shake: 4, color: '#ef4444', trail: '239,68,68', trailFx: 'glow',
     sparks: ['#ffffff', '#fca5a5', '#ef4444'], previewLen: 220, previewY: 34, stats: { rate: 4, speed: 5, power: 5 } },
+
+  // ======================== ELEMENTAL ARSENAL (SLIDE 7 #1-3) ========================
+  // Copied 100% from games/game-3 "Elemental Arsenal": xeno = Acid Spitter,
+  // dora = Air Cannon, pred = Plasma Caster. Wheel = slide 1's target wheel.
+  { ...base, id: 'xeno', name: 'XENOMORPH ACID SPITTER', emoji: '🧪', rarity: 'EPIC', perk: 'CAIRAN BERACUN', desc: 'Tenggorokan xenomorph yang menyemburkan glopel asam lengket. Setiap tetes menempel di roda dan mengalir perlahan.',
+    speed: 1650, cooldown: 0.3, half: 5, noSmoke: true, recoil: 1, shake: 3, energy: true, color: '#b6ff1a', trail: '163,230,53', trailFx: 'acid',
+    sparks: ['#ffffff', '#d9f99d', '#65a30d'], previewLen: 200, previewY: 34, stats: { rate: 3, speed: 2, power: 4 } },
+  { ...base, id: 'dora', name: 'AIR CANNON', emoji: '💨', rarity: 'EPIC', perk: 'DOKAN!', desc: 'Meriam udara terkompresi! Menembak cincin udara yang membelokkan cahaya. DOKAN!',
+    speed: 2100, cooldown: 0.34, half: 6, noSmoke: true, recoil: 1, shake: 5, energy: true, color: '#9fdcff', trail: '159,220,255', trailFx: 'air',
+    sparks: ['#ffffff', '#bae6fd', '#38bdf8'], previewLen: 190, previewY: 34, stats: { rate: 3, speed: 4, power: 4 } },
+  { ...base, id: 'pred', name: 'PREDATOR PLASMA CASTER', emoji: '⚡', rarity: 'EPIC', perk: 'PLASMA CASTER', desc: 'Meriam plasma pundak Predator! Tahan untuk mengisi daya, lalu lepaskan baut plasma mematikan.',
+    speed: 2600, cooldown: 0.35, half: 5, noSmoke: true, energy: true, charge: true, recoil: 1.4, shake: 6, color: '#6fd3ff', trail: '111,211,255', trailFx: 'plasma',
+    sparks: ['#ffffff', '#a5f3fc', '#6fd3ff'], previewLen: 220, previewY: 34, stats: { rate: 2, speed: 3, power: 5 } },
 ];
 
 export const RARITY_COLOR: Record<Rarity, string> = {

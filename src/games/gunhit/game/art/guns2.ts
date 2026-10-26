@@ -12,10 +12,10 @@ function slingshotPro(c: C, cx: number, y0: number, t: number, ready: boolean) {
   const s = gunState.sinceShot;
   const REST_X = 0;
   const REST_Y = 14;
-  // In resting/drawn pose, the pouch hangs out to the right (+x) of the handle
-  // so that the red bands, stitched leather pouch, and 3 river stones are 100%
-  // visible beside the carved wooden handle just like the KETAPEL reference card!
-  const HANG_X = 33;
+  // In resting/drawn pose, the pouch hangs STRAIGHT DOWN from the center of the
+  // Y-fork (x offset 0) so the two red bands form a symmetric V going straight
+  // down — no sideways tilt of the band/pouch assembly.
+  const HANG_X = 0;
   const HANG_Y = 106;
   let px = HANG_X;
   let py = HANG_Y;
@@ -283,7 +283,7 @@ function slingshotPro(c: C, cx: number, y0: number, t: number, ready: boolean) {
   c.moveTo(tipL.x + 2, tipL.y + 1);
   c.bezierCurveTo(
     tipL.x + 12,
-    tipL.y + 28,
+    tipL.y + 24,
     pouch.x - 16,
     pouch.y - 26,
     pouch.x - 10.5,
@@ -303,9 +303,9 @@ function slingshotPro(c: C, cx: number, y0: number, t: number, ready: boolean) {
   c.beginPath();
   c.moveTo(tipR.x + 2, tipR.y + 1);
   c.bezierCurveTo(
-    tipR.x + 12,
+    tipR.x - 12,
     tipR.y + 24,
-    pouch.x + 15,
+    pouch.x + 16,
     pouch.y - 26,
     pouch.x + 10.5,
     pouch.y - 4,

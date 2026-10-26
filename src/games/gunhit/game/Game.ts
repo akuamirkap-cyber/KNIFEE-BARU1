@@ -197,6 +197,9 @@ const FIRE_SFX: Record<WeaponId, () => void> = {
   gauntlet_cannon: sfx6.gauntlet,
   pulse_rifle: sfx6.pulse, cryo_blaster: sfx6.cryo, hyperdrive: sfx6.hyper,
   quantum_destabilizer: sfx6.quantum,
+  xeno: sfx6.xeno,
+  dora: sfx6.dora,
+  pred: sfx6.pred,
 };
 const HIT_SFX: Partial<Record<WeaponId, () => void>> = {
   coingun: sfx.coin, blaster: sfx5.blasterHit,
@@ -218,7 +221,7 @@ const PAINT = ['244,63,94', '250,204,21', '34,211,238', '168,85,247', '74,222,12
 
 type ItemType = 'bullet' | 'old' | 'spike' | 'coin' | 'diamond_chest';
 interface Item { angle: number; type: ItemType; age: number; w?: WeaponId; scale?: number; vel?: number; harvested?: boolean; tint?: string; big?: number; hits?: number; hue?: number; flash?: number }
-interface Proj { x: number; y: number; vx: number; vy: number; originX?: number; pierced?: number; hist?: { x: number; y: number }[]; tint?: string; big?: number; mini?: boolean; giant?: boolean; hue?: number; flash?: number; spawnDelay?: number }
+interface Proj { x: number; y: number; vx: number; vy: number; originX?: number; pierced?: number; hist?: { x: number; y: number }[]; tint?: string; big?: number; mini?: boolean; giant?: boolean; hue?: number; flash?: number; spawnDelay?: number; wob?: number; lastEcho?: number; t?: number }
 type StepRes = { res: 'none' | 'stick' | 'fail' | 'hit'; spike?: boolean; local?: number };
 interface Light { x: number; y: number; r: number; rgb: string; life: number; max: number }
 interface Fragment { x: number; y: number; vx: number; vy: number; rot: number; vr: number; a0: number; a1: number }
@@ -976,7 +979,7 @@ export class Game {
   private crack(a: number, _tint?: string) {
     const c = this.faceCtx;
     c.save();
-    drawPreciseWeaponDecal(c, this.faceR, a, this.weapon, this.level.style);
+    drawPreciseWeaponDecal(c, this.faceR, a, this.weapon, this.level.style, this.time);
     c.restore();
   }
 
@@ -1018,12 +1021,16 @@ export class Game {
       if (fw && shotHue !== undefined) gunState.rocketHue = shotHue;
       if (yoyo && shotHue !== undefined) gunState.yoyoHue = shotHue;
       if (bazooka && shotHue !== undefined) gunState.bazookaHue = shotHue;
-      if (n === 1) this.projs.push({ x: CX + ox, originX: CX + ox, y: GUN_Y - 4, vx, vy, big, tint, hue: shotHue, spawnDelay, ...sizeBuff });
+      // Weapon-specific spawn Y: dora barrel extends 70px above gun base, pred muzzle at GUN_Y-72 (game-3: my-68)
+      const spawnY = w.id === 'dora' ? GUN_Y + w.recoil * 22 - 50 : w.id === 'pred' ? GUN_Y - 72 : GUN_Y - 4;
+      const isNewWeapon = w.id === 'dora' || w.id === 'xeno' || w.id === 'pred';
+      const projExtra = isNewWeapon ? { wob: Math.random() * TAU, lastEcho: spawnY } : {};
+      if (n === 1) this.projs.push({ x: CX + ox, originX: CX + ox, y: spawnY, vx, vy, big, tint, hue: shotHue, spawnDelay, ...sizeBuff, ...projExtra });
       else {
         const travel = GUN_Y - (this.targetY + this.level.radius);
         for (let i = 0; i < n; i++) {
           const off = (i - (n - 1) / 2) * 26;
-          this.projs.push({ x: CX + ox, originX: CX + ox, y: GUN_Y - 4, vx: vx + (off * w.speed) / travel, vy, big, tint, hue: shotHue, spawnDelay, ...sizeBuff });
+          this.projs.push({ x: CX + ox, originX: CX + ox, y: spawnY, vx: vx + (off * w.speed) / travel, vy, big, tint, hue: shotHue, spawnDelay, ...sizeBuff, ...projExtra });
         }
       }
       if (fw && shotHue !== undefined) {
@@ -1076,7 +1083,38 @@ export class Game {
       }
     }
     this.shake = Math.max(this.shake, w.shake);
-    if (w.charge && big > 0) {
+    if (w.id === 'pred' && big > 0) {
+      sfx6.pred();
+      this.recoil = 1;
+      this.shake = Math.max(this.shake, 10);
+      this.camY += big * 3;
+      for (const ox of offsets) {
+        // flash: size 170, color PLASMA.glow, max 0.22 (game-3 releasePlasma)
+        this.sink.light(CX + ox, GUN_Y - 6, 170, '111,211,255', 0.22);
+        // flash: size 80, color #ffffff, max 0.12
+        this.sink.light(CX + ox, GUN_Y - 6, 80, '255,255,255', 0.12);
+        // ring: size 10 grow 420, color PLASMA.glow, max 0.3
+        this.sink.push({ x: CX + ox, y: GUN_Y - 6, vx: 0, vy: 0, life: 0.3, max: 0.3, size: 170, color: '111,211,255', kind: 'shock', rot: 0, vr: 0, g: 0 });
+        // ringE: size 8 grow 300, color #ffffff, max 0.28
+        this.sink.push({ x: CX + ox, y: GUN_Y - 6, vx: 0, vy: 0, life: 0.28, max: 0.28, size: 130, color: '255,255,255', kind: 'ring', rot: 0, vr: 0, g: 0 });
+        // 6 bolts: ang -PI/2 + rand(-1.4, 1.4), color i%2 ? #ffffff : PLASMA.glow (game-3)
+        for (let i = 0; i < 6; i++) {
+          const ang = -Math.PI / 2 + rand(-1.4, 1.4);
+          const col = i % 2 ? '255,255,255' : '111,211,255';
+          this.sink.push({ x: CX + ox, y: GUN_Y - 6, vx: Math.cos(ang) * rand(30, 70), vy: Math.sin(ang) * rand(30, 70), life: rand(0.1, 0.2), max: 0.2, size: 3, color: col, kind: 'bolt', rot: 0, vr: 0, g: 0 });
+        }
+        // 26 spark burst (game-3: kind 'spark', size 1.8, drag 4, max 0.3)
+        for (let i = 0; i < 26; i++) {
+          const a = rand(-Math.PI / 2, 1.3);
+          const sp = rand(200, 700);
+          this.sink.push({ x: CX + ox, y: GUN_Y - 6, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 0.3, max: 0.3, size: 1.8, color: i % 2 ? '255,255,255' : '111,211,255', kind: 'spark', rot: 0, vr: 0, g: 0, drag: 4 });
+        }
+        // 6 smoke: color #3a4a60, size rand(12,22) (game-3)
+        for (let i = 0; i < 6; i++) {
+          this.sink.push({ x: CX + ox + rand(-16, 16), y: GUN_Y - 6 + 10, vx: rand(-50, 50), vy: rand(-40, 20), life: rand(0.7, 1.2), max: 1.2, size: rand(12, 22), color: '58,74,96', kind: 'smoke', rot: 0, vr: 0, g: 0, drag: 2 });
+        }
+      }
+    } else if (w.charge && big > 0) {
       if (big === 2) sfx4.busterBig();
       else sfx4.busterMid();
       this.recoil = big === 2 ? 2.4 : 1.4;
@@ -1091,6 +1129,53 @@ export class Game {
         spawnSpeedLines(this.sink, CX + ox, this.targetY + this.level.radius + 20, GUN_Y - 30, '254,240,138');
       }
     } else FIRE_SFX[w.id]();
+    if (w.id === 'xeno') {
+      for (const ox of offsets) {
+        // 16 viscous droplets behind the glob (game-3 fire())
+        for (let i = 0; i < 16; i++) {
+          const k = i / 16;
+          this.sink.push({ x: CX + ox + rand(-3, 3), y: GUN_Y - 4 - k * 12, vx: rand(-25, 25), vy: vy * (0.45 + k * 0.5), life: rand(0.7, 1.2), max: 1.2, size: rand(2.5, 6.5) * (1 - k * 0.5) + 1.5, color: '#b6ff1a', kind: 'drop', rot: 0, vr: 0, g: 900 });
+        }
+        // 10 fine mist (game-3: vy rand(-900, -300))
+        for (let i = 0; i < 10; i++) {
+          this.sink.push({ x: CX + ox + rand(-6, 6), y: GUN_Y - 4 - rand(0, 4), vx: rand(-120, 120), vy: rand(-900, -300), life: rand(0.4, 0.8), max: 0.8, size: rand(1.2, 2.2), color: '#b6ff1a', kind: 'smoke', rot: 0, vr: 0, g: 1200 });
+        }
+        // flash + ring (game-3: flash size 80, ring size 8 grow 220)
+        this.sink.light(CX + ox, GUN_Y - 6, 80, '182,255,26', 0.2);
+        this.sink.push({ x: CX + ox, y: GUN_Y - 6, vx: 0, vy: 0, life: 0.3, max: 0.3, size: 80, color: '182,255,26', kind: 'ring', rot: 0, vr: 0, g: 0 });
+        // 6 smoke puffs (game-3: color #9bd13a, size rand(10,20))
+        for (let i = 0; i < 6; i++) {
+          this.sink.push({ x: CX + ox + rand(-14, 14), y: GUN_Y - 6, vx: rand(-40, 40), vy: rand(-90, -30), life: rand(0.8, 1.4), max: 1.4, size: rand(10, 20), color: '155,209,58', kind: 'smoke', rot: 0, vr: 0, g: 30, drag: 2 });
+        }
+      }
+    }
+    if (w.id === 'dora') {
+      // Dora muzzle = y0 - 70 where y0 = GUN_Y + recoil*22 (barrel extends 150px upward from y0+80)
+      const doraMuzzleY = GUN_Y + this.recoil * 22 - 70;
+      for (const ox of offsets) {
+        // flash + ringE (game-3 fireAir())
+        this.sink.light(CX + ox, doraMuzzleY, 120, '255,255,255', 0.16);
+        this.sink.push({ x: CX + ox, y: doraMuzzleY, vx: 0, vy: 0, life: 0.3, max: 0.3, size: 120, color: '255,255,255', kind: 'ring', rot: 0, vr: 0, g: 0 });
+        // ringE #1: size 14, grow 420, white, max 0.3
+        this.sink.push({ x: CX + ox, y: doraMuzzleY, vx: 0, vy: 0, life: 0.3, max: 0.3, size: 14, color: '255,255,255', kind: 'ringE', rot: 0, vr: 0, g: 0 });
+        // ringE #2: size 8, grow 260, AIR.glow, max 0.36
+        this.sink.push({ x: CX + ox, y: doraMuzzleY, vx: 0, vy: 0, life: 0.36, max: 0.36, size: 8, color: '159,220,255', kind: 'ringE', rot: 0, vr: 0, g: 0 });
+        // 14 puff particles (game-3: size rand(12,22), grow 26, drag 3.2)
+        for (let i = 0; i < 14; i++) {
+          const a = rand(0, TAU);
+          const sp = rand(90, 260);
+          this.sink.push({ x: CX + ox + Math.cos(a) * 14, y: doraMuzzleY + 6 + Math.sin(a) * 6, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.5 + 30, life: rand(0.5, 0.9), max: 0.9, size: rand(12, 22), color: '#ffffff', kind: 'puff', rot: rand(0, TAU), vr: rand(-2, 2), g: 0, drag: 3.2 });
+        }
+        // 10 wind streaks (game-3: size rand(14,30), speed rand(500,900))
+        for (let i = 0; i < 10; i++) {
+          const a = -Math.PI / 2 + rand(-0.5, 0.5);
+          this.sink.push({ x: CX + ox, y: doraMuzzleY, vx: Math.cos(a) * rand(500, 900), vy: Math.sin(a) * rand(500, 900), life: rand(0.18, 0.3), max: 0.3, size: rand(14, 30), color: '#ffffff', kind: 'wind', rot: 0, vr: 0, g: 0, drag: 1 });
+        }
+        // DOKAN! text (game-3: x+54, y-30, size 34, color #ffd23a, rot -0.18)
+        this.sink.push({ x: CX + ox + 54, y: doraMuzzleY - 30, vx: 0, vy: 0, life: 0.7, max: 0.7, size: 34, color: '#ffd23a', kind: 'text', rot: -0.18, vr: 0, g: 0, text: 'DOKAN!' });
+      }
+      this.shake = Math.max(this.shake, 9);
+    }
     if (w.id === 'slingshot') {
       sfx4.slingRelease();
       for (const ox of offsets) {
@@ -1670,6 +1755,81 @@ export class Game {
     this.addText(kill.length ? `☢️ ${kill.length}x DIMUSNAHKAN!` : '☢️ OBLITERATE!', CX, this.targetY - 10, '#86efac', 30);
   }
 
+  private airBlast(x: number, y: number, k: number) {
+    // Ported 100% from game-3 airBlast()
+    this.sink.light(x, y, 160 * k, '255,255,255', 0.2);
+    this.sink.push({ x, y, vx: 0, vy: 0, life: 0.32, max: 0.32, size: 10, color: '255,255,255', kind: 'ring', rot: 0, vr: 0, g: 0 });
+    this.sink.push({ x, y, vx: 0, vy: 0, life: 0.4, max: 0.4, size: 6, color: '159,220,255', kind: 'ring', rot: 0, vr: 0, g: 0 });
+    this.sink.push({ x, y, vx: 0, vy: 0, life: 0.35, max: 0.35, size: 20, color: '255,255,255', kind: 'ringE', rot: 0, vr: 0, g: 0 });
+    // star burst
+    this.sink.push({ x, y, vx: 0, vy: 0, life: 0.22, max: 0.22, size: 90 * k, color: '#fff4a0', kind: 'star', rot: 0, vr: 0, g: 0 });
+    // 22 puff particles in a ring
+    const n = Math.round(22 * k);
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * TAU + rand(-0.1, 0.1);
+      const sp = rand(220, 420) * k;
+      this.sink.push({ x: x + Math.cos(a) * 10, y: y + Math.sin(a) * 6, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.6 + 40, life: rand(0.6, 1.1), max: 1.1, size: rand(14, 26), color: '#ffffff', kind: 'puff', rot: rand(0, TAU), vr: rand(-3, 3), g: 0, drag: 3 });
+    }
+    // 10 large puffs
+    for (let i = 0; i < 10; i++) this.sink.push({ x: x + rand(-20, 20), y: y + rand(-5, 10), vx: rand(-60, 60), vy: rand(-40, 40), life: rand(0.9, 1.4), max: 1.4, size: rand(22, 40), color: '#f4f8ff', kind: 'puff', rot: rand(0, TAU), vr: rand(-1.5, 1.5), g: 0, drag: 2.5 });
+    // wood dust + splinters
+    for (let i = 0; i < 14; i++) this.sink.push({ x: x + rand(-20, 20), y: y + rand(-10, 5), vx: rand(-120, 120), vy: rand(-60, 60), life: rand(0.8, 1.4), max: 1.4, size: rand(12, 24), color: '#a67c4a', kind: 'smoke', rot: 0, vr: 0, g: 0, drag: 2 });
+    // ash particles
+    for (let i = 0; i < 26; i++) this.sink.push({ x, y, vx: rand(-420, 420), vy: rand(-520, 100), life: rand(0.8, 1.6), max: 1.6, size: rand(3, 8), color: pick(['#d9b47a', '#9a6a36', '#5a3a1a']), kind: 'chip', rot: 0, vr: rand(-18, 18), g: 1100, drag: 0.5 });
+    // wind burst
+    for (let i = 0; i < 30; i++) {
+      const a = Math.PI / 2 + rand(-Math.PI, 0);
+      const sp = rand(300, 800);
+      this.sink.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 0.3, max: 0.3, size: 18, color: '#ffffff', kind: 'wind', rot: 0, vr: 0, g: 0, drag: 1.5 });
+    }
+    // text
+    this.sink.push({ x: x + 60 * (Math.random() < 0.5 ? 1 : -1), y: y - 50, vx: 0, vy: -70, life: 0.8, max: 0.8, size: 40 * k, color: '#ffd23a', kind: 'text', rot: rand(-0.25, 0.25), vr: 0, g: 0, text: pick(['DOKAN!', 'BAM!', 'DUARR!']) });
+  }
+
+  private plasmaImpact(x: number, y: number, k: number) {
+    // Ported 100% from game-3 plasmaImpact()
+    const down = Math.PI / 2;
+    this.sink.light(x, y, 260 * k, '10,42,74', 0.4);
+    this.sink.light(x, y, 170 * k, '111,211,255', 0.3);
+    this.sink.light(x, y, 90 * k, '255,255,255', 0.16);
+    this.sink.push({ x, y, vx: 0, vy: 0, life: 0.3, max: 0.3, size: 360 * k, color: '111,211,255', kind: 'shock', rot: 0, vr: 0, g: 0 });
+    this.sink.push({ x, y, vx: 0, vy: 0, life: 0.2, max: 0.2, size: 120 * k, color: '255,255,255', kind: 'star', rot: 0, vr: 0, g: 0 });
+    [[520, 0.34, '111,211,255'], [760, 0.46, '255,255,255'], [1000, 0.6, '10,42,74']].forEach(([g, m, col]) =>
+      this.sink.push({ x, y, vx: 0, vy: 0, life: m as number, max: m as number, size: 8, color: col as string, kind: 'ring', rot: 0, vr: 0, g: 0 }));
+    this.sink.push({ x, y, vx: 0, vy: 0, life: 0.35, max: 0.35, size: 14, color: '255,255,255', kind: 'ringE', rot: 0, vr: 0, g: 0 });
+    for (let i = 0; i < 12; i++) this.sink.push({ x, y, vx: Math.cos(down + rand(-1.7, 1.7)) * rand(50, 140) * k, vy: Math.sin(down + rand(-1.7, 1.7)) * rand(50, 140) * k, life: rand(0.12, 0.3), max: 0.3, size: 3, color: i % 2 ? '255,255,255' : '111,211,255', kind: 'bolt', rot: 0, vr: 0, g: 0 });
+    for (let i = 0; i < 5; i++) this.sink.push({ x, y, vx: Math.cos(-down + rand(-0.8, 0.8)) * rand(40, 90), vy: Math.sin(-down + rand(-0.8, 0.8)) * rand(40, 90), life: rand(0.1, 0.2), max: 0.2, size: 2, color: '111,211,255', kind: 'bolt', rot: 0, vr: 0, g: 0 });
+    for (let i = 0; i < 60 * k; i++) { const a = down + rand(-1.5, 1.5); const sp = rand(300, 1000); this.sink.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 0.5, max: 0.5, size: 2, color: pick(['255,255,255', '111,211,255', '255,122,32']), kind: 'spark', rot: 0, vr: 0, g: 500, drag: 3 }); }
+    for (let i = 0; i < 30 * k; i++) { const a = down + rand(-1.6, 1.6); const sp = rand(80, 420); this.sink.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 1.2, max: 1.2, size: 2.2, color: pick(['255,176,96', '255,112,48', '255,210,122']), kind: 'glow', rot: 0, vr: 0, g: 200, drag: 1.5 }); }
+    for (let i = 0; i < 12; i++) this.sink.push({ x: x + rand(-40, 40), y: y + rand(-10, 40), vx: 0, vy: 0, life: rand(0.2, 0.4), max: 0.4, size: rand(12, 26), color: '232,253,255', kind: 'star', rot: 0, vr: 0, g: 0 });
+    for (let i = 0; i < 14; i++) this.sink.push({ x: x + rand(-24, 24), y: y + rand(0, 14), vx: rand(-90, 90), vy: rand(-30, 60), life: rand(1.2, 2.2), max: 2.2, size: rand(18, 34), color: '42,52,66', kind: 'smoke', rot: 0, vr: 0, g: 0, drag: 1.5 });
+    for (let i = 0; i < 20; i++) this.sink.push({ x, y, vx: rand(-380, 380), vy: rand(-480, 80), life: rand(0.8, 1.5), max: 1.5, size: rand(3, 7), color: pick(['28,20,16', '74,48,32', '217,180,122']), kind: 'ash', rot: 0, vr: rand(-16, 16), g: 1000 });
+  }
+
+  private splash(x: number, y: number, k: number) {
+    // Ported 100% from game-3 splash() (acid)
+    const down = Math.PI / 2;
+    this.sink.light(x, y, 110 * k, '182,255,26', 0.28);
+    this.sink.light(x, y, 50, '255,255,255', 0.12);
+    this.sink.push({ x, y, vx: 0, vy: 0, life: 0.3, max: 0.3, size: 8, color: '182,255,26', kind: 'ring', rot: 0, vr: 0, g: 0 });
+    // pancake: blobs sliding sideways along the rim then falling
+    for (let i = 0; i < 10; i++) {
+      const side = i % 2 ? 1 : -1;
+      this.sink.push({ x: x + side * i * 2, y: y + 2, vx: side * rand(90, 420) * k, vy: rand(-60, 20), life: rand(0.5, 0.9), max: 0.9, size: rand(4, 8), color: '#b6ff1a', kind: 'drop', rot: 0, vr: 0, g: 1300, drag: 0.15 });
+    }
+    // main fan of drops (bounce downward/sideways)
+    for (let i = 0; i < 48 * k; i++) {
+      const a = down + rand(-1.55, 1.55);
+      const s = rand(120, 640) * k;
+      this.sink.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: rand(0.7, 1.4), max: 1.4, size: rand(1.8, 5.2), color: '#b6ff1a', kind: 'drop', rot: 0, vr: 0, g: 1100, drag: 0.15 });
+    }
+    // sprays upward (ricochet over the rim)
+    for (let i = 0; i < 10; i++) this.sink.push({ x: x + rand(-10, 10), y, vx: rand(-240, 240), vy: rand(-420, -120), life: rand(0.5, 1), max: 1, size: rand(1.5, 3.2), color: '#b6ff1a', kind: 'drop', rot: 0, vr: 0, g: 1100, drag: 0.15 });
+    for (let i = 0; i < 18; i++) this.sink.push({ x: x + rand(-20, 20), y: y + rand(0, 10), vx: rand(-50, 50), vy: rand(-90, -20), life: rand(1.4, 2.6), max: 2.6, size: rand(12, 26), color: pick(['143,194,58', '200,255,90', '90,122,42']), kind: 'smoke', rot: 0, vr: 0, g: 0, drag: 2 });
+    for (let i = 0; i < 14; i++) this.sink.push({ x: x + rand(-18, 18), y: y + rand(-6, 6), vx: rand(-20, 20), vy: rand(-30, 10), life: rand(0.3, 0.8), max: 0.8, size: rand(1.5, 4), color: '155,209,58', kind: 'bubble', rot: 0, vr: 0, g: 0, grow: 6 });
+    for (let i = 0; i < 14; i++) { const a = down + rand(-1.6, 1.6); const sp = rand(100, 400); this.sink.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 0.4, max: 0.4, size: 1.5, color: pick(['255,255,255', '155,209,58']), kind: 'spark', rot: 0, vr: 0, g: 700, drag: 3 }); }
+  }
+
   private stickAt(local: number, p?: Proj) {
     const R = this.level.radius;
     const w = this.weapon;
@@ -1690,6 +1850,33 @@ export class Game {
       scale: big ? embeddedProjectileScale(big) : undefined,
     });
     this.stuck++;
+    // Dora airBlast hit FX (game-3)
+    if (w.id === 'dora') {
+      const hp = this.worldPos(local, R);
+      this.bump = Math.max(this.bump, 18);
+      this.flashWhite = Math.max(this.flashWhite, 1);
+      this.shake = Math.max(this.shake, 13);
+      this.airBlast(hp.x, hp.y, 1);
+      sfx6.doraHit();
+    }
+    // Pred plasmaImpact hit FX (game-3)
+    if (w.id === 'pred') {
+      const hp = this.worldPos(local, R);
+      this.bump = Math.max(this.bump, 14);
+      this.flashWhite = Math.max(this.flashWhite, 1);
+      this.shake = Math.max(this.shake, 15);
+      this.plasmaImpact(hp.x, hp.y, 1);
+      sfx6.predHit();
+    }
+    // Xeno acid splash hit FX (game-3)
+    if (w.id === 'xeno') {
+      const hp = this.worldPos(local, R);
+      this.bump = Math.max(this.bump, 8);
+      this.flashWhite = Math.max(this.flashWhite, 1);
+      this.shake = Math.max(this.shake, 7);
+      this.splash(hp.x, hp.y, 1);
+      sfx6.xenoHit();
+    }
     if (this.time - this.lastHit < (w.comboWindow ?? 0.5)) this.combo++;
     else this.combo = 1;
     this.lastHit = this.time;
@@ -2352,7 +2539,8 @@ export class Game {
     // half a bullet inside the lid. Align honey, peeled fruit, hornet,
     // energy orbs and celestial star art without moving the hitboxes.
     const surfaceAligned = shot.w === 'honey' || shot.w === 'banana'
-      || shot.w === 'bee' || shot.w === 'moonbeam' || shot.w === 'plasma' || shot.w === 'blackhole';
+      || shot.w === 'bee' || shot.w === 'moonbeam' || shot.w === 'plasma' || shot.w === 'blackhole'
+      || shot.w === 'xeno' || shot.w === 'dora' || shot.w === 'pred';
     if (surfaceAligned) c.translate(0, surfaceOffset - (getWeapon(shot.w).stick + EMBED)
       * (shot.w === 'moonbeam' ? 0.53 : 0.5));
     if (shot.w === 'snowball') c.translate(0, surfaceOffset);
@@ -2388,7 +2576,79 @@ export class Game {
     const oldBig = gunState.bigShot, oldTint = gunState.tint;
     gunState.bigShot = shot.big;
     if (shot.tint) gunState.tint = shot.tint;
-    this.drawProj(c, shot.w, undefined, shot.age, shot.w === 'snowball' || surfaceAligned || shot.w === 'firework' || shot.w === 'yoyo' || shot.w === 'diamond' || shot.w === 'bazooka' || shot.w === 'gauntlet_cannon' || shot.w === 'magnet');
+    // ---- specialized stuck rendering (game-3: drawAirVortex, drawPlasmaScar) ----
+    const seed = (shot.x * 7 + shot.y * 3) % 1000;
+    const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+    const glowAt = (gx: number, gy: number, gr: number, gcolor: string, ga: number) => {
+      c.save(); c.globalCompositeOperation = 'lighter'; c.globalAlpha = Math.min(1, ga); c.fillStyle = gcolor; c.beginPath(); c.arc(gx, gy, gr, 0, TAU); c.fill(); c.restore();
+    };
+    const rgbaH = (h: string, a: number) => { const n = parseInt(h.slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; };
+    let skipProj = false;
+    if (shot.w === 'xeno') {
+      // game-3: acid stuck NOT drawn on rim (only drips in update loop)
+      skipProj = true;
+    } else if (shot.w === 'dora') {
+      // game-3 drawAirVortex: rotating torus ring, curls, impact star
+      skipProj = true;
+      const pop = 1 + Math.max(0, 0.6 - shot.age) * 1.2;
+      c.save();
+      c.translate(10, 0);
+      c.scale(pop, pop);
+      c.globalCompositeOperation = 'lighter';
+      glowAt(6, 0, 30, '#9fdcff', 0.35);
+      c.globalCompositeOperation = 'source-over';
+      c.lineCap = 'round';
+      for (let k = 0; k < 3; k++) {
+        const ph = this.time * 6 + k * 2.1 + seed;
+        const ry = 16 - k * 3, rxx = 5 + Math.abs(Math.sin(ph)) * 3;
+        c.strokeStyle = `rgba(255,255,255,${0.85 - k * 0.22})`;
+        c.lineWidth = 2.5 - k * 0.6;
+        c.beginPath(); c.ellipse(4 + k * 6, 0, rxx, ry, 0, 0, TAU); c.stroke();
+      }
+      for (let i = 0; i < 4; i++) {
+        const a = this.time * 5 + (i / 4) * TAU + seed;
+        const px = 8 + Math.cos(a) * 6, py = Math.sin(a) * 17;
+        c.strokeStyle = 'rgba(200,235,255,0.8)'; c.lineWidth = 1.6;
+        c.beginPath(); c.arc(px, py, 4, a, a + 3.6); c.stroke();
+      }
+      const sa = Math.max(0, 1 - shot.age / 0.5);
+      if (sa > 0) {
+        c.fillStyle = rgbaH('#fff4a0', sa);
+        c.beginPath();
+        for (let i = 0; i < 16; i++) { const an = (i / 16) * TAU; const r = i % 2 ? 6 : 16 * (1 + shot.age * 2); i ? c.lineTo(-4 + Math.cos(an) * r, Math.sin(an) * r) : c.moveTo(-4 + r, 0); }
+        c.closePath(); c.fill();
+      }
+      c.restore();
+    } else if (shot.w === 'pred') {
+      // game-3 drawPlasmaScar: charred spur, molten veins, plasma residue, arcs
+      skipProj = true;
+      const hot = clamp01(1 - shot.age / 6);
+      const pop = 1 + Math.max(0, 0.4 - shot.age) * 1.5;
+      c.save();
+      c.scale(pop, pop);
+      c.beginPath(); c.moveTo(-6, -9); c.lineTo(14, -6); c.lineTo(26, -1); c.lineTo(28, 1); c.lineTo(16, 6); c.lineTo(-6, 9); c.closePath();
+      const sg = c.createLinearGradient(-6, 0, 28, 0);
+      sg.addColorStop(0, hot > 0.3 ? '#3a1a08' : '#1a110a'); sg.addColorStop(1, '#0a0806');
+      c.fillStyle = sg; c.fill();
+      c.globalCompositeOperation = 'lighter';
+      c.strokeStyle = rgbaH('#ff7a20', 0.5 + hot * 0.5); c.lineWidth = 1.4; c.lineCap = 'round';
+      c.beginPath(); c.moveTo(-4, 0); c.lineTo(6, -2); c.lineTo(14, 1); c.lineTo(22, 0); c.stroke();
+      c.strokeStyle = rgbaH('#ffe0a0', hot); c.lineWidth = 0.7; c.stroke();
+      glowAt(2, 0, 14 + hot * 16, '#ff7a20', 0.3 + hot * 0.6);
+      const pulse = 0.6 + 0.4 * Math.sin(this.time * 14 + seed);
+      glowAt(0, 0, 22, '#6fd3ff', (0.2 + hot * 0.5) * pulse);
+      glowAt(0, 0, 8, '#ffffff', hot * pulse);
+      if (Math.random() < 0.4 + hot * 0.5) {
+        c.beginPath(); let ax = 0, ay = 0; c.moveTo(ax, ay);
+        const a = rand(0, TAU);
+        for (let k = 0; k < 4; k++) { ax += Math.cos(a) * 5 + rand(-4, 4); ay += Math.sin(a) * 5 + rand(-4, 4); c.lineTo(ax, ay); }
+        c.strokeStyle = rgbaH('#6fd3ff', 0.8); c.lineWidth = 2; c.stroke();
+        c.strokeStyle = '#ffffff'; c.lineWidth = 0.8; c.stroke();
+      }
+      c.globalCompositeOperation = 'source-over';
+      c.restore();
+    }
+    if (!skipProj) this.drawProj(c, shot.w, undefined, shot.age, shot.w === 'snowball' || surfaceAligned || shot.w === 'firework' || shot.w === 'yoyo' || shot.w === 'diamond' || shot.w === 'bazooka' || shot.w === 'gauntlet_cannon' || shot.w === 'magnet');
     gunState.bigShot = oldBig;
     gunState.tint = oldTint;
     gunState.rocketFlash = 0;
@@ -2528,10 +2788,11 @@ export class Game {
       if (this.state !== 'play') this.charging = false;
       this.chargeT += dt;
       const stage = this.chargeT >= 1 ? 2 : this.chargeT >= 0.35 ? 1 : 0;
-      if (stage > this.chargeStage) {
-        this.chargeStage = stage;
-        if (stage === 1) sfx4.chargeStart();
-        else sfx4.chargeFull();
+        if (stage > this.chargeStage) {
+          this.chargeStage = stage;
+          if (this.weapon.id === 'pred') sfx6.predCharge(stage === 2 ? 1 : 0.65);
+          else if (stage === 1) sfx4.chargeStart();
+          else sfx4.chargeFull();
         for (const ox of this.gunOffsets) this.sink.push({ x: CX + ox, y: GUN_Y + 2, vx: 0, vy: 0, life: 0.3, max: 0.3, size: stage === 2 ? 90 : 50, color: stage === 2 ? '254,240,138' : '125,211,252', kind: 'shock', rot: 0, vr: 0, g: 0 });
       }
       for (const ox of this.gunOffsets) {
@@ -2544,7 +2805,7 @@ export class Game {
       }
       if (stage === 2 && Math.random() < 0.15) sfx4.chargeHum(2);
     }
-    gunState.charge = this.charging ? Math.min(1, this.chargeT) : 0;
+    gunState.charge = this.charging ? Math.min(1, this.chargeT) : Math.max(0, gunState.charge - dt * 3);
     this.tintA = Math.max(0, this.tintA - dt * 1.6);
     this.comboPop = Math.max(0, this.comboPop - dt * 4);
     // Tekken-style healthbar delayed red drain effect
@@ -2878,6 +3139,36 @@ export class Game {
         }
         continue;
       }
+      // Dora projectile: echo ringE rings + wind streaks + puff particles (game-3)
+      if (tw.id === 'dora') {
+        if (p.t === undefined) p.t = 0;
+        p.t += s;
+        if (p.lastEcho === undefined) p.lastEcho = p.y;
+        while (p.lastEcho - p.y > 44) {
+          p.lastEcho -= 44;
+          this.sink.push({ x: p.x, y: p.lastEcho, vx: 0, vy: 0, life: 0.32, max: 0.32, size: 26, color: '#ffffff', kind: 'ringE', rot: 0, vr: 0, g: 0 });
+        }
+        if (Math.random() < 0.8) this.sink.push({ x: p.x + rand(-26, 26), y: p.y + rand(10, 40), vx: rand(-30, 30), vy: rand(150, 320), life: rand(0.15, 0.3), max: 0.3, size: rand(10, 24), color: '#ffffff', kind: 'wind', rot: 0, vr: 0, g: 0, drag: 1 });
+        if (Math.random() < 0.3) this.sink.push({ x: p.x + rand(-30, 30), y: p.y + rand(0, 30), vx: rand(-80, 80), vy: rand(60, 160), life: rand(0.3, 0.5), max: 0.5, size: rand(5, 10), color: '#ffffff', kind: 'puff', rot: rand(0, TAU), vr: rand(-3, 3), g: 0, drag: 2 });
+        continue;
+      }
+      // Xeno projectile: shed droplets + green smoke (game-3)
+      if (tw.id === 'xeno') {
+        if (Math.random() < 0.7) this.sink.push({ x: p.x + rand(-7, 7), y: p.y + rand(10, 40), vx: rand(-70, 70), vy: rand(-200, 100), life: rand(0.5, 1), max: 1, size: rand(1.5, 3.5), color: '#b6ff1a', kind: 'drop', rot: 0, vr: 0, g: 1100, drag: 0.15 });
+        if (Math.random() < 0.3) this.sink.push({ x: p.x + rand(-6, 6), y: p.y + 20, vx: rand(-20, 20), vy: rand(-20, 20), life: 0.8, max: 0.8, size: rand(6, 12), color: '182,255,26', kind: 'smoke', rot: 0, vr: 0, g: 0, drag: 0 });
+        continue;
+      }
+      // Pred projectile: sparks + bolts + ringE echo + smoke (game-3)
+      if (tw.id === 'pred') {
+        if (p.t === undefined) p.t = 0;
+        p.t += s;
+        if (p.lastEcho === undefined) p.lastEcho = p.y;
+        while (p.lastEcho - p.y > 60) { p.lastEcho -= 60; this.sink.push({ x: p.x, y: p.lastEcho, vx: 0, vy: 0, life: 0.25, max: 0.25, size: 10, color: '111,211,255', kind: 'ringE', rot: 0, vr: 0, g: 0 }); }
+        if (Math.random() < 0.9) this.sink.push({ x: p.x + rand(-8, 8), y: p.y + rand(10, 60), vx: rand(-120, 120), vy: rand(40, 200), life: rand(0.2, 0.4), max: 0.4, size: 1.5, color: Math.random() < 0.5 ? '#ffffff' : '111,211,255', kind: 'spark', rot: 0, vr: 0, g: 0, drag: 3 });
+        if (Math.random() < 0.5) this.sink.push({ x: p.x, y: p.y + rand(0, 40), vx: Math.cos(rand(0, TAU)) * rand(16, 40), vy: Math.sin(rand(0, TAU)) * rand(16, 40), life: 0.08, max: 0.08, size: 2, color: '111,211,255', kind: 'bolt', rot: 0, vr: 0, g: 0 });
+        if (Math.random() < 0.4) this.sink.push({ x: p.x + rand(-10, 10), y: p.y + 40, vx: rand(-20, 20), vy: rand(-10, 30), life: 0.7, max: 0.7, size: rand(8, 16), color: '74,106,144', kind: 'smoke', rot: 0, vr: 0, g: 0, drag: 0 });
+        continue;
+      }
       switch (tw.trailFx) {
         case 'glow':
         case 'void':
@@ -2927,6 +3218,21 @@ export class Game {
           if (Math.random() < 0.25) this.particles.push({ x: px + rand(-14, 14), y: py, vx: rand(-40, 40), vy: rand(-30, 30), life: 0.7, max: 0.7, size: 14, color: pick(['#fde68a', '#fca5a5', '#a5f3fc']), kind: 'text', rot: 0, vr: 0, g: 0, text: pick(['♪', '♫']) });
           this.sink.push({ x: px, y: py, vx: 0, vy: 40, life: 0.3, max: 0.3, size: 3, color: tw.trail, kind: 'glow', rot: 0, vr: 0, g: 0 });
           break;
+        case 'acid':
+          // Xenomorph viscous acid drips + fine mist
+          this.particles.push({ x: px, y: py, vx: rand(-20, 20), vy: rand(40, 100), life: rand(0.3, 0.6), max: 0.6, size: rand(3, 6), color: tw.trail, kind: 'drop', rot: 0, vr: 0, g: 500, drag: 0.8 });
+          if (Math.random() < 0.5) this.particles.push({ x: px + rand(-8, 8), y: py + rand(5, 15), vx: rand(-30, 30), vy: rand(20, 80), life: rand(0.3, 0.6), max: 0.6, size: rand(1.5, 3), color: 'rgba(126,200,30,', kind: 'smoke', rot: 0, vr: 0, g: 100, drag: 2 });
+          break;
+        case 'air':
+          // Dora compressed air ring puffs + light streaks
+          this.particles.push({ x: px, y: py, vx: rand(-40, 40), vy: rand(30, 90), life: rand(0.4, 0.8), max: 0.8, size: rand(8, 14), color: 'rgba(220,240,255,', kind: 'smoke', rot: rand(0, TAU), vr: rand(-2, 2), g: -30, drag: 3 });
+          if (Math.random() < 0.4) this.sink.push({ x: px, y: py, vx: 0, vy: 0, life: 0.2, max: 0.2, size: 14, color: '255,255,255', kind: 'ring', rot: 0, vr: 0, g: 0 });
+          break;
+        case 'plasma':
+          // Predator plasma ion sparks + electric arcs
+          this.particles.push({ x: px, y: py, vx: rand(-60, 60), vy: rand(40, 120), life: rand(0.15, 0.3), max: 0.3, size: rand(2, 4), color: tw.trail, kind: 'glow', rot: 0, vr: 0, g: 0, drag: 3 });
+          if (Math.random() < 0.3) this.sink.push({ x: px + rand(-10, 10), y: py, vx: rand(-30, 30), vy: 0, life: 0.12, max: 0.12, size: 2, color: '255,255,255', kind: 'bolt', rot: 0, vr: 0, g: 0 });
+          break;
       }
     }
     this.recoil = Math.max(0, this.recoil - dt * 7);
@@ -2939,6 +3245,43 @@ export class Game {
     for (const it of this.items) {
       it.age += s;
       if (it.flash) it.flash = Math.max(0, it.flash - dt * 3.5);
+    }
+    // ---- ongoing stuck effects for xeno/dora/pred (game-3 update loop) ----
+    if (this.state === 'play') {
+      for (const it of this.items) {
+        if (it.type !== 'bullet') continue;
+        if (it.w !== 'xeno' && it.w !== 'dora' && it.w !== 'pred') continue;
+        const wp = this.worldPos(it.angle, this.level.radius);
+        const hx = wp.x, hy = wp.y;
+        if (it.w === 'xeno') {
+          // acid drips falling from rim (game-3: green drops)
+          if (Math.random() < dt * 3) {
+            const a = it.angle + this.rot;
+            const dx = hx + Math.cos(a + Math.PI / 2) * rand(-4, 4);
+            this.sink.push({ x: dx, y: hy + 4, vx: rand(-20, 20), vy: rand(80, 160), life: rand(0.5, 1), max: 1, size: rand(3, 5), color: '#b6ff1a', kind: 'drop', rot: 0, vr: 0, g: 600, drag: 0.5 });
+          }
+        } else if (it.w === 'dora') {
+          // wind particles swirling around rim (game-3: white wind streaks, tangent direction)
+          if (Math.random() < dt * 10) {
+            const a = it.angle + this.rot;
+            const ta = a + Math.PI / 2;
+            this.sink.push({ x: hx + rand(-10, 10), y: hy + rand(-10, 10), vx: Math.cos(ta) * rand(60, 140) * (Math.random() < 0.5 ? 1 : -1), vy: Math.sin(ta) * rand(60, 140), life: rand(0.25, 0.45), max: 0.45, size: rand(6, 14), color: '#ffffff', kind: 'wind', rot: 0, vr: 0, g: 0, drag: 2 });
+          }
+        } else if (it.w === 'pred') {
+          // plasma scar: bolts, embers, smoke (game-3)
+          const hot = Math.max(0, 1 - it.age / 6);
+          if (Math.random() < dt * (2 + hot * 6)) {
+            const a = it.angle + this.rot + rand(-1.5, 1.5);
+            this.sink.push({ x: hx, y: hy, vx: Math.cos(a) * rand(30, 70), vy: Math.sin(a) * rand(30, 70), life: rand(0.1, 0.2), max: 0.2, size: 3, color: '111,211,255', kind: 'bolt', rot: 0, vr: 0, g: 0 });
+          }
+          if (Math.random() < dt * (3 + hot * 12)) {
+            this.sink.push({ x: hx + rand(-6, 6), y: hy + rand(-6, 6), vx: rand(-30, 30), vy: rand(-80, -20), life: rand(0.4, 0.9), max: 0.9, size: rand(1, 2.2), color: pick(['#ffb060', '#ff7030', '111,211,255']), kind: 'glow', rot: 0, vr: 0, g: 0, drag: 1 });
+          }
+          if (Math.random() < dt * (2 + hot * 6)) {
+            this.sink.push({ x: hx + rand(-6, 6), y: hy, vx: rand(-10, 10), vy: rand(-50, -20), life: rand(1, 1.8), max: 1.8, size: rand(6, 12), color: '48,58,72', kind: 'smoke', rot: 0, vr: 0, g: 0, drag: 2 });
+          }
+        }
+      }
     }
     for (const b of this.rockBullets) {
       b.age += s;
@@ -3483,6 +3826,12 @@ export class Game {
         && (this.weapon.id !== 'yoyo' || this.projs.length === 0));
     gunState.sinceShot = this.state === 'idle' ? 9 : this.rt - this.lastShotRT;
     gunState.reloadT = this.reloadT;
+    // xeno/pred animation state
+    const wId = this.weapon.id;
+    gunState.jaw = wId === 'xeno' ? Math.max(0, 1 - gunState.sinceShot / 0.3) : 0;
+    gunState.glow = wId === 'xeno' ? Math.max(0, 1 - gunState.sinceShot / 0.4) : 0;
+    gunState.servo = wId === 'pred' ? Math.max(0, 1 - gunState.sinceShot / 0.5) : 0;
+    gunState.heat = wId === 'pred' ? Math.max(0, 1 - gunState.sinceShot / 0.6) : 0;
     const flash = Math.max(0, this.muzzle / 0.07);
     if (this.weapon.id === 'firework') {
       const fw = this.getFwState();
@@ -3838,7 +4187,86 @@ export class Game {
             gunState.bazookaSeed = it.angle * 3.7;
             gunState.bazookaBite = Math.max(0.38, 1 - it.age * 0.8);
           }
-          this.drawProj(c, it.type === 'old' ? 'old' : it.w || 'pistol', len, it.age,
+          // ---- specialized stuck rendering (game-3: drawAirVortex, drawPlasmaScar) ----
+          const wSeed = (it.angle * 7 + this.targetY * 3) % 1000;
+          const clamp01w = (v: number) => Math.max(0, Math.min(1, v));
+          const glowAtW = (gx: number, gy: number, gr: number, gcolor: string, ga: number) => {
+            if (ga <= 0.003 || gr <= 0) return;
+            const n = parseInt(gcolor.slice(1), 16);
+            const gr2 = (n >> 16) & 255, gg = (n >> 8) & 255, gb = n & 255;
+            c.save(); c.globalCompositeOperation = 'lighter'; c.globalAlpha = Math.min(1, ga);
+            const grd = c.createRadialGradient(gx, gy, 0, gx, gy, gr);
+            grd.addColorStop(0, `rgba(${gr2},${gg},${gb},1)`);
+            grd.addColorStop(0.4, `rgba(${gr2},${gg},${gb},0.5)`);
+            grd.addColorStop(1, `rgba(${gr2},${gg},${gb},0)`);
+            c.fillStyle = grd; c.beginPath(); c.arc(gx, gy, gr, 0, TAU); c.fill();
+            c.restore();
+          };
+          const rgbaW = (h: string, a: number) => { const n = parseInt(h.slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; };
+          let skipWheelProj = false;
+          if (it.w === 'xeno') {
+            skipWheelProj = true; // game-3: acid stuck NOT drawn on rim
+          } else if (it.w === 'dora') {
+            skipWheelProj = true;
+            const pop = 1 + Math.max(0, 0.6 - it.age) * 1.2;
+            c.save();
+            c.rotate(Math.PI / 2);
+            c.translate(embedDepth * sc - sink + 10, 0);
+            c.scale(pop, pop);
+            c.globalCompositeOperation = 'lighter';
+            glowAtW(6, 0, 30, '#9fdcff', 0.35);
+            c.globalCompositeOperation = 'source-over';
+            c.lineCap = 'round';
+            for (let k = 0; k < 3; k++) {
+              const ph = this.time * 6 + k * 2.1 + wSeed;
+              const ry = 16 - k * 3, rxx = 5 + Math.abs(Math.sin(ph)) * 3;
+              c.strokeStyle = `rgba(255,255,255,${0.85 - k * 0.22})`;
+              c.lineWidth = 2.5 - k * 0.6;
+              c.beginPath(); c.ellipse(4 + k * 6, 0, rxx, ry, 0, 0, TAU); c.stroke();
+            }
+            for (let i = 0; i < 4; i++) {
+              const a = this.time * 5 + (i / 4) * TAU + wSeed;
+              const px = 8 + Math.cos(a) * 6, py = Math.sin(a) * 17;
+              c.strokeStyle = 'rgba(200,235,255,0.8)'; c.lineWidth = 1.6;
+              c.beginPath(); c.arc(px, py, 4, a, a + 3.6); c.stroke();
+            }
+            const sa = Math.max(0, 1 - it.age / 0.5);
+            if (sa > 0) {
+              c.fillStyle = rgbaW('#fff4a0', sa);
+              c.beginPath();
+              for (let i = 0; i < 16; i++) { const an = (i / 16) * TAU; const r = i % 2 ? 6 : 16 * (1 + it.age * 2); i ? c.lineTo(-4 + Math.cos(an) * r, Math.sin(an) * r) : c.moveTo(-4 + r, 0); }
+              c.closePath(); c.fill();
+            }
+            c.restore();
+          } else if (it.w === 'pred') {
+            skipWheelProj = true;
+            const hot = clamp01w(1 - it.age / 6);
+            const pop = 1 + Math.max(0, 0.4 - it.age) * 1.5;
+            c.save();
+            c.scale(pop, pop);
+            c.beginPath(); c.moveTo(-6, -9); c.lineTo(14, -6); c.lineTo(26, -1); c.lineTo(28, 1); c.lineTo(16, 6); c.lineTo(-6, 9); c.closePath();
+            const sg = c.createLinearGradient(-6, 0, 28, 0);
+            sg.addColorStop(0, hot > 0.3 ? '#3a1a08' : '#1a110a'); sg.addColorStop(1, '#0a0806');
+            c.fillStyle = sg; c.fill();
+            c.globalCompositeOperation = 'lighter';
+            c.strokeStyle = rgbaW('#ff7a20', 0.5 + hot * 0.5); c.lineWidth = 1.4; c.lineCap = 'round';
+            c.beginPath(); c.moveTo(-4, 0); c.lineTo(6, -2); c.lineTo(14, 1); c.lineTo(22, 0); c.stroke();
+            c.strokeStyle = rgbaW('#ffe0a0', hot); c.lineWidth = 0.7; c.stroke();
+            glowAtW(2, 0, 14 + hot * 16, '#ff7a20', 0.3 + hot * 0.6);
+            const pulse = 0.6 + 0.4 * Math.sin(this.time * 14 + wSeed);
+            glowAtW(0, 0, 22, '#6fd3ff', (0.2 + hot * 0.5) * pulse);
+            glowAtW(0, 0, 8, '#ffffff', hot * pulse);
+            if (Math.random() < 0.4 + hot * 0.5) {
+              c.beginPath(); let ax = 0, ay = 0; c.moveTo(ax, ay);
+              const a = rand(0, TAU);
+              for (let k = 0; k < 4; k++) { ax += Math.cos(a) * 5 + rand(-4, 4); ay += Math.sin(a) * 5 + rand(-4, 4); c.lineTo(ax, ay); }
+              c.strokeStyle = rgbaW('#6fd3ff', 0.8); c.lineWidth = 2; c.stroke();
+              c.strokeStyle = '#ffffff'; c.lineWidth = 0.8; c.stroke();
+            }
+            c.globalCompositeOperation = 'source-over';
+            c.restore();
+          }
+          if (!skipWheelProj) this.drawProj(c, it.type === 'old' ? 'old' : it.w || 'pistol', len, it.age,
             snowball || firework || yoyo || keris || diamond || bazooka || gauntlet || magnet || it.w === 'honey' || it.w === 'banana'
               || it.w === 'bee' || it.w === 'moonbeam' || it.w === 'plasma' || it.w === 'blackhole'
               || it.w === 'nail');
@@ -4327,19 +4755,25 @@ export class Game {
           break;
         }
         case 'text': {
-          const t = 1 - a;
-          const pop = t < 0.15 ? 0.5 + (t / 0.15) * 0.7 : 1.2 - Math.min(0.2, (t - 0.15) * 1.5);
+          const k = a;
+          const pop = k < 0.15 ? 1.6 - (k / 0.15) * 0.6 : 1;
+          const al = k > 0.7 ? 1 - (k - 0.7) / 0.3 : 1;
           c.save();
           c.translate(p.x, p.y);
+          c.rotate(p.rot);
           c.scale(pop, pop);
-          c.globalAlpha = Math.min(1, a * 2.5);
-          c.font = `${p.size}px 'Russo One', sans-serif`;
+          c.globalAlpha = al;
+          c.font = `italic 900 ${p.size}px Impact, 'Arial Black', sans-serif`;
           c.textAlign = 'center';
           c.textBaseline = 'middle';
-          c.lineWidth = 6;
-          c.strokeStyle = 'rgba(0,0,0,0.7)';
+          c.lineJoin = 'round';
+          c.strokeStyle = '#1a0a00'; c.lineWidth = p.size * 0.28;
           c.strokeText(p.text || '', 0, 0);
-          c.fillStyle = p.color;
+          c.strokeStyle = '#ffffff'; c.lineWidth = p.size * 0.14;
+          c.strokeText(p.text || '', 0, 0);
+          const tg = c.createLinearGradient(0, -p.size / 2, 0, p.size / 2);
+          tg.addColorStop(0, '#fff6b0'); tg.addColorStop(0.5, p.color); tg.addColorStop(1, '#ff7a00');
+          c.fillStyle = tg;
           c.fillText(p.text || '', 0, 0);
           c.restore();
           break;

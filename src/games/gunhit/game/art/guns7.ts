@@ -1,6 +1,7 @@
 import type { WeaponId } from '../weapons';
 import { TAU, lin, steel, rr, guard, glow, radial, star, gunState } from './kit';
 import { drawModernGrip } from './gripSystem';
+import { xenoHeadGun, doraCannonGun, predCasterGun } from './guns8';
 
 type C = CanvasRenderingContext2D;
 
@@ -1494,6 +1495,9 @@ export function drawGunExtra4(c: C, id: WeaponId, cx: number, y0: number, t: num
     case 'cryo_blaster': cryoBlaster(c, cx, y0, t); break;
     case 'hyperdrive': hyperdrive(c, cx, y0, t); break;
     case 'quantum_destabilizer': quantumDestabilizer(c, cx, y0, t); break;
+    case 'xeno': xenoHeadGun(c, cx, y0, t); break;
+    case 'dora': doraCannonGun(c, cx, y0, t); break;
+    case 'pred': predCasterGun(c, cx, y0, t, gunState.charge || 0, gunState.servo || 0, gunState.heat || 0); break;
     default: {
       void loneStar; void plasmaRepeater; void warpDisruptor; void deflectorShield;
       break;
@@ -1510,4 +1514,7 @@ export const FLASH4: Partial<Record<WeaponId, Flash4>> = {
   cryo_blaster: { k: 'energy', rgb: '103,232,249', r: 44 },
   hyperdrive: { k: 'energy', rgb: '96,165,250', r: 48 },
   quantum_destabilizer: { k: 'energy', rgb: '168,85,247', r: 40 },
+  xeno: { k: 'energy', rgb: '182,255,26', r: 55 },
+  dora: { k: 'energy', rgb: '255,255,255', r: 60 },
+  pred: { k: 'energy', rgb: '111,211,255', r: 65 },
 };

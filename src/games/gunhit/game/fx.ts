@@ -11,14 +11,15 @@ export type PKind =
   | 'spark' | 'chip' | 'smoke' | 'shell' | 'text' | 'ring' | 'glow' | 'bolt'
   | 'star' | 'shard' | 'shock' | 'drop' | 'streak' | 'petal'
   | 'snowflake' | 'snowChunk' | 'snowDust' | 'waterDrop' | 'waterSplash' | 'honeyDrop' | 'honeySplash'
-  | 'bananaDrop' | 'bananaSplash' | 'slap' | 'pencilShaving' | 'paintSplat' | 'prism' | 'feather';
+  | 'bananaDrop' | 'bananaSplash' | 'slap' | 'pencilShaving' | 'paintSplat' | 'prism' | 'feather'
+  | 'ringE' | 'puff' | 'wind' | 'ash' | 'bubble';
 
 export interface Particle {
   tx?: number; ty?: number;
   x: number; y: number; vx: number; vy: number;
   life: number; max: number; size: number; color: string;
   kind: PKind; rot: number; vr: number; g: number; text?: string;
-  drag?: number; extra?: number;
+  drag?: number; extra?: number; grow?: number;
 }
 
 export interface FxSink {
@@ -146,6 +147,11 @@ export const FX: Record<WeaponId, FxProfile> = {
   cryo_blaster: P('ice', 'frost', 'energy', '103,232,249', 190, { hitstop: 0.04, kick: 3, ghost: 3, tint: 0.15 }),
   hyperdrive: P('energy', 'glow', 'energy', '96,165,250', 220, { hitstop: 0.04, kick: 4, ghost: 4, speedLines: true, tint: 0.18, decalColors: ['#1e3a8a', '#60a5fa'] }),
   quantum_destabilizer: P('void', 'glow', 'energy', '168,85,247', 200, { hitstop: 0.05, kick: 4, ghost: 5, tint: 0.2, decalColors: ['#0f0a2e', '#a855f7'] }),
+
+  // ---------------------------------------------------------------- ELEMENTAL ARSENAL (slide 7)
+  xeno: P('energy', 'splash', 'energy', '182,255,26', 180, { hitstop: 0.03, kick: 4, ghost: 3, tint: 0.15, decalColors: ['#3f8a00', '#b6ff1a'] }),
+  dora: P('sonic', 'dent', 'energy', '255,255,255', 200, { hitstop: 0.04, kick: 5, ghost: 2, tint: 0.1, speedLines: true }),
+  pred: P('energy', 'scorch', 'energy', '111,211,255', 220, { hitstop: 0.05, kick: 6, ghost: 4, tint: 0.2, speedLines: true, decalColors: ['#1a5cff', '#6fd3ff'] }),
 };
 
 // ---------------------------------------------------------------- helpers
@@ -1251,6 +1257,72 @@ export function drawFxParticle(c: CanvasRenderingContext2D, p: Particle, time: n
       c.lineTo(p.x - p.vx * 0.04, p.y - p.vy * 0.04);
       c.stroke();
       c.restore();
+      break;
+    }
+    case 'ringE': {
+      c.strokeStyle = p.color;
+      c.globalAlpha = a * 0.9;
+      c.lineWidth = 1 + a * 2.5;
+      c.beginPath();
+      c.ellipse(p.x, p.y, p.size * (0.3 + t * 0.7), p.size * 0.38 * (0.3 + t * 0.7), 0, 0, TAU);
+      c.stroke();
+      c.globalAlpha = 1;
+      break;
+    }
+    case 'puff': {
+      const fade = Math.min(1, t * 5) * Math.min(1, a * 2.5);
+      c.save();
+      c.translate(p.x, p.y);
+      c.rotate(p.rot);
+      c.globalAlpha = fade;
+      const s = p.size;
+      const lobes = [[0, 0, 1], [-0.55, 0.15, 0.7], [0.55, 0.1, 0.72], [0.1, -0.5, 0.65], [-0.2, 0.45, 0.6]];
+      c.fillStyle = 'rgba(120,150,190,0.45)';
+      for (const [lx, ly, lr] of lobes) { c.beginPath(); c.arc(lx * s + 3, ly * s + 4, lr * s, 0, TAU); c.fill(); }
+      c.fillStyle = p.color;
+      for (const [lx, ly, lr] of lobes) { c.beginPath(); c.arc(lx * s, ly * s, lr * s, 0, TAU); c.fill(); }
+      c.fillStyle = 'rgba(255,255,255,0.9)';
+      c.beginPath(); c.arc(-s * 0.25, -s * 0.3, s * 0.4, 0, TAU); c.fill();
+      c.restore();
+      c.globalAlpha = 1;
+      break;
+    }
+    case 'wind': {
+      const sp = Math.hypot(p.vx, p.vy) || 1;
+      const ux = p.vx / sp, uy = p.vy / sp;
+      const len = p.size * (0.6 + a);
+      c.strokeStyle = p.color;
+      c.globalAlpha = a * 0.8;
+      c.lineWidth = 1.6;
+      c.lineCap = 'round';
+      c.beginPath();
+      c.moveTo(p.x, p.y);
+      c.quadraticCurveTo(p.x - ux * len * 0.5 - uy * 6, p.y - uy * len * 0.5 + ux * 6, p.x - ux * len, p.y - uy * len);
+      c.stroke();
+      c.globalAlpha = 1;
+      break;
+    }
+    case 'ash': {
+      c.globalAlpha = a * 0.8;
+      c.fillStyle = p.color;
+      c.beginPath();
+      c.arc(p.x, p.y, p.size * 0.5, 0, TAU);
+      c.fill();
+      c.globalAlpha = 1;
+      break;
+    }
+    case 'bubble': {
+      c.globalAlpha = a * 0.7;
+      c.strokeStyle = p.color;
+      c.lineWidth = 1.2;
+      c.beginPath();
+      c.arc(p.x, p.y, p.size, 0, TAU);
+      c.stroke();
+      c.fillStyle = p.color;
+      c.beginPath();
+      c.arc(p.x - p.size * 0.3, p.y - p.size * 0.3, p.size * 0.3, 0, TAU);
+      c.fill();
+      c.globalAlpha = 1;
       break;
     }
     default:
