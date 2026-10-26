@@ -129,9 +129,20 @@ export class Particles {
 
   draw(ctx: Ctx, back: boolean) {
     const L = this.list;
+    // Droplets and sparks are the only kinds a rapid-fire gun spawns by the
+    // hundred (Paintball throws ~66 droplets per hit at eight hits a second),
+    // and drawing them one by one costs a `save`/`rotate`/`fill`/`stroke` each.
+    // They are batched into one path per colour + alpha step first, then the
+    // remaining kinds are drawn in their original order.
+    if (!back) {
+      drawBatchedDrops(ctx, L);
+      drawBatchedSparks(ctx, L);
+    }
     for (let i = 0; i < L.length; i++) {
       const p = L[i];
-      if (p.back === back && !p.add) drawParticle(ctx, p);
+      if (p.back !== back || p.add) continue;
+      if (!back && (p.k === K.DROP || p.k === K.SPARK)) continue; // already batched
+      drawParticle(ctx, p);
     }
     ctx.globalCompositeOperation = 'lighter';
     for (let i = 0; i < L.length; i++) {
@@ -141,6 +152,167 @@ export class Particles {
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
   }
+}
+
+/**
+ * Batched droplet layer.
+ *
+ * `drawParticle`'s K.DROP case draws each droplet with its own translate /
+ * rotate / two fills / a stroke, so a Paintball burst (66 droplets a hit, ~500
+ * live) asked the canvas for ~1000 fills a second from this layer alone. Because
+ * `ellipse()` takes a rotation argument, the whole layer collapses into one path
+ * per colour + alpha step: body + outline per bucket, and the white gloss in a
+ * second path. Alpha is bucketed in 8 steps (invisible on a 2-3px speck) and the
+ * gloss is skipped below ~1.7px, where it was always a sub-pixel dot.
+ *
+ * The bucket map and arrays are module-level scratch reused every frame: the
+ * first version of this batching in the slide-1 renderer allocated a Map and an
+ * array per colour per frame, and that allocation showed up as GC time — the
+ * exact cost the batching exists to remove.
+ */
+const DROP_ALPHA_STEPS = 8;
+const GLOSS_MIN_RADIUS = 0.6;
+
+interface DropBatch {
+  color: string;
+  data: string;
+  alpha: number;
+  /** Flat `x, y, rx, ry, rot` per droplet. */
+  body: number[];
+  /** Flat `x, y, r` per gloss dot. */
+  gloss: number[];
+  frame: number;
+}
+
+const dropBatches = new Map<string, DropBatch>();
+const dropActive: DropBatch[] = [];
+let dropFrame = 0;
+
+function drawBatchedDrops(ctx: Ctx, L: Particle[]) {
+  dropFrame++;
+  let used = 0;
+  for (let i = 0; i < L.length; i++) {
+    const p = L[i];
+    if (p.k !== K.DROP || p.add || p.back === true) continue;
+    const t = p.life / p.max; // 1 → 0
+    const a = p.alpha * Math.min(1, t * 3);
+    if (a <= 0.02) continue;
+    const step = Math.max(1, Math.round(a * DROP_ALPHA_STEPS)) / DROP_ALPHA_STEPS;
+    const data = (p.data as string | null) || '20,70,140';
+    const key = `${p.color}|${data}|${step}`;
+    let b = dropBatches.get(key);
+    if (!b) {
+      if (dropBatches.size > 512) dropBatches.clear();
+      b = { color: p.color, data, alpha: step, body: [], gloss: [], frame: 0 };
+      dropBatches.set(key, b);
+    }
+    if (b.frame !== dropFrame) {
+      b.frame = dropFrame;
+      b.body.length = 0;
+      b.gloss.length = 0;
+      dropActive[used++] = b;
+    }
+    const sp = Math.hypot(p.vx, p.vy);
+    const st = 1 + Math.min(sp / 260, 2.2);
+    const ang = Math.atan2(p.vy, p.vx);
+    b.body.push(p.x, p.y, p.size * st, p.size, ang);
+    const gr = p.size * 0.36;
+    if (gr >= GLOSS_MIN_RADIUS) {
+      const dx = p.size * st * 0.3;
+      const dy = -p.size * 0.35;
+      const cos = Math.cos(ang);
+      const sin = Math.sin(ang);
+      b.gloss.push(p.x + dx * cos - dy * sin, p.y + dx * sin + dy * cos, gr);
+    }
+  }
+
+  for (let i = 0; i < used; i++) {
+    const b = dropActive[i];
+    const body = b.body;
+    if (!body.length) continue;
+    ctx.beginPath();
+    for (let k = 0; k < body.length; k += 5) {
+      ctx.ellipse(body[k], body[k + 1], body[k + 2], body[k + 3], body[k + 4], 0, TAU);
+    }
+    ctx.fillStyle = `rgba(${b.color},${b.alpha * 0.72})`;
+    ctx.fill();
+    ctx.strokeStyle = `rgba(${b.data},${b.alpha * 0.35})`;
+    ctx.lineWidth = 0.6;
+    ctx.stroke();
+    const gloss = b.gloss;
+    if (gloss.length) {
+      ctx.beginPath();
+      for (let k = 0; k < gloss.length; k += 3) {
+        ctx.arc(gloss[k], gloss[k + 1], gloss[k + 2], 0, TAU);
+      }
+      ctx.fillStyle = `rgba(255,255,255,${b.alpha * 0.9})`;
+      ctx.fill();
+    }
+  }
+  dropActive.length = used;
+}
+
+/**
+ * Batched spark layer: every spark is a short round-capped line with its own
+ * colour, alpha and width. One path per colour + alpha step + half-pixel width
+ * turns hundreds of strokes into a handful (the freeze-ray and keris guns were
+ * asking for ~70k strokes a second from sparks alone).
+ */
+const SPARK_ALPHA_STEPS = 8;
+
+interface SparkBatch {
+  color: string;
+  alpha: number;
+  width: number;
+  seg: number[];
+  frame: number;
+}
+
+const sparkBatches = new Map<string, SparkBatch>();
+const sparkActive: SparkBatch[] = [];
+let sparkFrame = 0;
+
+function drawBatchedSparks(ctx: Ctx, L: Particle[]) {
+  sparkFrame++;
+  let used = 0;
+  for (let i = 0; i < L.length; i++) {
+    const p = L[i];
+    if (p.k !== K.SPARK || p.add || p.back === true) continue;
+    const t = p.life / p.max;
+    const a = p.alpha * Math.min(1, t * 1.8);
+    if (a <= 0.02) continue;
+    const step = Math.max(1, Math.round(a * SPARK_ALPHA_STEPS)) / SPARK_ALPHA_STEPS;
+    const width = Math.max(0.5, Math.round(p.size * (0.35 + 0.65 * t) * 2) / 2);
+    const key = `${p.color}|${step}|${width}`;
+    let b = sparkBatches.get(key);
+    if (!b) {
+      if (sparkBatches.size > 512) sparkBatches.clear();
+      b = { color: p.color, alpha: step, width, seg: [], frame: 0 };
+      sparkBatches.set(key, b);
+    }
+    if (b.frame !== sparkFrame) {
+      b.frame = sparkFrame;
+      b.seg.length = 0;
+      sparkActive[used++] = b;
+    }
+    b.seg.push(p.x, p.y, p.x - p.vx * p.len, p.y - p.vy * p.len);
+  }
+
+  ctx.lineCap = 'round';
+  for (let i = 0; i < used; i++) {
+    const b = sparkActive[i];
+    const seg = b.seg;
+    if (!seg.length) continue;
+    ctx.beginPath();
+    for (let k = 0; k < seg.length; k += 4) {
+      ctx.moveTo(seg[k], seg[k + 1]);
+      ctx.lineTo(seg[k + 2], seg[k + 3]);
+    }
+    ctx.strokeStyle = `rgba(${b.color},${b.alpha})`;
+    ctx.lineWidth = b.width;
+    ctx.stroke();
+  }
+  sparkActive.length = used;
 }
 
 const FIRE_PAL = ['255,255,238', '255,238,160', '255,208,80', '255,158,34', '244,104,18', '196,60,10', '120,32,8', '64,16,6'];
