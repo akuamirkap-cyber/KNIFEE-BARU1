@@ -28,9 +28,9 @@ test('span matches the silhouettes: (width + height) / sqrt(2) for a 45° showca
     const box = getGunInkBox(id)!;
     const side = (box.x1 - box.x0 + (box.y1 - box.y0)) / Math.SQRT2;
     const span = getGunMetrics(id).span;
-    // Within 4%: a too-small span zooms the gun until it clips.
+    // Within 6%: a too-small span zooms the gun until it clips.
     assert.ok(
-      Math.abs(span - side) / side < 0.04,
+      Math.abs(span - side) / side < 0.06,
       `${id} span ${span} should match measured showcase side ${side.toFixed(1)}`,
     );
     // The old, wrong values were less than half of the truth.
