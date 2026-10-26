@@ -15,22 +15,180 @@ const pick = <T,>(arr: T[]) => arr[Math.floor(Math.random() * arr.length)];
  * whole rings, bolts, sparks and smoke plumes from the elemental weapons were
  * invisible. Normalising here restores them everywhere.
  */
-export function cssColor(color: string, alpha = 1): string {
-  if (!color) return `rgba(255,255,255,${alpha})`;
+/**
+ * Parsed `r,g,b` triplet per colour string.
+ *
+ * `cssColor` runs once per drawn particle per frame — on a paintball burst that
+ * is a thousand regex matches a second, and the profiler showed it as the
+ * single biggest JS cost of a frame. The set of colours in play is tiny, so the
+ * triplet is parsed once and reused; only the alpha has to be re-formatted.
+ */
+const tripletCache = new Map<string, string | null>();
+/** Colour strings that already are opaque CSS, keyed by the string itself. */
+const plainCache = new Map<string, string>();
+
+function parseTriplet(color: string): string | null {
+  const hit = tripletCache.get(color);
+  if (hit !== undefined) return hit;
+  let out: string | null = null;
   if (color[0] === '#') {
     let hex = color.slice(1);
     if (hex.length === 3) hex = hex.split('').map((ch) => ch + ch).join('');
-    if (hex.length !== 6) return color;
-    const n = parseInt(hex, 16);
-    return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
+    if (hex.length === 6) {
+      const n = parseInt(hex, 16);
+      out = `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`;
+    }
+  } else {
+    const triplet = color.match(/^\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*$/);
+    if (triplet) out = `${+triplet[1]},${+triplet[2]},${+triplet[3]}`;
+    else {
+      const open = color.match(/^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*$/);
+      if (open) out = `${+open[1]},${+open[2]},${+open[3]}`;
+      else {
+        const full = color.match(/^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*(?:,\s*[\d.]+\s*)?\)$/);
+        if (full) out = `${+full[1]},${+full[2]},${+full[3]}`;
+      }
+    }
   }
-  const triplet = color.match(/^\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*$/);
-  if (triplet) return `rgba(${+triplet[1]},${+triplet[2]},${+triplet[3]},${alpha})`;
-  const open = color.match(/^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*$/);
-  if (open) return `rgba(${+open[1]},${+open[2]},${+open[3]},${alpha})`;
-  const full = color.match(/^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*(?:,\s*[\d.]+\s*)?\)$/);
-  if (full) return `rgba(${+full[1]},${+full[2]},${+full[3]},${alpha})`;
-  return color;
+  if (tripletCache.size > 4096) tripletCache.clear();
+  tripletCache.set(color, out);
+  return out;
+}
+
+export function cssColor(color: string, alpha = 1): string {
+  if (!color) return `rgba(255,255,255,${alpha})`;
+  if (alpha === 1) {
+    const plain = plainCache.get(color);
+    if (plain) return plain;
+    const trip = parseTriplet(color);
+    const out = trip === null ? color : `rgba(${trip},1)`;
+    if (plainCache.size > 4096) plainCache.clear();
+    plainCache.set(color, out);
+    return out;
+  }
+  const trip = parseTriplet(color);
+  return trip === null ? color : `rgba(${trip},${alpha})`;
+}
+
+/**
+ * All `drop` particles of the frame, batched into one path per colour + alpha
+ * step.
+ *
+ * A single paintball hit throws 22 droplets and the gun fires eight times a
+ * second, so the droplet layer was ~900 separate `fill()` calls every frame.
+ * Ellipses take a rotation argument, so they batch perfectly: a screen full of
+ * droplets now costs a handful of fills, and the shape, colour, angle, gloss and
+ * fade are unchanged (the alpha is bucketed in 8 steps, well below what an eye
+ * can resolve on a 3-6px speck). Droplet count itself was left alone — the gun
+ * still paints exactly as thick as it did.
+ *
+ * The buckets are module-level scratch reused frame to frame; the first version
+ * built a `Map` and an array per colour per frame, and that allocation showed up
+ * as GC time in the profile — the very thing this batching exists to avoid.
+ */
+const dropBuckets = new Map<string, Particle[][]>();
+const dropActive: string[] = [];
+
+export function drawDropParticles(c: CanvasRenderingContext2D, particles: readonly Particle[]): void {
+  // Wipe whatever the previous frame left in the shared buckets.
+  for (const color of dropActive) {
+    const byStep = dropBuckets.get(color)!;
+    for (const list of byStep) list.length = 0;
+  }
+  dropActive.length = 0;
+
+  let any = false;
+  for (const p of particles) {
+    if (p.kind !== 'drop') continue;
+    const a = Math.max(0, p.life / p.max);
+    if (a < 0.04) continue;
+    const step = Math.min(7, Math.max(0, Math.round(Math.min(1, a * 2) * 8) - 1));
+    let byStep = dropBuckets.get(p.color);
+    if (!byStep) {
+      byStep = [[], [], [], [], [], [], [], []];
+      dropBuckets.set(p.color, byStep);
+    }
+    byStep[step].push(p);
+    any = true;
+  }
+  if (!any) return;
+
+  c.save();
+  for (const [color, byStep] of dropBuckets) {
+    let used = false;
+    for (let step = 0; step < 8; step++) {
+      const list = byStep[step];
+      if (!list.length) continue;
+      used = true;
+      c.globalAlpha = (step + 1) / 8;
+      c.fillStyle = cssColor(color);
+      c.beginPath();
+      for (const p of list) {
+        c.ellipse(p.x, p.y, p.size * dropStretch(p), p.size * 0.7, Math.atan2(p.vy, p.vx), 0, TAU);
+      }
+      c.fill();
+      // Gloss: sub-pixel below ~3.4px, so it is batched only where it shows.
+      let gloss = false;
+      for (const p of list) {
+        if (p.size < 3.4) continue;
+        if (!gloss) {
+          gloss = true;
+          c.fillStyle = 'rgba(255,255,255,0.7)';
+          c.beginPath();
+        }
+        const ang = Math.atan2(p.vy, p.vx);
+        const hx = 0.3 * p.size;
+        const hy = -0.2 * p.size;
+        c.arc(p.x + hx * Math.cos(ang) - hy * Math.sin(ang), p.y + hx * Math.sin(ang) + hy * Math.cos(ang), p.size * 0.22, 0, TAU);
+      }
+      if (gloss) c.fill();
+    }
+    if (used) dropActive.push(color);
+  }
+  c.restore();
+}
+
+/** How much a moving droplet is stretched along its direction of travel. */
+function dropStretch(p: Particle): number {
+  return Math.min(2.5, Math.hypot(p.vx, p.vy) / 250 + 1);
+}
+
+/**
+ * Smoke plumes, drawn from a radial gradient cached per context + colour.
+ *
+ * The plume used to build a fresh `createRadialGradient` with three colour
+ * stops for every particle on every frame — the biggest source of gradient
+ * allocations in the whole game (a snowball or freeze burst made 400 of them a
+ * frame). One unit-radius gradient per colour does the same job: the transform
+ * places and scales it, and `globalAlpha` carries the fade-in/out.
+ */
+const smokeGradients = new WeakMap<CanvasRenderingContext2D, Map<string, CanvasGradient>>();
+
+export function drawSmokeParticle(c: CanvasRenderingContext2D, p: Particle, alpha: number): void {
+  const r = p.size * (1.6 - alpha * 0.6);
+  if (r <= 0.2 || alpha <= 0.01) return;
+  let byColor = smokeGradients.get(c);
+  if (!byColor) {
+    byColor = new Map();
+    smokeGradients.set(c, byColor);
+  }
+  let g = byColor.get(p.color);
+  if (!g) {
+    g = c.createRadialGradient(0, 0, 0, 0, 0, 1);
+    g.addColorStop(0, cssColor(p.color, 0.45));
+    g.addColorStop(0.55, cssColor(p.color, 0.2));
+    g.addColorStop(1, cssColor(p.color, 0));
+    byColor.set(p.color, g);
+  }
+  c.save();
+  c.globalAlpha = Math.min(1, alpha);
+  c.translate(p.x, p.y);
+  c.scale(r, r);
+  c.fillStyle = g;
+  c.beginPath();
+  c.arc(0, 0, 1, 0, TAU);
+  c.fill();
+  c.restore();
 }
 
 // ---------------------------------------------------------------- particles
@@ -1280,18 +1438,24 @@ export function drawFxParticle(c: CanvasRenderingContext2D, p: Particle, time: n
     case 'drop': {
       const ang = Math.atan2(p.vy, p.vx);
       const sp = Math.min(2.5, Math.hypot(p.vx, p.vy) / 250 + 1);
+      const r = p.size;
       c.save();
       c.globalAlpha = Math.min(1, a * 2);
       c.translate(p.x, p.y);
       c.rotate(ang);
       c.fillStyle = cssColor(p.color);
       c.beginPath();
-      c.ellipse(0, 0, p.size * sp, p.size * 0.7, 0, 0, TAU);
+      c.ellipse(0, 0, r * sp, r * 0.7, 0, 0, TAU);
       c.fill();
-      c.fillStyle = 'rgba(255,255,255,0.7)';
-      c.beginPath();
-      c.arc(p.size * 0.3, -p.size * 0.2, p.size * 0.22, 0, TAU);
-      c.fill();
+      // The glossy highlight is a sub-pixel speck below ~3.4px: drawing it feeds
+      // 2 fills per droplet for nothing. Paintball fires 8 shots a second, so
+      // that is a real slice of the frame budget.
+      if (r >= 3.4) {
+        c.fillStyle = 'rgba(255,255,255,0.7)';
+        c.beginPath();
+        c.arc(r * 0.3, -r * 0.2, r * 0.22, 0, TAU);
+        c.fill();
+      }
       c.restore();
       break;
     }

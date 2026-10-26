@@ -130,6 +130,18 @@ export default function App({ onExit }: { onExit?: () => void }) {
   const [questState, setQuestState] = useState<QuestState>(getInitialQuests);
   const questStateRef = useRef(questState);
   questStateRef.current = questState;
+  /**
+   * Shots are counted in a ref and flushed at most once a second.
+   *
+   * `onShotFired` used to call `saveQuests` on *every* shot — a React state
+   * update plus a synchronous `localStorage.setItem` per bullet. Rapid-fire guns
+   * made that brutal: the paintball gun fires 8.3 shots a second, so holding it
+   * meant eight full re-renders and eight disk writes per second, which is what
+   * "ngelag pas nembak" was. The quest panel only needs a total, so the count is
+   * batched and written when the burst pauses.
+   */
+  const pendingShotsRef = useRef(0);
+  const shotFlushRef = useRef<number | undefined>(undefined);
 
   const [muted, setMutedState] = useState(false);
   const [menuTheme, setMenuTheme] = useState<MenuEnvironmentTheme>(() => {
@@ -363,8 +375,16 @@ export default function App({ onExit }: { onExit?: () => void }) {
         });
       },
       onShotFired: (count) => {
-        const current = questStateRef.current;
-        saveQuests({ ...current, shotsFired: current.shotsFired + count });
+        pendingShotsRef.current += count;
+        if (shotFlushRef.current !== undefined) return;
+        shotFlushRef.current = window.setTimeout(() => {
+          shotFlushRef.current = undefined;
+          const shots = pendingShotsRef.current;
+          if (shots <= 0) return;
+          pendingShotsRef.current = 0;
+          const current = questStateRef.current;
+          saveQuests({ ...current, shotsFired: current.shotsFired + shots });
+        }, 1000);
       },
       onBossDefeated: (bossName, level, coinsEarned, bossType) => {
         const totalXpBefore = num(LS.playerXp);
@@ -447,6 +467,20 @@ export default function App({ onExit }: { onExit?: () => void }) {
     return () => {
       g.destroy();
       gameRef.current = null;
+      // Bank whatever shots are still pending in the batch, without setState.
+      if (shotFlushRef.current !== undefined) {
+        window.clearTimeout(shotFlushRef.current);
+        shotFlushRef.current = undefined;
+      }
+      if (pendingShotsRef.current > 0) {
+        const merged = {
+          ...questStateRef.current,
+          shotsFired: questStateRef.current.shotsFired + pendingShotsRef.current,
+        };
+        pendingShotsRef.current = 0;
+        questStateRef.current = merged;
+        localStorage.setItem(LS.quests, JSON.stringify(merged));
+      }
     };
   }, []);
 

@@ -36,7 +36,7 @@ import { sfx4 } from './sfx4';
 import { sfx6 } from './sfx6';
 import { sfx5 } from './sfx5';
 import { gunState } from './art/kit';
-import { FX, spawnImpact, spawnMuzzle, spawnSpeedLines, drawFxParticle, cssColor, type Particle, type FxSink } from './fx';
+import { FX, spawnImpact, spawnMuzzle, spawnSpeedLines, drawFxParticle, drawSmokeParticle, drawDropParticles, cssColor, type Particle, type FxSink } from './fx';
 import { drawPreciseWeaponDecal } from './art/decalSystem';
 import { drawGlow } from './art/glowSprite';
 import { AcidFluid, type AcidStuckBlob } from './acidFluid';
@@ -2550,6 +2550,10 @@ export class Game {
     }
     if (tint) {
       const hp0 = this.worldPos(local, R);
+      // The droplet layer is batched into one path per colour now, so the burst
+      // stays exactly as lush as it was: 22 droplets a hit used to mean ~900
+      // fills a frame at 8 shots a second, and it is a handful of fills however
+      // many land.
       for (let i = 0; i < 22; i++) {
         const a = rand(0, TAU);
         const v = rand(120, 520);
@@ -5634,9 +5638,16 @@ export class Game {
       drawBonusCoin(c, coin.x, coin.y, coin.r * scale, this.time, coin.phase, true);
     }
 
+    // Droplets are one batched path per colour; the loop below skips them.
+    drawDropParticles(c, this.particles);
+
     // particles
     for (const p of this.particles) {
       const a = Math.max(0, p.life / p.max);
+      // Below ~4% alpha nothing is visible on a phone screen, but each one still
+      // costs a fill. Skipping them keeps a paintball burst from paying for a
+      // hundred invisible droplets.
+      if ((a < 0.04 && p.kind !== 'text') || p.kind === 'drop') continue;
       switch (p.kind) {
         case 'spark':
           c.strokeStyle = cssColor(p.color);
@@ -5657,20 +5668,13 @@ export class Game {
           c.fillRect(-p.size / 2, -p.size / 3, p.size, p.size * 0.66);
           c.restore();
           break;
-        case 'smoke': {
+        case 'smoke':
           // Soft plumes: a filled arc left a hard-edged disc, while slide 7
-          // draws smoke through its glow sprite. Gradient falloff matches it.
-          const r = p.size * (1.6 - a * 0.6);
-          const sg = c.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
-          sg.addColorStop(0, cssColor(p.color, a * 0.45));
-          sg.addColorStop(0.55, cssColor(p.color, a * 0.2));
-          sg.addColorStop(1, cssColor(p.color, 0));
-          c.fillStyle = sg;
-          c.beginPath();
-          c.arc(p.x, p.y, r, 0, TAU);
-          c.fill();
+          // draws smoke through its glow sprite. Gradient falloff matches it,
+          // and the gradient is cached per colour instead of being rebuilt for
+          // every plume on every frame.
+          drawSmokeParticle(c, p, a);
           break;
-        }
         case 'shell':
           c.save();
           c.translate(p.x, p.y);
