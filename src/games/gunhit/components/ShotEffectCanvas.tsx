@@ -11,7 +11,9 @@ import type { GunEffect } from '../game/art/gunVariants';
 import { drawSetOneShotShell } from '../game/setOneFx';
 import { setOneIdFor } from '../game/setOneArt';
 import { setSevenIdFor } from '../game/setSevenArt';
+import { setElevenIdFor } from '../game/setElevenArt';
 import { drawSetSevenShotShell } from '../game/setSevenFx';
+import { drawSetElevenShotShell } from '../game/setElevenFx';
 import { setNineIdFor } from '../game/setNineArt';
 import { drawSetNineShotShell } from '../game/setNineFx';
 
@@ -72,6 +74,14 @@ export default function ShotEffectCanvas({ weapon, effect }: { weapon: Weapon; e
           const setNineId = effect === 'set9' ? setNineIdFor(weapon.id) : null;
           if (setNineId) {
             drawSetNineShotShell(c, setNineId, 0.06, 26);
+            c.restore();
+            if (active) frame = requestAnimationFrame(paint);
+            return;
+          }
+          // Slide-11 rounds and beams are painted by slide 11's own renderer.
+          const setElevenId = effect === 'set11' ? setElevenIdFor(weapon.id) : null;
+          if (setElevenId) {
+            drawSetElevenShotShell(c, setElevenId, 0.06, 26);
             c.restore();
             if (active) frame = requestAnimationFrame(paint);
             return;

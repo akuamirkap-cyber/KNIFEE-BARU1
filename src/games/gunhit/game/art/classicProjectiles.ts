@@ -116,6 +116,17 @@ export function drawClassicProjectile(c: C, kind: VariantWeapon, len: number, t:
     case 'identity_disc':
     case 'proton_pack':
     case 'heat_ray':
+    case 'xeno':
+    case 'mega_buster':
+    case 'harmonic_disruptor':
+    case 'absolute_zero':
+    case 'helios_flare':
+    case 'chrono_rifle':
+    case 'orbital_beacon':
+    case 'helix_pulsar':
+    case 'singularity':
+    case 'prism_lance':
+    case 'nano_swarm':
       return;
     default: { const _never: never = kind; return _never; }
   }

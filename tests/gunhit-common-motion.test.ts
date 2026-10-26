@@ -8,6 +8,11 @@ import { getGunVariantOptions, isSetOneDesignWeapon, isSetSevenDesignWeapon } fr
 import { gunState, lin, vlin } from '../src/games/gunhit/game/art/kit';
 import { drawChronoGrip, drawElectroGrip, drawFishGrip, drawFrostGrip, drawFreezeGrip, drawPortalGrip, drawVoidGrip, drawWaterGrip } from '../src/games/gunhit/game/art/gripSystem';
 
+// Some guns now default to slide-11 art, which bakes glow sprites offscreen.
+installCanvasShim();
+import { installCanvasShim } from './supportCanvas';
+
+
 // Check the geometry passed to Canvas, not just whether the draw function was
 // called. A bad dimension/color can otherwise blank the whole Arsenal slide.
 function canvasArt(events: string[]): CanvasRenderingContext2D {

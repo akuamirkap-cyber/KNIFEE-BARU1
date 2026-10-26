@@ -11,7 +11,7 @@ import { drawGun } from '../src/games/gunhit/game/art/guns';
 import { getGunMetrics } from '../src/games/gunhit/game/art/metrics';
 import {
   EDITABLE_WEAPONS, getGunEffect, getGunEffectOptions, getGunVariant, getGunVariantOptions,
-  hasSlide9Update, setGunEffect, setGunVariant,
+  hasSlide9Update, hasSlide11Update, setGunEffect, setGunVariant,
 } from '../src/games/gunhit/game/art/gunVariants';
 import { Game, makeLevel } from '../src/games/gunhit/game/Game';
 import { WEAPONS, getWeapon } from '../src/games/gunhit/game/weapons';
@@ -129,34 +129,42 @@ test('every slide-9 gun has measured preview metrics and real artwork', () => {
   }
 });
 
-test('slide 9 is the newest design and shot of its 17 guns, and older cards stay pickable', () => {
+test('slide 9 keeps its card on all 17 guns, newest wherever slide 11 has no newer one', () => {
   const matched = ['pistol', 'ak47', 'sniper', 'railgun', 'dragon', 'pred',
     'photon_saber', 'gauntlet_cannon'];
+  // Slide 11 later adopted every one of those eight, plus eight of the nine
+  // guns slide 9 introduced; YAUTJA is the only slide-9 gun it never had.
+  const elevenNewer = (id: string) => hasSlide11Update(id);
   for (const id of [...matched, ...SET_NINE_NEW_WEAPONS]) {
     assert.ok(EDITABLE_WEAPONS.includes(id as never), `${id} is selectable`);
-    assert.equal(getGunVariant(id as never), 'set9', `${id} shows slide 9's art by default`);
-    assert.equal(getGunEffect(id as never), 'set9', `${id} fires slide 9's shot by default`);
     assert.equal(hasSlide9Update(id), true, `${id} carries the NEW badge`);
+    const newest = elevenNewer(id) ? 'set11' : 'set9';
+    assert.equal(getGunVariant(id as never), newest, `${id} shows its newest art by default`);
+    assert.equal(getGunEffect(id as never), newest, `${id} fires its newest shot by default`);
+    // Slide 9's own card is always there, labelled, and pickable.
     const designs = getGunVariantOptions(id as never);
-    assert.equal(designs.at(-1)?.id, 'set9');
-    assert.equal(designs.at(-1)?.label, 'Slide 9');
+    const design = designs.find((o) => o.id === 'set9');
+    assert.ok(design, `${id} keeps its slide-9 design card`);
+    assert.equal(design!.label, 'Slide 9');
     const effects = getGunEffectOptions(id as never);
-    assert.equal(effects.at(-1)?.id, 'set9');
-    assert.equal(effects.at(-1)?.label, 'Slide 9');
+    const effect = effects.find((o) => o.id === 'set9');
+    assert.ok(effect, `${id} keeps its slide-9 effect card`);
+    assert.equal(effect!.label, 'Slide 9');
+    // Whatever is default must be one of the cards offered.
+    assert.ok(designs.some((o) => o.id === getGunVariant(id as never)));
+    assert.ok(effects.some((o) => o.id === getGunEffect(id as never)));
   }
-  // The nine new guns have no earlier shape at all.
-  for (const id of SET_NINE_NEW_WEAPONS) {
-    assert.deepEqual(getGunVariantOptions(id).map((o) => o.id), ['set9']);
-    assert.deepEqual(getGunEffectOptions(id).map((o) => o.id), ['set9']);
-  }
+  // YAUTJA: slide 9 is still the newest and only layer.
+  assert.deepEqual(getGunVariantOptions('yautja').map((o) => o.id), ['set9']);
+  assert.deepEqual(getGunEffectOptions('yautja').map((o) => o.id), ['set9']);
   // Slide-1 designs and shots remain selectable for the matched guns.
   for (const id of matched) {
     const designs = getGunVariantOptions(id as never).map((o) => o.id);
     assert.ok(designs.includes('original'), `${id} keeps its slide-1 shape`);
     assert.ok(getGunEffectOptions(id as never).some((o) => o.id === 'new'));
   }
-  assert.deepEqual(getGunVariantOptions('ak47').map((o) => o.id), ['original', 'set9']);
-  assert.deepEqual(getGunEffectOptions('ak47').map((o) => o.id), ['original', 'new', 'set9']);
+  assert.deepEqual(getGunVariantOptions('ak47').map((o) => o.id), ['original', 'set9', 'set11']);
+  assert.deepEqual(getGunEffectOptions('ak47').map((o) => o.id), ['original', 'new', 'set9', 'set11']);
 });
 
 test('slide 9 artwork draws through the normal gun pipeline, with its own recoil', () => {
@@ -201,27 +209,39 @@ test('the carried round keeps slide 9’s trail spacing, so it never freezes', (
   fx.fire(210, 560, -Math.PI / 2, 0);
   const bullet = fx.takeShots()[0];
   assert.ok(bullet);
-  // Slide 9 samples its tail once per 60 Hz frame at the bullet's own speed.
+  // Slide 9's tail is a pixel length: `trailMax` samples, one per 60 Hz frame at
+  // the round's own speed. Slide 1 must reproduce that LENGTH, never more.
   const step = Math.hypot(bullet.vx, bullet.vy) / 60;
+  const tail = step * (bullet.trailMax - 1);
+  const span = (b: { trail: { x: number; y: number }[] }) => b.trail.reduce(
+    (sum, p, i) => (i === 0 ? sum : sum + Math.hypot(p.x - b.trail[i - 1].x, p.y - b.trail[i - 1].y)), 0);
   // Slide 1 moves the same round at its own game speed - and can stall a frame.
   let y = 560;
-  for (const travel of [60, 240, 30, 0, 120]) {
+  let flown = 0;
+  for (const travel of [60, 240, 30, 0, 120, 207, 90, 150]) {
     y -= travel;
+    flown += travel;
     fx.carry(bullet, 210, y, -Math.PI / 2);
     for (let i = 1; i < bullet.trail.length; i++) {
       const gap = Math.hypot(
         bullet.trail[i].x - bullet.trail[i - 1].x,
         bullet.trail[i].y - bullet.trail[i - 1].y,
       );
-      assert.ok(gap <= step * 1.001, `trail gap ${gap.toFixed(1)} > slide-9 step ${step.toFixed(1)}`);
+      // Fine, frame-rate independent sampling: no long straight bar behind the
+      // round, whatever slide 1's dt is.
+      assert.ok(gap <= 6.001, `trail gap ${gap.toFixed(1)} is coarser than slide 1's 6px step`);
     }
-    assert.ok(bullet.trail.length <= bullet.trailMax, 'the tail stays as long as slide 9’s');
+    // The tail is slide 9's own length, in pixels, at every speed.
+    assert.ok(span(bullet) <= tail + 6.5,
+      `tail ${span(bullet).toFixed(0)}px is longer than slide 9's ${tail.toFixed(0)}px`);
+    // Once the round has flown a full tail length, the comet is complete.
+    assert.ok(span(bullet) >= Math.min(tail, flown) * 0.9, 'and it is a full comet, not a stub');
+    assert.ok(bullet.trail.length <= 140, 'the point list stays bounded');
     assert.equal(bullet.y, y, 'and it still follows slide 1');
-    // The tail must not grow with the frame rate: its pixel length is fixed.
-    const px = bullet.trail.reduce((sum, p, i) => (i === 0 ? sum : sum + Math.hypot(
-      p.x - bullet.trail[i - 1].x, p.y - bullet.trail[i - 1].y)), 0);
-    assert.ok(px <= step * (bullet.trailMax - 1) + 0.5, 'tail length matches slide 9');
   }
+  // A stalled frame must not leave a hole in the tail.
+  const last = bullet.trail[bullet.trail.length - 1];
+  assert.equal(last.y, bullet.y, 'the tail ends on the round itself');
 });
 
 test('slide 1 flies slide 9’s round, and only slide 9’s shot fires for its guns', () => {

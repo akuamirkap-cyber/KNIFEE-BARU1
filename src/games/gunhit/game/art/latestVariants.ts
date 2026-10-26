@@ -434,6 +434,7 @@ export function drawLatestGun(c: C, id: LatestDesignWeapon, cx: number, y0: numb
     // Slide-2 guns are drawn by `drawGun` from `slide2Weapons` (they need the
     // live charge/void state), so this table never receives them.
     case 'blackhole': break;
+
     default: { const _never: never = id; return _never; }
   }
   c.restore();

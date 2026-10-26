@@ -6,6 +6,8 @@ import { AcidFluid } from '../src/games/gunhit/game/acidFluid';
 import { drawGun } from '../src/games/gunhit/game/weapons';
 import { drawPreciseWeaponDecal } from '../src/games/gunhit/game/art/decalSystem';
 import { getWeapon } from '../src/games/gunhit/game/weapons';
+import { installCanvasShim } from './supportCanvas';
+
 
 /**
  * Slide 1 ports slide 7's elemental weapons. Slide 7 builds its bloom from a
@@ -112,12 +114,19 @@ test('bloom uses a fading radial gradient instead of a solid disc', () => {
 });
 
 test('acid spitter gun art glows softly and never fills a bare circle with its light colour', () => {
+  // This path reaches slide-11 art, which bakes glow sprites offscreen.
+  const restoreCanvas = installCanvasShim();
+  try {
   const { ctx, fills } = recordingContext();
   drawGun(ctx, 'xeno', 0, 0, 0.5, 0.6, true);
   const flatGreen = fills.filter(
     (f) => typeof f.style === 'string' && /^#7dff00$/i.test(f.style as string),
   );
   assert.equal(flatGreen.length, 0, 'the acid glow must not be a flat #7dff00 disc');
+  } finally {
+    // Never leak the shim into the DOM-free tests that follow.
+    restoreCanvas();
+  }
 });
 
 test('acid crater decal also uses the soft bloom', () => {

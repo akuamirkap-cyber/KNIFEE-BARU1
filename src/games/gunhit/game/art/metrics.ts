@@ -1,5 +1,6 @@
 import type { WeaponId } from '../weapons';
 import { getGunVariant, isFixedClassicGun, supportsGunVariants, type GunVariant, type VariantWeapon } from './gunVariants';
+import { SET_ELEVEN_BY_SLIDE1_ID, SET_ELEVEN_METRICS, SET_ELEVEN_NEW_IDS, SET_ELEVEN_NEW_WEAPONS } from '../setElevenArt';
 
 export interface GunMetrics {
   totalLen: number;
@@ -306,6 +307,20 @@ const SET_SEVEN_METRICS: Partial<Record<WeaponId, GunMetrics>> = {
   blaster: { totalLen: 248, centerOffsetY: 108, centerOffsetX: 0, span: 224 }, // -33,-16..32,232
 };
 
+// ── Slide 11 (games/game-8) ────────────────────────────────────────────────
+// Measured from slide 11's real renderer; the module that owns the drawing also
+// owns the numbers, so the preview and the game can never disagree.
+const SET_ELEVEN_METRICS_BY_SLIDE1: Partial<Record<WeaponId, GunMetrics>> = Object.fromEntries(
+  Object.entries(SET_ELEVEN_BY_SLIDE1_ID).map(([slide1, eleven]) => [
+    slide1,
+    SET_ELEVEN_METRICS[eleven as keyof typeof SET_ELEVEN_METRICS],
+  ]),
+) as Partial<Record<WeaponId, GunMetrics>>;
+for (const [i, eleven] of SET_ELEVEN_NEW_WEAPONS.entries()) {
+  SET_ELEVEN_METRICS_BY_SLIDE1[SET_ELEVEN_NEW_IDS[i] as WeaponId] =
+    SET_ELEVEN_METRICS[eleven as keyof typeof SET_ELEVEN_METRICS];
+}
+
 // ── Slide 9 (games/game-6) ──────────────────────────────────────────────────
 // Measured from slide 9's real renderer (`drawSetNineGun`, rested pose) with the
 // same ink-bounds pass: box → diagonal span (w + h) / √2, centre = box centre.
@@ -333,7 +348,10 @@ const SET_NINE_METRICS: Partial<Record<WeaponId, GunMetrics>> = {
 export function getGunMetrics(id: WeaponId, variant: GunVariant = getGunVariant(id)): GunMetrics {
   const effectiveVariant = isFixedClassicGun(id) ? 'original'
     : id === 'honey' && variant === 'latest' ? 'current' : variant;
-  const measured = effectiveVariant === 'set9'
+  const eleven = effectiveVariant === 'set11' ? SET_ELEVEN_METRICS_BY_SLIDE1[id] : undefined;
+  const measured = eleven
+    ? eleven
+    : effectiveVariant === 'set9'
     ? SET_NINE_METRICS[id]
     : effectiveVariant === 'set7'
       ? SET_SEVEN_METRICS[id]

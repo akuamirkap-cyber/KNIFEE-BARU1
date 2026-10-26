@@ -12,7 +12,7 @@ import { sfx4 } from '../game/sfx4';
 import { useSlideActive } from '../../shared/SlideActivity';
 import { SunburstFX } from '../../knife-hit/components/Effects';
 import { gunSunburstColor } from '../game/sunburstPalette';
-import { EDITABLE_WEAPONS, getGunVariant, setGunVariant, getGunEffect, setGunEffect, getGunVariantOptions, canChooseGunDesign, hasSlide7Update, slide7UpdateSet, hasSlide9Update, type GunVariant } from '../game/art/gunVariants';
+import { EDITABLE_WEAPONS, getGunVariant, setGunVariant, getGunEffect, setGunEffect, getGunVariantOptions, canChooseGunDesign, hasSlide7Update, slide7UpdateSet, hasSlide9Update, hasSlide11Update, type GunVariant } from '../game/art/gunVariants';
 import GunVariantPicker from './GunVariantPicker';
 
 type Tab = 'ALL' | 'DESAIN' | 'EPIC' | 'LANGKA' | 'LEGENDARIS' | 'UMUM' | 'BOSS';
@@ -452,10 +452,12 @@ export default function Arsenal({
           <span className="rounded-full bg-yellow-400/20 px-2 py-0.5 text-[8.5px] font-black tracking-wider text-yellow-200 border border-yellow-400/45 leading-none">
             {selectedGun.perk}
           </span>
-          {(hasSlide9Update(selectedGun.id) || hasSlide7Update(selectedGun.id)) && (
+          {(hasSlide11Update(selectedGun.id) || hasSlide9Update(selectedGun.id) || hasSlide7Update(selectedGun.id)) && (
             <span
               className="shrink-0 rounded-full border border-emerald-200/80 bg-gradient-to-r from-emerald-400 to-green-500 px-1.5 py-0.5 text-[7.5px] font-black tracking-widest text-[#052e16] leading-none shadow-[0_0_10px_rgba(52,211,153,0.8)]"
-              title={hasSlide9Update(selectedGun.id)
+              title={hasSlide11Update(selectedGun.id)
+                ? 'Senjata ini dapat pembaharuan: desain & efek asli slide 11'
+                : hasSlide9Update(selectedGun.id)
                 ? 'Senjata ini dapat pembaharuan: desain & efek asli slide 9'
                 : `Senjata ini dapat pembaharuan: desain & efek asli slide 7 (SET ${slide7UpdateSet(selectedGun.id)})`}
             >
@@ -595,7 +597,7 @@ export default function Arsenal({
                         <span>{rarityLabel}</span>
                       </div>
                       <div className="flex items-center gap-1">
-                        {(hasSlide9Update(w.id) || hasSlide7Update(w.id)) && (
+                        {(hasSlide11Update(w.id) || hasSlide9Update(w.id) || hasSlide7Update(w.id)) && (
                           <span
                             className="rounded-md border border-emerald-200/80 bg-gradient-to-b from-emerald-400 to-green-500 px-1 py-px text-[7.5px] font-black uppercase leading-none tracking-wider text-[#052e16] shadow-[0_0_8px_rgba(52,211,153,0.75)]"
                             title={hasSlide9Update(w.id)

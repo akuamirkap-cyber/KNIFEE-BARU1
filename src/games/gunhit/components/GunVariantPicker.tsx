@@ -47,6 +47,9 @@ const DESCRIPTIONS: Description = {
  * slide 7's own, and every other card is the slide-1 design it replaces.
  */
 function describeFallback(weapon: Weapon, variant: GunVariant, label: string): string {
+  if (variant === 'set11') {
+    return `${label}: ${weapon.name} dengan bentuk, efek tembakan dan suara asli dari slide 11`;
+  }
   if (variant === 'set9') {
     return `${label}: ${weapon.name} dengan bentuk, efek tembakan dan suara asli dari slide 9`;
   }

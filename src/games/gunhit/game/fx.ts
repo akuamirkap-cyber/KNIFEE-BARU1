@@ -190,6 +190,18 @@ export const FX: Record<WeaponId, FxProfile> = {
   proton_pack: P('electric', 'glow', 'energy', '253,224,71', 190, { hitstop: 0.05, kick: 6, ghost: 4, decalColors: ['#422006', '#fde047'] }),
   heat_ray: P('fire', 'burn', 'fire', '255,77,77', 200, { hitstop: 0.06, kick: 7, tint: 0.2 }),
 
+  // Slide 11 (games/game-8)
+  mega_buster: P('buster', 'glow', 'energy', '140,200,255', 120, { kick: 3.4, ghost: 3, tint: 0.1 }),
+  harmonic_disruptor: P('sonic', 'glow', 'energy', '190,160,255', 130, { kick: 3.6, hitstop: 0.03 }),
+  absolute_zero: P('ice', 'frost', 'energy', '150,220,255', 120, { kick: 3, tint: 0.12 }),
+  helios_flare: P('fire', 'burn', 'energy', '255,200,90', 150, { kick: 4.2, hitstop: 0.035, ghost: 4, tint: 0.14 }),
+  chrono_rifle: P('energy', 'glow', 'energy', '120,230,240', 110, { kick: 3, tint: 0.1 }),
+  orbital_beacon: P('heavy', 'scorch', 'energy', '255,150,210', 140, { kick: 4.6, hitstop: 0.05 }),
+  helix_pulsar: P('energy', 'glow', 'energy', '200,140,255', 100, { kick: 2.4, streak: 1.2 }),
+  singularity: P('void', 'glow', 'energy', '190,120,255', 150, { kick: 4.4, hitstop: 0.05, ghost: 4, tint: 0.16 }),
+  prism_lance: P('energy', 'glow', 'energy', '120,235,245', 120, { kick: 3, tint: 0.1 }),
+  nano_swarm: P('nature', 'hole', 'soft', '130,230,150', 100, { kick: 2.6, streak: 1.1 }),
+
 };
 
 // ---------------------------------------------------------------- helpers

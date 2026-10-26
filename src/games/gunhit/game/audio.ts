@@ -3,6 +3,7 @@ import { fireworkSfx } from './fireworkSlide2Sfx';
 import { slide2Sfx } from './slide2Audio';
 import { setOneSfx } from './setOneAudio';
 import { setNineMuted } from './setNineFx';
+import { setElevenMuted } from './setElevenFx';
 
 let actx: AudioContext | null = null;
 let master: GainNode | null = null;
@@ -17,6 +18,8 @@ export function setMuted(m: boolean) {
   setOneSfx.setMuted(m);
   // Slide 9's ported guns play through slide 9's own synthesizer.
   setNineMuted(m);
+  // …and slide 11's through slide 11's.
+  setElevenMuted(m);
   if (master) master.gain.value = m ? 0 : 0.55;
 }
 

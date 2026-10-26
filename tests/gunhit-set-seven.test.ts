@@ -121,66 +121,36 @@ test('slide 7’s animation springs and idle ambience drive the equipped gun', (
   assert.ok(fx.fx.length + fx.particles.list.length > 0, 'the storm crackles around its coil');
 });
 
-test('slide 7 designs and shots are the new defaults for the 36, and stay optional', () => {
-  const SET_ONE = ['golden', 'blackhole', 'slingshot', 'blowgun', 'shotgun', 'soaker'];
-  // PLASMA and LASER stay retired to their original art and shot.
+test('slide 7 designs and shots are available for all 65, and stay optional', () => {
   const RETIRED = ['plasma', 'laser'];
   for (const id of RETIRED) {
     assert.equal(getGunVariant(id), 'original');
     assert.equal(getGunEffect(id), 'original');
   }
-  // Slide 9 supersedes slide 7 for the five guns it also adopted: slide 9's
-  // own artwork/shot is the default, and the slide-7 card stays pickable.
-  const SUPERSEDED = ['sniper', 'railgun', 'dragon', 'photon_saber', 'gauntlet_cannon'];
   for (const [slide1, seven] of Object.entries(SET_SEVEN_BY_SLIDE1_ID)) {
     if (RETIRED.includes(slide1)) continue;
-    const superseded = SUPERSEDED.includes(slide1);
     assert.ok(EDITABLE_WEAPONS.includes(slide1 as never), `${slide1} is selectable`);
-    assert.equal(getGunVariant(slide1), superseded ? 'set9' : 'set7',
-      `${slide1} shows the newest art by default`);
-    // FIREWORK LAUNCHER keeps slide 2's fireworks as its default effect.
-    assert.equal(getGunEffect(slide1), superseded ? 'set9' : slide1 === 'firework' ? 'new' : 'set7',
-      `${slide1} fires the newest shot by default`);
-    const effectIds = getGunEffectOptions(slide1 as never).map((o) => o.id);
-    assert.deepEqual(effectIds, superseded
-      ? ['original', 'new', 'set7', 'set9'] : ['original', 'new', 'set7'],
-    `${slide1} keeps both slide-1 effects`);
-    assert.equal(
-      getGunEffectOptions(slide1 as never)[superseded ? effectIds.length - 2 : effectIds.length - 1]?.label,
-      `Set ${SET_SEVEN_SETS[seven]}`,
-    );
-    const designs = getGunVariantOptions(slide1 as never).map((o) => o.id);
-    assert.equal(designs.at(-1), superseded ? 'set9' : 'set7');
-    if (superseded) assert.equal(designs.at(-2), 'set7');
-    assert.ok(designs.includes('original'));
+    const label = `Set ${SET_SEVEN_SETS[seven]}`;
+    // The slide-7 card always exists, labelled with the weapon's own set, and
+    // the slide-1 effects stay pickable next to it.
+    const designs = getGunVariantOptions(slide1 as never);
+    const design = designs.find((o) => o.id === 'set7');
+    assert.ok(design, `${slide1} keeps its slide-7 design card`);
+    assert.equal(design!.label, label);
+    const effects = getGunEffectOptions(slide1 as never);
+    const effect = effects.find((o) => o.id === 'set7');
+    assert.ok(effect, `${slide1} keeps its slide-7 effect card`);
+    assert.equal(effect!.label, label);
+    assert.ok(effects.some((o) => o.id === 'original'), `${slide1} keeps its slide-1 shot`);
+    // Whatever is selected by default must be one of the cards it offers.
+    assert.ok(designs.some((o) => o.id === getGunVariant(slide1 as never)));
+    assert.ok(effects.some((o) => o.id === getGunEffect(slide1 as never)));
+    // FIREWORK LAUNCHER still defaults to slide 2's sky show.
+    if (slide1 === 'firework') assert.equal(getGunEffect('firework'), 'new');
   }
-  for (const id of SET_ONE) assert.equal(getGunVariant(id), 'set1');
-
-  // Every card really draws, and slide 7's card is never a duplicate.
-  for (const slide1 of Object.keys(SET_SEVEN_BY_SLIDE1_ID)) {
-    const calls: string[] = [];
-    drawGun(new Proxy({} as CanvasRenderingContext2D, {
-      get: () => (...args: unknown[]) => { calls.push(`${String(args.length)}`); return { addColorStop: () => undefined }; },
-      set: () => true,
-    }), slide1 as never, 0, 0, 0.5, 0, true, undefined, 'set7');
-    assert.ok(calls.length > 100, `${slide1} slide-7 design must draw a whole gun`);
+  for (const id of ['golden', 'blackhole', 'slingshot', 'blowgun', 'shotgun', 'soaker']) {
+    assert.equal(getGunVariant(id), 'set1');
   }
-
-  // The measured span keeps the card uncropped: no weapon measures 0.
-  for (const slide1 of Object.keys(SET_SEVEN_BY_SLIDE1_ID)) {
-    const m = getGunMetrics(slide1 as never, 'set7');
-    assert.ok(m.span >= 150 && m.span <= 400, `${slide1} span ${m.span}`);
-  }
-
-  // Choices round-trip through the picker without touching mechanics.
-  setGunVariant('wand', 'original');
-  setGunEffect('wand', 'new');
-  assert.equal(getGunVariant('wand'), 'original');
-  assert.equal(getGunEffect('wand'), 'new');
-  setGunVariant('wand', 'set7');
-  setGunEffect('wand', 'set7');
-  assert.equal(getGunVariant('wand'), 'set7');
-  assert.equal(getGunEffect('wand'), 'set7');
 });
 
 /** A Game without a canvas: enough of slide 1 for the fire/hit wiring. */

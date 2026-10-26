@@ -199,10 +199,10 @@ export class SetNineFx implements GameAPI {
   takeShots(): Bullet[] {
     if (this.bullets.length === this.taken.size) return [];
     const made = this.bullets.filter((b) => !this.taken.has(b));
-    for (const b of made) {
-      this.taken.add(b);
-      this.carried.add(b);
-    }
+    // Only hand the round over here: `carry()` is what makes it slide 1's. An
+    // extra round of a volley must keep flying on slide 9's own physics
+    // instead of freezing in place at the muzzle.
+    for (const b of made) this.taken.add(b);
     return made;
   }
 
@@ -300,10 +300,28 @@ export class SetNineFx implements GameAPI {
     }
   }
 
-  /** Beams, then rounds, then every particle slide 9 spawned. */
+  /**
+   * Beams, then rounds, then every particle slide 9 spawned. Each piece is
+   * guarded: one weapon's renderer throwing must never blank slide 1's frame
+   * (that is what reads as the round freezing or the wheel glitching).
+   */
   draw(ctx: CanvasRenderingContext2D) {
-    for (const bm of this.beams) bm.draw(ctx, bm, this.time);
-    for (const b of this.bullets) b.draw(ctx, b, this.time);
+    for (const bm of this.beams) {
+      try {
+        bm.draw(ctx, bm, this.time);
+      } catch {
+        /* ignore */
+      }
+    }
+    for (const b of this.bullets) {
+      ctx.save();
+      try {
+        b.draw(ctx, b, this.time);
+      } catch {
+        /* ignore */
+      }
+      ctx.restore();
+    }
     drawParticles(ctx, this.particles);
   }
 
@@ -334,17 +352,36 @@ export class SetNineFx implements GameAPI {
    * to slide 9 at any frame rate and any slide-1 speed buff.
    */
   carry(b: Bullet, x: number, y: number, angle: number) {
-    const step = Math.max(2, Math.hypot(b.vx, b.vy) / 60);
+    // Slide 9's tail is a *pixel* length: `trailMax` samples, one per 60 Hz
+    // frame, at the round's own speed. Slide 1 can fly the same round much
+    // faster, which stretched that 9-point polyline into a long, chunky bar -
+    // the "frozen tracer" look. Sample the flown path at a fine, fixed pixel
+    // step and keep exactly slide 9's tail length, so the comet is the same
+    // size as on slide 9 and its width taper is smooth at any speed and any
+    // frame rate.
+    const v = Math.hypot(b.vx, b.vy) || 1;
+    const step = 6;
+    const maxLen = Math.max(24, (Math.max(2, b.trailMax - 1) * v) / 60);
     const dist = Math.hypot(x - b.x, y - b.y);
-    const n = Math.min(Math.max(1, Math.ceil(dist / step)), Math.max(2, b.trailMax));
-    for (let i = 1; i <= n; i++) {
+    const n = Math.max(1, Math.min(120, Math.ceil(dist / step)));
+    for (let i = 1; i < n; i++) {
       const k = i / n;
       b.trail.push({ x: b.x + (x - b.x) * k, y: b.y + (y - b.y) * k });
     }
-    while (b.trail.length > b.trailMax) b.trail.shift();
+    b.trail.push({ x, y });
+    // Trim the oldest points until the tail is slide 9's own length again.
+    while (b.trail.length > 2) {
+      const p = b.trail[0];
+      if (Math.hypot(x - p.x, y - p.y) > maxLen) b.trail.shift();
+      else break;
+    }
+    if (b.trail.length > 140) b.trail.splice(0, b.trail.length - 140);
     b.x = x;
     b.y = y;
     b.angle = angle;
+    // From now on slide 1 owns this round: slide 9 must not fly it again.
+    this.taken.add(b);
+    this.carried.add(b);
   }
 }
 

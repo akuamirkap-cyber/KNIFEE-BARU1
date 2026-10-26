@@ -11,6 +11,8 @@ import { drawSetOneGun, setOneIdFor } from '../setOneArt';
 import { drawSetSevenGun, setSevenIdFor } from '../setSevenArt';
 import { restSevenAnim } from '../setSevenArt';
 import { drawSetNineGun, isNineNewWeapon, restNineState, setNineIdFor } from '../setNineArt';
+import { drawSetElevenGun, elevenScale, isElevenNewSlide1Id, restElevenState, setElevenIdFor } from '../setElevenArt';
+import { isElevenOnlyWeapon } from './gunVariants';
 import type { WeaponAnim } from '../../../../../games/game-4/src/game/weapons';
 
 const TAU = Math.PI * 2;
@@ -68,6 +70,28 @@ export function drawGun(
   // at the same muzzle origin with slide 9's own draw state (recoil, slide,
   // bolt, pump, charge meter, spin-up, drum index). The nine guns slide 1 never
   // had only ever exist as this design, so they always render it.
+  // Slide 11 (games/game-8) is the newest layer: its own artwork, drawn at the
+  // same muzzle origin with slide 11's own weapon state.
+  const setElevenId = variant === 'set11' || isElevenOnlyWeapon(id) ? setElevenIdFor(id) : null;
+  if (setElevenId) {
+    const sinceShot = Math.max(0, gunState.sinceShot);
+    drawSetElevenGun(
+      c, setElevenId, cx, y0, t,
+      gunState.elevenState ?? {
+        ...restElevenState(),
+        // Menus and cards rebuild the same recoil/cycle slide 11 shows right
+        // after a shot, so the gun visibly kicks instead of standing still.
+        recoil: sinceShot >= 0.16 ? 0 : 1 - sinceShot / 0.16,
+        fireT: sinceShot,
+        ready: Math.min(1, sinceShot / 0.35),
+        charge: gunState.charge,
+      },
+      elevenScale(setElevenId),
+    );
+    c.restore();
+    if (flash > 0 && !gunState.elevenLive) drawFlash(c, id, cx, y0, t, flash);
+    return;
+  }
   const setNineId = variant === 'set9' || isNineNewWeapon(id) ? setNineIdFor(id) : null;
   if (setNineId) {
     // Live games hand over their own state; menus and cards rebuild the same
