@@ -28,7 +28,9 @@ export function drawPreciseWeaponDecal(
   a: number,
   w: Weapon,
   style: string,
-  time = 0
+  time = 0,
+  /** Paintball only: the colour of the shot that landed, as an `r,g,b` triple. */
+  tint?: string
 ) {
   const x = Math.cos(a) * (R - 2.5);
   const y = Math.sin(a) * (R - 2.5);
@@ -440,7 +442,9 @@ export function drawPreciseWeaponDecal(
 
     const fluidCol =
       w.id === 'paintball'
-        ? `rgba(${w.trail || '244,63,94'}, 0.75)`
+        // A paintball carries a random colour per shot; stamping the weapon's
+        // fixed white trail left white splats on the wheel instead of paint.
+        ? `rgba(${tint || w.trail || '244,63,94'}, 0.75)`
         : 'rgba(56, 189, 248, 0.5)';
 
     // Splat droplet kental

@@ -1293,10 +1293,10 @@ export class Game {
     this.faceR = R;
   }
 
-  private crack(a: number, _tint?: string) {
+  private crack(a: number, tint?: string) {
     const c = this.faceCtx;
     c.save();
-    drawPreciseWeaponDecal(c, this.faceR, a, this.weapon, this.level.style, this.time);
+    drawPreciseWeaponDecal(c, this.faceR, a, this.weapon, this.level.style, this.time, tint);
     c.restore();
   }
 

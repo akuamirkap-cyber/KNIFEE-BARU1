@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { drawDropParticles, type Particle } from '../src/games/gunhit/game/fx';
+import { drawPreciseWeaponDecal } from '../src/games/gunhit/game/art/decalSystem';
+import { getWeapon } from '../src/games/gunhit/game/weapons';
 
 /**
  * Paintball is the game's busiest rapid-fire gun (8.3 shots a second, one
@@ -134,4 +136,28 @@ test('a real paintball-sized burst costs a handful of fills', () => {
   assert.ok(count.ellipse >= 200, 'droplets are still drawn');
   assert.ok(count.fill <= 80, `expected batched fills, got ${count.fill}`);
   assert.equal(count.save, 1);
+});
+
+test('the splat on the wheel is the colour that was fired', () => {
+  const styles: string[] = [];
+  const ctx = {
+    _fillStyle: '',
+    get fillStyle() { return this._fillStyle; },
+    set fillStyle(v: string) { this._fillStyle = v; styles.push(v); },
+    globalAlpha: 1, strokeStyle: '', lineWidth: 1, lineCap: 'butt', lineJoin: 'miter', globalCompositeOperation: 'source-over',
+    filter: 'none', shadowBlur: 0, shadowColor: '',
+    save() {}, restore() {}, beginPath() {}, closePath() {}, clip() {}, fill() {}, stroke() {},
+    arc() {}, ellipse() {}, moveTo() {}, lineTo() {}, quadraticCurveTo() {}, bezierCurveTo() {}, rect() {}, roundRect() {},
+    translate() {}, rotate() {}, scale() {}, setTransform() {}, clearRect() {}, fillRect() {}, strokeRect() {},
+    createLinearGradient: () => ({ addColorStop() {} }), createRadialGradient: () => ({ addColorStop() {} }),
+  } as unknown as CanvasRenderingContext2D;
+  const paintball = getWeapon('paintball');
+
+  drawPreciseWeaponDecal(ctx, 106, Math.PI / 2, paintball, 'wood', 1, '250,204,21');
+  assert.ok(styles.includes('rgba(250,204,21, 0.75)'), `expected the yellow shot to leave yellow paint, got ${styles.join(' ')}`);
+
+  // Without a tint (every other weapon) the decal keeps its own colour.
+  styles.length = 0;
+  drawPreciseWeaponDecal(ctx, 106, Math.PI / 2, paintball, 'wood', 1);
+  assert.ok(styles.includes(`rgba(${paintball.trail}, 0.75)`), 'no tint means the weapon default');
 });
