@@ -270,7 +270,7 @@ export default function App() {
               })}
             </div>
 
-            <div className="no-scrollbar -mx-2.5 flex snap-x gap-2 overflow-x-auto px-2.5 py-1.5 lg:mx-0 lg:grid lg:grid-cols-3 lg:gap-3 lg:overflow-visible lg:px-0 lg:py-0">
+            <div className="weapon-grid">
               {list.map((w, i) => {
                 const active = w.id === weapon;
                 const src = icons[w.id];
@@ -282,8 +282,8 @@ export default function App() {
                       select(w.id);
                     }}
                     className={cn(
-                      'card group relative aspect-square w-[86px] shrink-0 snap-start overflow-hidden rounded-xl border-2 transition-all duration-200 lg:w-auto lg:rounded-2xl',
-                      active ? 'z-10 scale-[1.05]' : 'border-white/10 hover:-translate-y-0.5 hover:border-white/30',
+                      'card group relative aspect-square w-full min-w-0 overflow-hidden rounded-lg border-2 transition-all duration-200 sm:rounded-xl lg:rounded-2xl',
+                      active ? 'z-10 scale-[1.04]' : 'border-white/10 hover:-translate-y-0.5 hover:border-white/30',
                     )}
                     style={active ? { borderColor: w.accent, boxShadow: `0 0 22px ${w.accent}99, inset 0 0 22px ${w.accent}55` } : undefined}
                     title={`${w.name} (${KEYS[i]})`}
@@ -293,13 +293,13 @@ export default function App() {
                         src={src}
                         alt={w.name}
                         draggable={false}
-                        className="absolute inset-0 h-full w-full object-contain p-1 drop-shadow-[0_4px_5px_rgba(0,0,0,0.45)] transition-transform duration-300 group-hover:scale-110"
+                        className="absolute inset-0 h-full w-full object-contain p-0.5 drop-shadow-[0_3px_4px_rgba(0,0,0,0.45)] transition-transform duration-300 group-hover:scale-110 lg:p-1"
                       />
                     ) : (
                       <span className="absolute inset-4 animate-pulse rounded-full bg-white/10" />
                     )}
-                    <RarityTag rarity={w.rarity} className="absolute left-1.5 top-1.5 px-1.5 py-[3px] text-[8.5px] lg:left-2 lg:top-2 lg:px-2 lg:py-1 lg:text-[11px]" />
-                    <span className="font-game absolute inset-x-1 bottom-1 truncate rounded-md bg-black/75 px-1 py-[3px] text-center text-[9.5px] leading-none tracking-wide lg:inset-x-2.5 lg:bottom-2 lg:py-1 lg:text-[12.5px]">
+                    <RarityTag rarity={w.rarity} className="absolute left-0.5 top-0.5 px-1 py-[2px] text-[7px] sm:text-[7.5px] lg:left-2 lg:top-2 lg:px-2 lg:py-1 lg:text-[11px]" />
+                    <span className="font-game absolute inset-x-0.5 bottom-0.5 truncate rounded bg-black/75 px-0.5 py-[2px] text-center text-[8.5px] leading-none tracking-tight sm:rounded-md sm:px-1 sm:py-[3px] sm:text-[9.5px] sm:tracking-wide lg:inset-x-2.5 lg:bottom-2 lg:py-1 lg:text-[12.5px]">
                       {w.name}
                     </span>
                     <span className="font-game absolute right-2 top-1.5 hidden text-[11px] text-white/45 lg:block">{KEYS[i]}</span>

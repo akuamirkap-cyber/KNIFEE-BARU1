@@ -31,6 +31,31 @@ body {
   width: min(calc(100vw - 20px), calc((100dvh - 132px) * 0.5526), 460px);
 }
 
+/* Every weapon of the selected set is shown at once: the grid wraps and always
+   fits the panel width, so no card is ever cut off (sets hold 6 – 17 weapons). */
+.weapon-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+}
+@media (max-width: 380px) {
+  .weapon-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+@media (min-width: 640px) {
+  .weapon-grid {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 8px;
+  }
+}
+@media (min-width: 1024px) {
+  .weapon-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+  }
+}
+
 .no-scrollbar {
   scrollbar-width: none;
 }
