@@ -8,6 +8,51 @@ export interface GunMetrics {
   span: number;
 }
 
+/**
+ * Ink bounds of a gun in muzzle space (origin = muzzle, +y runs down the
+ * barrel). Only the guns whose silhouette is too irregular for the rough
+ * span/centre table are listed; they are measured from the renderer itself so
+ * menu thumbnails can fit the WHOLE gun instead of cropping it.
+ */
+export interface GunInkBox {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
+const GUN_INK_BOX: Partial<Record<WeaponId, GunInkBox>> = {
+  // Measured at rest (no recoil/charge) from drawGun().
+  xeno: { x0: -104, y0: -41, x1: 74, y1: 398 },
+  dora: { x0: -86, y0: -85, x1: 39, y1: 249 },
+  pred: { x0: -101, y0: -85, x1: 100, y1: 240 },
+};
+
+export function getGunInkBox(id: WeaponId): GunInkBox | null {
+  return GUN_INK_BOX[id] ?? null;
+}
+
+export interface PreviewFit {
+  scale: number;
+  tx: number;
+  ty: number;
+}
+
+/**
+ * Fit an ink box inside a W×H preview rotated a quarter turn (how every menu
+ * strip draws guns). Returns the scale and the translation that puts the box
+ * corner-to-corner inside the canvas — padding included — so nothing clips.
+ */
+export function fitInkBoxQuarterTurn(box: GunInkBox, w: number, h: number, pad = 8): PreviewFit {
+  const bw = Math.max(1, box.x1 - box.x0);
+  const bh = Math.max(1, box.y1 - box.y0);
+  const scale = Math.max(0.01, Math.min((w - pad * 2) / bh, (h - pad * 2) / bw));
+  const cx = (box.x0 + box.x1) / 2;
+  const cy = (box.y0 + box.y1) / 2;
+  // rotate(90°): local (x, y) -> screen offset (-y * scale, x * scale)
+  return { scale, tx: w / 2 + cy * scale, ty: h / 2 - cx * scale };
+}
+
 // Measured actual bounding box of every gun from muzzle (cx, y0)
 // centerOffsetY = vertical distance from muzzle (y0) to the visual center
 // centerOffsetX = horizontal distance from barrel line (cx) to center of mass
@@ -92,9 +137,13 @@ export const GUN_METRICS: Partial<Record<WeaponId, Partial<GunMetrics>>> = {
   hyperdrive: { totalLen: 166, centerOffsetY: 78, centerOffsetX: 8, span: 174 },
   quantum_destabilizer: { totalLen: 195, centerOffsetY: 94, centerOffsetX: 12, span: 200 },
   // ---------------------------------------------------------- ELEMENTAL ARSENAL (slide 7)
-  xeno: { totalLen: 420, centerOffsetY: 180, centerOffsetX: -13, span: 135 },
-  dora: { totalLen: 300, centerOffsetY: 80, centerOffsetX: 0, span: 165 },
-  pred: { totalLen: 310, centerOffsetY: 86, centerOffsetX: -15, span: 200 },
+  // Measured silhouettes (w×h at rest): xeno 178×439, dora 125×334, pred 201×325.
+  // `span` is the box diagonal after the 45° showcase rotation, i.e.
+  // (w + h) / √2 — the old 135/165/200 values were far too small, so every
+  // menu scaled these three up until they were cropped.
+  xeno: { totalLen: 439, centerOffsetY: 179, centerOffsetX: -15, span: 437 },
+  dora: { totalLen: 334, centerOffsetY: 82, centerOffsetX: -24, span: 325 },
+  pred: { totalLen: 325, centerOffsetY: 78, centerOffsetX: -1, span: 372 },
 };
 
 // Variant-specific centers also keep the three comparison cards at the same

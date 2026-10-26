@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { drawGun, drawProjectile, getWeapon, RARITY_COLOR, WEAPONS, type WeaponId } from '../game/weapons';
 import { gunState } from '../game/art/kit';
+import { fitInkBoxQuarterTurn, getGunInkBox } from '../game/art/metrics';
 
 const PW = 300;
 const PH = 115;
@@ -28,17 +29,32 @@ function Preview({ id }: { id: WeaponId }) {
       c.setTransform(dpr, 0, 0, dpr, 0, 0);
       c.clearRect(0, 0, PW, PH);
       const kick = Math.max(0, fireT + 0.15) * Math.min(3, w.recoil) * 60;
-      const sc = w.previewScale;
       const since = Math.max(0, 0.07 - fireT);
       gunState.sinceShot = since;
       gunState.charge = w.charge ? Math.max(0, Math.min(1, (since - 0.25) / 0.9)) : 0;
       if (fireT > 0.069) gunState.shots++;
-      c.save();
-      c.translate(PW / 2 + (w.previewLen * sc) / 2 + 10 - kick, w.previewY);
-      c.rotate(Math.PI / 2);
-      c.scale(sc, sc);
-      drawGun(c, id, 0, 0, t, Math.max(0, fireT / 0.07), fireT < -0.3 || fireT > 0.07);
-      c.restore();
+      const flash = Math.max(0, fireT / 0.07);
+      const ready = fireT < -0.3 || fireT > 0.07;
+      const box = getGunInkBox(id);
+      if (box) {
+        // Elemental guns (slide 7) are far taller than this strip: fit the whole
+        // measured silhouette instead of anchoring the muzzle to a magic Y.
+        const fit = fitInkBoxQuarterTurn(box, PW, PH, 10);
+        c.save();
+        c.translate(fit.tx - kick * 0.35, fit.ty);
+        c.rotate(Math.PI / 2);
+        c.scale(fit.scale, fit.scale);
+        drawGun(c, id, 0, 0, t, flash, ready);
+        c.restore();
+      } else {
+        const sc = w.previewScale;
+        c.save();
+        c.translate(PW / 2 + (w.previewLen * sc) / 2 + 10 - kick, w.previewY);
+        c.rotate(Math.PI / 2);
+        c.scale(sc, sc);
+        drawGun(c, id, 0, 0, t, flash, ready);
+        c.restore();
+      }
       for (let i = 0; i < 2; i++) {
         c.save();
         c.translate(30 + i * 0, PH - 20 - i * 14);
