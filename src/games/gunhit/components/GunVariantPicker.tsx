@@ -12,7 +12,7 @@ const DESCRIPTIONS: Description = {
   diamond: ['Permata dan bodi platinum', 'Kristal bersinar modern', 'Pistol berfaset dengan pegangan tegas'],
   rainbow: ['Busur pelangi klasik', 'Spektrum bercahaya', 'Prisma pelangi dalam pistol mutiara'],
   meteor: ['Batuan lava klasik', 'Inti meteor menyala', 'Meriam tempa dengan grip dan ventilasi lava'],
-  golden: ['Pistol emas klasik', 'Emas berukir dan reload', 'Meriam emas, silinder dan slide bergerak'],
+  golden: ['Pistol emas klasik', 'Emas berukir dan reload', 'Meriam emas, silinder dan slide bergerak', 'GOLDEN GUN slide 7: pistol emas dengan slide mundur dan selongsong terlempar'],
   moonbeam: ['Bulan sabit klasik', 'Tongkat bulan berbintang', 'Tongkat sihir dengan bintang dan aura'],
   honey: ['Stoples madu klasik dengan tutup kain', 'Blaster lebah dengan pompa dan reservoir madu'],
   cricket: ['Cricket mini lama dengan receiver dan grip mungil', 'Profil krom seperti referensi: laras panjang, pelatuk terbuka, grip hitam'],
@@ -21,6 +21,23 @@ const DESCRIPTIONS: Description = {
   blackhole: [
     'Meriam singularitas klasik slide 1',
     'Meriam slide 2: cincin foton ganda, inti singularitas, dan orb mengisi di moncong',
+    'BLACK HOLE slide 7: tongkat singularitas dengan orb mengisi dan cakar energi',
+  ],
+  slingshot: [
+    'Ketapel kayu sawo slide 1',
+    'KETAPEL slide 7: kayu bercabang, karet ban, kantung kulit dan batu kali berputar',
+  ],
+  blowgun: [
+    'Sumpitan Dayak slide 1',
+    'SUMPIT DAYAK slide 7: buluh panjang, mata tombak, dan jumbai yang bergoyang',
+  ],
+  shotgun: [
+    'Shotgun slide 1',
+    'SHOTGUN slide 7: pompa kayu, selongsong terlempar dan kepulan asap pekat',
+  ],
+  soaker: [
+    'Pistol air neon slide 1',
+    'SUPER SOAKER slide 7: tangki berisi air, pengukur tekanan dan pompa yang bergerak',
   ],
 };
 

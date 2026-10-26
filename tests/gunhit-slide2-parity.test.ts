@@ -47,13 +47,12 @@ test('the black hole gun is no longer a retired classic: newest design + newest 
   assert.equal((EDITABLE_WEAPONS as readonly string[]).includes('blackhole'), true);
   assert.equal(supportsGunVariants('blackhole'), true);
   assert.equal(canChooseGunDesign('blackhole'), true);
-  assert.equal(isTwoCardGun('blackhole'), true);
-  // Only two genuine silhouettes exist, so the picker shows two cards instead
-  // of inventing a duplicate third.
-  assert.deepEqual(getGunVariantOptions('blackhole').map(o => o.id), ['original', 'latest']);
+  // Three genuine silhouettes now: slide 1, slide 2 and the slide-7 SET 1 staff.
+  assert.equal(isTwoCardGun('blackhole'), false);
+  assert.deepEqual(getGunVariantOptions('blackhole').map(o => o.id), ['original', 'latest', 'set1']);
   assert.deepEqual(getGunEffectOptions('blackhole').map(o => o.id), ['original', 'new']);
-  assert.equal(getGunVariant('blackhole'), 'latest', 'slide-2 art is the default');
-  assert.equal(getGunEffect('blackhole'), 'new', 'slide-2 void shot is the default');
+  assert.equal(getGunVariant('blackhole'), 'set1', 'the slide-7 SET 1 staff is the newest design');
+  assert.equal(getGunEffect('blackhole'), 'new', 'the newest shot is the default');
 });
 
 test('the slide-2 black hole preview is measured so the whole cannon fits its card', () => {

@@ -149,7 +149,9 @@ export const GUN_METRICS: Partial<Record<WeaponId, Partial<GunMetrics>>> = {
 
 // Variant-specific centers also keep the three comparison cards at the same
 // apparent size. The rest of the arsenal retains its existing metrics.
-const VARIANT_METRICS: Record<VariantWeapon, { original: GunMetrics; latest?: GunMetrics }> = {
+type VariantMetrics = Partial<Record<GunVariant, GunMetrics>> & { original: GunMetrics };
+
+const VARIANT_METRICS: Record<VariantWeapon, VariantMetrics> = {
   plasma: {
     original: { totalLen: 180, centerOffsetY: 85, centerOffsetX: 15, span: 195 },
     latest: { totalLen: 180, centerOffsetY: 88, centerOffsetX: 9, span: 211 },
@@ -181,6 +183,7 @@ const VARIANT_METRICS: Record<VariantWeapon, { original: GunMetrics; latest?: Gu
   golden: {
     original: { totalLen: 170, centerOffsetY: 80, centerOffsetX: 22, span: 185 },
     latest: { totalLen: 180, centerOffsetY: 87, centerOffsetX: 10, span: 210 },
+    set1: { totalLen: 150, centerOffsetY: 66, centerOffsetX: 31, span: 174 }, // -17,-9..79,141
   },
   blackhole: {
     original: { totalLen: 174, centerOffsetY: 84, centerOffsetX: 2, span: 180 },
@@ -188,6 +191,8 @@ const VARIANT_METRICS: Record<VariantWeapon, { original: GunMetrics; latest?: Gu
     // ink runs x -117..116, y -76..216 around the muzzle, so the 45° showcase
     // diagonal is (233 + 292) / √2 ≈ 371. The old 180 cropped the orbit ring.
     latest: { totalLen: 216, centerOffsetY: 70, centerOffsetX: 0, span: 371 },
+    // Slide-7 BLACK HOLE staff: ink x -51..51, y -51..244.
+    set1: { totalLen: 295, centerOffsetY: 97, centerOffsetX: 0, span: 281 },
   },
   moonbeam: {
     original: { totalLen: 198, centerOffsetY: 88, centerOffsetX: 0, span: 204 },
@@ -205,13 +210,34 @@ const VARIANT_METRICS: Record<VariantWeapon, { original: GunMetrics; latest?: Gu
   electro: {
     original: { totalLen: 215, centerOffsetY: 105, centerOffsetX: 18, span: 230 },
   },
+  // SET 1 of slide 7. The "Set 1" numbers are measured from the real slide-7
+  // renderer (`drawSetOneGun`, at rest and mid-animation) so the card shows the
+  // whole weapon: ink box → diagonal span (w + h) / √2, centre = box centre.
+  //                           box                      w×h    → span
+  slingshot: {
+    original: { totalLen: 176, centerOffsetY: 88, centerOffsetX: 0, span: 184 },
+    set1: { totalLen: 179, centerOffsetY: 83, centerOffsetX: 0, span: 177 }, // -36,-7..36,172
+  },
+  blowgun: {
+    original: { totalLen: 290, centerOffsetY: 145, centerOffsetX: 5, span: 295 },
+    set1: { totalLen: 290, centerOffsetY: 105, centerOffsetX: 12, span: 257 }, // -25,-40..48,250
+  },
+  shotgun: {
+    original: { totalLen: 226, centerOffsetY: 113, centerOffsetX: 6, span: 224 },
+    set1: { totalLen: 297, centerOffsetY: 139, centerOffsetX: 9, span: 240 }, // -13,-10..30,287
+  },
+  soaker: {
+    original: { totalLen: 164, centerOffsetY: 75, centerOffsetX: -1, span: 174 },
+    set1: { totalLen: 158, centerOffsetY: 78, centerOffsetX: 5, span: 185 }, // -47,-1..56,157
+  },
 };
 
 export function getGunMetrics(id: WeaponId, variant: GunVariant = getGunVariant(id)): GunMetrics {
   const effectiveVariant = isFixedClassicGun(id) ? 'original'
     : id === 'honey' && variant === 'latest' ? 'current' : variant;
-  const m = supportsGunVariants(id) && effectiveVariant !== 'current'
-    ? VARIANT_METRICS[id][effectiveVariant] : GUN_METRICS[id];
+  const measured = supportsGunVariants(id) && effectiveVariant !== 'current'
+    ? VARIANT_METRICS[id][effectiveVariant] : undefined;
+  const m = measured ?? GUN_METRICS[id];
   return {
     totalLen: m?.totalLen ?? 175,
     centerOffsetY: m?.centerOffsetY ?? 85,

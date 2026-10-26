@@ -8,6 +8,8 @@ import {
 } from '../src/games/gunhit/game/art/gunVariants';
 import { drawProjectile } from '../src/games/gunhit/game/art/projectiles';
 import { drawMaterialTrail } from '../src/games/gunhit/game/art/projectileTrails';
+import { drawSetOneShotShell } from '../src/games/gunhit/game/setOneFx';
+import { setOneIdFor } from '../src/games/gunhit/game/setOneArt';
 import { drawClassicBeam, drawLaserBeam } from '../src/games/gunhit/game/art/beamEffects';
 import { FX, spawnImpact, spawnMuzzle, type Particle } from '../src/games/gunhit/game/fx';
 import { getGunMetrics } from '../src/games/gunhit/game/art/metrics';
@@ -44,8 +46,8 @@ function pathsFor(id: VariantWeapon, variant: GunVariant) {
 test('user loadouts use the requested classic/new combination; only real alternatives can be selected', () => {
   assert.deepEqual(GUN_VARIANTS.map(v => v.label), ['Sebelumnya', 'Sekarang', 'Terbaru']);
   assert.deepEqual(GUN_EFFECTS.map(v => v.label), ['Sebelumnya', 'Baru']);
-  assert.equal(VARIANT_WEAPONS.length, 14);
-  assert.equal(EDITABLE_WEAPONS.length, 12);
+  assert.equal(VARIANT_WEAPONS.length, 18);
+  assert.equal(EDITABLE_WEAPONS.length, 16);
   assert.equal(getGunVariant('pistol'), 'current');
   assert.equal(getGunEffect('pistol'), 'new');
   for (const id of FIXED_CLASSIC_WEAPONS) {
@@ -63,11 +65,14 @@ test('user loadouts use the requested classic/new combination; only real alterna
   const requested = {
     dragon: ['original', 'new'], rainbow: ['original', 'new'], meteor: ['original', 'new'],
     diamond: ['latest', 'new'], moonbeam: ['original', 'original'],
-    golden: ['original', 'original'], honey: ['original', 'new'],
+    honey: ['original', 'new'],
     chicken: ['latest', 'new'],
     cricket: ['current', 'new'], fish: ['current', 'new'], electro: ['current', 'new'],
-    // Slide-2 parity: newest design AND newest shot are the defaults.
-    blackhole: ['latest', 'new'],
+    // Slide-7 SET 1 is the newest arsenal: its artwork and its own shot are the
+    // defaults for the six guns slide 1 shares with it.
+    golden: ['set1', 'new'], blackhole: ['set1', 'new'],
+    slingshot: ['set1', 'new'], blowgun: ['set1', 'new'],
+    shotgun: ['set1', 'new'], soaker: ['set1', 'new'],
   } as const;
   for (const id of EDITABLE_WEAPONS) {
     assert.equal(canChooseGunDesign(id), true);
@@ -78,6 +83,12 @@ test('user loadouts use the requested classic/new combination; only real alterna
     assert.deepEqual(getGunVariantOptions(id).map(v => v.id), ['original', 'current']);
   }
   assert.equal(getGunVariantOptions('chicken').length, 3);
+  // SET 1 cards: GOLDEN keeps its three slide-1 designs plus "Set 1".
+  assert.deepEqual(getGunVariantOptions('golden').map(v => v.id), ['original', 'current', 'latest', 'set1']);
+  assert.deepEqual(getGunVariantOptions('blackhole').map(v => v.id), ['original', 'latest', 'set1']);
+  for (const id of ['slingshot', 'blowgun', 'shotgun', 'soaker'] as const) {
+    assert.deepEqual(getGunVariantOptions(id).map(v => v.id), ['original', 'set1']);
+  }
   assert.equal(getGunEffectOptions('honey').length, 2);
   assert.equal(getGunMetrics('honey', 'latest').span, getGunMetrics('honey', 'current').span);
 });
@@ -117,7 +128,7 @@ test('choices persist per weapon and the preview metrics follow the chosen silho
     assert.equal(getGunVariant('dragon'), 'original');
     assert.equal(getGunMetrics('diamond').span, getGunMetrics('diamond', 'original').span);
     assert.notEqual(getGunMetrics('diamond').span, getGunMetrics('diamond', 'latest').span);
-    const persisted = JSON.parse(written['gunhit:gun-designs:v2']);
+    const persisted = JSON.parse(written['gunhit:gun-designs:v3']);
     assert.equal(persisted.diamond, 'original');
     assert.equal(persisted.honey, 'current');
   } finally {
@@ -135,8 +146,12 @@ function effectArt(id: VariantWeapon, effect: GunEffect) {
     if (effect === 'original') drawClassicBeam(ctx, 0, 5, 100, 0.9, getWeapon(id).trail);
     else drawLaserBeam(ctx, 0, 5, 100, 0.9, 0.8);
   } else {
-    drawMaterialTrail(ctx, id, effect);
-    drawProjectile(ctx, id, 40, 0.8, 0, false, effect);
+    const setOneId = effect === 'new' ? setOneIdFor(id) : null;
+    if (setOneId) drawSetOneShotShell(ctx, setOneId, 0.06, 24);
+    else {
+      drawMaterialTrail(ctx, id, effect);
+      drawProjectile(ctx, id, 40, 0.8, 0, false, effect);
+    }
   }
   return calls.join(',');
 }
@@ -154,7 +169,7 @@ test('eleven editable guns show the old and new actual shot renderers', () => {
   // The black hole gained a real second shot (slide-2 void) and a second
   // design (slide-2 cannon), so it is no longer a retired classic.
   assert.equal(canChooseGunDesign('blackhole'), true);
-  assert.deepEqual(getGunVariantOptions('blackhole').map(v => v.id), ['original', 'latest']);
+  assert.deepEqual(getGunVariantOptions('blackhole').map(v => v.id), ['original', 'latest', 'set1']);
   assert.notEqual(effectArt('blackhole', 'new'), effectArt('blackhole', 'original'));
 });
 
@@ -175,8 +190,8 @@ test('honey old/new effects persist independently of design and leave gameplay r
     assert.equal(getGunEffect('honey'), 'original');
     assert.equal(getGunEffect('chicken'), 'new');
     assert.equal(getGunEffect('laser'), 'original');
-    assert.equal(JSON.parse(written['gunhit:shot-effects:v2']).honey, 'original');
-    assert.equal(JSON.parse(written['gunhit:shot-effects:v2']).chicken, 'new');
+    assert.equal(JSON.parse(written['gunhit:shot-effects:v3']).honey, 'original');
+    assert.equal(JSON.parse(written['gunhit:shot-effects:v3']).chicken, 'new');
     assert.deepEqual({ speed: honey.speed, stick: honey.stick, half: honey.half,
       points: honey.points, cooldown: honey.cooldown, recoil: honey.recoil }, mechanics);
     const oldParticles: Particle[] = [], newParticles: Particle[] = [];

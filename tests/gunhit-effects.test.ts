@@ -1259,7 +1259,9 @@ test('electro, blackhole, slingshot, shotgun, and soaker render reference-matche
         return true;
       },
     });
-    drawGun(ctx, w, 210, 575, 0.45, 0, true, 'classic');
+    // The reference designs, not the slide-7 SET 1 card (the default). The
+    // black hole's reference art is its slide-2 cannon ("Terbaru" card).
+    drawGun(ctx, w, 210, 575, 0.45, 0, true, undefined, w === 'blackhole' ? 'latest' : 'current');
     assert.deepEqual(thickDarkStrokes, [], `${w} should use refined thin outlines`);
     assert.ok(stops.length >= 10, `${w} should render rich multi-stop gradients matching the reference art`);
   }
@@ -1308,7 +1310,9 @@ test('removed weapons are absent and honey, railgun, and snowball render referen
         return true;
       },
     });
-    drawGun(ctx, w, 210, 575, 0.45, 0, true, 'classic');
+    // The reference designs, not the slide-7 SET 1 card (the default). The
+    // black hole's reference art is its slide-2 cannon ("Terbaru" card).
+    drawGun(ctx, w, 210, 575, 0.45, 0, true, undefined, w === 'blackhole' ? 'latest' : 'current');
     assert.deepEqual(thickDarkStrokes, [], `${w} should use refined thin outlines`);
     assert.ok(stops.length >= 12, `${w} should render rich multi-stop gradients matching the reference art`);
   }

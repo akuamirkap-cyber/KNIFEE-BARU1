@@ -3,6 +3,7 @@ import { shotPulse } from './commonGunMotion';
 import { drawPlasmaGrip, drawVoidGrip } from './gripSystem';
 import type { VariantWeapon } from './gunVariants';
 import { drawSlide2DiamondMuzzleFormation } from '../diamondSlideFx';
+import { slingshot as slingshotSlide1, blowgun as blowgunSlide1, shotgun as shotgunSlide1, soaker as soakerSlide1 } from './guns2';
 
 // Pre-overhaul renderers are preserved from git HEAD (c0769f5).
 // Only Moonbeam's original pistol grip is replaced by a continuous staff so
@@ -245,6 +246,12 @@ export function drawOriginalGun(c: C, id: VariantWeapon, cx: number, y0: number,
     case 'cricket': originalCricket(c, cx, y0, t); break;
     case 'electro': originalElectro(c, cx, y0, t); break;
     case 'fish': originalFishGun(c, cx, y0, t); break;
+    // SET 1 weapons of slide 7 only ever had one slide-1 look; it lives in
+    // guns2 and is drawn here for the "Sebelumnya" card.
+    case 'slingshot': slingshotSlide1(c, cx, y0, t, ready); break;
+    case 'blowgun': blowgunSlide1(c, cx, y0, t); break;
+    case 'shotgun': shotgunSlide1(c, cx, y0, t, ready); break;
+    case 'soaker': soakerSlide1(c, cx, y0, t); break;
     default: { const _never: never = id; return _never; }
   }
 }

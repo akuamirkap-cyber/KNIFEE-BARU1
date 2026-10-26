@@ -4,6 +4,7 @@ import { WEAPONS, getWeapon, type WeaponId } from '../src/games/gunhit/game/weap
 import { COMMON_GUN_IDS, commonGunPreviewState, isCommonGun, shotPulse } from '../src/games/gunhit/game/art/commonGunMotion';
 import { drawGun } from '../src/games/gunhit/game/art/guns';
 import { drawGunCentered } from '../src/games/gunhit/game/art/drawCentered';
+import { getGunVariantOptions, isSetOneDesignWeapon } from '../src/games/gunhit/game/art/gunVariants';
 import { gunState, lin, vlin } from '../src/games/gunhit/game/art/kit';
 import { drawChronoGrip, drawElectroGrip, drawFishGrip, drawFrostGrip, drawFreezeGrip, drawPortalGrip, drawVoidGrip, drawWaterGrip } from '../src/games/gunhit/game/art/gripSystem';
 
@@ -36,13 +37,21 @@ function canvasArt(events: string[]): CanvasRenderingContext2D {
   }) as CanvasRenderingContext2D;
 }
 
+/**
+ * These assertions are about the slide-1 bodies, so the slide-7 SET 1 design
+ * (the new default for its six guns) is pinned back to its first card here.
+ */
+function slide1Design(id: WeaponId) {
+  return isSetOneDesignWeapon(id) ? getGunVariantOptions(id)[0].id : undefined;
+}
+
 function render(id: WeaponId, age: number, t: number, ready = true): string {
   const previousShot = gunState.sinceShot, previousReload = gunState.reloadT;
   const events: string[] = [];
   try {
     gunState.sinceShot = age;
     gunState.reloadT = 0;
-    drawGun(canvasArt(events), id, 0, 0, t, 0, ready);
+    drawGun(canvasArt(events), id, 0, 0, t, 0, ready, undefined, slide1Design(id));
   } finally {
     gunState.sinceShot = previousShot;
     gunState.reloadT = previousReload;
@@ -94,7 +103,7 @@ test('menu and Arsenal demonstrate a shot, one refill, then return to idle witho
     for (const id of COMMON_GUN_IDS) {
       const events: string[] = [];
       for (const t of [0, 0.9, 1.18, 1.65]) {
-        drawGunCentered(canvasArt(events), id, t, 0, true, undefined, true);
+        drawGunCentered(canvasArt(events), id, t, 0, true, slide1Design(id), true);
         assert.equal(gunState.sinceShot, 0.47, `${id}: demo must restore shot time`);
         assert.equal(gunState.reloadT, 1.25, `${id}: demo must restore reload time`);
       }

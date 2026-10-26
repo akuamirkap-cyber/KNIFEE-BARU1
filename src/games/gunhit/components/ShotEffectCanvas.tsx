@@ -8,6 +8,8 @@ import { createCrispBolt, renderCrispBolt } from '../game/kerisSlideFx';
 import { star } from '../game/art/kit';
 import { useSlideActive } from '../../shared/SlideActivity';
 import type { GunEffect } from '../game/art/gunVariants';
+import { drawSetOneShotShell } from '../game/setOneFx';
+import { setOneIdFor } from '../game/setOneArt';
 
 /** Tiny live comparison using the exact same projectile/beam renderers as gameplay. */
 export default function ShotEffectCanvas({ weapon, effect }: { weapon: Weapon; effect: GunEffect }) {
@@ -54,6 +56,13 @@ export default function ShotEffectCanvas({ weapon, effect }: { weapon: Weapon; e
           }
           if (weapon.id === 'keris') {
             renderCrispBolt(c, createCrispBolt(0, 74, 0, -4, { sway: 5, steps: 5, branchChance: 0.25 }), '#4deeea', 6);
+          }
+          const setOneId = effect === 'new' ? setOneIdFor(weapon.id) : null;
+          if (setOneId) {
+            drawSetOneShotShell(c, setOneId, 0.06, 24);
+            c.restore();
+            if (active) frame = requestAnimationFrame(paint);
+            return;
           }
           if (!drawMaterialTrail(c, weapon.id, effect)) {
             const trail = c.createLinearGradient(0, 14, 0, 80);

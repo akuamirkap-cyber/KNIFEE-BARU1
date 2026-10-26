@@ -1,6 +1,7 @@
 import { slide23Sfx } from './slide23Sfx';
 import { fireworkSfx } from './fireworkSlide2Sfx';
 import { slide2Sfx } from './slide2Audio';
+import { setOneSfx } from './setOneAudio';
 
 let actx: AudioContext | null = null;
 let master: GainNode | null = null;
@@ -12,6 +13,7 @@ export function setMuted(m: boolean) {
   slide23Sfx.setMuted(m);
   fireworkSfx.setMuted(m);
   slide2Sfx.setMuted(m);
+  setOneSfx.setMuted(m);
   if (master) master.gain.value = m ? 0 : 0.55;
 }
 

@@ -44,7 +44,32 @@ export function mulberry32(seed: number) {
   };
 }
 
+/** Minimal stand-in used when slide 7's art is rendered headlessly (tests). */
+function headlessCtx(): CanvasRenderingContext2D {
+  const gradient = { addColorStop: () => undefined };
+  return new Proxy({}, {
+    get: (_t, prop) => {
+      const name = String(prop);
+      if (name === 'createLinearGradient' || name === 'createRadialGradient'
+        || name === 'createPattern') return () => gradient;
+      if (name === 'measureText') return () => ({ width: 0 });
+      if (name === 'getImageData') return () => ({ data: new Uint8ClampedArray(4) });
+      return () => undefined;
+    },
+    set: () => true,
+  }) as unknown as CanvasRenderingContext2D;
+}
+
 export function makeCanvas(w: number, h: number) {
+  if (typeof document === 'undefined') {
+    // Sprites are only used as drawImage sources; headless geometry checks do
+    // not need a DOM canvas.
+    return {
+      width: Math.max(1, Math.ceil(w)),
+      height: Math.max(1, Math.ceil(h)),
+      getContext: () => headlessCtx(),
+    } as unknown as HTMLCanvasElement;
+  }
   const c = document.createElement('canvas');
   c.width = Math.max(1, Math.ceil(w));
   c.height = Math.max(1, Math.ceil(h));

@@ -5,6 +5,13 @@ type C = CanvasRenderingContext2D;
 
 // Original shot drawings from c0769f5, not a recolor of the new projectile.
 // Only visuals are reused: collisions, speed, stick depth and buffs stay current.
+const NO_CLASSIC_ART = ['slingshot', 'blowgun', 'shotgun', 'soaker'] as const;
+
+/** True when the gun has a genuine pre-variant shot to show as "Sebelumnya". */
+export function hasClassicProjectile(id: VariantWeapon): boolean {
+  return !(NO_CLASSIC_ART as readonly string[]).includes(id);
+}
+
 export function drawClassicProjectile(c: C, kind: VariantWeapon, len: number, t: number) {
   switch (kind) {
     case 'golden': classicRound(c, len, 'gold'); break;
@@ -21,6 +28,13 @@ export function drawClassicProjectile(c: C, kind: VariantWeapon, len: number, t:
     case 'cricket': classicCricket(c, len, t); break;
     case 'electro': classicElectro(c, len, t); break;
     case 'fish': classicFish(c, len, t); break;
+    // SET 1 weapons keep their existing slide-1 projectile as the "Sebelumnya"
+    // effect; `hasClassicProjectile` sends them down their normal renderer.
+    case 'slingshot':
+    case 'blowgun':
+    case 'shotgun':
+    case 'soaker':
+      return;
     default: { const _never: never = kind; return _never; }
   }
 }

@@ -1,5 +1,5 @@
 import type { WeaponId } from '../weapons';
-import { getGunVariant, isFixedClassicGun, supportsGunVariants, supportsLatestDesign, type GunVariant } from './gunVariants';
+import { getGunVariant, isFixedClassicGun, isSetOneDesignWeapon, supportsGunVariants, supportsLatestDesign, type GunVariant } from './gunVariants';
 import { drawOriginalGun } from './legacyVariants';
 import { drawLatestGun } from './latestVariants';
 import { drawGunExtra, drawFlashExtra } from './guns3';
@@ -7,6 +7,7 @@ import { gunState, lin as sharedLin, radial } from './kit';
 import { shotPulse } from './commonGunMotion';
 import { drawSlide3BazookaMuzzleFx } from '../bazookaSlideFx';
 import { drawBlackHoleGun2, type Slide2GunState } from '../slide2Weapons';
+import { drawSetOneGun, setOneIdFor } from '../setOneArt';
 
 const TAU = Math.PI * 2;
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
@@ -59,6 +60,21 @@ export function drawGun(
   variant: GunVariant = getGunVariant(id),
 ) {
   c.save();
+  // SET 1 of slide 7: the newest design is slide 7's own artwork, drawn at the
+  // same muzzle origin with the same visible animation ranges (slide travel,
+  // pump, pouch, charge meter, tank gauge).
+  const setOneId = isSetOneDesignWeapon(id) && variant === 'set1' ? setOneIdFor(id) : null;
+  if (setOneId && supportsGunVariants(id)) {
+    drawSetOneGun(c, setOneId, cx, y0, t, {
+      sinceShot: gunState.sinceShot,
+      charge: gunState.charge,
+      water: gunState.ammoRatio,
+      ready,
+    });
+    c.restore();
+    if (flash > 0) drawFlash(c, id, cx, y0, t, flash);
+    return;
+  }
   // Slide-2 guns: the newest design is slide 2's own art, drawn at the same
   // muzzle origin with the same rest/charge animation (loadP 7/s, recoil 6/s).
   if (id === 'blackhole' && variant === 'latest' && supportsGunVariants(id)) {

@@ -11,23 +11,46 @@ export const EDITABLE_WEAPONS = [
   // Slide-2 guns: the old slide-1 art is kept as "Sebelumnya", the slide-2
   // art (and its shot) is the new default.
   'blackhole',
+  // SET 1 of slide 7 (`Weapon Hit 71 Senjata`): KETAPEL, SUMPIT DAYAK,
+  // SHOTGUN and SUPER SOAKER get slide 7's own art as a "Set 1" card.
+  'slingshot', 'blowgun', 'shotgun', 'soaker',
 ] as const satisfies readonly WeaponId[];
+
+/**
+ * Slide-7 SET 1 weapons that exist on slide 1 under the same name. Their
+ * newest design is the real slide-7 artwork (`setOneArt.drawSetOneGun`), so
+ * they get an extra "Set 1" design card that is selected by default.
+ */
+export const SET_ONE_DESIGN_WEAPONS = [
+  'golden', 'blackhole', 'slingshot', 'blowgun', 'shotgun', 'soaker',
+] as const satisfies readonly WeaponId[];
+export type SetOneDesignWeapon = (typeof SET_ONE_DESIGN_WEAPONS)[number];
+
+export function isSetOneDesignWeapon(id: WeaponId | 'old'): id is SetOneDesignWeapon {
+  return (SET_ONE_DESIGN_WEAPONS as readonly string[]).includes(id);
+}
 /**
  * Guns that only ever had ONE old look on slide 1, so the picker offers two
  * cards instead of three: "Sebelumnya" (slide-1 art) and "Terbaru" (slide 2).
  */
-export const TWO_CARD_WEAPONS = ['blackhole'] as const satisfies readonly WeaponId[];
+// No gun is limited to two cards any more: BLACK HOLE gained the slide-7 staff
+// as a third silhouette, and the SET 1 guns gained their own card.
+export const TWO_CARD_WEAPONS = [] as const satisfies readonly WeaponId[];
 export type EditableWeapon = (typeof EDITABLE_WEAPONS)[number];
-export type LatestDesignWeapon = Exclude<EditableWeapon, 'honey' | 'cricket' | 'fish' | 'electro'>;
+/** Guns whose previous/current/latest renderers are three distinct designs. */
+const NO_LATEST_DESIGN = ['honey', 'cricket', 'fish', 'electro', 'slingshot', 'blowgun', 'shotgun', 'soaker'] as const;
+export type LatestDesignWeapon = Exclude<EditableWeapon, (typeof NO_LATEST_DESIGN)[number]>;
 export const VARIANT_WEAPONS = [...EDITABLE_WEAPONS, ...FIXED_CLASSIC_WEAPONS] as const;
 export type VariantWeapon = (typeof VARIANT_WEAPONS)[number];
 
-export type GunVariant = 'original' | 'current' | 'latest';
+export type GunVariant = 'original' | 'current' | 'latest' | 'set1';
 export const GUN_VARIANTS: readonly { id: GunVariant; label: string }[] = [
   { id: 'original', label: 'Sebelumnya' },
   { id: 'current', label: 'Sekarang' },
   { id: 'latest', label: 'Terbaru' },
 ];
+/** The slide-7 SET 1 design card (newest for its six weapons). */
+export const SET_ONE_VARIANT: { id: GunVariant; label: string } = { id: 'set1', label: 'Set 1' };
 export type GunEffect = 'original' | 'new';
 export const GUN_EFFECTS: readonly { id: GunEffect; label: string }[] = [
   { id: 'original', label: 'Sebelumnya' },
@@ -44,7 +67,7 @@ export function supportsGunVariants(id: WeaponId | 'old'): id is VariantWeapon {
   return isFixedClassicGun(id) || canChooseGunDesign(id);
 }
 export function supportsLatestDesign(id: VariantWeapon): id is LatestDesignWeapon {
-  return !isFixedClassicGun(id) && !(['honey', 'cricket', 'fish', 'electro'] as const).includes(id as 'honey' | 'cricket' | 'fish' | 'electro');
+  return !isFixedClassicGun(id) && !(NO_LATEST_DESIGN as readonly string[]).includes(id);
 }
 
 export function isTwoCardGun(id: WeaponId | 'old'): boolean {
@@ -53,11 +76,23 @@ export function isTwoCardGun(id: WeaponId | 'old'): boolean {
 
 export function getGunVariantOptions(id: VariantWeapon) {
   if (isFixedClassicGun(id)) return GUN_VARIANTS.slice(0, 1);
+  // SET 1 weapons: the slide-1 silhouette(s) plus slide 7's own artwork, which
+  // is the newest design and therefore the default.
+  if (isSetOneDesignWeapon(id)) {
+    // GOLDEN GUN already has three genuine slide-1 designs, so it keeps all of
+    // them and gains "Set 1" as a fourth card.
+    if (id === 'golden') return [...GUN_VARIANTS, SET_ONE_VARIANT];
+    // The BLACK HOLE cannon keeps its slide-2 look as "Terbaru" next to the
+    // slide-7 staff, which is what the default now points at.
+    if (id === 'blackhole') return [GUN_VARIANTS[0], GUN_VARIANTS[2], SET_ONE_VARIANT];
+    // The other four only ever had one slide-1 look.
+    return [GUN_VARIANTS[0], SET_ONE_VARIANT];
+  }
   // Only two genuine silhouettes: the old slide-1 art and the slide-2 art.
   if (isTwoCardGun(id)) return [GUN_VARIANTS[0], GUN_VARIANTS[2]];
   // These have a previous/current comparison only; don't offer a fake third
   // card whose renderer would duplicate one of those two designs.
-  return (['honey', 'cricket', 'fish', 'electro'] as const).includes(id as 'honey' | 'cricket' | 'fish' | 'electro')
+  return (NO_LATEST_DESIGN as readonly string[]).includes(id)
     ? GUN_VARIANTS.slice(0, 2) : GUN_VARIANTS;
 }
 export function getGunEffectOptions(id: VariantWeapon) {
@@ -68,17 +103,21 @@ export function getGunEffectOptions(id: VariantWeapon) {
 // player whose earlier choices were stored in v1; further picks persist in v2.
 const DEFAULT_DESIGNS: Record<EditableWeapon, GunVariant> = {
   dragon: 'original', diamond: 'latest', rainbow: 'original', meteor: 'original',
-  golden: 'original', moonbeam: 'original', chicken: 'latest', honey: 'original',
+  moonbeam: 'original', chicken: 'latest', honey: 'original',
   cricket: 'current', fish: 'current', electro: 'current',
-  // Slide 2 is the newest look, so it is the default.
-  blackhole: 'latest',
+  // Slide-7 SET 1 is the newest arsenal, so its own artwork is the default for
+  // the six guns slide 1 shares with it.
+  golden: 'set1', blackhole: 'set1', slingshot: 'set1', blowgun: 'set1',
+  shotgun: 'set1', soaker: 'set1',
 };
 const DEFAULT_EFFECTS: Record<EditableWeapon, GunEffect> = {
   dragon: 'new', diamond: 'new', rainbow: 'new', meteor: 'new',
-  golden: 'original', moonbeam: 'original', chicken: 'new', honey: 'new',
+  moonbeam: 'original', chicken: 'new', honey: 'new',
   cricket: 'new', fish: 'new', electro: 'new',
-  // The slide-2 void shot (charge sparks, lensing orb, void burst) is default.
-  blackhole: 'new',
+  // The slide-7 SET 1 shot (its muzzle recipe, trail, impact burst and its own
+  // sounds) is the newest effect for these six.
+  golden: 'new', blackhole: 'new', slingshot: 'new', blowgun: 'new',
+  shotgun: 'new', soaker: 'new',
 };
 
 function readChoices(key: string): Record<string, unknown> | null {
@@ -91,8 +130,8 @@ function readChoices(key: string): Record<string, unknown> | null {
   } catch { return null; /* Storage may be disabled or contain malformed JSON. */ }
 }
 
-const DESIGN_KEY = 'gunhit:gun-designs:v2';
-const EFFECT_KEY = 'gunhit:shot-effects:v2';
+const DESIGN_KEY = 'gunhit:gun-designs:v3';
+const EFFECT_KEY = 'gunhit:shot-effects:v3';
 const saved: Partial<Record<EditableWeapon, GunVariant>> = {};
 const effects: Partial<Record<EditableWeapon, GunEffect>> = {};
 
