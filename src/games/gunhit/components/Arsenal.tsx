@@ -12,7 +12,7 @@ import { sfx4 } from '../game/sfx4';
 import { useSlideActive } from '../../shared/SlideActivity';
 import { SunburstFX } from '../../knife-hit/components/Effects';
 import { gunSunburstColor } from '../game/sunburstPalette';
-import { EDITABLE_WEAPONS, GUN_VARIANTS, getGunVariant, setGunVariant, getGunEffect, setGunEffect, canChooseGunDesign, type GunVariant } from '../game/art/gunVariants';
+import { EDITABLE_WEAPONS, getGunVariant, setGunVariant, getGunEffect, setGunEffect, getGunVariantOptions, canChooseGunDesign, type GunVariant } from '../game/art/gunVariants';
 import GunVariantPicker from './GunVariantPicker';
 
 type Tab = 'ALL' | 'DESAIN' | 'EPIC' | 'LANGKA' | 'LEGENDARIS' | 'UMUM' | 'BOSS';
@@ -467,7 +467,7 @@ export default function Arsenal({
           <button type="button" onClick={() => setEditingDesign(true)}
             aria-label={`Bandingkan desain ${selectedGun.name}`}
             className="relative z-20 mt-1 rounded-xl border border-amber-200/70 bg-[#342354] px-3.5 py-0.5 text-[10px] font-black text-amber-200 shadow-[0_0_12px_rgba(250,204,21,0.22)] transition hover:bg-[#4d3475] active:scale-95">
-            ✦ PILIH DESAIN · {GUN_VARIANTS.find((v) => v.id === selectedVariant)?.label.toUpperCase()} ▸
+            ✦ PILIH DESAIN · {(getGunVariantOptions(selectedGunId).find((v) => v.id === selectedVariant)?.label ?? '').toUpperCase()} ▸
           </button>
         )}
       </div>
