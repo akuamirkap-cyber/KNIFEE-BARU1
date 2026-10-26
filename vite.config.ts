@@ -84,7 +84,6 @@ export default defineConfig(() => {
           obliterator: path.resolve(process.cwd(), 'games/obliterator/index.html'),
           game1: path.resolve(process.cwd(), 'games/game-1/index.html'),
           game2: path.resolve(process.cwd(), 'games/game-2/index.html'),
-          game3: path.resolve(process.cwd(), 'games/game-3/index.html'),
           game4: path.resolve(process.cwd(), 'games/game-4/index.html'),
           game5: path.resolve(process.cwd(), 'games/game-5/index.html'),
           game6: path.resolve(process.cwd(), 'games/game-6/index.html'),

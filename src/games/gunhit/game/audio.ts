@@ -1,14 +1,69 @@
 import { slide23Sfx } from './slide23Sfx';
+import { fireworkSfx } from './fireworkSlide2Sfx';
+import { slide2Sfx } from './slide2Audio';
+import { setOneSfx } from './setOneAudio';
+import { setNineMuted } from './setNineFx';
+import { setElevenMuted } from './setElevenFx';
 
 let actx: AudioContext | null = null;
 let master: GainNode | null = null;
 let noiseBuf: AudioBuffer | null = null;
 let muted = false;
 
+/**
+ * Slide-1 master level.
+ *
+ * Slide 7 (`game-4`) and slide 1 both used to sit at 0.55, while slide 9 runs
+ * at 0.85 and slide 11 at 0.92 — each with a compressor on the bus. Once the
+ * ported guns started playing their source synthesizers next to slide 1's own
+ * recipes, the 0.55 bus made everything on slide 1 sound "lirih" compared to
+ * the slide the gun came from. 0.85 matches slide 9, and the compressor below
+ * keeps the loudest recipes from clipping now that the bus is hotter.
+ */
+const MASTER_LEVEL = 0.85;
+
+/**
+ * Per-call gain multiplier for slide 1's own `noise()`/`tone()` recipes.
+ *
+ * A handful of slide-1 sounds were authored as whisper-quiet accents (a
+ * yo-yo's whirr, a rainbow's shimmer). They are fine as a layer, but the
+ * player only hears them as the *fire* sound of that gun, so `withSfxGain`
+ * lets each one be lifted to a comparable loudness without rewriting the
+ * recipe. Ported slides have their own graph and are unaffected.
+ */
+let busScale = 1;
+
+export function sfxVolume(v: number): number {
+  return v * busScale;
+}
+
+/** Runs `fn` with every slide-1 `noise()`/`tone()` voice scaled by `k`. */
+export function withSfxGain<T>(k: number, fn: () => T): T {
+  const prev = busScale;
+  busScale = prev * Math.min(6, Math.max(0.05, k));
+  try {
+    return fn();
+  } finally {
+    busScale = prev;
+  }
+}
+
+/** Current slide-1 master level (0 while muted). */
+export function masterLevel(): number {
+  return master ? master.gain.value : MASTER_LEVEL;
+}
+
 export function setMuted(m: boolean) {
   muted = m;
   slide23Sfx.setMuted(m);
-  if (master) master.gain.value = m ? 0 : 0.55;
+  fireworkSfx.setMuted(m);
+  slide2Sfx.setMuted(m);
+  setOneSfx.setMuted(m);
+  // Slide 9's ported guns play through slide 9's own synthesizer.
+  setNineMuted(m);
+  // …and slide 11's through slide 11's.
+  setElevenMuted(m);
+  if (master) master.gain.value = m ? 0 : MASTER_LEVEL;
 }
 
 function ac(): AudioContext {
@@ -17,9 +72,19 @@ function ac(): AudioContext {
       window.AudioContext ||
       (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     actx = new AC();
+    // Slide 9 / slide 11 both run a compressor on their master bus; slide 1
+    // never had one, so the loud recipes (shotgun, sniper, AK) could clip
+    // while the quiet ones were buried. Same idea, gentler settings.
+    const comp = actx.createDynamicsCompressor();
+    comp.threshold.value = -16;
+    comp.knee.value = 24;
+    comp.ratio.value = 7;
+    comp.attack.value = 0.002;
+    comp.release.value = 0.2;
+    comp.connect(actx.destination);
     master = actx.createGain();
-    master.gain.value = muted ? 0 : 0.55;
-    master.connect(actx.destination);
+    master.gain.value = muted ? 0 : MASTER_LEVEL;
+    master.connect(comp);
     noiseBuf = actx.createBuffer(1, actx.sampleRate, actx.sampleRate);
     const d = noiseBuf.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
@@ -39,7 +104,8 @@ export function noise(dur: number, freq: number, vol: number, type: BiquadFilter
     f.frequency.setValueAtTime(freq, t);
     if (freqEnd) f.frequency.exponentialRampToValueAtTime(freqEnd, t + dur);
     const g = a.createGain();
-    g.gain.setValueAtTime(vol, t);
+    const v = sfxVolume(vol);
+    g.gain.setValueAtTime(v, t);
     g.gain.exponentialRampToValueAtTime(0.001, t + dur);
     src.connect(f);
     f.connect(g);
@@ -61,7 +127,7 @@ export function tone(f0: number, f1: number, dur: number, type: OscillatorType, 
     o.frequency.exponentialRampToValueAtTime(Math.max(1, f1), t + dur);
     const g = a.createGain();
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(vol, t + 0.005);
+    g.gain.exponentialRampToValueAtTime(sfxVolume(vol), t + 0.005);
     g.gain.exponentialRampToValueAtTime(0.001, t + dur);
     o.connect(g);
     g.connect(master!);
@@ -76,6 +142,8 @@ export const sfx = {
   unlock() {
     ac();
     slide23Sfx.unlock();
+    slide2Sfx.unlock();
+    fireworkSfx.unlock();
   },
   click() {
     slide23Sfx.click();
@@ -203,10 +271,13 @@ export const sfx = {
     slide23Sfx.clear(w);
   },
   clear(w?: string) {
-    slide23Sfx.clear(w);
+    // Slide 2's own stage-clear fanfare for the firework launcher.
+    if (w === 'firework') fireworkSfx.clear();
+    else slide23Sfx.clear(w);
   },
   fail(w?: string) {
-    slide23Sfx.fail(w);
+    if (w === 'firework') fireworkSfx.fail();
+    else slide23Sfx.fail(w);
   },
   coin() {
     tone(988, 988, 0.08, 'square', 0.13);

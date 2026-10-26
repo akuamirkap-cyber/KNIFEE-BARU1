@@ -44,6 +44,17 @@ class Slide23Sfx {
   private master: GainNode | null = null;
   private reverb: ConvolverNode | null = null;
   private noiseBuf: AudioBuffer | null = null;
+  /**
+   * Extra gain for the recipe that is playing right now (see `shoot(id, gain)`).
+   *
+   * A few slide-2/3 weapons are authored as soft accents — inside their own
+   * slide they ride on top of fireworks and a stage track, so 0.11–0.2 peaks
+   * are enough. On slide 1 the same recipe is the *only* thing the player
+   * hears when the gun fires, and it came out whisper-quiet next to the other
+   * 98 guns. Slide 1 therefore asks for the recipe at a louder gain instead of
+   * rewriting the sound.
+   */
+  private shotGain = 1;
   muted = false;
 
   setMuted(m: boolean) {
@@ -144,7 +155,7 @@ class Slide23Sfx {
         osc.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t0 + dur);
       }
       const g = ctx.createGain();
-      const peak = opts.gain ?? 0.16;
+      const peak = (opts.gain ?? 0.16) * this.shotGain;
       const atk = opts.attack ?? 0.007;
       g.gain.setValueAtTime(0.0001, t0);
       g.gain.linearRampToValueAtTime(peak, t0 + atk);
@@ -179,11 +190,12 @@ class Slide23Sfx {
       o2.frequency.setValueAtTime(freq * 2, t0);
       const g1 = ctx.createGain();
       const g2 = ctx.createGain();
+      const peak = gain * this.shotGain;
       g1.gain.setValueAtTime(0.0001, t0);
-      g1.gain.linearRampToValueAtTime(gain, t0 + 0.006);
+      g1.gain.linearRampToValueAtTime(peak, t0 + 0.006);
       g1.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
       g2.gain.setValueAtTime(0.0001, t0);
-      g2.gain.linearRampToValueAtTime(gain * 0.32, t0 + 0.006);
+      g2.gain.linearRampToValueAtTime(peak * 0.32, t0 + 0.006);
       g2.gain.exponentialRampToValueAtTime(0.0001, t0 + dur * 0.6);
       o1.connect(g1);
       o2.connect(g2);
@@ -243,7 +255,7 @@ class Slide23Sfx {
       flt.frequency.setValueAtTime(Math.max(20, f0), t0);
       flt.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t0 + dur);
       const g = ctx.createGain();
-      g.gain.setValueAtTime(gain, t0);
+      g.gain.setValueAtTime(gain * this.shotGain, t0);
       g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
       src.connect(flt);
       flt.connect(g);
@@ -307,7 +319,7 @@ class Slide23Sfx {
         }
       }
       const g = ctx.createGain();
-      const peak = opts.gain ?? 0.14;
+      const peak = (opts.gain ?? 0.14) * this.shotGain;
       g.gain.setValueAtTime(0.0001, t0);
       g.gain.linearRampToValueAtTime(peak, t0 + 0.008);
       g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
@@ -458,7 +470,24 @@ class Slide23Sfx {
   }
 
   // ------------------------------------------------ SHOOT (Slide #2 & Slide #3)
-  shoot(w: WeaponId | string) {
+  /**
+   * Slide #2 / #3 firing recipe.
+   *
+   * `gain` lifts (or trims) the whole recipe by one multiplier — every voice it
+   * schedules is scaled, so the character of the sound stays exactly as it was
+   * authored, only its level changes.
+   */
+  shoot(w: WeaponId | string, gain = 1) {
+    const prev = this.shotGain;
+    this.shotGain = prev * Math.min(6, Math.max(0.1, gain));
+    try {
+      this.recipe(w);
+    } finally {
+      this.shotGain = prev;
+    }
+  }
+
+  private recipe(w: WeaponId | string) {
     switch (w) {
       // Slide #2 weapons
       case 'keris':

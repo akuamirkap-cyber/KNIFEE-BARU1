@@ -13,7 +13,12 @@ export type WeaponId =
   | 'coingun' | 'blaster'
   | 'photon_saber'
   | 'gauntlet_cannon' | 'pulse_rifle' | 'cryo_blaster' | 'hyperdrive' | 'quantum_destabilizer'
-  | 'xeno' | 'dora' | 'pred';
+  | 'xeno' | 'dora' | 'pred'
+  | 'longbow' | 'mp5' | 'tesla_rifle' | 'ion_smg' | 'phaser'
+  | 'yautja' | 'identity_disc' | 'proton_pack' | 'heat_ray'
+  | 'mega_buster' | 'harmonic_disruptor' | 'absolute_zero' | 'helios_flare'
+  | 'chrono_rifle' | 'orbital_beacon' | 'helix_pulsar' | 'singularity'
+  | 'prism_lance' | 'nano_swarm';
 export type ProjKind = WeaponId | 'old';
 export type Rarity = 'UMUM' | 'LANGKA' | 'EPIC' | 'LEGENDARIS';
 export type TrailFx = 'none' | 'glow' | 'smoke' | 'spark' | 'bubble' | 'frost' | 'gold' | 'void' | 'fire' | 'pixel' | 'confetti' | 'rainbow' | 'petal' | 'note' | 'acid' | 'air' | 'plasma';
@@ -377,6 +382,68 @@ export const WEAPONS: Weapon[] = [
   { ...base, id: 'pred', name: 'PREDATOR PLASMA CASTER', emoji: '⚡', rarity: 'EPIC', perk: 'PLASMA CASTER', desc: 'Meriam plasma pundak Predator! Tahan untuk mengisi daya, lalu lepaskan baut plasma mematikan.',
     speed: 2600, cooldown: 0.35, half: 5, noSmoke: true, energy: true, charge: true, recoil: 1.4, shake: 6, color: '#6fd3ff', trail: '111,211,255', trailFx: 'plasma',
     sparks: ['#ffffff', '#a5f3fc', '#6fd3ff'], previewLen: 220, previewY: 34, stats: { rate: 2, speed: 3, power: 5 } },
+  // ======================== SLIDE 9 (games/game-6) ========================
+  // Every slide-9 weapon that had no counterpart on slide 1 became its own gun:
+  // the art, the shot and the sounds are slide 9's own (`setNineArt` /
+  // `setNineFx`), and slide 1's rules still decide the hit and the score.
+  { ...base, id: 'longbow', name: 'LONGBOW RECURVE', emoji: '🏹', rarity: 'UMUM', perk: 'BUSUR TARIK', desc: 'Busur recurve laminasi dari slide 9. TAHAN untuk menarik tali, LEPAS untuk melepas anak panah panjang yang melesat lurus. 2 poin!',
+    speed: 3400, cooldown: 0.28, points: 2, half: 3, stick: 20, charge: true, recoil: 1.2, shake: 3, color: '#ffd27a', trail: '255,210,122', trailFx: 'spark',
+    sparks: ['#ffffff', '#fde68a', '#f59e0b'], previewLen: 210, previewScale: 0.86, previewY: 34, stats: { rate: 2, speed: 5, power: 4 } },
+  { ...base, id: 'mp5', name: 'MP5 SMG', emoji: '🔫', rarity: 'UMUM', perk: 'SEMBURAN CEPAT', desc: 'SMG 9×19 dengan 800 tembakan per menit, dipindahkan langsung dari slide 9. Tahan layar untuk menyemburkan peluru tanpa jeda!',
+    speed: 3200, cooldown: 0.085, half: 3.6, stick: 20, auto: true, recoil: 0.7, shake: 2, color: '#7dd3fc', trail: '125,211,252', trailFx: 'spark',
+    sparks: ['#ffffff', '#bae6fd', '#38bdf8'], previewLen: 200, previewScale: 0.86, previewY: 34, stats: { rate: 5, speed: 4, power: 3 } },
+  { ...base, id: 'tesla_rifle', name: 'TESLA RIFLE ARC', emoji: '⚡', rarity: 'EPIC', perk: 'BOLA PETIR', desc: 'Senapan Tesla 50 kV dari slide 9: menembakkan bola petir yang melompat ke peluru lain. 2 poin tiap kena!',
+    speed: 2600, cooldown: 0.5, points: 2, half: 4.6, stick: 28, energy: true, chain: true, recoil: 1.2, shake: 5, color: '#38bdf8', trail: '56,189,248', trailFx: 'spark',
+    sparks: ['#ffffff', '#bae6fd', '#0ea5e9'], previewLen: 230, previewScale: 0.82, previewY: 38, stats: { rate: 2, speed: 3, power: 4 } },
+  { ...base, id: 'ion_smg', name: 'ION PULSE SMG', emoji: '🔫', rarity: 'EPIC', perk: 'BOLT HELIX', desc: 'MP5 ion dari slide 9. Bolt plasma helix berpilin cepat, 650 RPM, dan tiap kena 2 poin!',
+    speed: 3800, cooldown: 0.1, points: 2, half: 3.4, stick: 24, auto: true, energy: true, recoil: 0.6, shake: 2.5, color: '#c084fc', trail: '192,132,252', trailFx: 'glow',
+    sparks: ['#ffffff', '#e9d5ff', '#a855f7'], previewLen: 215, previewScale: 0.86, previewY: 34, stats: { rate: 5, speed: 4, power: 3 } },
+  { ...base, id: 'phaser', name: 'PHASER TYPE-II', emoji: '🖖', rarity: 'EPIC', perk: 'NADION PULSE', desc: 'Phaser genggam khas armada bintang, asli dari slide 9. Sinar nadion instan, 2 poin, dan bisa disetel ke lebar maksimum!',
+    speed: 6000, cooldown: 0.65, points: 2, half: 3.2, energy: true, beam: true, recoil: 0.6, shake: 3, color: '#fb923c', trail: '251,146,60', trailFx: 'glow',
+    sparks: ['#ffffff', '#fed7aa', '#fb923c'], previewLen: 190, previewY: 32, stats: { rate: 2, speed: 5, power: 4 } },
+  { ...base, id: 'yautja', name: 'YAUTJA SHOULDER CASTER', emoji: '🎯', rarity: 'EPIC', perk: 'TRI-LASER', desc: 'Kanon pundak Yautja dari slide 9: tiga kuncian laser merah menyala sebelum satu bolt plasma hijau meluncur. 3 poin!',
+    speed: 2800, cooldown: 0.74, points: 3, half: 4.8, stick: 30, energy: true, recoil: 1.2, shake: 5, color: '#a3e635', trail: '163,230,53', trailFx: 'plasma',
+    sparks: ['#ffffff', '#d9f99d', '#65a30d'], previewLen: 210, previewY: 36, stats: { rate: 2, speed: 3, power: 5 } },
+  { ...base, id: 'identity_disc', name: 'IDENTITY DISC', emoji: '💿', rarity: 'EPIC', perk: 'CAKRAM CAHAYA', desc: 'Cakram neon Tron dari slide 9. Berputar sambil melesat, memantul, lalu pulang ke tangan. 2 poin dan koin 2x!',
+    speed: 2200, cooldown: 0.67, points: 2, half: 6, stick: 26, coinValue: 2, spinFly: true, energy: true, recoil: 0.4, shake: 2.5, color: '#22d3ee', trail: '34,211,238', trailFx: 'glow',
+    sparks: ['#ffffff', '#a5f3fc', '#22d3ee'], previewLen: 200, previewY: 34, stats: { rate: 2, speed: 3, power: 4 } },
+  { ...base, id: 'proton_pack', name: 'PROTON PACK', emoji: '👻', rarity: 'LEGENDARIS', perk: 'PARTICLE STREAM', desc: 'Paket proton pemburu hantu dari slide 9! Sinar partikel mendesis yang menyapu target, 3 poin tiap kena!',
+    speed: 5000, cooldown: 1, points: 3, half: 5.5, energy: true, beam: true, recoil: 1, shake: 6, color: '#fde047', trail: '253,224,71', trailFx: 'glow',
+    sparks: ['#ffffff', '#fef9c3', '#facc15'], previewLen: 230, previewScale: 0.82, previewY: 40, stats: { rate: 1, speed: 5, power: 5 } },
+  // ── Slide 11 (games/game-8): the ten guns slide 1 never had ─────────────
+  { ...base, id: 'mega_buster', name: 'MEGA BUSTER', emoji: '🤖', rarity: 'EPIC', perk: 'CHARGE SHOT', desc: 'Meriam lengan ala Mega Man dari slide 11. Ketuk untuk menembak, tahan lalu lepas untuk peluru charge besar. 2 poin!',
+    speed: 3400, cooldown: 0.16, points: 2, half: 4.4, stick: 22, charge: true, energy: true, recoil: 1.1, shake: 3, color: '#38bdf8', trail: '56,189,248', trailFx: 'glow',
+    sparks: ['#ffffff', '#bae6fd', '#0ea5e9'], previewLen: 200, previewScale: 0.86, previewY: 34, stats: { rate: 4, speed: 4, power: 3 } },
+  { ...base, id: 'harmonic_disruptor', name: 'HARMONIC DISRUPTOR', emoji: '🔊', rarity: 'LANGKA', perk: 'GELOMBANG SUARA', desc: 'Meriam resonansi dari slide 11: gelombang kejut suara yang menggetarkan seluruh roda. 2 poin tiap kena!',
+    speed: 2600, cooldown: 0.55, points: 2, half: 5.4, stick: 26, energy: true, recoil: 1.3, shake: 6, color: '#a78bfa', trail: '167,139,250', trailFx: 'glow',
+    sparks: ['#ffffff', '#ddd6fe', '#8b5cf6'], previewLen: 210, previewScale: 0.82, previewY: 36, stats: { rate: 2, speed: 3, power: 4 } },
+  { ...base, id: 'absolute_zero', name: 'ABSOLUTE ZERO', emoji: '❄️', rarity: 'LANGKA', perk: 'TOMBak KRISTAL', desc: 'Tombak kristal krio dari slide 11 yang membekukan permukaan roda seketika. 2 poin dan duri membeku!',
+    speed: 2800, cooldown: 0.5, points: 2, half: 4.8, stick: 26, energy: true, recoil: 1.1, shake: 4, color: '#7dd3fc', trail: '125,211,252', trailFx: 'glow',
+    sparks: ['#ffffff', '#e0f2fe', '#38bdf8'], previewLen: 205, previewScale: 0.84, previewY: 36, stats: { rate: 2, speed: 4, power: 4 } },
+  { ...base, id: 'helios_flare', name: 'HELIOS FLARE', emoji: '☀️', rarity: 'LEGENDARIS', perk: 'BINTANG PANAS', desc: 'Proyektor plasma bintang dari slide 11. Bola api raksasa yang meledak panas, 3 poin tiap kena!',
+    speed: 2400, cooldown: 0.9, points: 3, half: 6, stick: 28, energy: true, recoil: 1.5, shake: 7, color: '#fbbf24', trail: '251,191,36', trailFx: 'fire',
+    sparks: ['#ffffff', '#fde68a', '#f59e0b'], previewLen: 225, previewScale: 0.8, previewY: 38, stats: { rate: 1, speed: 3, power: 5 } },
+  { ...base, id: 'chrono_rifle', name: 'CHRONO RIFLE', emoji: '⏳', rarity: 'LANGKA', perk: 'HENTIKAN WAKTU', desc: 'Senapan temporal dari slide 11: pelurunya memperlambat roda saat menghantam. 2 poin per kena!',
+    speed: 3200, cooldown: 0.7, points: 2, half: 4.2, stick: 24, energy: true, recoil: 1, shake: 4, color: '#67e8f9', trail: '103,232,249', trailFx: 'glow',
+    sparks: ['#ffffff', '#cffafe', '#06b6d4'], previewLen: 210, previewScale: 0.84, previewY: 34, stats: { rate: 2, speed: 4, power: 4 } },
+  { ...base, id: 'orbital_beacon', name: 'ORBITAL BEACON', emoji: '🛰️', rarity: 'EPIC', perk: 'SERANGAN ORBITAL', desc: 'Penanda sasaran dari slide 11: tandai roda, lalu sinar ion jatuh dari langit. 3 poin!',
+    speed: 2000, cooldown: 1.2, points: 3, half: 6.4, stick: 28, energy: true, recoil: 1.2, shake: 8, color: '#f472b6', trail: '244,114,182', trailFx: 'glow',
+    sparks: ['#ffffff', '#fbcfe8', '#ec4899'], previewLen: 195, previewScale: 0.84, previewY: 36, stats: { rate: 1, speed: 2, power: 5 } },
+  { ...base, id: 'helix_pulsar', name: 'HELIX PULSAR', emoji: '🧬', rarity: 'EPIC', perk: 'PILIN GANDA', desc: 'Repeater plasma dua untai dari slide 11. Tahan layar dan biarkan pilinannya menyemprot tanpa jeda!',
+    speed: 3800, cooldown: 0.09, auto: true, points: 2, half: 3.4, stick: 20, energy: true, recoil: 0.7, shake: 2.5, color: '#c084fc', trail: '192,132,252', trailFx: 'glow',
+    sparks: ['#ffffff', '#e9d5ff', '#a855f7'], previewLen: 215, previewScale: 0.86, previewY: 34, stats: { rate: 5, speed: 4, power: 3 } },
+  { ...base, id: 'singularity', name: 'SINGULARITY CANNON', emoji: '🌌', rarity: 'LEGENDARIS', perk: 'HORIZON PERISTIWA', desc: 'Meriam lubang hitam dari slide 11. Bola cakram akresi yang menyedot apa pun yang menyentuhnya. 3 poin!',
+    speed: 1900, cooldown: 1.1, points: 3, half: 7, stick: 30, energy: true, recoil: 1.4, shake: 8, color: '#a855f7', trail: '168,85,247', trailFx: 'glow',
+    sparks: ['#ffffff', '#e9d5ff', '#7c3aed'], previewLen: 225, previewScale: 0.8, previewY: 38, stats: { rate: 1, speed: 2, power: 5 } },
+  { ...base, id: 'prism_lance', name: 'PRISM LANCE', emoji: '🔷', rarity: 'LANGKA', perk: 'BIAS SPEKTRUM', desc: 'Tombak prisma dari slide 11: berkas cahaya yang membiaskan warna di sepanjang lintasan. 2 poin!',
+    speed: 4200, cooldown: 0.6, points: 2, half: 4, stick: 22, energy: true, beam: true, recoil: 0.8, shake: 3, color: '#22d3ee', trail: '34,211,238', trailFx: 'glow',
+    sparks: ['#ffffff', '#a5f3fc', '#06b6d4'], previewLen: 220, previewScale: 0.84, previewY: 34, stats: { rate: 2, speed: 5, power: 4 } },
+  { ...base, id: 'nano_swarm', name: 'NANO-SWARM', emoji: '🐝', rarity: 'EPIC', perk: 'GEROMBOLAN DRON', desc: 'Peluncur drone nano dari slide 11: sekawanan dron kecil yang menggerogoti roda. 2 poin tiap kena!',
+    speed: 2600, cooldown: 0.7, points: 2, half: 5, stick: 24, energy: true, recoil: 0.9, shake: 3.5, color: '#4ade80', trail: '74,222,128', trailFx: 'spark',
+    sparks: ['#ffffff', '#bbf7d0', '#22c55e'], previewLen: 200, previewScale: 0.84, previewY: 34, stats: { rate: 2, speed: 3, power: 4 } },
+  { ...base, id: 'heat_ray', name: 'MARTIAN HEAT-RAY', emoji: '🔥', rarity: 'LEGENDARIS', perk: 'SINAR PANAS', desc: 'Meriam panas tripod Mars dari slide 9. Sinar merah membara yang membakar permukaan roda, 3 poin dan duri ikut meleleh!',
+    speed: 5200, cooldown: 1.15, points: 3, half: 5, energy: true, beam: true, burn: true, burnText: '🔥 TERBAKAR!', recoil: 1.3, shake: 7, color: '#ff4d4d', trail: '255,77,77', trailFx: 'fire',
+    sparks: ['#ffffff', '#fca5a5', '#ef4444'], previewLen: 220, previewY: 36, stats: { rate: 1, speed: 5, power: 5 } },
 ];
 
 export const RARITY_COLOR: Record<Rarity, string> = {

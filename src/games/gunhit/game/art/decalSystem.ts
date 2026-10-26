@@ -1,4 +1,5 @@
 import type { Weapon } from '../weapons';
+import { drawGlow } from './glowSprite';
 
 const TAU = Math.PI * 2;
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
@@ -9,8 +10,10 @@ const prng = (seed: number) => {
   return () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
 };
 const rgba = (h: string, a: number) => { const n = parseInt(h.slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; };
+// Soft bloom instead of a filled disc (slide 7 glowSprite): the acid entry
+// crater used to show a flat neon-green circle around it.
 const glowAt = (c: CanvasRenderingContext2D, x: number, y: number, r: number, color: string, a: number) => {
-  c.save(); c.globalCompositeOperation = 'lighter'; c.globalAlpha = Math.min(1, a); c.fillStyle = color; c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill(); c.restore();
+  drawGlow(c, x, y, r, color, a);
 };
 
 // -------------------------------------------------------------
@@ -25,7 +28,9 @@ export function drawPreciseWeaponDecal(
   a: number,
   w: Weapon,
   style: string,
-  time = 0
+  time = 0,
+  /** Paintball only: the colour of the shot that landed, as an `r,g,b` triple. */
+  tint?: string
 ) {
   const x = Math.cos(a) * (R - 2.5);
   const y = Math.sin(a) * (R - 2.5);
@@ -437,7 +442,9 @@ export function drawPreciseWeaponDecal(
 
     const fluidCol =
       w.id === 'paintball'
-        ? `rgba(${w.trail || '244,63,94'}, 0.75)`
+        // A paintball carries a random colour per shot; stamping the weapon's
+        // fixed white trail left white splats on the wheel instead of paint.
+        ? `rgba(${tint || w.trail || '244,63,94'}, 0.75)`
         : 'rgba(56, 189, 248, 0.5)';
 
     // Splat droplet kental

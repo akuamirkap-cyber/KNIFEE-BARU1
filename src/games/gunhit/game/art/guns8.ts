@@ -1,5 +1,6 @@
 import type { WeaponId } from '../weapons';
 import { TAU, rand, gunState } from './kit';
+import { drawGlow } from './glowSprite';
 
 type C = CanvasRenderingContext2D;
 
@@ -12,15 +13,10 @@ function clamp(v: number, a = 0, b = 1) { return Math.max(a, Math.min(b, v)); }
 function hexRgb(h: string) { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
 function rgba(h: string, a: number) { const [r, g, b] = hexRgb(h); return `rgba(${r},${g},${b},${a})`; }
 
+// Soft bloom (slide 7 glowSprite). A plain filled arc here produced the hard
+// "solid circle" disc that appeared behind the Xenomorph Acid Spitter.
 function glowAt(c: C, x: number, y: number, r: number, color: string, a: number) {
-  c.save();
-  c.globalCompositeOperation = 'lighter';
-  c.globalAlpha = Math.min(1, a);
-  c.fillStyle = color;
-  c.beginPath();
-  c.arc(x, y, r, 0, TAU);
-  c.fill();
-  c.restore();
+  drawGlow(c, x, y, r, color, a);
 }
 
 function sinceShot(max: number) { return Math.max(0, 1 - gunState.sinceShot / max); }
@@ -58,35 +54,64 @@ export function xenoHeadGun(c: C, cx: number, y0: number, t: number) {
     c.restore();
   }
 
-  // hoses on the back
+  // Hoses now root INSIDE the neck and only emerge from its sides, so they read
+  // as part of the creature instead of floating in mid-air.
   c.lineCap = 'round';
   for (let i = 0; i < 4; i++) {
-    const x0 = 36 + i * 5, y0h = 110 + i * 18;
-    const path = () => { c.beginPath(); c.moveTo(x0, y0h); c.bezierCurveTo(86 + i * 9, 130 + i * 12, 74 + i * 11, 230, 64 + i * 9, 320); };
+    // Both ends tuck BEHIND the skull/neck (drawn afterwards), so the hoses read
+    // as hydraulic lines plugged into the creature — never as dangling tubes.
+    const sx = 6 + i * 8, sy = 188 + i * 11;
+    const ex = 22 + i * 5, ey = 266 + i * 7;
+    const path = () => {
+      c.beginPath();
+      c.moveTo(sx, sy);
+      c.bezierCurveTo(sx + 44 + i * 4, sy + 30, ex + 36 + i * 5, ey - 36, ex, ey);
+    };
     path(); c.strokeStyle = '#04060a'; c.lineWidth = 10; c.stroke();
     path(); c.strokeStyle = '#1a222d'; c.lineWidth = 6; c.stroke();
     path(); c.strokeStyle = 'rgba(150,175,210,0.28)'; c.lineWidth = 1.5; c.stroke();
   }
 
-  // segmented neck
-  for (let i = 0; i < 6; i++) {
-    const y = 222 + i * 15;
-    const g = c.createLinearGradient(-50, 0, 50, 0);
-    g.addColorStop(0, '#0a0e14'); g.addColorStop(0.45, '#3a4556'); g.addColorStop(1, '#070a0f');
-    c.fillStyle = g;
-    c.beginPath(); c.ellipse(-2, y, 52 - i, 9, 0, 0, TAU); c.fill();
-    c.strokeStyle = 'rgba(0,0,0,0.7)'; c.lineWidth = 1.2; c.stroke();
+  // Tapering ribbed neck: ONE closed silhouette that continues the skull, so the
+  // back no longer ends in a flat cut with a stack of pancake rings below it.
+  const neckPath = () => {
+    c.beginPath();
+    c.moveTo(-52, 206);
+    c.bezierCurveTo(-48, 258, -40, 298, -27, 326);
+    c.bezierCurveTo(-19, 344, 13, 346, 23, 328);
+    c.bezierCurveTo(36, 300, 47, 258, 52, 206);
+    c.closePath();
+  };
+  const neckG = c.createLinearGradient(-54, 0, 54, 0);
+  neckG.addColorStop(0, '#04060a'); neckG.addColorStop(0.24, '#161d27');
+  neckG.addColorStop(0.48, '#3d4a60'); neckG.addColorStop(0.72, '#141a23'); neckG.addColorStop(1, '#04060a');
+  neckPath(); c.fillStyle = neckG; c.fill();
+  c.strokeStyle = 'rgba(0,0,0,0.85)'; c.lineWidth = 1.6; c.stroke();
+  c.save(); neckPath(); c.clip();
+  for (let i = 0; i < 7; i++) {
+    const y = 214 + i * 17;
+    c.beginPath(); c.moveTo(-64, y); c.quadraticCurveTo(0, y + 13, 64, y);
+    c.strokeStyle = 'rgba(0,0,0,0.55)'; c.lineWidth = 2.6; c.stroke();
+    c.beginPath(); c.moveTo(-64, y - 3); c.quadraticCurveTo(0, y + 9, 64, y - 3);
+    c.strokeStyle = 'rgba(165,195,235,0.2)'; c.lineWidth = 1.2; c.stroke();
   }
+  c.fillStyle = 'rgba(190,215,245,0.13)';
+  c.beginPath(); c.ellipse(-18, 274, 7, 48, 0.04, 0, TAU); c.fill();
+  c.fillStyle = 'rgba(255,255,255,0.16)';
+  c.beginPath(); c.ellipse(-24, 232, 3, 26, 0.1, 0, TAU); c.fill();
+  c.restore();
 
   // dome / cranium
   const domePath = () => {
     c.beginPath();
-    c.moveTo(-56, 236);
+    c.moveTo(-56, 232);
     c.bezierCurveTo(-80, 130, -74, 20, -48, -56);
     c.bezierCurveTo(-38, -88, -22, -108, -4, -113);
     c.bezierCurveTo(6, -116, 15, -112, UT.x, UT.y);
     c.quadraticCurveTo(16, -40, 26, 10);
-    c.bezierCurveTo(42, 60, 54, 140, 50, 236);
+    c.bezierCurveTo(42, 60, 54, 140, 52, 232);
+    // Rounded lower edge that flows into the neck (was a flat horizontal cut).
+    c.bezierCurveTo(32, 252, -34, 252, -56, 232);
     c.closePath();
   };
   const dome = c.createLinearGradient(-76, 0, 54, 0);
@@ -236,13 +261,27 @@ export function doraCannonGun(c: C, cx: number, y0: number, t: number) {
   const L = 150;
   const muzzleRy = 13;
 
-  // Mechanical arm holding the cannon (no character)
+  // Only the cannon itself: the robot arm that used to hold it read as a hand
+  // and was cropped in every thumbnail, so it is gone. The breech is now a
+  // rounded cap that belongs to the barrel instead of a separate limb.
   c.lineCap = 'round';
-  const armPath = () => { c.beginPath(); c.moveTo(-66, 150 + rc * 4); c.quadraticCurveTo(-34, 120, -4, 34); };
-  armPath(); c.strokeStyle = '#2a2d34'; c.lineWidth = 40; c.stroke();
-  armPath(); c.strokeStyle = '#5b6170'; c.lineWidth = 32; c.stroke();
-  c.fillStyle = '#1a1d22'; c.beginPath(); c.arc(-2, 26, 22, 0, TAU); c.fill();
-  c.strokeStyle = 'rgba(0,0,0,0.4)'; c.lineWidth = 1.5; c.stroke();
+  const breech = c.createLinearGradient(-W, 0, W, 0);
+  breech.addColorStop(0, '#05070a'); breech.addColorStop(0.24, '#2a2f38');
+  breech.addColorStop(0.46, '#5d6472'); breech.addColorStop(0.62, '#343945');
+  breech.addColorStop(1, '#05070a');
+  c.fillStyle = breech;
+  c.beginPath();
+  c.moveTo(-W, -2);
+  c.quadraticCurveTo(-W - 2, 16, -14, 20);
+  c.quadraticCurveTo(0, 23, 14, 20);
+  c.quadraticCurveTo(W + 2, 16, W, -2);
+  c.closePath();
+  c.fill();
+  c.strokeStyle = 'rgba(0,0,0,0.6)'; c.lineWidth = 1.6; c.stroke();
+  c.fillStyle = 'rgba(255,255,255,0.14)';
+  c.beginPath(); c.ellipse(-W * 0.32, 8, 3.4, 9, 0.2, 0, TAU); c.fill();
+  c.strokeStyle = 'rgba(0,0,0,0.5)'; c.lineWidth = 1.4;
+  c.beginPath(); c.moveTo(-W + 3, 12); c.quadraticCurveTo(0, 17, W - 3, 12); c.stroke();
 
   // barrel body
   const body = c.createLinearGradient(-W, 0, W, 0);

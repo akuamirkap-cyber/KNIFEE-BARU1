@@ -12,7 +12,7 @@ import { sfx4 } from '../game/sfx4';
 import { useSlideActive } from '../../shared/SlideActivity';
 import { SunburstFX } from '../../knife-hit/components/Effects';
 import { gunSunburstColor } from '../game/sunburstPalette';
-import { EDITABLE_WEAPONS, GUN_VARIANTS, getGunVariant, setGunVariant, getGunEffect, setGunEffect, canChooseGunDesign, type GunVariant } from '../game/art/gunVariants';
+import { EDITABLE_WEAPONS, getGunVariant, setGunVariant, getGunEffect, setGunEffect, getGunVariantOptions, canChooseGunDesign, hasSlide7Update, slide7UpdateSet, hasSlide9Update, hasSlide11Update, type GunVariant } from '../game/art/gunVariants';
 import GunVariantPicker from './GunVariantPicker';
 
 type Tab = 'ALL' | 'DESAIN' | 'EPIC' | 'LANGKA' | 'LEGENDARIS' | 'UMUM' | 'BOSS';
@@ -452,6 +452,18 @@ export default function Arsenal({
           <span className="rounded-full bg-yellow-400/20 px-2 py-0.5 text-[8.5px] font-black tracking-wider text-yellow-200 border border-yellow-400/45 leading-none">
             {selectedGun.perk}
           </span>
+          {(hasSlide11Update(selectedGun.id) || hasSlide9Update(selectedGun.id) || hasSlide7Update(selectedGun.id)) && (
+            <span
+              className="shrink-0 rounded-full border border-emerald-200/80 bg-gradient-to-r from-emerald-400 to-green-500 px-1.5 py-0.5 text-[7.5px] font-black tracking-widest text-[#052e16] leading-none shadow-[0_0_10px_rgba(52,211,153,0.8)]"
+              title={hasSlide11Update(selectedGun.id)
+                ? 'Senjata ini dapat pembaharuan: desain & efek asli slide 11'
+                : hasSlide9Update(selectedGun.id)
+                ? 'Senjata ini dapat pembaharuan: desain & efek asli slide 9'
+                : `Senjata ini dapat pembaharuan: desain & efek asli slide 7 (SET ${slide7UpdateSet(selectedGun.id)})`}
+            >
+              NEW
+            </span>
+          )}
         </div>
         {selectedLocked && (
           <div className="relative z-20 mt-1 flex flex-col items-center gap-0.5">
@@ -467,7 +479,7 @@ export default function Arsenal({
           <button type="button" onClick={() => setEditingDesign(true)}
             aria-label={`Bandingkan desain ${selectedGun.name}`}
             className="relative z-20 mt-1 rounded-xl border border-amber-200/70 bg-[#342354] px-3.5 py-0.5 text-[10px] font-black text-amber-200 shadow-[0_0_12px_rgba(250,204,21,0.22)] transition hover:bg-[#4d3475] active:scale-95">
-            ✦ PILIH DESAIN · {GUN_VARIANTS.find((v) => v.id === selectedVariant)?.label.toUpperCase()} ▸
+            ✦ PILIH DESAIN · {(getGunVariantOptions(selectedGunId).find((v) => v.id === selectedVariant)?.label ?? '').toUpperCase()} ▸
           </button>
         )}
       </div>
@@ -584,11 +596,23 @@ export default function Arsenal({
                       >
                         <span>{rarityLabel}</span>
                       </div>
-                      {isSelected && (
-                        <span className="flex h-4 w-4 items-center justify-center rounded-full bg-emerald-400 text-[9px] font-black text-black shadow">
-                          ✓
-                        </span>
-                      )}
+                      <div className="flex items-center gap-1">
+                        {(hasSlide11Update(w.id) || hasSlide9Update(w.id) || hasSlide7Update(w.id)) && (
+                          <span
+                            className="rounded-md border border-emerald-200/80 bg-gradient-to-b from-emerald-400 to-green-500 px-1 py-px text-[7.5px] font-black uppercase leading-none tracking-wider text-[#052e16] shadow-[0_0_8px_rgba(52,211,153,0.75)]"
+                            title={hasSlide9Update(w.id)
+                              ? 'Desain & efek baru · Slide 9'
+                              : `Desain & efek baru · Slide 7 SET ${slide7UpdateSet(w.id)}`}
+                          >
+                            NEW
+                          </span>
+                        )}
+                        {isSelected && (
+                          <span className="flex h-4 w-4 items-center justify-center rounded-full bg-emerald-400 text-[9px] font-black text-black shadow">
+                            ✓
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     {/* 2. VISUAL SENJATA: EXACT CENTER PIVOT */}

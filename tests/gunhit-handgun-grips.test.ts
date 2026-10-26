@@ -19,9 +19,12 @@ function contextWithCalls(calls: string[]) {
 
 test('Pistol uses the same rearward grip angle as Electro Gun', () => {
   const calls: string[] = [];
-  drawGun(contextWithCalls(calls), 'pistol', 0, 0, 0.5, 0);
+  // PISTOL's default design is slide 9's Beretta now; this test is about the
+  // slide-1 M1911 grip, which stays pickable as the "Sebelumnya" card.
+  drawGun(contextWithCalls(calls), 'pistol', 0, 0, 0.5, 0, true, undefined, 'original');
   const electroCalls: string[] = [];
-  drawGun(contextWithCalls(electroCalls), 'electro', 0, 0, 0.5, 0);
+  // Slide-1's redesigned Electro Gun is the "Sekarang" card; SET 6's is default.
+drawGun(contextWithCalls(electroCalls), 'electro', 0, 0, 0.5, 0, true, undefined, 'current');
   assert.ok(calls.includes('rotate:-0.72'), 'Pistol grip should match Electro Gun rake');
   assert.ok(electroCalls.includes('rotate:-0.72'), 'reference Electro grip should use the same rake');
   assert.ok(calls.includes('quadraticCurveTo'), 'grip should retain its ergonomic curves');

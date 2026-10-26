@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { drawGun, drawProjectile, getWeapon, RARITY_COLOR, WEAPONS, type WeaponId } from '../game/weapons';
+import { hasSlide7Update, hasSlide9Update, hasSlide11Update } from '../game/art/gunVariants';
 import { gunState } from '../game/art/kit';
+import { fitInkBoxQuarterTurn, getGunInkBox } from '../game/art/metrics';
 
 const PW = 300;
 const PH = 115;
@@ -28,17 +30,32 @@ function Preview({ id }: { id: WeaponId }) {
       c.setTransform(dpr, 0, 0, dpr, 0, 0);
       c.clearRect(0, 0, PW, PH);
       const kick = Math.max(0, fireT + 0.15) * Math.min(3, w.recoil) * 60;
-      const sc = w.previewScale;
       const since = Math.max(0, 0.07 - fireT);
       gunState.sinceShot = since;
       gunState.charge = w.charge ? Math.max(0, Math.min(1, (since - 0.25) / 0.9)) : 0;
       if (fireT > 0.069) gunState.shots++;
-      c.save();
-      c.translate(PW / 2 + (w.previewLen * sc) / 2 + 10 - kick, w.previewY);
-      c.rotate(Math.PI / 2);
-      c.scale(sc, sc);
-      drawGun(c, id, 0, 0, t, Math.max(0, fireT / 0.07), fireT < -0.3 || fireT > 0.07);
-      c.restore();
+      const flash = Math.max(0, fireT / 0.07);
+      const ready = fireT < -0.3 || fireT > 0.07;
+      const box = getGunInkBox(id);
+      if (box) {
+        // Elemental guns (slide 7) are far taller than this strip: fit the whole
+        // measured silhouette instead of anchoring the muzzle to a magic Y.
+        const fit = fitInkBoxQuarterTurn(box, PW, PH, 10);
+        c.save();
+        c.translate(fit.tx - kick * 0.35, fit.ty);
+        c.rotate(Math.PI / 2);
+        c.scale(fit.scale, fit.scale);
+        drawGun(c, id, 0, 0, t, flash, ready);
+        c.restore();
+      } else {
+        const sc = w.previewScale;
+        c.save();
+        c.translate(PW / 2 + (w.previewLen * sc) / 2 + 10 - kick, w.previewY);
+        c.rotate(Math.PI / 2);
+        c.scale(sc, sc);
+        drawGun(c, id, 0, 0, t, flash, ready);
+        c.restore();
+      }
       for (let i = 0; i < 2; i++) {
         c.save();
         c.translate(30 + i * 0, PH - 20 - i * 14);
@@ -135,6 +152,11 @@ export default function WeaponPicker({
           <div className="text-lg font-bold leading-tight drop-shadow font-game text-white flex items-center justify-center gap-1.5">
             <span>{w.emoji}</span>
             <span>{w.name}</span>
+            {(hasSlide11Update(w.id) || hasSlide9Update(w.id) || hasSlide7Update(w.id)) && (
+              <span className="rounded-full border border-emerald-200/80 bg-gradient-to-r from-emerald-400 to-green-500 px-1.5 py-px text-[8px] font-black tracking-widest text-[#052e16] leading-none shadow-[0_0_8px_rgba(52,211,153,0.8)]">
+                NEW
+              </span>
+            )}
           </div>
         </div>
 
@@ -165,7 +187,7 @@ export default function WeaponPicker({
               key={x.id}
               data-id={x.id}
               onClick={() => onChange(x.id)}
-              className="flex h-8 min-w-8 shrink-0 items-center justify-center rounded-lg text-base transition active:scale-90 border"
+              className="relative flex h-8 min-w-8 shrink-0 items-center justify-center rounded-lg text-base transition active:scale-90 border"
               style={{
                 background: sel ? `${c}40` : 'rgba(255,255,255,0.05)',
                 borderColor: sel ? c : 'rgba(255,255,255,0.08)',
@@ -175,6 +197,9 @@ export default function WeaponPicker({
               aria-label={x.name}
             >
               {x.emoji}
+              {(hasSlide9Update(x.id) || hasSlide7Update(x.id)) && (
+                <span className="pointer-events-none absolute right-0 top-0 h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.95)]" />
+              )}
             </button>
           );
         })}

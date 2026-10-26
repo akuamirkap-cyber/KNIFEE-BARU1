@@ -1,4 +1,14 @@
-import { slide23Sfx } from './slide23Sfx';
+/**
+ * Firework Launcher FX for slide 1 (Gun Hit Arcade).
+ *
+ * This module is a 1:1 port of the Firework 8-Gun engine (slide 2,
+ * `games/fireworkgun/src/game/engine.ts`) for the `firework` weapon:
+ * the same burst patterns, the same particle counts, the same gravity / drag /
+ * trail constants, the same glows and shock rings, and the same stage-clear and
+ * fail finales. Only the slide-1 specifics are kept on top (420x760 stage,
+ * skyline backdrop, muzzle anchored to the gun, gun glow).
+ */
+import { fireworkSfx } from './fireworkSlide2Sfx';
 
 const TAU = Math.PI * 2;
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
@@ -20,6 +30,7 @@ export type BurstType =
   | 'rainbow'
   | 'willow';
 
+/** Slide 2 `IMPACT_TYPES` — the shells that can burst on a board hit. */
 export const IMPACT_TYPES: readonly BurstType[] = [
   'peony',
   'ring',
@@ -30,6 +41,7 @@ export const IMPACT_TYPES: readonly BurstType[] = [
   'rainbow',
 ];
 
+/** Slide 2 `SKY_TYPES` — the shells launched into the skyline. */
 export const ALL_BURST_TYPES: readonly BurstType[] = [
   'peony',
   'ring',
@@ -41,42 +53,42 @@ export const ALL_BURST_TYPES: readonly BurstType[] = [
   'willow',
 ];
 
+/** Slide 2 `Particle` — per-frame physics in 60 Hz units (f = dt * 60). */
 export interface Firework8Particle {
   x: number;
   y: number;
-  px: number;
-  py: number;
   vx: number;
   vy: number;
-  g: number;
-  drag: number;
-  hue: number;
-  sat: number;
-  light: number;
-  alpha: number;
-  decay: number;
+  life: number;
+  max: number;
   size: number;
-  twinkle?: boolean;
-  crackle?: boolean;
+  h: number;
+  s: number;
+  l: number;
+  g: number;
+  d: number;
+  tr: number;
+  tw: boolean;
+  crackle: boolean;
 }
 
 export interface Firework8Glow {
   x: number;
   y: number;
-  r: number;
   hue: number;
-  alpha: number;
-  decay: number;
+  life: number;
+  max: number;
+  r: number;
 }
 
 export interface Firework8Ring {
   x: number;
   y: number;
-  r: number;
-  maxR: number;
   hue: number;
-  alpha: number;
-  w: number;
+  life: number;
+  max: number;
+  r: number;
+  impl?: boolean;
 }
 
 export interface Firework8SkyRocket {
@@ -84,9 +96,9 @@ export interface Firework8SkyRocket {
   y: number;
   vx: number;
   vy: number;
-  targetY: number;
   hue: number;
   type: BurstType;
+  scale: number;
   ambient?: boolean;
 }
 
@@ -119,6 +131,8 @@ export interface Firework8State {
   timers: { t: number; fn: () => void }[];
   shotIdx: number;
   impactIdx: number;
+  /** Countdown for the idle/celebration show (slide 2 `ambientT`). */
+  ambientT: number;
   bgCanvas?: HTMLCanvasElement | null;
   bgDpr?: number;
 }
@@ -141,12 +155,11 @@ function roundRectPath(
 }
 
 /**
- * Exact firework rocket shape from Slide #3 ("Firework 8-Gun" / games/fireworkgun/src/game/engine.ts).
- * Drawn horizontally in local space: nose tip at (0, 0) pointing toward -x,
- * striped body at x = 11..35, swept fins at x = 24..36, wooden stick at x = 30..46.
+ * Exact firework rocket shape from slide 2. Drawn horizontally in local space:
+ * nose tip at (0, 0) pointing toward -x, striped body at x = 11..35,
+ * swept fins at x = 24..36, wooden stick at x = 30..46.
  */
 export function drawRocketShape(ctx: CanvasRenderingContext2D, hue: number, flash = 0) {
-  // Stick
   ctx.strokeStyle = '#e6c27a';
   ctx.lineWidth = 2.6;
   ctx.lineCap = 'round';
@@ -155,7 +168,6 @@ export function drawRocketShape(ctx: CanvasRenderingContext2D, hue: number, flas
   ctx.lineTo(FIREWORK_PL, 0);
   ctx.stroke();
 
-  // Fins
   ctx.fillStyle = hsl(hue, 85, 38);
   ctx.beginPath();
   ctx.moveTo(24, -4.5);
@@ -168,7 +180,6 @@ export function drawRocketShape(ctx: CanvasRenderingContext2D, hue: number, flas
   ctx.closePath();
   ctx.fill();
 
-  // Body
   const grad = ctx.createLinearGradient(0, -6, 0, 6);
   grad.addColorStop(0, hsl(hue, 90, 74));
   grad.addColorStop(0.5, hsl(hue, 95, 52));
@@ -177,12 +188,10 @@ export function drawRocketShape(ctx: CanvasRenderingContext2D, hue: number, flas
   roundRectPath(ctx, 11, -5.5, 24, 11, 2);
   ctx.fill();
 
-  // Stripes
   ctx.fillStyle = 'rgba(255,255,255,0.85)';
   ctx.fillRect(18, -5.5, 3, 11);
   ctx.fillRect(25, -5.5, 3, 11);
 
-  // Nose cone
   ctx.fillStyle = hsl(hue + 35, 100, 62);
   ctx.beginPath();
   ctx.moveTo(0, 0);
@@ -199,10 +208,7 @@ export function drawRocketShape(ctx: CanvasRenderingContext2D, hue: number, flas
   }
 }
 
-/**
- * Draws the Slide #3 firework rocket oriented for SGA's vertical projectile convention:
- * nose tip at (0, 0) pointing up (-y), body from y = 11..35, fins at y = 24..36, stick to y = 46.
- */
+/** Rocket oriented for the vertical projectile convention: nose up (-y). */
 export function drawFirework8Projectile(
   ctx: CanvasRenderingContext2D,
   hue = 340,
@@ -254,6 +260,7 @@ export function createFirework8State(w = 420, h = 760): Firework8State {
     timers: [],
     shotIdx: 0,
     impactIdx: 0,
+    ambientT: rnd(0.6, 1.4),
     bgCanvas: null,
     bgDpr: 0,
   };
@@ -263,6 +270,7 @@ export function firework8HueBase(level: number): number {
   return (level * 53) % 360;
 }
 
+/** Slide 2 `ammoHue`: every shell climbs 41° around the wheel (+41 per shot). */
 export function firework8ShotHue(level: number, shotIdx: number): number {
   return (firework8HueBase(level) + shotIdx * 41) % 360;
 }
@@ -280,7 +288,6 @@ export function paintFirework8Backdrop(
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
 
-  // Horizon haze
   const hg = ctx.createRadialGradient(w * 0.5, h * 0.92, 10, w * 0.5, h * 0.92, w * 0.9);
   hg.addColorStop(0, 'rgba(255, 120, 160, 0.25)');
   hg.addColorStop(0.6, 'rgba(140, 50, 140, 0.08)');
@@ -288,7 +295,6 @@ export function paintFirework8Backdrop(
   ctx.fillStyle = hg;
   ctx.fillRect(0, 0, w, h);
 
-  // Skyline
   for (const b of skyline) {
     const by = h - b.h;
     ctx.fillStyle = '#0b0420';
@@ -337,7 +343,7 @@ export function drawFirework8Background(
     paintFirework8Backdrop(ctx, state);
   }
 
-  // Twinkling stars
+  // Twinkling stars (slide 2: 110 stars, 0.35..1 alpha)
   for (const st of state.stars) {
     const a = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(st.p));
     ctx.fillStyle = hsl(st.hue, 80, 90, a);
@@ -346,32 +352,23 @@ export function drawFirework8Background(
     ctx.fill();
   }
 
-  // Additive glows in the sky
+  // Glows — slide 2 `render()` formula: radius grows as the glow dies.
   if (state.glows.length > 0) {
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    for (const gl of state.glows) {
-      const gr = ctx.createRadialGradient(gl.x, gl.y, 0, gl.x, gl.y, gl.r);
-      gr.addColorStop(0, hsl(gl.hue, 100, 65, gl.alpha));
-      gr.addColorStop(0.4, hsl(gl.hue, 100, 50, gl.alpha * 0.35));
-      gr.addColorStop(1, 'rgba(0,0,0,0)');
+    for (const g of state.glows) {
+      const k = g.life / g.max;
+      const rad = g.r * (1.3 - 0.3 * k);
+      const gr = ctx.createRadialGradient(g.x, g.y, 0, g.x, g.y, rad);
+      gr.addColorStop(0, hsl(g.hue, 100, 60, 0.38 * k));
+      gr.addColorStop(1, hsl(g.hue, 100, 50, 0));
       ctx.fillStyle = gr;
-      ctx.beginPath();
-      ctx.arc(gl.x, gl.y, gl.r, 0, TAU);
-      ctx.fill();
+      ctx.fillRect(g.x - rad, g.y - rad, rad * 2, rad * 2);
     }
     ctx.restore();
   }
 
-  // Background sky rockets
-  for (const s of state.sky) {
-    ctx.fillStyle = hsl(s.hue, 100, 78);
-    ctx.beginPath();
-    ctx.arc(s.x, s.y, 2.3, 0, TAU);
-    ctx.fill();
-  }
-
-  // Wheel / target radial glow from Slide #3
+  // Wheel / board glow from slide 2's fireworks backdrop
   const hueBase = firework8HueBase(level);
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
@@ -390,39 +387,66 @@ export function drawFirework8ParticlesAndRings(
   ctx: CanvasRenderingContext2D,
   state: Firework8State,
 ) {
-  if (state.rings.length === 0 && state.particles.length === 0) return;
+  if (state.rings.length === 0 && state.particles.length === 0 && state.sky.length === 0) {
+    return;
+  }
 
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
-
-  // Rings
-  for (const r of state.rings) {
-    if (r.alpha <= 0) continue;
-    ctx.strokeStyle = hsl(r.hue, 100, 70, r.alpha);
-    ctx.lineWidth = r.w;
-    ctx.beginPath();
-    ctx.arc(r.x, r.y, Math.max(0.5, r.r), 0, TAU);
-    ctx.stroke();
-  }
-
-  // Line-streak firework particles
   ctx.lineCap = 'round';
-  for (const p of state.particles) {
-    let a = p.alpha;
-    if (p.twinkle && Math.random() < 0.35) a *= rnd(0.25, 1);
-    if (a <= 0) continue;
 
-    ctx.strokeStyle = hsl(p.hue, p.sat, p.light, a);
-    ctx.lineWidth = p.size * 1.15;
+  // Particles — slide 2 `render()`: k = life/max, alpha = k^0.7, trail from -v*tr,
+  // twinkle flicker in the last 40% of life, soft halo on big sparks.
+  for (const p of state.particles) {
+    const k = Math.max(0, p.life / p.max);
+    let a = Math.pow(k, 0.7);
+    if (p.tw && k < 0.6) a *= 0.55 + Math.random() * 0.45;
+    const l = k > 0.88 ? Math.min(95, p.l + 25) : p.l - (1 - k) * 12;
+    const size = p.size * (0.45 + 0.55 * k);
+    ctx.strokeStyle = hsl(p.h, p.s, l, a);
+    ctx.lineWidth = size * 1.6;
     ctx.beginPath();
-    ctx.moveTo(p.px, p.py);
+    ctx.moveTo(p.x - p.vx * p.tr, p.y - p.vy * p.tr);
     ctx.lineTo(p.x, p.y);
     ctx.stroke();
+    if (size > 2.1 && a > 0.2) {
+      ctx.fillStyle = hsl(p.h, p.s, 70, a * 0.18);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, size * 3.2, 0, TAU);
+      ctx.fill();
+    }
+  }
 
-    ctx.fillStyle = hsl(p.hue, p.sat, Math.min(98, p.light + 18), a);
+  // Sky rocket heads
+  for (const s of state.sky) {
+    ctx.fillStyle = 'rgba(255,230,160,0.95)';
     ctx.beginPath();
-    ctx.arc(p.x, p.y, p.size * 0.75, 0, TAU);
+    ctx.arc(s.x, s.y, 2.6, 0, TAU);
     ctx.fill();
+  }
+
+  // Shock rings — slide 2 expansion curve
+  for (const r of state.rings) {
+    const k = r.life / r.max;
+    if (r.impl) {
+      const rad = Math.max(2, r.r * k);
+      ctx.strokeStyle = hsl(r.hue, 100, 72, 0.85 * (1 - k * 0.4));
+      ctx.lineWidth = 1.5 + 3.5 * (1 - k);
+      ctx.beginPath();
+      ctx.arc(r.x, r.y, rad, 0, TAU);
+      ctx.stroke();
+      ctx.strokeStyle = `rgba(255,255,255,${0.5 * (1 - k)})`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(r.x, r.y, Math.max(1, rad - 3), 0, TAU);
+      ctx.stroke();
+    } else {
+      ctx.strokeStyle = hsl(r.hue, 100, 70, 0.7 * k);
+      ctx.lineWidth = 3 * k + 0.5;
+      ctx.beginPath();
+      ctx.arc(r.x, r.y, r.r * (1 - k * k) + 4, 0, TAU);
+      ctx.stroke();
+    }
   }
 
   ctx.restore();
@@ -454,20 +478,63 @@ export function drawFirework8GunGlow(
   ctx.restore();
 }
 
-export function launchFirework8Sky(state: Firework8State, ambient = false) {
-  if (!ambient) slide23Sfx.skyLaunch();
+/** Slide 2 `launchSky()`: ballistic launch that peaks at `targetY`. */
+export function launchFirework8Sky(state: Firework8State, ambient = false, scale = 1.1) {
+  const x0 = rnd(50, state.w - 50);
+  const y0 = state.h - 110;
+  const ty = rnd(70, 330);
+  const tx = rnd(50, state.w - 50);
+  const a = 700;
+  const dist = y0 - ty;
+  const vy = -Math.sqrt(2 * a * dist);
+  const tt = -vy / a;
   state.sky.push({
-    x: rnd(40, state.w - 40),
-    y: state.h - 30,
-    vx: rnd(-0.6, 0.6),
-    vy: rnd(-7.5, -9.8),
-    targetY: rnd(80, state.h * (ambient ? 0.55 : 0.45)),
+    x: x0,
+    y: y0,
+    vx: (tx - x0) / tt,
+    vy,
     hue: rnd(0, 360),
     type: pick(ALL_BURST_TYPES),
+    scale,
     ambient,
+  });
+  fireworkSfx.skyLaunch();
+}
+
+/** Slide 2 `spawn()` helper. */
+function push(
+  state: Firework8State,
+  x: number,
+  y: number,
+  vx: number,
+  vy: number,
+  o: Partial<Firework8Particle>,
+) {
+  if (state.particles.length > 3600) return;
+  const life = o.life ?? 1.2;
+  state.particles.push({
+    x,
+    y,
+    vx,
+    vy,
+    life,
+    max: life,
+    size: o.size ?? 2,
+    h: o.h ?? 0,
+    s: o.s ?? 100,
+    l: o.l ?? 60,
+    g: o.g ?? 0.05,
+    d: o.d ?? 0.96,
+    tr: o.tr ?? 2.5,
+    tw: o.tw ?? true,
+    crackle: o.crackle ?? false,
   });
 }
 
+/**
+ * Slide 2 `burst()` — every pattern with its exact counts, speeds, colours,
+ * gravity, drag and lifetime. `scale` mirrors the shell size (1 = full finale).
+ */
 export function burstFirework8(
   state: Firework8State,
   x: number,
@@ -475,176 +542,190 @@ export function burstFirework8(
   hue: number,
   type: BurstType = 'peony',
   scale = 1,
+  hueJitter = 25,
 ) {
-  state.glows.push({
-    x,
-    y,
-    r: 130 * scale,
-    hue,
-    alpha: 0.9,
-    decay: 0.04,
-  });
+  const speed = 5.2 * scale;
+  const cnt = Math.max(0.5, scale);
+  const life = () => rnd(1.0, 1.6) * (0.7 + scale * 0.3);
+  state.glows.push({ x, y, hue, life: 0.5, max: 0.5, r: 90 * scale + 30 });
+  push(state, x, y, 0, 0, { life: 0.22, size: 22 * scale, h: hue, l: 92, d: 1, g: 0, tr: 0, tw: false });
 
-  state.rings.push({
-    x,
-    y,
-    r: 4,
-    maxR: 110 * scale,
-    hue,
-    alpha: 0.85,
-    w: 3 * scale,
-  });
+  const jh = () => rnd(-hueJitter, hueJitter);
 
-  // Central flash
-  state.particles.push({
-    x,
-    y,
-    px: x,
-    py: y,
-    vx: 0,
-    vy: 0,
-    g: 0,
-    drag: 1,
-    hue,
-    sat: 30,
-    light: 96,
-    alpha: 1,
-    decay: 0.11,
-    size: 26 * scale,
-  });
-
-  const count = Math.floor(
-    (type === 'willow' ? 68 : type === 'ring' ? 54 : 62) * Math.min(1.3, scale + 0.25),
-  );
-
-  for (let i = 0; i < count; i++) {
-    const t = i / count;
-    let vx = 0;
-    let vy = 0;
-    let h = hue + rnd(-18, 18);
-    let sat = 100;
-    let light = rnd(58, 76);
-    let decay = rnd(0.013, 0.024);
-    let g = 0.085;
-    let drag = 0.968;
-    let size = rnd(2, 3.6) * Math.min(1.2, scale + 0.2);
-    let twinkle = Math.random() < 0.45;
-    let crackle = false;
-
-    if (type === 'peony') {
-      const a = rnd(0, TAU);
-      const sp = Math.pow(Math.random(), 0.45) * rnd(3.2, 8.8) * scale;
-      vx = Math.cos(a) * sp;
-      vy = Math.sin(a) * sp;
-      if (Math.random() < 0.28) h = (hue + 140) % 360;
-    } else if (type === 'ring') {
-      const a = t * TAU;
-      const sp = 6.6 * scale;
-      vx = Math.cos(a) * sp;
-      vy = Math.sin(a) * sp;
-      h = hue + Math.sin(a * 3) * 35;
-      decay = 0.017;
-    } else if (type === 'star') {
-      const a = t * TAU;
-      const spikes = 5;
-      const r = 0.52 + 0.48 * Math.cos(spikes * a);
-      const sp = r * 8.6 * scale;
-      vx = Math.cos(a) * sp;
-      vy = Math.sin(a) * sp;
-      h = hue + (r > 0.75 ? 0 : 55);
-    } else if (type === 'heart') {
-      const a = t * TAU;
-      const hx = 16 * Math.pow(Math.sin(a), 3);
-      const hy = -(
-        13 * Math.cos(a) -
-        5 * Math.cos(2 * a) -
-        2 * Math.cos(3 * a) -
-        Math.cos(4 * a)
-      );
-      const sp = 0.42 * scale;
-      vx = hx * sp;
-      vy = hy * sp;
-      h = 340 + rnd(-12, 12);
-    } else if (type === 'spiral') {
-      const a = t * TAU * 3;
-      const sp = (1.6 + t * 7.2) * scale;
-      vx = Math.cos(a) * sp;
-      vy = Math.sin(a) * sp;
-      h = (hue + t * 200) % 360;
-    } else if (type === 'crackle') {
-      const a = rnd(0, TAU);
-      const sp = rnd(2.2, 7.6) * scale;
-      vx = Math.cos(a) * sp;
-      vy = Math.sin(a) * sp;
-      crackle = Math.random() < 0.48;
-      twinkle = true;
-    } else if (type === 'rainbow') {
-      const a = t * TAU + rnd(-0.04, 0.04);
-      const sp = rnd(4.5, 8.8) * scale;
-      vx = Math.cos(a) * sp;
-      vy = Math.sin(a) * sp;
-      h = (t * 360) % 360;
-    } else if (type === 'willow') {
-      const a = rnd(0, TAU);
-      const sp = Math.pow(Math.random(), 0.5) * rnd(2.5, 7.2) * scale;
-      vx = Math.cos(a) * sp;
-      vy = Math.sin(a) * sp;
-      h = 44 + rnd(-10, 10);
-      sat = 95;
-      light = 72;
-      g = 0.14;
-      drag = 0.978;
-      decay = rnd(0.008, 0.014);
-      size = rnd(1.8, 2.8);
+  switch (type) {
+    case 'peony': {
+      const n = Math.round(80 * cnt);
+      for (let i = 0; i < n; i++) {
+        const a = rnd(0, TAU);
+        const sp = speed * (0.7 + 0.3 * Math.random());
+        push(state, x, y, Math.cos(a) * sp, Math.sin(a) * sp, {
+          life: life(),
+          size: rnd(1.6, 2.6),
+          h: hue + jh(),
+          g: 0.035,
+          d: 0.955,
+        });
+      }
+      for (let i = 0; i < n * 0.45; i++) {
+        const a = rnd(0, TAU);
+        const sp = speed * 0.42 * (0.4 + Math.random() * 0.6);
+        push(state, x, y, Math.cos(a) * sp, Math.sin(a) * sp, {
+          life: life() * 0.8,
+          size: 1.8,
+          h: hue + 150,
+          l: 72,
+          g: 0.035,
+          d: 0.955,
+        });
+      }
+      break;
     }
-
-    state.particles.push({
-      x,
-      y,
-      px: x,
-      py: y,
-      vx,
-      vy,
-      g,
-      drag,
-      hue: h,
-      sat,
-      light,
-      alpha: 1,
-      decay,
-      size,
-      twinkle,
-      crackle,
-    });
-  }
-
-  // Inner glitter
-  for (let i = 0; i < 18; i++) {
-    const a = rnd(0, TAU);
-    const sp = rnd(0.6, 2.8) * scale;
-    state.particles.push({
-      x,
-      y,
-      px: x,
-      py: y,
-      vx: Math.cos(a) * sp,
-      vy: Math.sin(a) * sp,
-      g: 0.04,
-      drag: 0.94,
-      hue: (hue + 180) % 360,
-      sat: 90,
-      light: 88,
-      alpha: 1,
-      decay: rnd(0.025, 0.045),
-      size: rnd(1.3, 2.3),
-      twinkle: true,
-    });
+    case 'ring': {
+      const n = Math.round(56 * cnt);
+      const off = rnd(0, TAU);
+      for (let i = 0; i < n; i++) {
+        const a = off + (i / n) * TAU;
+        push(state, x, y, Math.cos(a) * speed, Math.sin(a) * speed, {
+          life: life(),
+          size: 2.4,
+          h: hue + jh() * 0.3,
+          g: 0.02,
+          d: 0.958,
+        });
+      }
+      const m = Math.round(30 * cnt);
+      for (let i = 0; i < m; i++) {
+        const a = off + (i / m) * TAU;
+        push(state, x, y, Math.cos(a) * speed * 0.55, Math.sin(a) * speed * 0.55, {
+          life: life() * 0.85,
+          size: 2,
+          h: hue + 120,
+          l: 70,
+          g: 0.02,
+          d: 0.958,
+        });
+      }
+      break;
+    }
+    case 'star': {
+      const n = Math.round(110 * cnt);
+      const off = rnd(0, TAU);
+      for (let i = 0; i < n; i++) {
+        const seg = (i / n) * 10;
+        const k = Math.floor(seg);
+        const f = seg - k;
+        const a1 = (k * Math.PI) / 5 - Math.PI / 2 + off;
+        const a2 = ((k + 1) * Math.PI) / 5 - Math.PI / 2 + off;
+        const r1 = k % 2 === 0 ? 1 : 0.42;
+        const r2 = (k + 1) % 2 === 0 ? 1 : 0.42;
+        const vx = Math.cos(a1) * r1 * (1 - f) + Math.cos(a2) * r2 * f;
+        const vy = Math.sin(a1) * r1 * (1 - f) + Math.sin(a2) * r2 * f;
+        push(state, x, y, vx * speed * 1.05, vy * speed * 1.05, {
+          life: life(),
+          size: 2.3,
+          h: hue + jh() * 0.3,
+          l: 66,
+          g: 0.015,
+          d: 0.957,
+        });
+      }
+      break;
+    }
+    case 'heart': {
+      const n = Math.round(70 * cnt);
+      const hh = rnd(325, 360);
+      for (let i = 0; i < n; i++) {
+        const t = (i / n) * TAU;
+        const hx = 16 * Math.pow(Math.sin(t), 3);
+        const hy = -(
+          13 * Math.cos(t) -
+          5 * Math.cos(2 * t) -
+          2 * Math.cos(3 * t) -
+          Math.cos(4 * t)
+        );
+        const k = (speed * 1.05) / 17;
+        push(state, x, y, hx * k, hy * k, {
+          life: life(),
+          size: 2.5,
+          h: hh + rnd(-8, 8),
+          l: 64,
+          g: 0.015,
+          d: 0.957,
+        });
+      }
+      break;
+    }
+    case 'spiral': {
+      const n = Math.round(100 * cnt);
+      const off = rnd(0, TAU);
+      for (let i = 0; i < n; i++) {
+        const a = off + i * 0.34;
+        const sp = speed * (0.15 + 0.85 * (i / n));
+        push(state, x, y, Math.cos(a) * sp, Math.sin(a) * sp, {
+          life: life(),
+          size: 2.2,
+          h: hue + (i / n) * 90,
+          g: 0.02,
+          d: 0.957,
+        });
+      }
+      break;
+    }
+    case 'crackle': {
+      const n = Math.round(70 * cnt);
+      for (let i = 0; i < n; i++) {
+        const a = rnd(0, TAU);
+        const sp = speed * (0.55 + 0.45 * Math.random());
+        push(state, x, y, Math.cos(a) * sp, Math.sin(a) * sp, {
+          life: rnd(0.9, 1.3),
+          size: 2.4,
+          h: hue + jh(),
+          l: 68,
+          g: 0.03,
+          d: 0.955,
+          crackle: true,
+        });
+      }
+      break;
+    }
+    case 'rainbow': {
+      const n = Math.round(90 * cnt);
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * TAU;
+        const sp = speed * (0.75 + 0.25 * Math.random());
+        push(state, x, y, Math.cos(a) * sp, Math.sin(a) * sp, {
+          life: life(),
+          size: 2.3,
+          h: hue + (i / n) * 360,
+          l: 62,
+          g: 0.03,
+          d: 0.955,
+        });
+      }
+      break;
+    }
+    case 'willow': {
+      const n = Math.round(80 * cnt);
+      for (let i = 0; i < n; i++) {
+        const a = rnd(0, TAU);
+        const sp = speed * rnd(0.35, 1);
+        push(state, x, y, Math.cos(a) * sp, Math.sin(a) * sp, {
+          life: rnd(1.8, 2.8),
+          size: 1.7,
+          h: rnd(36, 50),
+          s: 95,
+          l: 66,
+          g: 0.045,
+          d: 0.972,
+          tr: 4,
+        });
+      }
+      break;
+    }
   }
 }
 
-/**
- * Muzzle launch effect ("saat keluar") from Slide #3's fire() method.
- */
+/** Slide 2 `fire()` muzzle: 22 sparks, white pop, glow and a small shock ring. */
 export function spawnFirework8Muzzle(
   state: Firework8State,
   mx: number,
@@ -654,77 +735,58 @@ export function spawnFirework8Muzzle(
   for (let i = 0; i < 22; i++) {
     const a = -Math.PI / 2 + rnd(-0.55, 0.55);
     const sp = rnd(2, 8);
-    const h = hue + rnd(-25, 25);
-    state.particles.push({
-      x: mx,
-      y: my,
-      px: mx,
-      py: my,
-      vx: Math.cos(a) * sp,
-      vy: Math.sin(a) * sp,
-      g: 0.14,
-      drag: 0.95,
-      hue: h,
-      sat: 100,
-      light: rnd(60, 80),
-      alpha: 1,
-      decay: rnd(0.035, 0.06),
-      size: rnd(1.8, 3.6),
-      twinkle: true,
+    push(state, mx, my, Math.cos(a) * sp, Math.sin(a) * sp, {
+      life: rnd(0.25, 0.55),
+      size: rnd(1.2, 2.6),
+      h: hue + rnd(-25, 25),
+      l: 65,
+      g: 0.12,
+      d: 0.92,
     });
   }
-  state.particles.push({
-    x: mx,
-    y: my,
-    px: mx,
-    py: my,
-    vx: 0,
-    vy: 0,
-    g: 0,
-    drag: 1,
-    hue,
-    sat: 40,
-    light: 98,
-    alpha: 1,
-    decay: 0.14,
+  push(state, mx, my, 0, 0, {
+    life: 0.14,
     size: 16,
+    h: hue,
+    l: 85,
+    d: 1,
+    g: 0,
+    tr: 0,
+    tw: false,
   });
-  state.glows.push({ x: mx, y: my, r: 70, hue, alpha: 0.7, decay: 0.07 });
-  state.rings.push({ x: mx, y: my, r: 4, maxR: 38, hue, alpha: 0.7, w: 2.5 });
+  state.glows.push({ x: mx, y: my - 2, hue, life: 0.25, max: 0.25, r: 70 });
+  state.rings.push({ x: mx, y: my + 2, hue, life: 0.3, max: 0.3, r: 38 });
 }
 
-/**
- * Flying rocket tail sparks from Slide #3's update() method.
- */
+/** Slide 2 flying-rocket trail: 3 sparks per frame below the stick. */
 export function spawnFirework8FlightSparks(
   state: Firework8State,
   rx: number,
   ry: number,
   hue: number,
 ) {
-  for (let i = 0; i < 3; i++) {
-    state.particles.push({
-      x: rx + rnd(-2, 2),
-      y: ry + FIREWORK_PL + rnd(0, 10),
-      px: rx,
-      py: ry + FIREWORK_PL + 10,
-      vx: rnd(-1.1, 1.1),
-      vy: rnd(2.2, 5.2),
-      g: 0.08,
-      drag: 0.94,
-      hue: hue + rnd(-25, 25),
-      sat: 100,
-      light: rnd(60, 88),
-      alpha: 1,
-      decay: rnd(0.045, 0.075),
-      size: rnd(1.8, 3.3),
-      twinkle: true,
-    });
+  for (let k = 0; k < 3; k++) {
+    push(
+      state,
+      rx + rnd(-2, 2),
+      ry + FIREWORK_PL + rnd(0, 10),
+      rnd(-0.6, 0.6),
+      rnd(1, 3.5),
+      {
+        life: rnd(0.2, 0.5),
+        size: rnd(1.5, 2.8),
+        h: hue + rnd(-25, 25),
+        l: k === 0 ? 90 : 62,
+        g: 0.02,
+        d: 0.93,
+      },
+    );
   }
 }
 
 /**
- * Stuck rocket hit burst ("nancep") from Slide #3's stick() method.
+ * Slide 2 `stick()` for the firework weapon: a random shell bursts 30px under the
+ * hit point, a smaller peony pops right at the rim, plus the 90px shock ring.
  */
 export function spawnFirework8StickBurst(
   state: Firework8State,
@@ -732,17 +794,16 @@ export function spawnFirework8StickBurst(
   hy: number,
   hue: number,
 ) {
-  const bx = hx;
-  const by = hy + 34;
-  const type = IMPACT_TYPES[state.impactIdx % IMPACT_TYPES.length];
-  state.impactIdx++;
-  burstFirework8(state, bx, by, hue, type, 0.72);
-  burstFirework8(state, hx, hy, (hue + 60) % 360, 'peony', 0.35);
-  state.rings.push({ x: hx, y: hy, r: 6, maxR: 90, hue, alpha: 0.9, w: 3 });
+  const type = IMPACT_TYPES[Math.floor(Math.random() * IMPACT_TYPES.length)];
+  const by = hy + FIREWORK_PL * 0.65;
+  burstFirework8(state, hx, by, hue, type, 0.72);
+  burstFirework8(state, hx, hy + 4, (hue + 60) % 360, 'peony', 0.35);
+  state.rings.push({ x: hx, y: by, hue, life: 0.45, max: 0.45, r: 90 });
 }
 
 /**
- * Stage clear finale from Slide #3's clearLevel() method.
+ * Slide 2 `clearLevel()` finale: rainbow + ring + willow over the board, one big
+ * shock ring and glow, then a 9-rocket sky show over ~2 seconds.
  */
 export function spawnFirework8ClearFinale(
   state: Firework8State,
@@ -751,42 +812,45 @@ export function spawnFirework8ClearFinale(
   level: number,
 ) {
   const hueBase = firework8HueBase(level);
-  burstFirework8(state, cx, cy, hueBase, 'rainbow', 1.5);
-  burstFirework8(state, cx, cy, (hueBase + 120) % 360, 'ring', 1.3);
-  burstFirework8(state, cx, cy, (hueBase + 240) % 360, 'willow', 1.4);
+  burstFirework8(state, cx, cy, hueBase, 'rainbow', 1.5, 0);
+  burstFirework8(state, cx, cy, (hueBase + 120) % 360, 'ring', 1.3, 0);
+  burstFirework8(state, cx, cy, 45, 'willow', 1.4, 0);
+  state.rings.push({ x: cx, y: cy, hue: hueBase, life: 0.8, max: 0.8, r: 260 });
+  state.glows.push({ x: cx, y: cy, hue: hueBase, life: 0.9, max: 0.9, r: 260 });
 
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 9; i++) {
     state.timers.push({
-      t: 0.14 + i * 0.14,
-      fn: () => launchFirework8Sky(state, false),
+      t: 0.15 + i * 0.22 + rnd(0, 0.1),
+      fn: () => launchFirework8Sky(state, true, rnd(1.0, 1.35)),
     });
   }
 }
 
-/**
- * Fail collision burst from Slide #3's failRocket() method.
- */
+/** Slide 2 `failRocket()`: white peony + warm ring + soft glow at the crash point. */
 export function spawnFirework8FailBurst(
   state: Firework8State,
   x: number,
   y: number,
-  hue: number,
+  _hue?: number,
 ) {
-  burstFirework8(state, x, y, hue, 'peony', 0.6);
-  burstFirework8(state, x, y, (hue + 180) % 360, 'ring', 0.5);
+  burstFirework8(state, x, y, 0, 'peony', 0.6, 20);
+  burstFirework8(state, x, y, 45, 'ring', 0.5, 20);
+  state.glows.push({ x, y, hue: 0, life: 0.5, max: 0.5, r: 120 });
 }
 
 /**
- * Updates stars, sky rockets, line-streak particles, glows, rings, and idle sparks on stuck rockets.
+ * Slide 2 `update()` for the firework system.
+ * `celebrate` turns on the idle sky show (slide 2 runs it on the menu / game over:
+ * one rocket every 0.7–1.5 s, each with its own launch whistle and boom).
  */
 export function updateFirework8State(
   state: Firework8State,
   dt: number,
-  stuckPins?: { x: number; y: number; worldA: number; hue: number }[],
+  celebrate = false,
 ) {
   const f = dt * 60;
 
-  // Scheduled timers (e.g. stage clear sky rockets)
+  // Scheduled timers (stage-clear sky show)
   for (let i = state.timers.length - 1; i >= 0; i--) {
     state.timers[i].t -= dt;
     if (state.timers[i].t <= 0) {
@@ -801,118 +865,77 @@ export function updateFirework8State(
     st.p += st.s * dt;
   }
 
-  // Idle sparks from stuck rockets on the wheel
-  if (stuckPins && stuckPins.length > 0) {
-    for (const p of stuckPins) {
-      if (Math.random() < 0.22 * f) {
-        state.particles.push({
-          x: p.x,
-          y: p.y,
-          px: p.x,
-          py: p.y,
-          vx: Math.cos(p.worldA) * rnd(0.4, 1.8) + rnd(-0.5, 0.5),
-          vy: Math.sin(p.worldA) * rnd(0.4, 1.8) + rnd(-0.5, 0.5),
-          g: 0.05,
-          drag: 0.95,
-          hue: p.hue + rnd(-20, 20),
-          sat: 100,
-          light: 72,
-          alpha: 0.85,
-          decay: 0.06,
-          size: 1.8,
-        });
-      }
-    }
-  }
-
-  // Ambient sky rockets
-  if (Math.random() < 0.018 * f && state.sky.length < 3) {
-    launchFirework8Sky(state, true);
-  }
+  // Sky rockets — slide 2 ballistic flight (a = 700 px/s²), burst when it peaks
   for (let i = state.sky.length - 1; i >= 0; i--) {
     const s = state.sky[i];
-    s.x += s.vx * f;
-    s.y += s.vy * f;
-    s.vy += 0.05 * f;
-    state.particles.push({
-      x: s.x + rnd(-1, 1),
-      y: s.y + 4,
-      px: s.x,
-      py: s.y + 4,
-      vx: rnd(-0.4, 0.4),
-      vy: rnd(0.8, 2),
-      g: 0.04,
-      drag: 0.95,
-      hue: s.hue,
-      sat: 90,
-      light: 72,
-      alpha: 0.85,
-      decay: 0.055,
-      size: 1.5,
-    });
-    if (s.y <= s.targetY || s.vy >= -0.5) {
-      if (!s.ambient) slide23Sfx.boom(0.75);
-      burstFirework8(state, s.x, s.y, s.hue, s.type, rnd(0.55, 0.85));
+    s.vy += 700 * dt;
+    s.x += s.vx * dt;
+    s.y += s.vy * dt;
+    for (let k = 0; k < 2; k++) {
+      push(state, s.x, s.y, rnd(-0.5, 0.5), rnd(0.5, 2), {
+        life: rnd(0.3, 0.7),
+        size: 1.8,
+        h: 38 + rnd(-10, 10),
+        l: 70,
+        g: 0.02,
+        d: 0.94,
+      });
+    }
+    if (s.vy > -40) {
       state.sky.splice(i, 1);
+      burstFirework8(state, s.x, s.y, s.hue, s.type, s.scale, 30);
+      fireworkSfx.boom(s.scale);
     }
   }
 
-  // Particles
+  // Idle celebration show (slide 2 `ambientT`: 0.7–1.5 s between rockets)
+  if (celebrate) {
+    state.ambientT -= dt;
+    if (state.ambientT <= 0) {
+      launchFirework8Sky(state, true, rnd(0.9, 1.2));
+      state.ambientT = rnd(0.7, 1.5);
+    }
+  }
+
+  // Particles — slide 2 physics (drag, gravity, life, crackle spawns white sparks)
   for (let i = state.particles.length - 1; i >= 0; i--) {
     const p = state.particles[i];
-    p.px = p.x;
-    p.py = p.y;
-    p.vx *= Math.pow(p.drag, f);
-    p.vy *= Math.pow(p.drag, f);
+    const dr = Math.pow(p.d, f);
+    p.vx *= dr;
+    p.vy *= dr;
     p.vy += p.g * f;
     p.x += p.vx * f;
     p.y += p.vy * f;
-    p.alpha -= p.decay * f;
-
-    if (p.crackle && p.alpha < 0.38 && p.alpha > 0.3) {
-      p.crackle = false;
-      for (let k = 0; k < 5; k++) {
-        const a = rnd(0, TAU);
-        const sp = rnd(1.2, 3.2);
-        state.particles.push({
-          x: p.x,
-          y: p.y,
-          px: p.x,
-          py: p.y,
-          vx: Math.cos(a) * sp,
-          vy: Math.sin(a) * sp,
-          g: 0.06,
-          drag: 0.92,
-          hue: p.hue + rnd(-35, 35),
-          sat: 100,
-          light: 88,
-          alpha: 0.95,
-          decay: 0.075,
-          size: 1.4,
-          twinkle: true,
-        });
+    p.life -= dt;
+    if (p.life <= 0) {
+      if (p.crackle) {
+        for (let k = 0; k < 3; k++) {
+          const a = rnd(0, TAU);
+          const sp = rnd(0.8, 2.2);
+          push(state, p.x, p.y, Math.cos(a) * sp, Math.sin(a) * sp, {
+            life: rnd(0.2, 0.45),
+            size: 1.3,
+            h: 50,
+            s: 40,
+            l: 92,
+            g: 0.02,
+            d: 0.92,
+            tr: 1,
+          });
+        }
       }
+      state.particles[i] = state.particles[state.particles.length - 1];
+      state.particles.pop();
     }
-
-    if (p.alpha <= 0) state.particles.splice(i, 1);
-  }
-  if (state.particles.length > 900) {
-    state.particles.splice(0, state.particles.length - 900);
   }
 
-  // Glows
+  // Glows & rings simply run out of life
   for (let i = state.glows.length - 1; i >= 0; i--) {
-    const gl = state.glows[i];
-    gl.alpha -= gl.decay * f;
-    if (gl.alpha <= 0) state.glows.splice(i, 1);
+    state.glows[i].life -= dt;
+    if (state.glows[i].life <= 0) state.glows.splice(i, 1);
   }
-
-  // Rings
   for (let i = state.rings.length - 1; i >= 0; i--) {
-    const r = state.rings[i];
-    r.r += (r.maxR - r.r) * 0.18 * f;
-    r.alpha -= 0.04 * f;
-    r.w *= Math.pow(0.96, f);
-    if (r.alpha <= 0) state.rings.splice(i, 1);
+    state.rings[i].life -= dt;
+    if (state.rings[i].life <= 0) state.rings.splice(i, 1);
   }
 }

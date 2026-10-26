@@ -5,6 +5,26 @@ type C = CanvasRenderingContext2D;
 
 // Original shot drawings from c0769f5, not a recolor of the new projectile.
 // Only visuals are reused: collisions, speed, stick depth and buffs stay current.
+const NO_CLASSIC_ART = [
+  'slingshot', 'blowgun', 'shotgun', 'soaker', 'snowball',
+  'sniper', 'flamethrower', 'bubble', 'bamboo', 'banana',
+  'harpoon', 'confetti', 'seed', 'pizza', 'minigun',
+  'crossbow', 'plasma', 'laser', 'gravity', 'coconut',
+  'angklung', 'bee', 'sakura', 'firework', 'keris',
+  'storm', 'pencil', 'sandal', 'paintball', 'wand',
+  'shark', 'ghost', 'ufo', 'rpg', 'bazooka',
+  'freeze', 'magnet', 'shrink', 'grow', 'pirate',
+  'card', 'holy', 'unicorn', 'obliterator', 'coingun',
+  'photon_saber', 'gauntlet_cannon', 'ruby', 'emerald', 'sapphire',
+  'crystal', 'beerifle', 'buster', 'pulse_rifle', 'cryo_blaster',
+  'hyperdrive', 'quantum_destabilizer', 'blaster', 'railgun',
+] as const;
+
+/** True when the gun has a genuine pre-variant shot to show as "Sebelumnya". */
+export function hasClassicProjectile(id: VariantWeapon): boolean {
+  return !(NO_CLASSIC_ART as readonly string[]).includes(id);
+}
+
 export function drawClassicProjectile(c: C, kind: VariantWeapon, len: number, t: number) {
   switch (kind) {
     case 'golden': classicRound(c, len, 'gold'); break;
@@ -21,6 +41,93 @@ export function drawClassicProjectile(c: C, kind: VariantWeapon, len: number, t:
     case 'cricket': classicCricket(c, len, t); break;
     case 'electro': classicElectro(c, len, t); break;
     case 'fish': classicFish(c, len, t); break;
+    // SET 1 weapons keep their existing slide-1 projectile as the "Sebelumnya"
+    // effect; `hasClassicProjectile` sends them down their normal renderer.
+    case 'slingshot':
+    case 'blowgun':
+    case 'shotgun':
+    case 'soaker':
+    case 'snowball':
+    case 'sniper':
+    case 'flamethrower':
+    case 'bubble':
+    case 'bamboo':
+    case 'banana':
+    case 'harpoon':
+    case 'confetti':
+    case 'seed':
+    case 'pizza':
+    case 'minigun':
+    case 'crossbow':
+    case 'plasma':
+    case 'laser':
+    case 'gravity':
+    case 'coconut':
+    case 'angklung':
+    case 'bee':
+    case 'sakura':
+    case 'firework':
+    case 'keris':
+    case 'storm':
+    case 'pencil':
+    case 'sandal':
+    case 'paintball':
+    case 'wand':
+    case 'shark':
+    case 'ghost':
+    case 'ufo':
+      return;
+    case 'rpg':
+    case 'bazooka':
+    case 'freeze':
+    case 'magnet':
+    case 'shrink':
+    case 'grow':
+    case 'pirate':
+    case 'card':
+    case 'holy':
+    case 'unicorn':
+    case 'obliterator':
+    case 'coingun':
+    case 'photon_saber':
+    case 'gauntlet_cannon':
+    case 'ruby':
+    case 'emerald':
+    case 'sapphire':
+    case 'crystal':
+    case 'beerifle':
+    case 'buster':
+    case 'pulse_rifle':
+    case 'cryo_blaster':
+    case 'hyperdrive':
+    case 'quantum_destabilizer':
+    case 'blaster':
+    case 'railgun':
+    // Slide 9 ports (and the nine guns it added) draw their own rounds.
+    case 'pistol':
+    case 'ak47':
+    case 'pred':
+    case 'longbow':
+    case 'mp5':
+    case 'tesla_rifle':
+    case 'ion_smg':
+    case 'phaser':
+    case 'yautja':
+    case 'identity_disc':
+    case 'proton_pack':
+    case 'heat_ray':
+    case 'xeno':
+    case 'mega_buster':
+    case 'harmonic_disruptor':
+    case 'absolute_zero':
+    case 'helios_flare':
+    case 'chrono_rifle':
+    case 'orbital_beacon':
+    case 'helix_pulsar':
+    case 'singularity':
+    case 'prism_lance':
+    case 'nano_swarm':
+      return;
     default: { const _never: never = kind; return _never; }
   }
 }

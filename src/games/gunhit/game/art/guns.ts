@@ -1,11 +1,19 @@
 import type { WeaponId } from '../weapons';
-import { getGunVariant, isFixedClassicGun, supportsGunVariants, supportsLatestDesign, type GunVariant } from './gunVariants';
+import { getGunVariant, hasSeparateOriginal, isFixedClassicGun, isSetNineDesignWeapon, isSetOneDesignWeapon, isSetSevenDesignWeapon, supportsGunVariants, supportsLatestDesign, type GunVariant } from './gunVariants';
 import { drawOriginalGun } from './legacyVariants';
 import { drawLatestGun } from './latestVariants';
 import { drawGunExtra, drawFlashExtra } from './guns3';
 import { gunState, lin as sharedLin, radial } from './kit';
 import { shotPulse } from './commonGunMotion';
 import { drawSlide3BazookaMuzzleFx } from '../bazookaSlideFx';
+import { drawBlackHoleGun2, type Slide2GunState } from '../slide2Weapons';
+import { drawSetOneGun, setOneIdFor } from '../setOneArt';
+import { drawSetSevenGun, setSevenIdFor } from '../setSevenArt';
+import { restSevenAnim } from '../setSevenArt';
+import { drawSetNineGun, isNineNewWeapon, restNineState, setNineIdFor } from '../setNineArt';
+import { drawSetElevenGun, elevenScale, isElevenNewSlide1Id, restElevenState, setElevenIdFor } from '../setElevenArt';
+import { isElevenOnlyWeapon } from './gunVariants';
+import type { WeaponAnim } from '../../../../../games/game-4/src/game/weapons';
 
 const TAU = Math.PI * 2;
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
@@ -58,10 +66,92 @@ export function drawGun(
   variant: GunVariant = getGunVariant(id),
 ) {
   c.save();
-  // The three retired guns ALWAYS render the original, even if an obsolete
+  // Slide 9 (games/game-6): the newest design is slide 9's own artwork, drawn
+  // at the same muzzle origin with slide 9's own draw state (recoil, slide,
+  // bolt, pump, charge meter, spin-up, drum index). The nine guns slide 1 never
+  // had only ever exist as this design, so they always render it.
+  // Slide 11 (games/game-8) is the newest layer: its own artwork, drawn at the
+  // same muzzle origin with slide 11's own weapon state.
+  const setElevenId = variant === 'set11' || isElevenOnlyWeapon(id) ? setElevenIdFor(id) : null;
+  if (setElevenId) {
+    const sinceShot = Math.max(0, gunState.sinceShot);
+    drawSetElevenGun(
+      c, setElevenId, cx, y0, t,
+      gunState.elevenState ?? {
+        ...restElevenState(),
+        // Menus and cards rebuild the same recoil/cycle slide 11 shows right
+        // after a shot, so the gun visibly kicks instead of standing still.
+        recoil: sinceShot >= 0.16 ? 0 : 1 - sinceShot / 0.16,
+        fireT: sinceShot,
+        ready: Math.min(1, sinceShot / 0.35),
+        charge: gunState.charge,
+      },
+      elevenScale(setElevenId),
+    );
+    c.restore();
+    if (flash > 0 && !gunState.elevenLive) drawFlash(c, id, cx, y0, t, flash);
+    return;
+  }
+  const setNineId = variant === 'set9' || isNineNewWeapon(id) ? setNineIdFor(id) : null;
+  if (setNineId) {
+    // Live games hand over their own state; menus and cards rebuild the same
+    // recoil/cycle from the shared shot clock so the gun still reacts to a shot.
+    const sinceShot = Math.max(0, gunState.sinceShot);
+    drawSetNineGun(c, setNineId, cx, y0, t, gunState.s9State ?? restNineState({
+      recoil: sinceShot >= 0.16 ? 0 : 1 - sinceShot / 0.16,
+      charge: gunState.charge,
+      cycle: Math.min(1, sinceShot / 0.35),
+      catchT: sinceShot,
+    }));
+    c.restore();
+    if (flash > 0 && !gunState.s9Live) drawFlash(c, id, cx, y0, t, flash);
+    return;
+  }
+  // SET 1 of slide 7: the newest design is slide 7's own artwork, drawn at the
+  // same muzzle origin with the same visible animation ranges (slide travel,
+  // pump, pouch, charge meter, tank gauge).
+  const setOneId = isSetOneDesignWeapon(id) && variant === 'set1' ? setOneIdFor(id) : null;
+  if (setOneId && supportsGunVariants(id)) {
+    drawSetOneGun(c, setOneId, cx, y0, t, {
+      sinceShot: gunState.sinceShot,
+      charge: gunState.charge,
+      water: gunState.ammoRatio,
+      ready,
+    });
+    c.restore();
+    if (flash > 0) drawFlash(c, id, cx, y0, t, flash);
+    return;
+  }
+  // Slide-7 SET 2..5: slide 7's own artwork, drawn at the same muzzle origin
+  // with slide 7's own animation state (the live game hands its springs over
+  // through `gunState.s7Anim`; menus and cards get the rested pose).
+  const setSevenId = isSetSevenDesignWeapon(id) && variant === 'set7' ? setSevenIdFor(id) : null;
+  if (setSevenId && supportsGunVariants(id)) {
+    drawSetSevenGun(c, setSevenId, cx, y0, t, gunState.s7Anim ?? restSevenAnim());
+    c.restore();
+    if (flash > 0) drawFlash(c, id, cx, y0, t, flash);
+    return;
+  }
+  // Slide-2 guns: the newest design is slide 2's own art, drawn at the same
+  // muzzle origin with the same rest/charge animation (loadP 7/s, recoil 6/s).
+  if (id === 'blackhole' && variant === 'latest' && supportsGunVariants(id)) {
+    const since = gunState.sinceShot;
+    const st: Slide2GunState = {
+      time: t,
+      recoil: Math.max(0, 1 - since * 6),
+      loadP: Math.min(1, since * 7),
+      hue: 215 + ((gunState.shots * 53) % 105),
+      live: ready,
+    };
+    drawBlackHoleGun2(c, cx, y0, st);
+    c.restore();
+    if (flash > 0) drawFlash(c, id, cx, y0, t, flash);
+    return;
+  }
+  // The retired guns ALWAYS render the original, even if an obsolete
   // saved choice or a caller explicitly requests a removed design. Honey has
   // two genuine silhouettes, not a duplicate 'latest' card.
-  if (supportsGunVariants(id) && (isFixedClassicGun(id) || variant === 'original' ||
+  if (supportsGunVariants(id) && (isFixedClassicGun(id) || (variant === 'original' && hasSeparateOriginal(id)) ||
     (variant === 'latest' && supportsLatestDesign(id)))) {
     if (isFixedClassicGun(id) || variant === 'original') drawOriginalGun(c, id, cx, y0, t, ready);
     else if (supportsLatestDesign(id)) drawLatestGun(c, id, cx, y0, t);

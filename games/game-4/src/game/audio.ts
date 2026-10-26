@@ -27,6 +27,30 @@ class SFX {
   private comp: DynamicsCompressorNode | null = null;
   private noiseBuf: AudioBuffer | null = null;
   muted = false;
+  /**
+   * Per-name level trim, applied to every voice a recipe schedules.
+   *
+   * Slide 7 mixes some weapons as background texture: `rainbow_fire` peaks at
+   * 0.12 because it plays over the stage track with fireworks cracking in front
+   * of it. On slide 1 the same recipe is the only sound of the shot, and next to
+   * 98 other guns it read as barely there. These multipliers lift exactly those
+   * names to the ~0.45 peak band the rest of the arsenal lives in, without
+   * touching their timbre, rhythm or the loud recipes at all.
+   */
+  private static readonly LEVEL: Record<string, number> = {
+    angklung_fire: 3.6, rainbow_fire: 3.6, unicorn_fire: 3.6,
+    wand_fire: 3.2, charge_charge: 3.2, emerald_charge: 3.6,
+    laser_charge: 3.6, moon_charge: 3.2, plasma_charge: 4,
+    chicken_fire: 2.5, freeze_fire: 2, ghost_fire: 1.8, holy_fire: 1.8,
+    gravity_charge: 2, storm_charge: 2, ufo_fire: 2, rail_charge: 1.8,
+    bamboo_fuse: 1.8,
+    sakura_fire: 1.6, banana_fire: 1.5, bubble_fire: 1.5, diamond_fire: 1.5,
+    shrink_fire: 2.8, grow_fire: 2.8,
+    bh_fire: 0.9, bh_charge: 3.6, bh_suck: 2.2, bh_hit: 0.6,
+    sling_fire: 1.65, sumpit_fire: 0.9, soaker_fire: 1.2, pump: 1,
+  };
+  /** Level trim of the recipe being played right now (see `LEVEL`). */
+  private mul = 1;
 
   ensure() {
     if (!this.ctx) {
@@ -37,7 +61,10 @@ class SFX {
         this.comp.threshold.value = -14;
         this.comp.ratio.value = 6;
         this.master = this.ctx.createGain();
-        this.master.gain.value = 0.55;
+        // 0.55 was too quiet once slide 7's guns started firing on slide 1 next
+        // to slide 9 (0.85) and slide 11 (0.92); 0.8 keeps every ported set in
+        // the same loudness band while the compressor below still tames peaks.
+        this.master.gain.value = 0.8;
         this.master.connect(this.comp);
         this.comp.connect(this.ctx.destination);
         const len = this.ctx.sampleRate * 1.5;
@@ -63,7 +90,7 @@ class SFX {
     if (o.freqEnd) f.frequency.exponentialRampToValueAtTime(Math.max(20, o.freqEnd), t0 + o.dur);
     f.Q.value = o.q ?? 0.8;
     const g = c.createGain();
-    const peak = o.gain ?? 0.5;
+    const peak = (o.gain ?? 0.5) * this.mul;
     const att = o.attack ?? 0.004;
     g.gain.setValueAtTime(0.0001, t0);
     g.gain.exponentialRampToValueAtTime(peak, t0 + att);
@@ -84,7 +111,7 @@ class SFX {
     osc.frequency.setValueAtTime(o.freq, t0);
     if (o.freqEnd) osc.frequency.exponentialRampToValueAtTime(Math.max(10, o.freqEnd), t0 + o.dur);
     const g = c.createGain();
-    const peak = o.gain ?? 0.3;
+    const peak = (o.gain ?? 0.3) * this.mul;
     const att = o.attack ?? 0.003;
     g.gain.setValueAtTime(0.0001, t0);
     g.gain.exponentialRampToValueAtTime(peak, t0 + att);
@@ -95,10 +122,31 @@ class SFX {
     osc.stop(t0 + o.dur + 0.05);
   }
 
-  play(name: string) {
+  play(name: string, gain = 1) {
     if (this.muted) return;
     this.ensure();
     if (!this.ctx) return;
+    const prev = this.mul;
+    this.mul = prev * gain * (SFX.LEVEL[name] ?? 1);
+    try {
+      this.recipe(name);
+    } finally {
+      this.mul = prev;
+    }
+  }
+
+  /** Runs `fn` with every recipe it plays scaled by `gain` (per-shot level). */
+  withGain<T>(gain: number, fn: () => T): T {
+    const prev = this.mul;
+    this.mul = prev * gain;
+    try {
+      return fn();
+    } finally {
+      this.mul = prev;
+    }
+  }
+
+  private recipe(name: string) {
     const n = (o: NoiseOpts) => this.noise(o);
     const t = (o: ToneOpts) => this.tone(o);
     switch (name) {

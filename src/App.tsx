@@ -6,7 +6,6 @@ import {
   Zap,
   Target,
   Sparkles,
-  Shield,
   Layers,
   Crosshair,
   Compass,
@@ -26,7 +25,7 @@ import ScaledFrame from './components/ScaledFrame';
 import { SlideActivityProvider } from './games/shared/SlideActivity';
 import GunHitGame from './games/gunhit/App';
 
-type SlideId = 'gunhit' | 'fireworkgun' | 'rainbow' | 'obliterator' | 'game1' | 'game2' | 'game3' | 'game4' | 'game5' | 'game6' | 'game7' | 'game8';
+type SlideId = 'gunhit' | 'fireworkgun' | 'rainbow' | 'obliterator' | 'game1' | 'game2' | 'game4' | 'game5' | 'game6' | 'game7' | 'game8';
 
 export interface GameSlide {
   id: SlideId;
@@ -59,7 +58,6 @@ export default function App() {
     obliterator: 0,
     game1: 0,
     game2: 0,
-    game3: 0,
     game4: 0,
     game5: 0,
     game6: 0,
@@ -308,34 +306,8 @@ export default function App() {
       ),
     },
     {
-      id: 'game3',
-      slideNumber: 7,
-      name: 'Elemental Arsenal',
-      fullName: 'Acid · Air Cannon · Plasma · Black Hole',
-      badge: '🧪 Elemental Weapons',
-      tagline: 'Kategori senjata elemen: Acid, Air Cannon, Plasma, dan Black Hole dengan proyektil khusus.',
-      weapons: ['🧪 Acid Blaster', '💨 Air Cannon', '⚡ Plasma Core', '🕳️ Black Hole'],
-      icon: Shield,
-      themeColor: 'text-emerald-400',
-      borderColor: 'border-emerald-500/40 hover:border-emerald-400/80 shadow-emerald-950/40',
-      accentBg: 'bg-emerald-500/20 text-emerald-400',
-      path: `${cleanBase}games/game-3/index.html`,
-      render: (active: boolean) => (
-        <iframe
-          ref={(el) => {
-            iframeRefs.current.game3 = el;
-          }}
-          key={`game3-${keys.game3}`}
-          src={`${cleanBase}games/game-3/index.html?standby=${active ? '0' : '1'}`}
-          title="Elemental Arsenal"
-          className="w-full h-full border-0 bg-black block"
-          allow="autoplay; gamepad"
-        />
-      ),
-    },
-    {
       id: 'game4',
-      slideNumber: 8,
+      slideNumber: 7,
       name: 'Weapon Hit 71 Senjata',
       fullName: 'Weapon Hit — 71 Senjata (Level 1 FX)',
       badge: '🔮 71 Senjata',
@@ -361,7 +333,7 @@ export default function App() {
     },
     {
       id: 'game5',
-      slideNumber: 9,
+      slideNumber: 8,
       name: 'Neon Ballistics',
       fullName: 'ARSENAL - Neon Ballistics (Level 01)',
       badge: '🔴 Neon Ballistics',
@@ -387,7 +359,7 @@ export default function App() {
     },
     {
       id: 'game6',
-      slideNumber: 10,
+      slideNumber: 9,
       name: 'Arsenal Wheel Hit Range',
       fullName: 'Arsenal Wheel Hit — 2D Weapon FX Range',
       badge: '🎯 Range Edition',
@@ -413,7 +385,7 @@ export default function App() {
     },
     {
       id: 'game7',
-      slideNumber: 11,
+      slideNumber: 10,
       name: 'Ballistics Lab',
       fullName: 'Arsenal FX — 2D Ballistics Lab',
       badge: '🧪 Ballistics Lab',
@@ -439,7 +411,7 @@ export default function App() {
     },
     {
       id: 'game8',
-      slideNumber: 12,
+      slideNumber: 11,
       name: 'Knife-Hit Arsenal FX',
       fullName: 'Arsenal FX – Knife-Hit Weapon Effects',
       badge: '🐉 Knife-Hit FX',
@@ -487,7 +459,7 @@ export default function App() {
                   GAME ARCADE HUB
                 </h1>
                 <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                  12 Slides Live
+                  {slides.length} Slides Live
                 </span>
               </div>
               <p className="text-xs text-neutral-400">
@@ -539,7 +511,7 @@ export default function App() {
             <button
               onClick={handleReloadAll}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-white/5 hover:bg-white/10 text-neutral-200 hover:text-white rounded-xl border border-white/10 transition-colors active:scale-95 cursor-pointer"
-              title="Muat ulang seluruh 12 game"
+              title={`Muat ulang seluruh ${slides.length} game`}
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Reset Semua</span>
@@ -601,7 +573,7 @@ export default function App() {
           <div className="flex items-center gap-2 text-xs font-mono text-amber-400/90 px-3 py-1.5 rounded-xl bg-black/40 border border-white/5 shrink-0">
             <span>3 Kolom ke Kanan</span>
             <span>•</span>
-            <span>Total 12 Game</span>
+            <span>Total {slides.length} Game</span>
           </div>
         </div>
 

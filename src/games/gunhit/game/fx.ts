@@ -6,13 +6,198 @@ const TAU = Math.PI * 2;
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 const pick = <T,>(arr: T[]) => arr[Math.floor(Math.random() * arr.length)];
 
+
+// ---------------------------------------------------------------- colors
+/**
+ * Particle colors arrive in three shapes across the codebase: hex (`#b6ff1a`),
+ * bare rgb triplets (`182,255,26`, used by the slide-7 port) and already
+ * wrapped rgba strings. `fill()`/`stroke()` silently ignore a bare triplet, so
+ * whole rings, bolts, sparks and smoke plumes from the elemental weapons were
+ * invisible. Normalising here restores them everywhere.
+ */
+/**
+ * Parsed `r,g,b` triplet per colour string.
+ *
+ * `cssColor` runs once per drawn particle per frame — on a paintball burst that
+ * is a thousand regex matches a second, and the profiler showed it as the
+ * single biggest JS cost of a frame. The set of colours in play is tiny, so the
+ * triplet is parsed once and reused; only the alpha has to be re-formatted.
+ */
+const tripletCache = new Map<string, string | null>();
+/** Colour strings that already are opaque CSS, keyed by the string itself. */
+const plainCache = new Map<string, string>();
+
+function parseTriplet(color: string): string | null {
+  const hit = tripletCache.get(color);
+  if (hit !== undefined) return hit;
+  let out: string | null = null;
+  if (color[0] === '#') {
+    let hex = color.slice(1);
+    if (hex.length === 3) hex = hex.split('').map((ch) => ch + ch).join('');
+    if (hex.length === 6) {
+      const n = parseInt(hex, 16);
+      out = `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`;
+    }
+  } else {
+    const triplet = color.match(/^\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*$/);
+    if (triplet) out = `${+triplet[1]},${+triplet[2]},${+triplet[3]}`;
+    else {
+      const open = color.match(/^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*$/);
+      if (open) out = `${+open[1]},${+open[2]},${+open[3]}`;
+      else {
+        const full = color.match(/^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*(?:,\s*[\d.]+\s*)?\)$/);
+        if (full) out = `${+full[1]},${+full[2]},${+full[3]}`;
+      }
+    }
+  }
+  if (tripletCache.size > 4096) tripletCache.clear();
+  tripletCache.set(color, out);
+  return out;
+}
+
+export function cssColor(color: string, alpha = 1): string {
+  if (!color) return `rgba(255,255,255,${alpha})`;
+  if (alpha === 1) {
+    const plain = plainCache.get(color);
+    if (plain) return plain;
+    const trip = parseTriplet(color);
+    const out = trip === null ? color : `rgba(${trip},1)`;
+    if (plainCache.size > 4096) plainCache.clear();
+    plainCache.set(color, out);
+    return out;
+  }
+  const trip = parseTriplet(color);
+  return trip === null ? color : `rgba(${trip},${alpha})`;
+}
+
+/**
+ * All `drop` particles of the frame, batched into one path per colour + alpha
+ * step.
+ *
+ * A single paintball hit throws 22 droplets and the gun fires eight times a
+ * second, so the droplet layer was ~900 separate `fill()` calls every frame.
+ * Ellipses take a rotation argument, so they batch perfectly: a screen full of
+ * droplets now costs a handful of fills, and the shape, colour, angle, gloss and
+ * fade are unchanged (the alpha is bucketed in 8 steps, well below what an eye
+ * can resolve on a 3-6px speck). Droplet count itself was left alone — the gun
+ * still paints exactly as thick as it did.
+ *
+ * The buckets are module-level scratch reused frame to frame; the first version
+ * built a `Map` and an array per colour per frame, and that allocation showed up
+ * as GC time in the profile — the very thing this batching exists to avoid.
+ */
+const dropBuckets = new Map<string, Particle[][]>();
+const dropActive: string[] = [];
+
+export function drawDropParticles(c: CanvasRenderingContext2D, particles: readonly Particle[]): void {
+  // Wipe whatever the previous frame left in the shared buckets.
+  for (const color of dropActive) {
+    const byStep = dropBuckets.get(color)!;
+    for (const list of byStep) list.length = 0;
+  }
+  dropActive.length = 0;
+
+  let any = false;
+  for (const p of particles) {
+    if (p.kind !== 'drop') continue;
+    const a = Math.max(0, p.life / p.max);
+    if (a < 0.04) continue;
+    const step = Math.min(7, Math.max(0, Math.round(Math.min(1, a * 2) * 8) - 1));
+    let byStep = dropBuckets.get(p.color);
+    if (!byStep) {
+      byStep = [[], [], [], [], [], [], [], []];
+      dropBuckets.set(p.color, byStep);
+    }
+    byStep[step].push(p);
+    any = true;
+  }
+  if (!any) return;
+
+  c.save();
+  for (const [color, byStep] of dropBuckets) {
+    let used = false;
+    for (let step = 0; step < 8; step++) {
+      const list = byStep[step];
+      if (!list.length) continue;
+      used = true;
+      c.globalAlpha = (step + 1) / 8;
+      c.fillStyle = cssColor(color);
+      c.beginPath();
+      for (const p of list) {
+        c.ellipse(p.x, p.y, p.size * dropStretch(p), p.size * 0.7, Math.atan2(p.vy, p.vx), 0, TAU);
+      }
+      c.fill();
+      // Gloss: sub-pixel below ~3.4px, so it is batched only where it shows.
+      let gloss = false;
+      for (const p of list) {
+        if (p.size < 3.4) continue;
+        if (!gloss) {
+          gloss = true;
+          c.fillStyle = 'rgba(255,255,255,0.7)';
+          c.beginPath();
+        }
+        const ang = Math.atan2(p.vy, p.vx);
+        const hx = 0.3 * p.size;
+        const hy = -0.2 * p.size;
+        c.arc(p.x + hx * Math.cos(ang) - hy * Math.sin(ang), p.y + hx * Math.sin(ang) + hy * Math.cos(ang), p.size * 0.22, 0, TAU);
+      }
+      if (gloss) c.fill();
+    }
+    if (used) dropActive.push(color);
+  }
+  c.restore();
+}
+
+/** How much a moving droplet is stretched along its direction of travel. */
+function dropStretch(p: Particle): number {
+  return Math.min(2.5, Math.hypot(p.vx, p.vy) / 250 + 1);
+}
+
+/**
+ * Smoke plumes, drawn from a radial gradient cached per context + colour.
+ *
+ * The plume used to build a fresh `createRadialGradient` with three colour
+ * stops for every particle on every frame — the biggest source of gradient
+ * allocations in the whole game (a snowball or freeze burst made 400 of them a
+ * frame). One unit-radius gradient per colour does the same job: the transform
+ * places and scales it, and `globalAlpha` carries the fade-in/out.
+ */
+const smokeGradients = new WeakMap<CanvasRenderingContext2D, Map<string, CanvasGradient>>();
+
+export function drawSmokeParticle(c: CanvasRenderingContext2D, p: Particle, alpha: number): void {
+  const r = p.size * (1.6 - alpha * 0.6);
+  if (r <= 0.2 || alpha <= 0.01) return;
+  let byColor = smokeGradients.get(c);
+  if (!byColor) {
+    byColor = new Map();
+    smokeGradients.set(c, byColor);
+  }
+  let g = byColor.get(p.color);
+  if (!g) {
+    g = c.createRadialGradient(0, 0, 0, 0, 0, 1);
+    g.addColorStop(0, cssColor(p.color, 0.45));
+    g.addColorStop(0.55, cssColor(p.color, 0.2));
+    g.addColorStop(1, cssColor(p.color, 0));
+    byColor.set(p.color, g);
+  }
+  c.save();
+  c.globalAlpha = Math.min(1, alpha);
+  c.translate(p.x, p.y);
+  c.scale(r, r);
+  c.fillStyle = g;
+  c.beginPath();
+  c.arc(0, 0, 1, 0, TAU);
+  c.fill();
+  c.restore();
+}
+
 // ---------------------------------------------------------------- particles
 export type PKind =
   | 'spark' | 'chip' | 'smoke' | 'shell' | 'text' | 'ring' | 'glow' | 'bolt'
   | 'star' | 'shard' | 'shock' | 'drop' | 'streak' | 'petal'
   | 'snowflake' | 'snowChunk' | 'snowDust' | 'waterDrop' | 'waterSplash' | 'honeyDrop' | 'honeySplash'
   | 'bananaDrop' | 'bananaSplash' | 'slap' | 'pencilShaving' | 'paintSplat' | 'prism' | 'feather'
-  | 'ringE' | 'puff' | 'wind' | 'ash' | 'bubble';
+  | 'ringE' | 'puff' | 'wind' | 'ash' | 'bubble' | 'acid' | 'speed';
 
 export interface Particle {
   tx?: number; ty?: number;
@@ -152,6 +337,29 @@ export const FX: Record<WeaponId, FxProfile> = {
   xeno: P('energy', 'splash', 'energy', '182,255,26', 180, { hitstop: 0.03, kick: 4, ghost: 3, tint: 0.15, decalColors: ['#3f8a00', '#b6ff1a'] }),
   dora: P('sonic', 'dent', 'energy', '255,255,255', 200, { hitstop: 0.04, kick: 5, ghost: 2, tint: 0.1, speedLines: true }),
   pred: P('energy', 'scorch', 'energy', '111,211,255', 220, { hitstop: 0.05, kick: 6, ghost: 4, tint: 0.2, speedLines: true, decalColors: ['#1a5cff', '#6fd3ff'] }),
+  // Slide 9 (games/game-6): the classic fallback profiles of the ported guns.
+  longbow: P('blade', 'slit', 'quiet', '255,240,200', 70, { hitstop: 0.04, kick: 4, streak: 1.3, speedLines: true }),
+  mp5: P('bullet', 'hole', 'fire', '125,211,252', 70, { hitstop: 0.01, kick: 2 }),
+  tesla_rifle: P('electric', 'glow', 'energy', '56,189,248', 180, { hitstop: 0.04, kick: 5, ghost: 3, decalColors: ['#082f49', '#38bdf8'] }),
+  ion_smg: P('energy', 'glow', 'energy', '192,132,252', 130, { hitstop: 0.02, kick: 3, ghost: 2, decalColors: ['#2e1065', '#c084fc'] }),
+  phaser: P('energy', 'glow', 'energy', '251,146,60', 150, { hitstop: 0.04, kick: 4, ghost: 3, decalColors: ['#431407', '#fb923c'] }),
+  yautja: P('energy', 'glow', 'energy', '163,230,53', 170, { hitstop: 0.05, kick: 5, ghost: 3, decalColors: ['#1a2e05', '#a3e635'] }),
+  identity_disc: P('energy', 'glow', 'energy', '34,211,238', 150, { hitstop: 0.04, kick: 5, ghost: 4, tint: 0.15, decalColors: ['#042f2e', '#22d3ee'] }),
+  proton_pack: P('electric', 'glow', 'energy', '253,224,71', 190, { hitstop: 0.05, kick: 6, ghost: 4, decalColors: ['#422006', '#fde047'] }),
+  heat_ray: P('fire', 'burn', 'fire', '255,77,77', 200, { hitstop: 0.06, kick: 7, tint: 0.2 }),
+
+  // Slide 11 (games/game-8)
+  mega_buster: P('buster', 'glow', 'energy', '140,200,255', 120, { kick: 3.4, ghost: 3, tint: 0.1 }),
+  harmonic_disruptor: P('sonic', 'glow', 'energy', '190,160,255', 130, { kick: 3.6, hitstop: 0.03 }),
+  absolute_zero: P('ice', 'frost', 'energy', '150,220,255', 120, { kick: 3, tint: 0.12 }),
+  helios_flare: P('fire', 'burn', 'energy', '255,200,90', 150, { kick: 4.2, hitstop: 0.035, ghost: 4, tint: 0.14 }),
+  chrono_rifle: P('energy', 'glow', 'energy', '120,230,240', 110, { kick: 3, tint: 0.1 }),
+  orbital_beacon: P('heavy', 'scorch', 'energy', '255,150,210', 140, { kick: 4.6, hitstop: 0.05 }),
+  helix_pulsar: P('energy', 'glow', 'energy', '200,140,255', 100, { kick: 2.4, streak: 1.2 }),
+  singularity: P('void', 'glow', 'energy', '190,120,255', 150, { kick: 4.4, hitstop: 0.05, ghost: 4, tint: 0.16 }),
+  prism_lance: P('energy', 'glow', 'energy', '120,235,245', 120, { kick: 3, tint: 0.1 }),
+  nano_swarm: P('nature', 'hole', 'soft', '130,230,150', 100, { kick: 2.6, streak: 1.1 }),
+
 };
 
 // ---------------------------------------------------------------- helpers
@@ -865,7 +1073,7 @@ export function drawFxParticle(c: CanvasRenderingContext2D, p: Particle, time: n
       c.translate(p.x, p.y);
       c.rotate(ang);
       c.globalAlpha = Math.min(1, a * 2.2);
-      c.strokeStyle = p.color;
+      c.strokeStyle = cssColor(p.color);
       c.lineWidth = 2.4 * a;
       c.lineCap = 'round';
       for (let i = -1; i <= 1; i++) {
@@ -882,7 +1090,7 @@ export function drawFxParticle(c: CanvasRenderingContext2D, p: Particle, time: n
       c.globalAlpha = Math.min(1, a * 2);
       c.translate(p.x, p.y);
       c.rotate(p.rot);
-      c.fillStyle = p.color;
+      c.fillStyle = cssColor(p.color);
       c.beginPath();
       c.arc(0, 0, p.size, 0, Math.PI * 1.3);
       c.arc(0, 0, p.size * 0.65, Math.PI * 1.3, 0, true);
@@ -900,7 +1108,7 @@ export function drawFxParticle(c: CanvasRenderingContext2D, p: Particle, time: n
       c.save();
       c.translate(p.x, p.y);
       c.globalAlpha = Math.min(1, a * 1.8);
-      c.fillStyle = p.color;
+      c.fillStyle = cssColor(p.color);
       const r = p.size * (0.4 + t * 0.6);
       c.beginPath();
       c.arc(0, 0, r, 0, TAU);
@@ -917,7 +1125,7 @@ export function drawFxParticle(c: CanvasRenderingContext2D, p: Particle, time: n
       c.globalAlpha = Math.min(1, a * 2);
       c.translate(p.x, p.y);
       c.rotate(p.rot);
-      c.fillStyle = p.color;
+      c.fillStyle = cssColor(p.color);
       c.beginPath();
       c.moveTo(0, -p.size);
       c.lineTo(p.size * 0.8, -p.size * 0.2);
@@ -963,7 +1171,7 @@ export function drawFxParticle(c: CanvasRenderingContext2D, p: Particle, time: n
       c.globalAlpha = Math.min(1, a * 1.5);
       c.translate(p.x, p.y);
       c.rotate(p.rot * 0.15);
-      c.fillStyle = p.color;
+      c.fillStyle = cssColor(p.color);
       c.beginPath();
       c.moveTo(0, -r);
       c.quadraticCurveTo(0, 0, r, 0);
@@ -984,7 +1192,7 @@ export function drawFxParticle(c: CanvasRenderingContext2D, p: Particle, time: n
       c.translate(p.x, p.y);
       c.rotate(p.rot);
       c.shadowColor = '#93c5fd'; c.shadowBlur = 3;
-      c.strokeStyle = p.color;
+      c.strokeStyle = cssColor(p.color);
       c.lineCap = 'round'; c.lineWidth = Math.max(0.7, p.size * 0.16);
       for (let i = 0; i < 3; i++) {
         c.rotate(TAU / 6);
@@ -1002,7 +1210,7 @@ export function drawFxParticle(c: CanvasRenderingContext2D, p: Particle, time: n
       c.globalAlpha = Math.min(1, a * 1.7);
       const r = p.size * (0.7 + t * 0.35);
       const powder = c.createRadialGradient(-r * 0.2, -r * 0.25, 0, 0, 0, r * 1.55);
-      powder.addColorStop(0, p.color);
+      powder.addColorStop(0, cssColor(p.color));
       powder.addColorStop(0.48, 'rgba(246,252,255,0.86)');
       powder.addColorStop(1, 'rgba(244,251,255,0)');
       c.fillStyle = powder;
@@ -1017,7 +1225,7 @@ export function drawFxParticle(c: CanvasRenderingContext2D, p: Particle, time: n
       c.rotate(p.rot);
       const s = p.size;
       const packed = c.createRadialGradient(-s * 0.35, -s * 0.45, s * 0.08, 0, 0, s * 1.25);
-      packed.addColorStop(0, '#ffffff'); packed.addColorStop(0.52, p.color); packed.addColorStop(1, '#c5dee9');
+      packed.addColorStop(0, '#ffffff'); packed.addColorStop(0.52, cssColor(p.color)); packed.addColorStop(1, '#c5dee9');
       c.fillStyle = packed;
       c.beginPath();
       c.moveTo(-s * 0.92, -s * 0.14);
@@ -1039,7 +1247,7 @@ export function drawFxParticle(c: CanvasRenderingContext2D, p: Particle, time: n
       c.globalAlpha = Math.min(1, a * 2);
       c.translate(p.x, p.y);
       c.rotate(p.rot);
-      c.fillStyle = p.color;
+      c.fillStyle = cssColor(p.color);
       c.beginPath();
       c.moveTo(0, -p.size);
       c.lineTo(p.size * 0.5, p.size * 0.6);
@@ -1054,7 +1262,7 @@ export function drawFxParticle(c: CanvasRenderingContext2D, p: Particle, time: n
       const r = p.size * (0.2 + 0.8 * e);
       c.save();
       c.globalCompositeOperation = 'lighter';
-      c.strokeStyle = `rgba(${p.color},${0.65 * a})`;
+      c.strokeStyle = cssColor(p.color, 0.65 * a);
       c.lineWidth = Math.max(1, 2.4 * a);
       c.beginPath();
       c.arc(p.x, p.y, r, 0, TAU);
@@ -1068,7 +1276,7 @@ export function drawFxParticle(c: CanvasRenderingContext2D, p: Particle, time: n
       c.translate(p.x, p.y);
       c.rotate(p.rot);
       c.scale(1, 0.4 + 0.6 * Math.abs(Math.sin(time * 6 + p.rot)));
-      c.fillStyle = p.color;
+      c.fillStyle = cssColor(p.color);
       c.beginPath();
       c.ellipse(0, 0, p.size, p.size * 0.5, 0, 0, TAU);
       c.fill();
@@ -1104,7 +1312,7 @@ export function drawFxParticle(c: CanvasRenderingContext2D, p: Particle, time: n
       c.save(); c.translate(p.x, p.y); c.rotate(Math.atan2(p.vy, p.vx));
       c.globalAlpha = Math.min(1, a * 1.9);
       const r = p.size;
-      c.fillStyle = p.color;
+      c.fillStyle = cssColor(p.color);
       c.beginPath(); c.moveTo(-r * 1.5, 0);
       c.bezierCurveTo(-r * 0.7, -r * 0.25, -r * 0.25, -r * 0.9, r * 0.3, -r * 0.8);
       c.quadraticCurveTo(r * 1.27, -r * 0.45, r * 0.86, r * 0.65);
@@ -1230,18 +1438,24 @@ export function drawFxParticle(c: CanvasRenderingContext2D, p: Particle, time: n
     case 'drop': {
       const ang = Math.atan2(p.vy, p.vx);
       const sp = Math.min(2.5, Math.hypot(p.vx, p.vy) / 250 + 1);
+      const r = p.size;
       c.save();
       c.globalAlpha = Math.min(1, a * 2);
       c.translate(p.x, p.y);
       c.rotate(ang);
-      c.fillStyle = p.color;
+      c.fillStyle = cssColor(p.color);
       c.beginPath();
-      c.ellipse(0, 0, p.size * sp, p.size * 0.7, 0, 0, TAU);
+      c.ellipse(0, 0, r * sp, r * 0.7, 0, 0, TAU);
       c.fill();
-      c.fillStyle = 'rgba(255,255,255,0.7)';
-      c.beginPath();
-      c.arc(p.size * 0.3, -p.size * 0.2, p.size * 0.22, 0, TAU);
-      c.fill();
+      // The glossy highlight is a sub-pixel speck below ~3.4px: drawing it feeds
+      // 2 fills per droplet for nothing. Paintball fires 8 shots a second, so
+      // that is a real slice of the frame budget.
+      if (r >= 3.4) {
+        c.fillStyle = 'rgba(255,255,255,0.7)';
+        c.beginPath();
+        c.arc(r * 0.3, -r * 0.2, r * 0.22, 0, TAU);
+        c.fill();
+      }
       c.restore();
       break;
     }
@@ -1249,7 +1463,7 @@ export function drawFxParticle(c: CanvasRenderingContext2D, p: Particle, time: n
       c.save();
       c.globalCompositeOperation = 'lighter';
       c.globalAlpha = a * 0.85;
-      c.strokeStyle = p.color;
+      c.strokeStyle = cssColor(p.color);
       c.lineWidth = p.size;
       c.lineCap = 'round';
       c.beginPath();
@@ -1260,7 +1474,7 @@ export function drawFxParticle(c: CanvasRenderingContext2D, p: Particle, time: n
       break;
     }
     case 'ringE': {
-      c.strokeStyle = p.color;
+      c.strokeStyle = cssColor(p.color);
       c.globalAlpha = a * 0.9;
       c.lineWidth = 1 + a * 2.5;
       c.beginPath();
@@ -1279,7 +1493,7 @@ export function drawFxParticle(c: CanvasRenderingContext2D, p: Particle, time: n
       const lobes = [[0, 0, 1], [-0.55, 0.15, 0.7], [0.55, 0.1, 0.72], [0.1, -0.5, 0.65], [-0.2, 0.45, 0.6]];
       c.fillStyle = 'rgba(120,150,190,0.45)';
       for (const [lx, ly, lr] of lobes) { c.beginPath(); c.arc(lx * s + 3, ly * s + 4, lr * s, 0, TAU); c.fill(); }
-      c.fillStyle = p.color;
+      c.fillStyle = cssColor(p.color);
       for (const [lx, ly, lr] of lobes) { c.beginPath(); c.arc(lx * s, ly * s, lr * s, 0, TAU); c.fill(); }
       c.fillStyle = 'rgba(255,255,255,0.9)';
       c.beginPath(); c.arc(-s * 0.25, -s * 0.3, s * 0.4, 0, TAU); c.fill();
@@ -1291,7 +1505,7 @@ export function drawFxParticle(c: CanvasRenderingContext2D, p: Particle, time: n
       const sp = Math.hypot(p.vx, p.vy) || 1;
       const ux = p.vx / sp, uy = p.vy / sp;
       const len = p.size * (0.6 + a);
-      c.strokeStyle = p.color;
+      c.strokeStyle = cssColor(p.color);
       c.globalAlpha = a * 0.8;
       c.lineWidth = 1.6;
       c.lineCap = 'round';
@@ -1304,21 +1518,45 @@ export function drawFxParticle(c: CanvasRenderingContext2D, p: Particle, time: n
     }
     case 'ash': {
       c.globalAlpha = a * 0.8;
-      c.fillStyle = p.color;
+      c.fillStyle = cssColor(p.color);
       c.beginPath();
       c.arc(p.x, p.y, p.size * 0.5, 0, TAU);
       c.fill();
       c.globalAlpha = 1;
       break;
     }
+    case 'speed': {
+      // 28 manga spokes that race outward from the impact (game-3 'speed')
+      const seed = (p.rot || 1) * 9301 + 49297;
+      let rs = seed % 233280;
+      const rnd = () => { rs = (rs * 9301 + 49297) % 233280; return rs / 233280; };
+      const R0 = p.size * (0.25 + t * 0.5);
+      const R1 = p.size * (0.6 + t * 0.6);
+      c.save();
+      c.globalCompositeOperation = 'lighter';
+      c.strokeStyle = cssColor(p.color, a * 0.8);
+      c.lineCap = 'round';
+      for (let i = 0; i < 28; i++) {
+        const an = (i / 28) * TAU + rnd() * 0.2;
+        const l0 = R0 + rnd() * p.size * 0.2;
+        const l1 = R1 + rnd() * p.size * 0.3;
+        c.lineWidth = 1 + rnd() * 2.5;
+        c.beginPath();
+        c.moveTo(p.x + Math.cos(an) * l0, p.y + Math.sin(an) * l0);
+        c.lineTo(p.x + Math.cos(an) * l1, p.y + Math.sin(an) * l1);
+        c.stroke();
+      }
+      c.restore();
+      break;
+    }
     case 'bubble': {
       c.globalAlpha = a * 0.7;
-      c.strokeStyle = p.color;
+      c.strokeStyle = cssColor(p.color);
       c.lineWidth = 1.2;
       c.beginPath();
       c.arc(p.x, p.y, p.size, 0, TAU);
       c.stroke();
-      c.fillStyle = p.color;
+      c.fillStyle = cssColor(p.color);
       c.beginPath();
       c.arc(p.x - p.size * 0.3, p.y - p.size * 0.3, p.size * 0.3, 0, TAU);
       c.fill();

@@ -92,7 +92,20 @@ export class SoundEngine {
 
   /* ---------------- primitives ---------------- */
   private t0() { return this.ac ? this.ac.currentTime + 0.012 : 0; }
-  private ready(): this is { ac: AudioContext } { return !!this.ac && !this.muted && this.ac.state === 'running'; }
+  private ready(): this is { ac: AudioContext } {
+    if (!this.ac || this.muted) return false;
+    // A context that is still waiting for the user's gesture still *schedules*
+    // voices: they play the moment it resumes. Dropping them here was why the
+    // first shots after a tap came out silent.
+    if (this.ac.state === 'suspended') {
+      try {
+        void this.ac.resume();
+      } catch {
+        /* ignore */
+      }
+    }
+    return true;
+  }
 
   /** gain stage w/ ADSR-lite, connected to fxBus (and thus reverb) */
   private osc(type: OscillatorType, f0: number, f1: number, dur: number, peak: number, a = 0.004, when = 0, pan = 0) {
@@ -248,12 +261,16 @@ export class SoundEngine {
         this.osc('sawtooth', 220, 34, 0.55, 0.2);
         break;
       case 'prism-lance':
-        this.chimes(3, [1600, 2400, 3200, 4200]);
-        this.noise(0.32, 0.22, { hp: 3600 });
+        // four-note glass chord + air; the chimes ride just under the noise so
+        // the lance reads as loud as the other rare guns
+        this.chimes(4, [1600, 2400, 3200, 4200]);
+        this.noise(0.32, 0.34, { hp: 3600 });
+        this.osc('triangle', 2400, 900, 0.22, 0.22, 0.004);
         break;
       case 'nano-swarm':
-        for (let i = 0; i < 5; i++) this.osc('square', 720 + i * 190, 720 + i * 190, 0.03, 0.1, 0.002, i * 0.028);
-        this.noise(0.2, 0.16, { hp: 2400 });
+        for (let i = 0; i < 5; i++) this.osc('square', 720 + i * 190, 720 + i * 190, 0.03, 0.2, 0.002, i * 0.028);
+        this.noise(0.2, 0.3, { hp: 2400 });
+        this.osc('sawtooth', 1400, 300, 0.16, 0.14, 0.004, 0.02);
         break;
       case 'chrono':
         this.noise(0.38, 0.26, { hp: 2800, sweepTo: 420, q: 2 });
@@ -265,8 +282,9 @@ export class SoundEngine {
         this.noise(0.5, 0.4, { hp: 420, lp: 2800, sweepTo: 2600, q: 2 });
         break;
       case 'helix-pulsar':
-        this.osc('square', 720, 240, 0.05, 0.16);
-        this.osc('sawtooth', 1080, 360, 0.05, 0.14, 0.002, 0.016);
+        this.osc('square', 720, 240, 0.05, 0.34);
+        this.osc('sawtooth', 1080, 360, 0.05, 0.3, 0.002, 0.016);
+        this.noise(0.06, 0.18, { hp: 2200 });
         break;
       case 'harmonic':
         this.osc('sine', 55, 28, 0.75, 1);
@@ -287,6 +305,46 @@ export class SoundEngine {
         this.noise(0.16, 0.7, { lp: 480, q: 2 });
         this.osc('sine', 230, 80, 0.1, 0.3);
         this.noise(0.1, 0.3, { hp: 1100, when: 0.02 });
+        break;
+      /* ── the six guns that used to fall through to the default recipe ──── */
+      case 'tripod':
+        // heat ray: rising electric whine + vent of steam
+        this.osc('sawtooth', 180, 1400, 0.3, 0.3, 0.02);
+        this.osc('square', 90, 620, 0.26, 0.18, 0.02, 0.01);
+        this.noise(0.34, 0.4, { hp: 1500, sweepTo: 5200, q: 1.4 });
+        this.noise(0.22, 0.2, { lp: 500, when: 0.12 });
+        break;
+      case 'ironman':
+        // repulsor blast: one fat solar palm-blast, the suit's signature
+        this.boom(0.9, 'zap');
+        this.osc('sine', 320, 60, 0.3, 0.6, 0.004);
+        this.noise(0.5, 0.4, { hp: 900, sweepTo: 2600, when: 0.02 });
+        break;
+      case 'mega-buster':
+        // uncharged buster shot: bright plasma pellet, punchy but small
+        this.osc('square', 1500, 520, 0.09, 0.42);
+        this.osc('sawtooth', 420, 140, 0.16, 0.22, 0.004);
+        this.noise(0.12, 0.4, { hp: 2600, when: 0.01 });
+        break;
+      case 'dragon-breath':
+        // throaty roar + scorching exhale
+        this.noise(0.55, 0.6, { lp: 420, sweepTo: 1600, q: 1.6 });
+        this.osc('sawtooth', 78, 34, 0.5, 0.5, 0.01);
+        this.crackle(10, 0.06, 0.32);
+        this.noise(0.9, 0.28, { lp: 300, when: 0.08 });
+        break;
+      case 'proton-pack':
+        // crossed-stream hum: two detuned saws + ion crackle
+        this.osc('sawtooth', 150, 210, 0.4, 0.34, 0.01);
+        this.osc('sawtooth', 158, 224, 0.4, 0.3, 0.01, 0.012);
+        this.noise(0.45, 0.34, { hp: 1200, sweepTo: 3000, q: 1.2 });
+        this.crackle(7, 0.04, 0.26, 2800);
+        break;
+      case 'phaser':
+        // classic phaser sweep: clean descending zap with a chorus tail
+        this.osc('sine', 2400, 320, 0.26, 0.42);
+        this.osc('square', 1200, 210, 0.18, 0.16, 0.004);
+        this.noise(0.2, 0.24, { hp: 3000, sweepTo: 800, q: 2 });
         break;
       default:
         this.noise(0.07, 0.7, { hp: 1300 });

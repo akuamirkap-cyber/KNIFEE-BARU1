@@ -4,8 +4,14 @@ import { WEAPONS, getWeapon, type WeaponId } from '../src/games/gunhit/game/weap
 import { COMMON_GUN_IDS, commonGunPreviewState, isCommonGun, shotPulse } from '../src/games/gunhit/game/art/commonGunMotion';
 import { drawGun } from '../src/games/gunhit/game/art/guns';
 import { drawGunCentered } from '../src/games/gunhit/game/art/drawCentered';
+import { getGunVariantOptions, isSetOneDesignWeapon, isSetSevenDesignWeapon } from '../src/games/gunhit/game/art/gunVariants';
 import { gunState, lin, vlin } from '../src/games/gunhit/game/art/kit';
 import { drawChronoGrip, drawElectroGrip, drawFishGrip, drawFrostGrip, drawFreezeGrip, drawPortalGrip, drawVoidGrip, drawWaterGrip } from '../src/games/gunhit/game/art/gripSystem';
+
+// Some guns now default to slide-11 art, which bakes glow sprites offscreen.
+installCanvasShim();
+import { installCanvasShim } from './supportCanvas';
+
 
 // Check the geometry passed to Canvas, not just whether the draw function was
 // called. A bad dimension/color can otherwise blank the whole Arsenal slide.
@@ -36,13 +42,23 @@ function canvasArt(events: string[]): CanvasRenderingContext2D {
   }) as CanvasRenderingContext2D;
 }
 
+/**
+ * These assertions are about the slide-1 bodies, so the slide-7 SET 1 design
+ * (the new default for its six guns) is pinned back to its first card here.
+ */
+function slide1Design(id: WeaponId) {
+  // Slide-7's own design is the default now; these tests describe slide 1's art.
+  return isSetOneDesignWeapon(id) || isSetSevenDesignWeapon(id)
+    ? getGunVariantOptions(id)[0].id : undefined;
+}
+
 function render(id: WeaponId, age: number, t: number, ready = true): string {
   const previousShot = gunState.sinceShot, previousReload = gunState.reloadT;
   const events: string[] = [];
   try {
     gunState.sinceShot = age;
     gunState.reloadT = 0;
-    drawGun(canvasArt(events), id, 0, 0, t, 0, ready);
+    drawGun(canvasArt(events), id, 0, 0, t, 0, ready, undefined, slide1Design(id));
   } finally {
     gunState.sinceShot = previousShot;
     gunState.reloadT = previousReload;
@@ -51,9 +67,9 @@ function render(id: WeaponId, age: number, t: number, ready = true): string {
   return events.join(';');
 }
 
-test('the complete UMUM rarity has 14 distinct animated weapons, and the shot curve ends cleanly', () => {
+test('the complete UMUM rarity has 16 distinct animated weapons, and the shot curve ends cleanly', () => {
   assert.deepEqual([...COMMON_GUN_IDS].sort(), WEAPONS.filter(w => w.rarity === 'UMUM').map(w => w.id).sort());
-  assert.equal(new Set(COMMON_GUN_IDS).size, 14);
+  assert.equal(new Set(COMMON_GUN_IDS).size, 16);
   assert.ok(COMMON_GUN_IDS.every(isCommonGun));
   assert.equal(isCommonGun('golden'), false);
   assert.equal(shotPulse(-1), 0);
@@ -94,7 +110,7 @@ test('menu and Arsenal demonstrate a shot, one refill, then return to idle witho
     for (const id of COMMON_GUN_IDS) {
       const events: string[] = [];
       for (const t of [0, 0.9, 1.18, 1.65]) {
-        drawGunCentered(canvasArt(events), id, t, 0, true, undefined, true);
+        drawGunCentered(canvasArt(events), id, t, 0, true, slide1Design(id), true);
         assert.equal(gunState.sinceShot, 0.47, `${id}: demo must restore shot time`);
         assert.equal(gunState.reloadT, 1.25, `${id}: demo must restore reload time`);
       }
@@ -199,22 +215,27 @@ test('themed grips use distinct silhouettes and palettes while leaning like the 
     assert.ok(hasSharpHeel, `${name} grip ends in a defined angled heel rather than a rounded blunt end`);
   }
   const actualBlackHole: string[] = [];
-  drawGunCentered(canvasArt(actualBlackHole), 'blackhole', 0);
-  assert.ok(actualBlackHole.some(event => event.startsWith('rotate(-0.72')), 'the active Black Hole renderer uses its angled violet grip');
+  // The active Black Hole design is now slide 2's cannon (see
+  // tests/gunhit-slide2-parity.test.ts); the angled violet grip still belongs
+  // to the slide-1 design, which stays selectable as "Sebelumnya".
+  drawGunCentered(canvasArt(actualBlackHole), 'blackhole', 0, 0, true, 'original');
+  assert.ok(actualBlackHole.some(event => event.startsWith('rotate(-0.72')), 'the slide-1 Black Hole renderer uses its angled violet grip');
   for (const id of ['freeze', 'fish', 'electro'] as const) {
     const events: string[] = [];
-    drawGunCentered(canvasArt(events), id, 0);
+    // slide-1 art is the "Sebelumnya" card now; the default is slide 7's gun.
+    drawGunCentered(canvasArt(events), id, 0, 0, true, 'current');
     assert.ok(events.some(event => event.startsWith('rotate(-0.72')), `${id} renderer uses its angled themed grip`);
   }
   const cricketEvents: string[] = [];
-  drawGunCentered(canvasArt(cricketEvents), 'cricket', 0);
+  drawGunCentered(canvasArt(cricketEvents), 'cricket', 0, 0, true, 'current');
   assert.ok(cricketEvents.length > 30, 'Noisy Cricket renders its redesigned miniature receiver and emitter');
 });
 
 test('Snowball Cannon demonstration only draws the five real hopper chambers, losing one before refill', () => {
   function hopperBalls(t: number): number {
     const events: string[] = [];
-    drawGunCentered(canvasArt(events), 'snowball', t, 0, true, undefined, true);
+    // Slide 1's hopper art is what this test describes; slide 7 is the default now.
+    drawGunCentered(canvasArt(events), 'snowball', t, 0, true, 'original', true);
     return events.filter(e => e.startsWith('arc(') && e.split(',')[2]?.startsWith('5.90')).length;
   }
   assert.equal(hopperBalls(0), 5);

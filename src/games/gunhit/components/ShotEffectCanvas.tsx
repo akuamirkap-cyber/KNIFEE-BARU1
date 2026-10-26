@@ -8,6 +8,14 @@ import { createCrispBolt, renderCrispBolt } from '../game/kerisSlideFx';
 import { star } from '../game/art/kit';
 import { useSlideActive } from '../../shared/SlideActivity';
 import type { GunEffect } from '../game/art/gunVariants';
+import { drawSetOneShotShell } from '../game/setOneFx';
+import { setOneIdFor } from '../game/setOneArt';
+import { setSevenIdFor } from '../game/setSevenArt';
+import { setElevenIdFor } from '../game/setElevenArt';
+import { drawSetSevenShotShell } from '../game/setSevenFx';
+import { drawSetElevenShotShell } from '../game/setElevenFx';
+import { setNineIdFor } from '../game/setNineArt';
+import { drawSetNineShotShell } from '../game/setNineFx';
 
 /** Tiny live comparison using the exact same projectile/beam renderers as gameplay. */
 export default function ShotEffectCanvas({ weapon, effect }: { weapon: Weapon; effect: GunEffect }) {
@@ -54,6 +62,37 @@ export default function ShotEffectCanvas({ weapon, effect }: { weapon: Weapon; e
           }
           if (weapon.id === 'keris') {
             renderCrispBolt(c, createCrispBolt(0, 74, 0, -4, { sway: 5, steps: 5, branchChance: 0.25 }), '#4deeea', 6);
+          }
+          const setOneId = effect === 'new' ? setOneIdFor(weapon.id) : null;
+          if (setOneId) {
+            drawSetOneShotShell(c, setOneId, 0.06, 24);
+            c.restore();
+            if (active) frame = requestAnimationFrame(paint);
+            return;
+          }
+          // Slide-9 rounds and beams are painted by slide 9's own renderer.
+          const setNineId = effect === 'set9' ? setNineIdFor(weapon.id) : null;
+          if (setNineId) {
+            drawSetNineShotShell(c, setNineId, 0.06, 26);
+            c.restore();
+            if (active) frame = requestAnimationFrame(paint);
+            return;
+          }
+          // Slide-11 rounds and beams are painted by slide 11's own renderer.
+          const setElevenId = effect === 'set11' ? setElevenIdFor(weapon.id) : null;
+          if (setElevenId) {
+            drawSetElevenShotShell(c, setElevenId, 0.06, 26);
+            c.restore();
+            if (active) frame = requestAnimationFrame(paint);
+            return;
+          }
+          // Slide-7 SET 2..5 rounds are painted by slide 7's own renderer.
+          const setSevenId = effect === 'set7' ? setSevenIdFor(weapon.id) : null;
+          if (setSevenId) {
+            drawSetSevenShotShell(c, setSevenId, 0.06, 22);
+            c.restore();
+            if (active) frame = requestAnimationFrame(paint);
+            return;
           }
           if (!drawMaterialTrail(c, weapon.id, effect)) {
             const trail = c.createLinearGradient(0, 14, 0, 80);

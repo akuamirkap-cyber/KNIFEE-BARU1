@@ -1,17 +1,49 @@
-import { sfx } from './audio';
+import { sfx, withSfxGain } from './audio';
+import { slide2Sfx } from './slide2Audio';
+import { Slide2Fx } from './slide2Fx';
+import {
+  ambientBlackHole2,
+  drawBlackHoleShot2,
+  fireBlackHole2,
+  launchVoidSky2,
+  setSlide2GunFx,
+  trailBlackHole2,
+  voidBurst2,
+} from './slide2Weapons';
 import { isSlide23Weapon, slide23Sfx } from './slide23Sfx';
+import { fireworkSfx } from './fireworkSlide2Sfx';
+import { setOneSfx } from './setOneAudio';
+import { SetOneFx, type SetOneHooks, type SetOneShot } from './setOneFx';
+import { fireSetOne, impactSetOne } from './setOneWeapons';
+import { setOneIdFor, type SetOneId } from './setOneArt';
+import { SetSevenFx, type SevenHooks } from './setSevenFx';
+import { buildSevenAnim, setSevenIdFor, type SevenId } from './setSevenArt';
+import { FIRE_RECIPES } from './setSevenFire';
+import { updateSevenAnim } from './setSevenAnim';
+import { SetNineFx, unlockNineAudio, type NineHooks } from './setNineFx';
+import { setNineIdFor, type NineId } from './setNineArt';
+import { SetElevenFx, setElevenMuted, unlockElevenAudio, type ElevenHooks } from './setElevenFx';
+import type { Proj as ElevenProj } from '../../../../games/game-8/src/game/types';
+import { setElevenIdFor, type ElevenId } from './setElevenArt';
+import type { Bullet as NineBullet } from '../../../../games/game-6/src/game/types';
+import { newAnim } from '../../../../games/game-4/src/game/weapons';
+import { RECOIL_ROT } from '../../../../games/game-4/src/game/Game';
+import { easeOutCubic } from '../../../../games/game-4/src/game/core';
+import type { Projectile as SevenShot } from '../../../../games/game-4/src/game/projectiles';
 import { sfx2 } from './sfx2';
 import { sfx3 } from './sfx3';
 import { sfx4 } from './sfx4';
 import { sfx6 } from './sfx6';
 import { sfx5 } from './sfx5';
 import { gunState } from './art/kit';
-import { FX, spawnImpact, spawnMuzzle, spawnSpeedLines, drawFxParticle, type Particle, type FxSink } from './fx';
+import { FX, spawnImpact, spawnMuzzle, spawnSpeedLines, drawFxParticle, drawSmokeParticle, drawDropParticles, cssColor, type Particle, type FxSink } from './fx';
 import { drawPreciseWeaponDecal } from './art/decalSystem';
+import { drawGlow } from './art/glowSprite';
+import { AcidFluid, type AcidStuckBlob } from './acidFluid';
 import { SNOWBALL_MAG_SIZE } from './art/guns2';
 import { drawMaterialTrail } from './art/projectileTrails';
 import { drawClassicBeam, drawLaserBeam, drawVoidTether } from './art/beamEffects';
-import { getGunEffect } from './art/gunVariants';
+import { getGunEffect, getGunVariant } from './art/gunVariants';
 import { drawWetSurface } from './art/waterSurface';
 import { drawFace, STYLE_COLORS, type Style } from './faces';
 import { drawGun, drawProjectile, WEAPONS, getWeapon, type Weapon, type WeaponId, type ProjKind } from './weapons';
@@ -29,7 +61,6 @@ import {
   drawFirework8GunGlow,
   drawFirework8ParticlesAndRings,
   FIREWORK_EMBED_NOSE,
-  FIREWORK_PL,
   firework8ShotHue,
   hsl,
   launchFirework8Sky,
@@ -172,25 +203,45 @@ const angDiff = (a: number, b: number) => {
   return d;
 };
 const pick = <T,>(arr: T[]) => arr[Math.floor(Math.random() * arr.length)];
+/** Slide 9 flashes with any CSS colour; slide 1's tint wants an `r,g,b` triple. */
+const hexToRgbTriplet = (color: string): string => {
+  const hex = color.trim().match(/^#([\da-f]{3}|[\da-f]{6})$/i);
+  if (hex) {
+    const raw = hex[1].length === 3 ? hex[1].split('').map((ch) => ch + ch).join('') : hex[1];
+    const n = parseInt(raw, 16);
+    return `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`;
+  }
+  const rgb = color.match(/(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})/);
+  return rgb ? `${rgb[1]},${rgb[2]},${rgb[3]}` : '255,255,255';
+};
 
-const FIRE_SFX: Record<WeaponId, () => void> = {
+/**
+ * Every weapon's own classic firing sound (the "Sebelumnya" / "Baru" cards).
+ *
+ * The `slide23Sfx.shoot(id, gain)` arms carry a level multiplier: slide 2/3
+ * wrote those recipes as soft accents under their stage music, and as the only
+ * voice of a slide-1 shot they were far quieter than the rest of the arsenal.
+ * ×1.5–×4 brings them to the same peak band as everything else while keeping
+ * their exact timbre and rhythm.
+ */
+export const FIRE_SFX: Record<WeaponId, () => void> = {
   pistol: sfx.shoot, ak47: sfx.shootAk, plasma: sfx.shootPlasma, laser: sfx.shootLaser,
   cricket: sfx.shootCricket, electro: sfx.shootElectro, nail: sfx.shootNail, fish: sfx.shootFish,
-  crossbow: sfx.shootCrossbow, bazooka: () => slide23Sfx.shoot('bazooka'), rpg: () => slide23Sfx.shoot('rpg'), freeze: sfx.shootFreeze,
-  golden: sfx.shootGolden, blackhole: () => slide23Sfx.shoot('blackhole'),
+  crossbow: sfx.shootCrossbow, bazooka: () => slide23Sfx.shoot('bazooka'), rpg: () => slide23Sfx.shoot('rpg', 1.6), freeze: sfx.shootFreeze,
+  golden: sfx.shootGolden, blackhole: () => slide23Sfx.shoot('blackhole', 2.2),
   shotgun: sfx2.shotgun, sniper: sfx2.sniper, minigun: sfx2.minigun, railgun: sfx2.railgun,
   flamethrower: sfx2.flame, slingshot: sfx2.slingshot, blowgun: sfx2.blowgun,
-  bamboo: () => slide23Sfx.shoot('bamboo'), banana: sfx2.banana, magnet: sfx2.magnet, bubble: sfx2.bubble,
-  shrink: sfx2.shrink, grow: sfx2.grow, harpoon: sfx2.harpoon, soaker: () => slide23Sfx.shoot('soaker'),
+  bamboo: () => slide23Sfx.shoot('bamboo', 1.8), banana: sfx2.banana, magnet: sfx2.magnet, bubble: sfx2.bubble,
+  shrink: sfx2.shrink, grow: sfx2.grow, harpoon: sfx2.harpoon, soaker: () => slide23Sfx.shoot('soaker', 3.2),
   snowball: sfx2.snowball, pirate: sfx2.pirate, chicken: sfx2.chicken, card: sfx2.card, confetti: sfx2.confetti,
   seed: sfx2.seed, dragon: sfx2.dragon,
   gravity: sfx2.gravity, pizza: sfx2.pizza,
-  honey: sfx3.honey, coconut: sfx3.coconut, angklung: sfx3.angklung, bee: sfx3.bee, yoyo: () => slide23Sfx.shoot('yoyo'),
-  sakura: sfx3.sakura, acid: sfx3.acid, keris: () => slide23Sfx.shoot('keris'), firework: () => slide23Sfx.shoot('firework'), anchor: sfx3.anchor,
-  shark: () => slide23Sfx.shoot('shark'), ghost: sfx3.ghost, ufo: sfx3.ufo, rainbow: () => slide23Sfx.shoot('rainbow'), meteor: sfx3.meteor, diamond: () => slide23Sfx.shoot('diamond'),
+  honey: sfx3.honey, coconut: sfx3.coconut, angklung: sfx3.angklung, bee: sfx3.bee, yoyo: () => slide23Sfx.shoot('yoyo', 4),
+  sakura: sfx3.sakura, acid: sfx3.acid, keris: () => slide23Sfx.shoot('keris', 3.4), firework: () => fireworkSfx.shoot(), anchor: sfx3.anchor,
+  shark: () => slide23Sfx.shoot('shark', 3.4), ghost: sfx3.ghost, ufo: sfx3.ufo, rainbow: () => slide23Sfx.shoot('rainbow', 4.6), meteor: sfx3.meteor, diamond: () => slide23Sfx.shoot('diamond', 1.8),
   moonbeam: sfx3.moonbeam, storm: sfx3.storm,
   obliterator: sfx4.obliterator, buster: sfx4.busterSmall, paintball: sfx4.paintball, holy: sfx4.holy, beerifle: sfx4.beeRifle,
-  emerald: sfx4.emerald, ruby: sfx4.ruby, sapphire: sfx4.sapphire, crystal: () => slide23Sfx.shoot('crystal'), unicorn: sfx4.unicorn,
+  emerald: sfx4.emerald, ruby: sfx4.ruby, sapphire: sfx4.sapphire, crystal: () => slide23Sfx.shoot('crystal', 4), unicorn: sfx4.unicorn,
   pencil: sfx4.pencil, sandal: sfx4.sandal, wand: sfx4.wand,
   coingun: sfx5.coinGun, blaster: sfx5.blaster,
   photon_saber: sfx6.saberShoot,
@@ -200,8 +251,20 @@ const FIRE_SFX: Record<WeaponId, () => void> = {
   xeno: sfx6.xeno,
   dora: sfx6.dora,
   pred: sfx6.pred,
+  // Slide 9 ports: their own synthesizer plays while the SET 9 effect is
+  // selected; these are the classic sounds of the older effect cards.
+  longbow: sfx.shootCrossbow, mp5: sfx.shootNail, tesla_rifle: sfx.shootElectro,
+  ion_smg: sfx.shootElectro, phaser: sfx.shootLaser, yautja: sfx.shootPlasma,
+  identity_disc: sfx2.magnet, proton_pack: sfx3.ghost, heat_ray: sfx2.flame,
+  // Slide 11
+  mega_buster: () => slide23Sfx.shoot('bamboo', 1.8), harmonic_disruptor: sfx2.magnet,
+  absolute_zero: sfx.shootFreeze, helios_flare: sfx.shootGolden,
+  chrono_rifle: sfx2.railgun, orbital_beacon: () => slide23Sfx.shoot('bazooka'),
+  helix_pulsar: sfx2.minigun, singularity: () => slide23Sfx.shoot('blackhole', 2.2),
+  prism_lance: sfx.shootLaser, nano_swarm: sfx2.minigun,
 };
-const HIT_SFX: Partial<Record<WeaponId, () => void>> = {
+/** The per-weapon impact accent, where the weapon has one of its own. */
+export const HIT_SFX: Partial<Record<WeaponId, () => void>> = {
   coingun: sfx.coin, blaster: sfx5.blasterHit,
   photon_saber: sfx6.saberHit,
   gauntlet_cannon: sfx6.gauntletHit,
@@ -217,11 +280,34 @@ const HIT_SFX: Partial<Record<WeaponId, () => void>> = {
   obliterator: sfx4.obliteratorHit, paintball: sfx4.paintSplat, holy: sfx4.purify, emerald: sfx3.chime, ruby: sfx2.metal,
   sapphire: sfx.ice, crystal: sfx4.shatter, unicorn: sfx4.magic, pencil: sfx4.scribble, sandal: sfx4.plak, wand: sfx4.magic,
 };
+/**
+ * Level trim for slide 1's own recipes.
+ *
+ * A dozen of slide 1's sounds were written as *accents* — a unicorn's sparkle,
+ * a shrink ray's whiff, a ghost's moan — mixed to sit under a bigger blast. On
+ * the guns where that accent is the entire shot, they measured 0.07–0.2 peak
+ * next to a 0.45 peak arsenal, which is exactly the "lirih" that made the
+ * ports feel wrong. The trim keeps each recipe untouched and only lifts its
+ * level into the same band as every other gun.
+ */
+export const FIRE_GAIN: Partial<Record<WeaponId, number>> = {
+  unicorn: 6, emerald: 5.6, shrink: 3.75, ufo: 3.75, buster: 3.75, holy: 3.75,
+  chicken: 3, sakura: 3, ghost: 3, wand: 3, moonbeam: 2.8, magnet: 2.5,
+  seed: 2.25, bee: 2.25, laser: 1.6,
+};
+
+/** Fires a slide-1 gun's own sound at its trimmed level. */
+export function playFireSfx(id: WeaponId) {
+  const k = FIRE_GAIN[id] ?? 1;
+  if (k === 1) FIRE_SFX[id]();
+  else withSfxGain(k, FIRE_SFX[id]);
+}
 const PAINT = ['244,63,94', '250,204,21', '34,211,238', '168,85,247', '74,222,128', '251,146,60'];
 
 type ItemType = 'bullet' | 'old' | 'spike' | 'coin' | 'diamond_chest';
-interface Item { angle: number; type: ItemType; age: number; w?: WeaponId; scale?: number; vel?: number; harvested?: boolean; tint?: string; big?: number; hits?: number; hue?: number; flash?: number }
-interface Proj { x: number; y: number; vx: number; vy: number; originX?: number; pierced?: number; hist?: { x: number; y: number }[]; tint?: string; big?: number; mini?: boolean; giant?: boolean; hue?: number; flash?: number; spawnDelay?: number; wob?: number; lastEcho?: number; t?: number }
+interface AcidStuck { blobs: AcidStuckBlob[]; dripT: number; drip: number; seed: number }
+interface Item { angle: number; type: ItemType; age: number; w?: WeaponId; scale?: number; vel?: number; harvested?: boolean; tint?: string; big?: number; hits?: number; hue?: number; flash?: number; acid?: AcidStuck; hideArt?: boolean }
+interface Proj { x: number; y: number; vx: number; vy: number; originX?: number; setOne?: SetOneShot; setSeven?: SevenShot; setSevenPending?: boolean; s7Ghost?: boolean; setNine?: NineBullet; setNinePending?: boolean; s9Ghost?: boolean; setEleven?: ElevenProj; setElevenPending?: boolean; s11Ghost?: boolean; pierced?: number; hist?: { x: number; y: number }[]; tint?: string; big?: number; mini?: boolean; giant?: boolean; hue?: number; flash?: number; spawnDelay?: number; wob?: number; lastEcho?: number; t?: number; trail?: { x: number; y: number }[] }
 type StepRes = { res: 'none' | 'stick' | 'fail' | 'hit'; spike?: boolean; local?: number };
 interface Light { x: number; y: number; r: number; rgb: string; life: number; max: number }
 interface Fragment { x: number; y: number; vx: number; vy: number; rot: number; vr: number; a0: number; a1: number }
@@ -361,6 +447,8 @@ export class Game {
   private items: Item[] = [];
   private projs: Proj[] = [];
   private particles: Particle[] = [];
+  /** Metaball acid layer (slide-7 Xenomorph Acid Spitter parity). */
+  private acidFluid = new AcidFluid();
   private frags: Fragment[] = [];
   private flyers: Flyer[] = [];
   private ammoLeft = 0;
@@ -376,6 +464,9 @@ export class Game {
   private timeScale = 1;
   private bump = 0;
   private hitFlash = 0;
+  /** game-3 wheelFlash: tints only the target, never the whole screen. */
+  private wheelFlash = 0;
+  private wheelFlashRgb = '200,255,128';
   private introT = 0;
   private wheelScale = 1;
   private stateT = 0;
@@ -451,6 +542,220 @@ export class Game {
   private chargeStage = 0;
   private lastPaint = '';
   private stretchPlayed = true;
+  /** Slide-2 FX layer + per-shot hue for the ported slide-2 weapons. */
+  private s2State?: Slide2Fx;
+  private get s2(): Slide2Fx {
+    return (this.s2State ??= new Slide2Fx());
+  }
+  private s2Hue = 265;
+  private s2Ambient = 1.4;
+
+  /**
+   * Slide 2 `voidBurst()` at a hit point: accretion inflow, delayed collapse
+   * flash, bipolar jets and tangential ejecta, plus slide 2's own hit voice.
+   */
+  private slide2Impact(x: number, y: number, scale = 0.8) {
+    if (!this.slide2Void) return;
+    voidBurst2(
+      this.s2,
+      x,
+      y,
+      this.s2Hue,
+      scale,
+      (amount) => { this.shake = Math.max(this.shake, amount); },
+      () => slide2Sfx.voidBoom(scale),
+    );
+    slide2Sfx.hitBH(Math.max(0, this.perkCount));
+    this.sink.light(x, y, 170, '180,120,255', 0.22);
+  }
+
+  /**
+   * True when the black-hole gun must run the slide-2 void shot. The slide-2
+   * cannon keeps its own shot whenever its design is the selected one; the
+   * slide-7 SET 1 staff (new default) uses the SET 1 shot below.
+   */
+  private get slide2Void(): boolean {
+    return this.weapon.id === 'blackhole' && getGunEffect('blackhole') === 'new'
+      && getGunVariant('blackhole') !== 'set1';
+  }
+
+  /** Slide-7 SET 1 FX layer: its own particles, FX objects and after() timers. */
+  private s1State?: SetOneFx;
+  private get s1(): SetOneFx {
+    return (this.s1State ??= new SetOneFx());
+  }
+  /** Last SET 1 shot, so special targets can replay the right impact burst. */
+  private s1Last?: SetOneShot;
+
+  /** The slide-7 SET 1 weapon behind the equipped slide-1 gun, if any. */
+  private get setOneId(): SetOneId | null {
+    return setOneIdFor(this.weapon.id);
+  }
+
+  /** True when the equipped gun must fire the slide-7 SET 1 shot. */
+  private get setOneLive(): boolean {
+    return this.setOneId !== null && getGunEffect(this.weapon.id) === 'new' && !this.slide2Void;
+  }
+
+  /** The slide-7 side effects that only the game itself can perform. */
+  private s1Hooks(): SetOneHooks {
+    return {
+      shake: (amount) => { this.shake = Math.max(this.shake, amount); },
+      hitStop: (seconds) => { this.hitStop = Math.max(this.hitStop, seconds); },
+      flash: (rgb, strength) => {
+        this.tintRgb = rgb;
+        this.tintA = Math.max(this.tintA, strength);
+      },
+      paintWheel: (draw) => {
+        this.faceCtx.save();
+        draw(this.faceCtx);
+        this.faceCtx.restore();
+      },
+      addWheelFx: (fx) => { this.s1.addWheel(fx); },
+      wheel: () => ({ x: CX, y: this.targetY, R: this.level.radius }),
+    };
+  }
+
+  /**
+   * Slide-7 SET 2..5 FX layer: slide 7's own particles, FX objects, animation
+   * springs and the real slide-7 shots (`projectiles2..5.ts`).
+   */
+  private s7State?: SetSevenFx;
+  private s7Weapon?: SevenId;
+  private get s7(): SetSevenFx {
+    const fx = (this.s7State ??= new SetSevenFx());
+    fx.setHooks(this.s7Hooks());
+    fx.gunX = CX;
+    fx.gunY = GUN_Y;
+    return fx;
+  }
+
+  /** Last slide-7 shot, for special targets (stones/diamonds/gold). */
+  private s7Last?: SevenShot;
+
+  /**
+   * Drop slide 7's own layer: its stuck rounds, particles, FX and timers all
+   * belong to the level (and to the gun) that produced them, exactly like slide
+   * 7 clears them on a new level or when the wheel shatters.
+   */
+  private resetSevenLayer() {
+    this.s7State?.clear();
+    this.s7Weapon = undefined;
+    this.s7Last = undefined;
+    this.s9State?.clear();
+    this.s11State?.clear();
+  }
+
+  /**
+   * Slide-9 (`games/game-6`) layer: its own particles, rounds, beams, entry
+   * holes, timers and synthesizer.
+   */
+  private s9State?: SetNineFx;
+
+  private get s9(): SetNineFx {
+    const fx = (this.s9State ??= new SetNineFx());
+    fx.setHooks(this.nineHooks());
+    fx.W = W;
+    fx.H = H;
+    fx.floorY = H;
+    return fx;
+  }
+
+  /** The slide-9 weapon behind the equipped slide-1 gun, if any. */
+  private get setNineId(): NineId | null {
+    return setNineIdFor(this.weapon.id);
+  }
+
+  /** True when the equipped gun must fire slide 9's own shot. */
+  private get setNineLive(): boolean {
+    return this.setNineId !== null && getGunEffect(this.weapon.id) === 'set9';
+  }
+
+  /** The slide-9 side effects that need the slide-1 game to act. */
+  private nineHooks(): NineHooks {
+    return {
+      shake: (amount) => { this.shake = Math.max(this.shake, amount * 0.55); },
+      flash: (color, strength) => {
+        this.tintRgb = hexToRgbTriplet(color);
+        this.tintA = Math.max(this.tintA, Math.min(0.36, strength * 0.45));
+      },
+      hitStop: (seconds) => { this.hitStop = Math.max(this.hitStop, Math.min(0.12, seconds)); },
+      wheel: () => ({ x: CX, y: this.targetY, R: this.level.radius, angle: this.rot }),
+    };
+  }
+
+  /**
+   * Slide-11 (`games/game-8`) layer: its own particles, rounds, entry holes,
+   * wheel marks and sound engine. Slide 11 is the newest layer, so it sits on
+   * top of slide 9 for the guns both of them update.
+   */
+  private s11State?: SetElevenFx;
+
+  private get s11(): SetElevenFx {
+    const fx = (this.s11State ??= new SetElevenFx());
+    fx.setHooks(this.elevenHooks());
+    return fx;
+  }
+
+  /** The slide-11 weapon behind the equipped slide-1 gun, if any. */
+  private get setElevenId(): ElevenId | null {
+    return setElevenIdFor(this.weapon.id);
+  }
+
+  /** True when the equipped gun must fire slide 11's own shot. */
+  private get setElevenLive(): boolean {
+    return this.setElevenId !== null && getGunEffect(this.weapon.id) === 'set11';
+  }
+
+  private elevenHooks(): ElevenHooks {
+    return {
+      shake: (amount) => { this.shake = Math.max(this.shake, amount * 0.5); },
+      flash: (color, strength) => {
+        this.tintRgb = hexToRgbTriplet(color);
+        this.tintA = Math.max(this.tintA, Math.min(0.36, strength * 0.45));
+      },
+      hitStop: (seconds) => { this.hitStop = Math.max(this.hitStop, Math.min(0.12, seconds)); },
+      wheel: () => ({ x: CX, y: this.targetY, R: this.level.radius, angle: this.rot }),
+    };
+  }
+
+  /** The slide-7 weapon behind the equipped slide-1 gun, if any. */
+  private get setSevenId(): SevenId | null {
+    return setSevenIdFor(this.weapon.id);
+  }
+
+  /** True when the equipped gun must fire slide 7's own SET 2..5 shot. */
+  private get setSevenLive(): boolean {
+    return this.setSevenId !== null && getGunEffect(this.weapon.id) === 'set7';
+  }
+
+  /** The slide-7 side effects that need the slide-1 game to act. */
+  private s7Hooks(): SevenHooks {
+    return {
+      shake: (amount) => { this.shake = Math.max(this.shake, amount); },
+      hitStop: (seconds) => { this.hitStop = Math.max(this.hitStop, seconds); },
+      flash: (rgb, strength) => {
+        this.tintRgb = rgb;
+        this.tintA = Math.max(this.tintA, strength);
+      },
+      paintWheel: (draw, R) => {
+        const c = this.faceCtx;
+        c.save();
+        c.beginPath();
+        c.arc(0, 0, Math.max(1, R - 0.6), 0, TAU);
+        c.clip();
+        draw(c);
+        c.restore();
+      },
+      wheelImpact: (power, color) => {
+        this.bump = Math.max(this.bump, Math.min(1.4, power / 7));
+        this.wheelFlash = Math.max(this.wheelFlash, 1);
+        this.wheelFlashRgb = color.replace('rgba(', '').replace(/,\s*$/, '');
+      },
+      wheel: () => ({ x: CX, y: this.targetY, R: this.level.radius, angle: this.rot }),
+    };
+  }
+
   private fwState?: Firework8State;
 
   private getFwState(): Firework8State {
@@ -505,7 +810,13 @@ export class Game {
   };
 
   setWeapon(id: WeaponId) {
+    const changed = this.weapon?.id !== id;
     this.weapon = getWeapon(id);
+    // Rounds stuck in the wheel belong to the gun that fired them.
+    if (changed) this.resetSevenLayer();
+    // The gun art may only spawn its charge sparks into a live FX layer, never
+    // into menu thumbnails.
+    setSlide2GunFx(id === 'blackhole' && getGunVariant(id) === 'latest' ? this.s2 : null);
     this.aiming = false;
     this.spin = 0;
     // A newly equipped cannon starts with no more balls than the level's
@@ -640,6 +951,7 @@ export class Game {
     this.canvas.style.height = `${H}px`;
     this.canvas.width = Math.round(W * this.dpr);
     this.canvas.height = Math.round(H * this.dpr);
+    this.acidFluid.resize(W, H);
     // Resizing clears the backing store. Restore a single still frame even
     // if the game is paused rather than leaving an empty thumbnail.
     if (this.hasRendered && !this.active) this.render();
@@ -670,6 +982,8 @@ export class Game {
 
   private startRun(level: number, forcedMode?: LevelMode) {
     sfx.unlock();
+    // Slide 7's own AudioContext can only start after a user gesture as well.
+    setOneSfx.unlock();
     this.score = 0;
     this.coins = 0;
     this.bankedCoins = 0;
@@ -693,6 +1007,7 @@ export class Game {
     this.level = makeLevel(1);
     this.events.onStageChange?.();
     this.level.style = 'orange';
+    this.resetSevenLayer();
     this.items = [];
     this.projs = [];
     this.bossProjs = [];
@@ -842,6 +1157,8 @@ export class Game {
   private loadLevel(n: number, forcedMode?: LevelMode) {
     this.level = makeLevel(n, forcedMode);
     this.events.onStageChange?.();
+    // A new level starts with an empty wheel: no rounds stuck from the last one.
+    this.resetSevenLayer();
     this.items = [];
     this.projs = [];
     this.rockFragments = [];
@@ -976,10 +1293,10 @@ export class Game {
     this.faceR = R;
   }
 
-  private crack(a: number, _tint?: string) {
+  private crack(a: number, tint?: string) {
     const c = this.faceCtx;
     c.save();
-    drawPreciseWeaponDecal(c, this.faceR, a, this.weapon, this.level.style, this.time);
+    drawPreciseWeaponDecal(c, this.faceR, a, this.weapon, this.level.style, this.time, tint);
     c.restore();
   }
 
@@ -1002,12 +1319,151 @@ export class Game {
     const vy = -w.speed * this.speedMult;
     const offsets = this.gunOffsets;
     const sizeBuff = { mini: this.treasureBuff === 'mini', giant: this.treasureBuff === 'giant' };
+    // ── Slide 9 (games/game-6) ─────────────────────────────────────────────
+    // Slide 9's own `fire()` runs: its muzzle FX, its particles, its sounds and
+    // the real slide-9 projectile or beam. Slide 1 still owns the flight, the
+    // hit test and the score, so it only carries that round.
+    const s9id = this.setNineId;
+    if (s9id && this.setNineLive) {
+      const fx = this.s9;
+      fx.selectWeapon(s9id);
+      fx.time = this.time;
+      fx.syncWheel();
+      const mx = CX + (offsets[0] ?? 0);
+      const my = GUN_Y - 4;
+      unlockNineAudio();
+      fx.fire(mx, my, -Math.PI / 2, w.charge ? this.chargeLevel : 0);
+      const made = fx.takeShots();
+      for (let i = 0; i < n; i++) {
+        const ox = offsets[i] ?? offsets[0] ?? 0;
+        const own = made[i];
+        const proj: Proj = {
+          x: CX + ox, originX: CX + ox, y: own ? own.y : my, vx, vy, big, tint, ...sizeBuff,
+        };
+        if (own) proj.setNine = own;
+        else if (i === 0) proj.setNinePending = true;
+        else proj.s9Ghost = true;
+        this.projs.push(proj);
+      }
+      this.recoil = w.recoil;
+      this.muzzle = 0.07;
+      this.camY += FX[w.id].kick * 0.5;
+      this.cooldown = (w.spinup ? 0.3 - 0.235 * this.spin : w.cooldown)
+        * (this.buff === 'speed' || this.treasureBuff === 'rapid' ? 0.5 : this.treasureBuff === 'mini' ? 0.6 : 1);
+      if (isSpecial(this.level.mode) && this.ammoLeft === 0) this.reloadT = 0.65;
+      else if (w.id === 'snowball' && this.snowLoaded === 0 && this.ammoLeft > 0) this.reloadT = 0.85;
+      return;
+    }
+    // ── Slide 11 (games/game-8) ────────────────────────────────────────────
+    // Slide 11 is the newest layer: its own `fire()` runs (muzzle FX, particles,
+    // sound, channel beams and the real slide-11 round), and slide 1 still owns
+    // the flight, the hit test and the score.
+    const s11id = this.setElevenId;
+    if (s11id && this.setElevenLive) {
+      const fx = this.s11;
+      fx.gunY = GUN_Y - 4;
+      fx.selectWeapon(s11id);
+      fx.syncWheel();
+      const mx = CX + (offsets[0] ?? 0);
+      const my = GUN_Y - 4;
+      unlockElevenAudio(fx);
+      fx.fire(mx, my, w.charge ? big : 0);
+      const made = fx.takeShots();
+      for (let i = 0; i < n; i++) {
+        const ox = offsets[i] ?? offsets[0] ?? 0;
+        const own = made[i];
+        // Slide 1 flies the round at slide 11's own projectile speed, so the
+        // tail keeps slide 11's spacing instead of stretching.
+        const sp = own ? Math.hypot(own.vx, own.vy) : Math.abs(vy);
+        const proj: Proj = {
+          x: CX + ox, originX: CX + ox, y: own ? own.y : my, vx, vy: -Math.abs(sp),
+          big, tint, ...sizeBuff,
+        };
+        if (own) proj.setEleven = own;
+        else if (i === 0) proj.setElevenPending = true;
+        else proj.s11Ghost = true;
+        this.projs.push(proj);
+      }
+      this.recoil = w.recoil;
+      this.muzzle = 0.07;
+      this.camY += FX[w.id].kick * 0.5;
+      this.cooldown = (w.spinup ? 0.3 - 0.235 * this.spin : w.cooldown)
+        * (this.buff === 'speed' || this.treasureBuff === 'rapid' ? 0.5 : this.treasureBuff === 'mini' ? 0.6 : 1);
+      if (isSpecial(this.level.mode) && this.ammoLeft === 0) this.reloadT = 0.65;
+      else if (w.id === 'snowball' && this.snowLoaded === 0 && this.ammoLeft > 0) this.reloadT = 0.85;
+      return;
+    }
+    // ── Slide-7 SET 2..5 ───────────────────────────────────────────────────
+    // Slide 7's own fire recipe runs (its muzzle FX, its particles, its sound),
+    // and the shot it creates is the real slide-7 projectile: the very class
+    // that paints the flight, the trail and the impact burst on slide 7. Slide 1
+    // still owns the flight and the hit test, so it only carries that shot.
+    const s7id = this.setSevenId;
+    if (s7id && this.setSevenLive) {
+      const fx = this.s7;
+      if (this.s7Weapon !== s7id) {
+        // A different weapon: slide 7 starts its animation from rest.
+        fx.anim = newAnim();
+        fx.particles.clear();
+        fx.fx.length = 0;
+        fx.wheelFx.length = 0;
+        fx.timers.length = 0;
+        fx.shots.length = 0;
+        fx.stuck.length = 0;
+        this.s7Weapon = s7id;
+      }
+      fx.weaponId = s7id;
+      fx.time = this.time;
+      fx.syncWheel();
+      const mx = CX + (offsets[0] ?? 0);
+      const my = GUN_Y - 4;
+      // Slide 7 counts the shot before the recipe runs (the firework cycle
+      // picks its rocket from that counter).
+      fx.shotsFired++;
+      FIRE_RECIPES[s7id](fx, mx, my);
+      const made = fx.takeShots();
+      // Slide 1 still fires one round per pellet (that is how ammo, hits and
+      // the score have always worked). Slide 7's real shot rides the first
+      // one; the extra pellets of a burst gun stay invisible carriers.
+      for (let i = 0; i < n; i++) {
+        const ox = offsets[i] ?? offsets[0] ?? 0;
+        const own = made[i];
+        const proj: Proj = {
+          x: CX + ox, originX: CX + ox, y: own ? own.y : my, vx, vy, big, tint,
+          hue: undefined, ...sizeBuff,
+        };
+        if (own) proj.setSeven = own;
+        else if (i === 0) proj.setSevenPending = true;
+        else proj.s7Ghost = true;
+        this.projs.push(proj);
+      }
+      this.s7Last = made[0];
+      // The bookkeeping slide 1 still owns: cooldown, recoil, reloads. All the
+      // visible parts (muzzle, shake, smoke, casing) are slide 7's own recipe.
+      this.recoil = w.recoil;
+      this.muzzle = 0.07;
+      this.camY += FX[w.id].kick * 0.5;
+      this.cooldown = (w.spinup ? 0.3 - 0.235 * this.spin : w.cooldown)
+        * (this.buff === 'speed' || this.treasureBuff === 'rapid' ? 0.5 : this.treasureBuff === 'mini' ? 0.6 : 1);
+      if (isSpecial(this.level.mode) && this.ammoLeft === 0) this.reloadT = 0.65;
+      else if (w.id === 'snowball' && this.snowLoaded === 0 && this.ammoLeft > 0) this.reloadT = 0.85;
+      return;
+    }
     const fw = w.id === 'firework' ? this.getFwState() : null;
     const yoyo = w.id === 'yoyo' ? this.getYoyoState() : null;
     const keris = w.id === 'keris' ? this.getKerisState() : null;
     const diamond = w.id === 'diamond' ? this.getDiamondState() : null;
     const bazooka = w.id === 'bazooka' ? this.getBazookaState() : null;
+    // Slide-7 SET 1: its own muzzle recipe per barrel, and its own spawn point
+    // (the slingshot throws from the pouch, the blowpipe from the mouthpiece,
+    // the black-hole staff releases the orb 0.28 s after the charge).
+    const setOneLive = this.setOneLive;
+    const s1Spawns = setOneLive
+      ? offsets.map((ox) => fireSetOne(this.s1, this.setOneId!, CX + ox, GUN_Y - 4, this.s1Hooks(), (n) => setOneSfx.play(n)))
+      : null;
+    let s1i = 0;
     for (const ox of offsets) {
+      const s1spawn = s1Spawns ? s1Spawns[s1i++] : null;
       const shotHue = fw
         ? firework8ShotHue(this.level?.n ?? 1, fw.shotIdx++)
         : yoyo
@@ -1017,20 +1473,28 @@ export class Game {
             : bazooka
               ? bazooka.nextHue()
               : undefined;
-      const spawnDelay = w.id === 'keris' ? KERIS_GLEAM_DUR : undefined;
+      const spawnDelay = s1spawn ? s1spawn.delay
+        : w.id === 'keris' ? KERIS_GLEAM_DUR : undefined;
       if (fw && shotHue !== undefined) gunState.rocketHue = shotHue;
       if (yoyo && shotHue !== undefined) gunState.yoyoHue = shotHue;
       if (bazooka && shotHue !== undefined) gunState.bazookaHue = shotHue;
       // Weapon-specific spawn Y: dora barrel extends 70px above gun base, pred muzzle at GUN_Y-72 (game-3: my-68)
-      const spawnY = w.id === 'dora' ? GUN_Y + w.recoil * 22 - 50 : w.id === 'pred' ? GUN_Y - 72 : GUN_Y - 4;
+      const spawnY = s1spawn ? s1spawn.y
+        : w.id === 'dora' ? GUN_Y + w.recoil * 22 - 50 : w.id === 'pred' ? GUN_Y - 72 : GUN_Y - 4;
+      const spawnX = s1spawn ? s1spawn.x : CX + ox;
       const isNewWeapon = w.id === 'dora' || w.id === 'xeno' || w.id === 'pred';
       const projExtra = isNewWeapon ? { wob: Math.random() * TAU, lastEcho: spawnY } : {};
-      if (n === 1) this.projs.push({ x: CX + ox, originX: CX + ox, y: spawnY, vx, vy, big, tint, hue: shotHue, spawnDelay, ...sizeBuff, ...projExtra });
+      const s1State = s1spawn ? this.s1.newShot(this.setOneId!, spawnX, spawnY) : undefined;
+      if (s1State) this.s1Last = s1State;
+      if (n === 1) this.projs.push({ x: spawnX, originX: spawnX, y: spawnY, vx, vy, big, tint, hue: shotHue, spawnDelay, setOne: s1State, ...sizeBuff, ...projExtra });
       else {
         const travel = GUN_Y - (this.targetY + this.level.radius);
         for (let i = 0; i < n; i++) {
           const off = (i - (n - 1) / 2) * 26;
-          this.projs.push({ x: CX + ox, originX: CX + ox, y: spawnY, vx: vx + (off * w.speed) / travel, vy, big, tint, hue: shotHue, spawnDelay, ...sizeBuff, ...projExtra });
+          // Multi-shot guns get their own slide-7 round each, so the pellets
+          // and the stream never share an age with a sibling bullet.
+          const own = s1spawn ? this.s1.newShot(this.setOneId!, spawnX, spawnY) : undefined;
+          this.projs.push({ x: spawnX, originX: spawnX, y: spawnY, vx: vx + (off * w.speed) / travel, vy, big, tint, hue: shotHue, spawnDelay, setOne: own, ...sizeBuff, ...projExtra });
         }
       }
       if (fw && shotHue !== undefined) {
@@ -1058,8 +1522,17 @@ export class Game {
     this.recoil = w.recoil;
     this.muzzle = 0.07;
     const fxp = FX[w.id];
-    if (w.id !== 'firework' && w.id !== 'yoyo' && w.id !== 'keris' && w.id !== 'diamond' && w.id !== 'bazooka') {
+    if (w.id !== 'firework' && w.id !== 'yoyo' && w.id !== 'keris' && w.id !== 'diamond' && w.id !== 'bazooka'
+      && !(w.id === 'blackhole' && this.slide2Void) && !setOneLive) {
       for (const ox of offsets) spawnMuzzle(this.sink, fxp, w, CX + ox, GUN_Y - 6);
+    }
+    // Slide 2 black hole: collapsing sparks into the muzzle, cosmic hue band.
+    if (w.id === 'blackhole' && this.slide2Void) {
+      this.s2Hue = 215 + ((gunState.shots * 53) % 105);
+      for (const ox of offsets) {
+        fireBlackHole2(this.s2, CX + ox, GUN_Y - 4, this.s2Hue);
+        this.sink.light(CX + ox, GUN_Y - 6, 90, '170,120,255', 0.22);
+      }
     }
     this.camY += fxp.kick * 0.5;
     if (fxp.speedLines) for (const ox of offsets) {
@@ -1128,21 +1601,24 @@ export class Game {
       if (big === 2) for (const ox of offsets) {
         spawnSpeedLines(this.sink, CX + ox, this.targetY + this.level.radius + 20, GUN_Y - 30, '254,240,138');
       }
-    } else FIRE_SFX[w.id]();
+    } else if (this.slide2Void) slide2Sfx.shootBH();
+    else if (!setOneLive) playFireSfx(w.id);
     if (w.id === 'xeno') {
       for (const ox of offsets) {
         // 16 viscous droplets behind the glob (game-3 fire())
         for (let i = 0; i < 16; i++) {
           const k = i / 16;
-          this.sink.push({ x: CX + ox + rand(-3, 3), y: GUN_Y - 4 - k * 12, vx: rand(-25, 25), vy: vy * (0.45 + k * 0.5), life: rand(0.7, 1.2), max: 1.2, size: rand(2.5, 6.5) * (1 - k * 0.5) + 1.5, color: '#b6ff1a', kind: 'drop', rot: 0, vr: 0, g: 900 });
+          this.sink.push({ x: CX + ox + rand(-3, 3), y: GUN_Y - 4 - k * 12, vx: rand(-25, 25), vy: vy * (0.45 + k * 0.5), life: rand(0.7, 1.2), max: 1.2, size: rand(2.5, 6.5) * (1 - k * 0.5) + 1.5, color: '#b6ff1a', kind: 'acid', rot: 0, vr: 0, g: 900 });
         }
         // 10 fine mist (game-3: vy rand(-900, -300))
         for (let i = 0; i < 10; i++) {
-          this.sink.push({ x: CX + ox + rand(-6, 6), y: GUN_Y - 4 - rand(0, 4), vx: rand(-120, 120), vy: rand(-900, -300), life: rand(0.4, 0.8), max: 0.8, size: rand(1.2, 2.2), color: '#b6ff1a', kind: 'smoke', rot: 0, vr: 0, g: 1200 });
+          this.sink.push({ x: CX + ox + rand(-6, 6), y: GUN_Y - 4 - rand(0, 4), vx: rand(-120, 120), vy: rand(-900, -300), life: rand(0.4, 0.8), max: 0.8, size: rand(1.2, 2.2), color: '#b6ff1a', kind: 'acid', rot: 0, vr: 0, g: 1200 });
         }
-        // flash + ring (game-3: flash size 80, ring size 8 grow 220)
+        // flash + ring (game-3: flash size 80, ring size 8 grow 220).
+        // The flash is a soft bloom, not a filled disc.
         this.sink.light(CX + ox, GUN_Y - 6, 80, '182,255,26', 0.2);
-        this.sink.push({ x: CX + ox, y: GUN_Y - 6, vx: 0, vy: 0, life: 0.3, max: 0.3, size: 80, color: '182,255,26', kind: 'ring', rot: 0, vr: 0, g: 0 });
+        this.sink.push({ x: CX + ox, y: GUN_Y - 6, vx: 0, vy: 0, life: 0.2, max: 0.2, size: 34, color: '182,255,26', kind: 'glow', rot: 0, vr: 0, g: 0 });
+        this.sink.push({ x: CX + ox, y: GUN_Y - 6, vx: 0, vy: 0, life: 0.3, max: 0.3, size: 26, color: '182,255,26', kind: 'ring', rot: 0, vr: 0, g: 0 });
         // 6 smoke puffs (game-3: color #9bd13a, size rand(10,20))
         for (let i = 0; i < 6; i++) {
           this.sink.push({ x: CX + ox + rand(-14, 14), y: GUN_Y - 6, vx: rand(-40, 40), vy: rand(-90, -30), life: rand(0.8, 1.4), max: 1.4, size: rand(10, 20), color: '155,209,58', kind: 'smoke', rot: 0, vr: 0, g: 30, drag: 2 });
@@ -1456,9 +1932,8 @@ export class Game {
     this.shake = Math.max(this.shake, 8);
     const fw = this.getFwState();
     const h = hue ?? gunState.rocketHue ?? firework8ShotHue(this.level?.n ?? 1, fw.impactIdx);
+    // Slide 2 has no extra flash ring here — the burst brings its own glow + shock ring.
     spawnFirework8StickBurst(fw, x, y, h);
-    this.sink.light(x, y + 20, 140, '255,180,220', 0.35);
-    this.sink.push({ x, y, vx: 0, vy: 0, life: 0.35, max: 0.35, size: 90, color: '#ff80bf', kind: 'ring', rot: 0, vr: 0, g: 0 });
   }
 
   private applySlow(time: number, factor: number, rgb: string, kind: 'ice' | 'water' | 'honey' | 'time') {
@@ -1763,6 +2238,8 @@ export class Game {
     this.sink.push({ x, y, vx: 0, vy: 0, life: 0.35, max: 0.35, size: 20, color: '255,255,255', kind: 'ringE', rot: 0, vr: 0, g: 0 });
     // star burst
     this.sink.push({ x, y, vx: 0, vy: 0, life: 0.22, max: 0.22, size: 90 * k, color: '#fff4a0', kind: 'star', rot: 0, vr: 0, g: 0 });
+    // manga speed lines radiating out of the slam (game-3 'speed' particle)
+    this.sink.push({ x, y, vx: 0, vy: 0, life: 0.28, max: 0.28, size: 240 * k, color: '#ffffff', kind: 'speed', rot: 0, vr: 0, g: 0 });
     // 22 puff particles in a ring
     const n = Math.round(22 * k);
     for (let i = 0; i < n; i++) {
@@ -1815,19 +2292,161 @@ export class Game {
     // pancake: blobs sliding sideways along the rim then falling
     for (let i = 0; i < 10; i++) {
       const side = i % 2 ? 1 : -1;
-      this.sink.push({ x: x + side * i * 2, y: y + 2, vx: side * rand(90, 420) * k, vy: rand(-60, 20), life: rand(0.5, 0.9), max: 0.9, size: rand(4, 8), color: '#b6ff1a', kind: 'drop', rot: 0, vr: 0, g: 1300, drag: 0.15 });
+      this.sink.push({ x: x + side * i * 2, y: y + 2, vx: side * rand(90, 420) * k, vy: rand(-60, 20), life: rand(0.5, 0.9), max: 0.9, size: rand(4, 8), color: '#b6ff1a', kind: 'acid', rot: 0, vr: 0, g: 1300, drag: 0.15 });
     }
     // main fan of drops (bounce downward/sideways)
     for (let i = 0; i < 48 * k; i++) {
       const a = down + rand(-1.55, 1.55);
       const s = rand(120, 640) * k;
-      this.sink.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: rand(0.7, 1.4), max: 1.4, size: rand(1.8, 5.2), color: '#b6ff1a', kind: 'drop', rot: 0, vr: 0, g: 1100, drag: 0.15 });
+      this.sink.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: rand(0.7, 1.4), max: 1.4, size: rand(1.8, 5.2), color: '#b6ff1a', kind: 'acid', rot: 0, vr: 0, g: 1100, drag: 0.15 });
     }
     // sprays upward (ricochet over the rim)
-    for (let i = 0; i < 10; i++) this.sink.push({ x: x + rand(-10, 10), y, vx: rand(-240, 240), vy: rand(-420, -120), life: rand(0.5, 1), max: 1, size: rand(1.5, 3.2), color: '#b6ff1a', kind: 'drop', rot: 0, vr: 0, g: 1100, drag: 0.15 });
+    for (let i = 0; i < 10; i++) this.sink.push({ x: x + rand(-10, 10), y, vx: rand(-240, 240), vy: rand(-420, -120), life: rand(0.5, 1), max: 1, size: rand(1.5, 3.2), color: '#b6ff1a', kind: 'acid', rot: 0, vr: 0, g: 1100, drag: 0.15 });
     for (let i = 0; i < 18; i++) this.sink.push({ x: x + rand(-20, 20), y: y + rand(0, 10), vx: rand(-50, 50), vy: rand(-90, -20), life: rand(1.4, 2.6), max: 2.6, size: rand(12, 26), color: pick(['143,194,58', '200,255,90', '90,122,42']), kind: 'smoke', rot: 0, vr: 0, g: 0, drag: 2 });
     for (let i = 0; i < 14; i++) this.sink.push({ x: x + rand(-18, 18), y: y + rand(-6, 6), vx: rand(-20, 20), vy: rand(-30, 10), life: rand(0.3, 0.8), max: 0.8, size: rand(1.5, 4), color: '155,209,58', kind: 'bubble', rot: 0, vr: 0, g: 0, grow: 6 });
     for (let i = 0; i < 14; i++) { const a = down + rand(-1.6, 1.6); const sp = rand(100, 400); this.sink.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 0.4, max: 0.4, size: 1.5, color: pick(['255,255,255', '155,209,58']), kind: 'spark', rot: 0, vr: 0, g: 700, drag: 3 }); }
+  }
+
+  /** True while the acid layer has something to composite. */
+  private hasAcidLayer(): boolean {
+    if (this.weapon.id === 'xeno' && this.projs.length) return true;
+    for (const p of this.particles) if (p.kind === 'acid') return true;
+    for (const it of this.items) if (it.acid) return true;
+    return false;
+  }
+
+  /**
+   * Collect every acid source as metaballs, ported 1:1 from game-3
+   * collectBlobs(): flying glob (head + body + tail + sampled trail), free
+   * droplets, and the blobs stuck on the wheel (sagging, wobbling + drip).
+   */
+  private collectAcidBlobs() {
+    const fluid = this.acidFluid;
+    fluid.begin();
+    const t = this.time;
+    // Match the transform used by render(): the wheel bobs and breathes, so the
+    // acid stuck to it must ride along or it would drift off the rim.
+    const wScale = (this.wheelScale ?? 1) * (1 + this.bump * 0.035);
+    const cy = this.targetY + this.bump * 7;
+    const R = this.level.radius * wScale;
+
+    if (this.weapon.id === 'xeno') {
+      for (const p of this.projs) {
+        if (p.spawnDelay && p.spawnDelay > 0) continue;
+        const pt = p.t ?? 0;
+        fluid.add(p.x, p.y, 13);
+        fluid.add(p.x, p.y + 9, 11);
+        fluid.add(p.x + Math.sin(pt * 40) * 1.5, p.y + 19, 8.5);
+        const trail = p.trail ?? [];
+        for (let i = 2; i < trail.length; i++) {
+          const k = i / trail.length;
+          const tp = trail[i];
+          fluid.add(tp.x + Math.sin(i * 1.7 + pt * 25) * k * 3, tp.y + 24 + i * 3, 7.5 * (1 - k) + 1.5);
+        }
+      }
+    }
+
+    for (const p of this.particles) {
+      if (p.kind !== 'acid') continue;
+      const k = p.life / p.max;
+      const r = p.size * (k < 0.75 ? 1 : 1 - (k - 0.75) / 0.25);
+      if (r < 0.6) continue;
+      fluid.add(p.x, p.y, r);
+      // teardrop streak along the velocity
+      const sp = Math.hypot(p.vx, p.vy);
+      if (sp > 150 && r > 1.5) {
+        const f = Math.min(0.03, 6 / sp);
+        fluid.add(p.x - p.vx * f, p.y - p.vy * f, r * 0.65);
+      }
+    }
+
+    for (const it of this.items) {
+      if (!it.acid || it.type !== 'bullet') continue;
+      const a = it.angle + this.rot;
+      const ca = Math.cos(a);
+      const sa = Math.sin(a);
+      const sag = Math.min(1, it.age / 1.2);
+      for (const b of it.acid.blobs) {
+        const wob = Math.sin(t * 3 + b.ph) * 1.2;
+        const d = R + b.d * (0.6 + 0.4 * sag) + wob;
+        const sd = b.s + Math.cos(t * 2.5 + b.ph) * 0.8;
+        fluid.add(CX + ca * d - sa * sd, cy + sa * d + ca * sd, b.r);
+      }
+      if (it.acid.drip > 0) {
+        const bx = CX + ca * (R + 8);
+        const by = cy + sa * (R + 8);
+        fluid.add(bx, by + it.acid.drip * 0.5, 3.5);
+        fluid.add(bx, by + it.acid.drip, 3 + it.acid.drip * 0.12);
+      }
+    }
+  }
+
+  /**
+   * Predator shoulder-caster tri-laser (game-3 drawTriLaser): three faint red
+   * beams converge on a lock-on triangle of dots on the target, tightening into
+   * a reticle while the core charges.
+   */
+  private drawTriLaser(c: CanvasRenderingContext2D) {
+    if (this.state !== 'play' || this.weapon.id !== 'pred' || this.level.mode === 'treasure') return;
+    const t = this.time;
+    const ch = this.charging ? Math.min(1, this.chargeT) : 0;
+    const ap = { x: CX, y: this.targetY + this.level.radius - 18 };
+    const lift = -this.spin * 6 + this.recoil * 8;
+    const ex = CX - 50;
+    const ey = GUN_Y - 92 + this.recoil * 14 + lift + 15;
+    const jitter = () => (Math.random() - 0.5) * (1.2 - ch);
+    const spreadR = 10 + (1 - ch) * 14 + Math.sin(t * 2) * 2;
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * TAU - Math.PI / 2 + t * 0.6;
+      const dx = ap.x + Math.cos(a) * spreadR + jitter();
+      const dy = ap.y + 8 + Math.sin(a) * spreadR * 0.45 + jitter();
+      const g = c.createLinearGradient(ex, ey, dx, dy);
+      g.addColorStop(0, 'rgba(255,30,30,0.45)');
+      g.addColorStop(0.5, 'rgba(255,30,30,0.12)');
+      g.addColorStop(1, 'rgba(255,30,30,0.5)');
+      c.strokeStyle = g;
+      c.lineWidth = 1.2 + ch * 0.6;
+      const eo = [[-5, 2], [5, 2], [0, -4]][i];
+      c.beginPath();
+      c.moveTo(ex + eo[0], ey + eo[1]);
+      c.lineTo(dx, dy);
+      c.stroke();
+      drawGlow(c, dx, dy, 9 + ch * 4, '#ff1e1e', 0.9);
+      drawGlow(c, dx, dy, 3, '#ffffff', 0.9);
+      c.fillStyle = '#ff5050';
+      c.beginPath();
+      c.arc(dx, dy, 1.6, 0, TAU);
+      c.fill();
+    }
+    c.strokeStyle = `rgba(255,30,30,${0.25 + ch * 0.5})`;
+    c.lineWidth = 1;
+    c.beginPath();
+    for (let i = 0; i <= 3; i++) {
+      const a = (i / 3) * TAU - Math.PI / 2 + t * 0.6;
+      const x = ap.x + Math.cos(a) * spreadR;
+      const y = ap.y + 8 + Math.sin(a) * spreadR * 0.45;
+      if (i) c.lineTo(x, y);
+      else c.moveTo(x, y);
+    }
+    c.stroke();
+    if (ch > 0) {
+      c.strokeStyle = `rgba(255,30,30,${ch * 0.8})`;
+      c.lineWidth = 1.5;
+      const r = 26 - ch * 10;
+      c.beginPath();
+      c.ellipse(ap.x, ap.y + 8, r, r * 0.45, 0, 0, TAU);
+      c.stroke();
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * TAU + t * 3;
+        c.beginPath();
+        c.moveTo(ap.x + Math.cos(a) * r * 0.8, ap.y + 8 + Math.sin(a) * r * 0.36);
+        c.lineTo(ap.x + Math.cos(a) * r * 1.3, ap.y + 8 + Math.sin(a) * r * 0.58);
+        c.stroke();
+      }
+    }
+    c.restore();
   }
 
   private stickAt(local: number, p?: Proj) {
@@ -1835,6 +2454,21 @@ export class Game {
     const w = this.weapon;
     const big = p?.big ?? 0;
     const tint = p?.tint;
+    /** SET 1 impact burst: slide 7's own recipe replaces slide 1's signature burst. */
+    const s1Hit = this.setOneLive && p?.setOne ? p.setOne : null;
+    /** SET 2..5 impact burst: slide 7's own `hit()` on its own round. */
+    const s7Hit = this.setSevenLive && p?.setSeven ? p.setSeven : null;
+    /** Slide 9 impact: its own `onImpact()` plus the entry hole it paints. */
+    const s9Hit = this.setNineLive && p?.setNine ? p.setNine : null;
+    /** Slide 11 impact: its own `onHit()` burst and its wheel embeds. */
+    const s11Hit = this.setElevenLive && p?.setEleven ? p.setEleven : null;
+    // A slide-9 / slide-11 gun whose own round has not been released yet (beam
+    // weapons, charged staffs, drums) still flies slide 1's carrier into the
+    // wheel. That carrier must not leave a slide-1 bullet hole: the layer owns
+    // the impact, exactly like it owns the shot.
+    const s9Pending = this.setNineLive && p?.setNinePending ? true : false;
+    const s11Pending = this.setElevenLive && p?.setElevenPending ? true : false;
+    const layerHit = !!(s9Hit || s11Hit || s9Pending || s11Pending);
     const hue = p?.hue ?? (w.id === 'firework' ? gunState.rocketHue : w.id === 'yoyo' ? gunState.yoyoHue : undefined);
     if (w.id === 'firework' && hue !== undefined) gunState.rocketHue = hue;
     if (w.id === 'yoyo' && hue !== undefined) gunState.yoyoHue = hue;
@@ -1848,13 +2482,17 @@ export class Game {
       hue,
       flash: w.id === 'firework' || w.id === 'yoyo' || w.id === 'diamond' || w.id === 'bazooka' ? 1 : undefined,
       scale: big ? embeddedProjectileScale(big) : undefined,
+      // Slide 9 / slide 11 paint their own entry hole into the wheel, so the
+      // slide-1 bullet art must not be drawn on top of it.
+      hideArt: layerHit ? true : undefined,
     });
     this.stuck++;
     // Dora airBlast hit FX (game-3)
     if (w.id === 'dora') {
       const hp = this.worldPos(local, R);
       this.bump = Math.max(this.bump, 18);
-      this.flashWhite = Math.max(this.flashWhite, 1);
+      this.wheelFlash = Math.max(this.wheelFlash, 0.8);
+      this.wheelFlashRgb = '220,242,255';
       this.shake = Math.max(this.shake, 13);
       this.airBlast(hp.x, hp.y, 1);
       sfx6.doraHit();
@@ -1863,7 +2501,8 @@ export class Game {
     if (w.id === 'pred') {
       const hp = this.worldPos(local, R);
       this.bump = Math.max(this.bump, 14);
-      this.flashWhite = Math.max(this.flashWhite, 1);
+      this.wheelFlash = Math.max(this.wheelFlash, 1);
+      this.wheelFlashRgb = '200,235,255';
       this.shake = Math.max(this.shake, 15);
       this.plasmaImpact(hp.x, hp.y, 1);
       sfx6.predHit();
@@ -1872,8 +2511,26 @@ export class Game {
     if (w.id === 'xeno') {
       const hp = this.worldPos(local, R);
       this.bump = Math.max(this.bump, 8);
-      this.flashWhite = Math.max(this.flashWhite, 1);
+      this.wheelFlash = Math.max(this.wheelFlash, 1);
+      this.wheelFlashRgb = '200,255,128';
       this.shake = Math.max(this.shake, 7);
+      // The glob now lives in the metaball layer: five sub-blobs that sag,
+      // wobble and eventually drip down the rim — exactly like slide 7.
+      const stuckItem = this.items[this.items.length - 1];
+      if (stuckItem) {
+        stuckItem.acid = {
+          blobs: [
+            { d: 5, s: 0, r: 11, ph: rand(0, TAU) },
+            { d: 13, s: rand(-3, 3), r: 8, ph: rand(0, TAU) },
+            { d: 1, s: rand(6, 10), r: 6, ph: rand(0, TAU) },
+            { d: 1, s: rand(-10, -6), r: 6, ph: rand(0, TAU) },
+            { d: 20, s: rand(-2, 2), r: 4.5, ph: rand(0, TAU) },
+          ],
+          dripT: rand(0.5, 1.5),
+          drip: 0,
+          seed: Math.random() * 1000,
+        };
+      }
       this.splash(hp.x, hp.y, 1);
       sfx6.xenoHit();
     }
@@ -1893,6 +2550,10 @@ export class Game {
     }
     if (tint) {
       const hp0 = this.worldPos(local, R);
+      // The droplet layer is batched into one path per colour now, so the burst
+      // stays exactly as lush as it was: 22 droplets a hit used to mean ~900
+      // fills a frame at 8 shots a second, and it is a handful of fills however
+      // many land.
       for (let i = 0; i < 22; i++) {
         const a = rand(0, TAU);
         const v = rand(120, 520);
@@ -1916,13 +2577,13 @@ export class Game {
     this.bump = 1;
     this.hitFlash = 1;
     this.shake = Math.max(this.shake, 6);
-    this.crack(local, tint);
-    if (isSlide23Weapon(w.id)) {
+    if (!s1Hit && !s7Hit && !layerHit) this.crack(local, tint);
+    if (isSlide23Weapon(w.id) && !layerHit) {
       const hitIdx = Math.max(0, this.stuck - 1);
       if (w.id === 'yoyo') slide23Sfx.hit('yoyo-spin', 0);
-      slide23Sfx.hit(w.id, hitIdx);
-      if (w.id === 'firework' && hitIdx % 3 === 2) slide23Sfx.boom(1.05);
-    } else {
+      if (w.id === 'firework') fireworkSfx.hit(hitIdx);
+      else slide23Sfx.hit(w.id, hitIdx);
+    } else if (!s1Hit && !s7Hit && !layerHit) {
       sfx.hit();
       if (w.energy && !w.slow && !w.pullCoins && !HIT_SFX[w.id]) sfx.zap();
     }
@@ -1930,6 +2591,20 @@ export class Game {
     const hx = hp.x;
     const hy = hp.y;
     const cols = STYLE_COLORS[this.level.style].chips;
+    if (s1Hit) impactSetOne(this.s1, s1Hit, hx, hy, local, this.s1Hooks(), (n) => setOneSfx.play(n));
+    // Slide 7's own impact: cracks painted into the wheel face, the rim glow,
+    // the burst, the stuck round and its sound — all from `projectiles*.ts`.
+    else if (s7Hit) {
+      s7Hit.hit(local, hx, hy);
+      this.s7Last = undefined;
+    }
+    // Slide 9's own impact: its burst, its sound and the entry hole it paints.
+    else if (s9Hit) this.s9.impact(hx, hy, local);
+    // Slide 11's own impact: its burst, its sound and the marks it leaves.
+    else if (s11Hit) this.s11.impact(hx, hy, s11Hit);
+    else if (s9Pending) this.s9.block(hx, hy);
+    else if (s11Pending) this.s11.block(hx, hy);
+    this.slide2Impact(hx, hy);
     this.applyPerks(w, hx, hy, R);
     if (w.id === 'yoyo') {
       spawnYoyoStickBurst(
@@ -1958,7 +2633,10 @@ export class Game {
       this.getBazookaState().onHit(hx, hy, 1.05);
     }
     const fxp = FX[w.id];
-    if (w.id !== 'firework' && w.id !== 'yoyo' && w.id !== 'keris' && w.id !== 'diamond' && w.id !== 'bazooka') {
+    // Slide 9 and slide 11 spawn their own impact burst and sound, so slide 1's
+    // signature burst would only stack a second explosion on top of them.
+    if (w.id !== 'firework' && w.id !== 'yoyo' && w.id !== 'keris' && w.id !== 'diamond' && w.id !== 'bazooka'
+      && !s1Hit && !layerHit) {
       spawnImpact(this.sink, fxp, w, hx, hy, (hx - CX) / R, (hy - this.targetY) / R, cols);
     }
     this.hitStop = Math.max(this.hitStop, fxp.hitstop);
@@ -2039,6 +2717,10 @@ export class Game {
   }
 
   private fail(p: Proj) {
+    // Slide 7's own "blocked" burst (the round is stopped by a stuck weapon).
+    if (this.setSevenLive && p.setSeven) p.setSeven.block(p.x, p.y);
+    if (this.setNineLive && p.setNine) this.s9.block(p.x, p.y);
+    if (this.setElevenLive && p.setEleven) this.s11.block(p.x, p.y);
     this.aiming = false;
     this.burnT = 0;
     this.state = 'fail';
@@ -2058,6 +2740,21 @@ export class Game {
     }
     if (this.weapon.id === 'bazooka') {
       this.getBazookaState().onHit(p.x, p.y, 1.45);
+    }
+    // The blunt slam and the plasma detonation also fire when the shot is
+    // wasted on an obstacle (game-3 resolveHit: fail branch).
+    if (this.weapon.id === 'dora') this.airBlast(p.x, p.y, 1.3);
+    if (this.weapon.id === 'pred') this.plasmaImpact(p.x, p.y, 1.3);
+    // Acid splashes off the obstacle (game-3 resolveHit fail branch).
+    if (this.weapon.id === 'xeno') {
+      this.splash(p.x, p.y + 10, 1.4);
+      this.sink.light(p.x, p.y, 90, '255,255,255', 0.15);
+      this.sink.push({ x: p.x, y: p.y, vx: 0, vy: 0, life: 0.25, max: 0.25, size: 6, color: '255,255,255', kind: 'ring', rot: 0, vr: 0, g: 0 });
+      for (let i = 0; i < 24; i++) {
+        const a = Math.PI / 2 + rand(-1.5, 1.5);
+        const sp = rand(200, 700);
+        this.sink.push({ x: p.x, y: p.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 0.5, max: 0.5, size: 2, color: pick(['#ffffff', '#fff2b0', '182,255,26']), kind: 'spark', rot: 0, vr: 0, g: 900, drag: 3 });
+      }
     }
     sfx.fail(this.weapon.id);
     this.shake = 16;
@@ -2118,6 +2815,53 @@ export class Game {
     if (this.weapon.id === 'bazooka') {
       this.getBazookaState().onStageClear(CX, this.targetY);
     }
+    // Xenomorph acid detonation: the burst soaks the arena in acid rain
+    // (game-3 explodeWheel()).
+    if (this.weapon.id === 'xeno') {
+      for (const it of this.items) {
+        if (!it.acid) continue;
+        const wa = it.angle + this.rot;
+        const sx = CX + Math.cos(wa) * (R + 10);
+        const sy = this.targetY + Math.sin(wa) * (R + 10);
+        for (let i = 0; i < 8; i++) {
+          this.sink.push({ x: sx, y: sy, vx: Math.cos(wa) * rand(100, 500) + rand(-100, 100), vy: Math.sin(wa) * rand(100, 500) - 200, life: 1.6, max: 1.6, size: rand(3, 7), color: '#b6ff1a', kind: 'acid', rot: 0, vr: 0, g: 1100, drag: 0.15 });
+        }
+      }
+      for (let i = 0; i < 90; i++) {
+        const a = rand(0, TAU);
+        const sp = rand(150, 850);
+        this.sink.push({ x: CX, y: this.targetY, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(1, 1.8), max: 1.8, size: rand(2.5, 7), color: '#b6ff1a', kind: 'acid', rot: 0, vr: 0, g: 1100, drag: 0.15 });
+      }
+      for (let i = 0; i < 30; i++) {
+        this.sink.push({ x: CX + rand(-40, 40), y: this.targetY + rand(-40, 40), vx: rand(-200, 200), vy: rand(-200, 200), life: rand(1.5, 2.8), max: 2.8, size: rand(25, 55), color: '106,138,58', kind: 'smoke', rot: 0, vr: 0, g: 0, drag: 2 });
+      }
+    }
+    // Air cannon detonation: a wall of cartoon puffs, manga speed lines and the
+    // big DOKAAAN!! (game-3 explodeWheel dora branch).
+    if (this.weapon.id === 'dora') {
+      for (let i = 0; i < 40; i++) {
+        const a = rand(0, TAU);
+        const sp = rand(200, 700);
+        this.sink.push({ x: CX, y: this.targetY, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(1, 1.8), max: 1.8, size: rand(20, 44), color: '#ffffff', kind: 'puff', rot: rand(0, TAU), vr: rand(-2, 2), g: 0, drag: 2.2 });
+      }
+      this.sink.push({ x: CX, y: this.targetY, vx: 0, vy: 0, life: 0.5, max: 0.5, size: 520, color: '#ffffff', kind: 'speed', rot: 3.7, vr: 0, g: 0 });
+      this.sink.push({ x: CX, y: this.targetY - 40, vx: 0, vy: -60, life: 1.4, max: 1.4, size: 64, color: '#ffd23a', kind: 'text', rot: -0.12, vr: 0, g: 0, text: 'DOKAAAN!!' });
+    }
+    // Plasma detonation: blinding core, lightning web and molten embers
+    // (game-3 explodeWheel pred branch).
+    if (this.weapon.id === 'pred') {
+      this.sink.light(CX, this.targetY, 600, '111,211,255', 0.6);
+      for (let i = 0; i < 18; i++) {
+        const a = rand(0, TAU);
+        this.sink.push({ x: CX, y: this.targetY, vx: Math.cos(a) * rand(120, 280), vy: Math.sin(a) * rand(120, 280), life: 0.35, max: 0.35, size: 3, color: i % 2 ? '255,255,255' : '111,211,255', kind: 'bolt', rot: 0, vr: 0, g: 0 });
+      }
+      for (let i = 0; i < 80; i++) {
+        const a = rand(0, Math.PI);
+        const sp = rand(300, 1200);
+        this.sink.push({ x: CX, y: this.targetY, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 1.4, max: 1.4, size: 2.6, color: pick(['255,176,96', '255,112,48', '111,211,255']), kind: 'glow', rot: 0, vr: 0, g: 500, drag: 1.5 });
+      }
+    }
+    this.resetSevenLayer();
     this.items = [];
     const cols = STYLE_COLORS[this.level.style].chips;
     for (let i = 0; i < 50; i++) {
@@ -2453,7 +3197,14 @@ export class Game {
     const chips = material === 'rock' ? ['#aab6c6', '#627388', '#e1ebf7']
       : material === 'diamond' ? ['#a5f3fc', '#67e8f9', '#e0f2fe']
         : ['#fbbf24', '#fde68a', '#a16207'];
-    if (w.id !== 'firework' && w.id !== 'yoyo' && w.id !== 'keris' && w.id !== 'diamond' && w.id !== 'bazooka') {
+    const s1Special = this.setOneLive && this.s1Last ? this.s1Last : null;
+    if (s1Special) {
+      const theta = Math.atan2(dy, dx);
+      impactSetOne(this.s1, s1Special, x, y, theta, this.s1Hooks(), (n) => setOneSfx.play(n));
+    }
+    this.slide2Impact(x, y);
+    if (w.id !== 'firework' && w.id !== 'yoyo' && w.id !== 'keris' && w.id !== 'diamond' && w.id !== 'bazooka'
+      && !s1Special) {
       spawnImpact(this.sink, fx, w, x, y, dx / dist, dy / dist, chips);
     }
     if (w.id === 'yoyo') {
@@ -2476,11 +3227,13 @@ export class Game {
       this.tintA = Math.max(this.tintA, fx.tint);
       this.tintRgb = fx.light;
     }
-    if (isSlide23Weapon(w.id)) {
+    if (isSlide23Weapon(w.id) && !(w.id === 'blackhole' && this.slide2Void)) {
       const hitIdx = (this.perkCount = (this.perkCount || 0) + 1) - 1;
       if (w.id === 'yoyo') slide23Sfx.hit('yoyo-spin', 0);
-      slide23Sfx.hit(w.id, hitIdx);
-      if (w.id === 'firework' && hitIdx % 3 === 2) slide23Sfx.boom(1.05);
+      if (w.id === 'firework') fireworkSfx.hit(hitIdx);
+      else slide23Sfx.hit(w.id, hitIdx);
+    } else if (s1Special) {
+      // Slide-7's impact recipe already played its own hit voice.
     } else if (HIT_SFX[w.id]) {
       HIT_SFX[w.id]!();
     } else if (w.energy && !w.slow && !w.pullCoins) {
@@ -2803,6 +3556,31 @@ export class Game {
         }
         this.sink.light(CX + ox, GUN_Y, 60 + Math.min(1, this.chargeT) * 120, stage === 2 ? '254,240,138' : '125,211,252', 0.05);
       }
+      // Predator: ions spiral into the shoulder-caster core, plus crackling
+      // arcs — the slide-7 charge telegraph (game-3 startCharge block).
+      if (this.weapon.id === 'pred') {
+        const coreY = GUN_Y - 72;
+        for (const ox of this.gunOffsets) {
+          if (Math.random() < 0.9) {
+            const a = rand(0, TAU);
+            const d = rand(40, 90);
+            this.sink.push({
+              x: CX + ox + Math.cos(a) * d, y: coreY + Math.sin(a) * d,
+              vx: -Math.cos(a) * d * 4, vy: -Math.sin(a) * d * 4,
+              life: 0.25, max: 0.25, size: 1.4, color: Math.random() < 0.5 ? '#ffffff' : '111,211,255',
+              kind: 'spark', rot: 0, vr: 0, g: 0,
+            });
+          }
+          if (Math.random() < Math.min(1, this.chargeT) * 0.5) {
+            const a = rand(0, TAU);
+            this.sink.push({
+              x: CX + ox, y: coreY, vx: Math.cos(a) * rand(14, 34), vy: Math.sin(a) * rand(14, 34),
+              life: 0.08, max: 0.08, size: 2, color: '111,211,255', kind: 'bolt', rot: 0, vr: 0, g: 0,
+            });
+          }
+          this.sink.light(CX + ox, coreY, 40 + Math.min(1, this.chargeT) * 90, '111,211,255', 0.12);
+        }
+      }
       if (stage === 2 && Math.random() < 0.15) sfx4.chargeHum(2);
     }
     gunState.charge = this.charging ? Math.min(1, this.chargeT) : Math.max(0, gunState.charge - dt * 3);
@@ -3094,6 +3872,66 @@ export class Game {
     const tw = this.weapon;
     for (const p of this.projs) {
       if (p.spawnDelay && p.spawnDelay > 0) continue;
+      if (p.setElevenPending) {
+        // Slide 11 releases some rounds a frame later (bursts, drones).
+        const made = this.s11.takeShots();
+        if (made.length) {
+          p.setEleven = made[0];
+          p.setElevenPending = false;
+          p.y = made[0].y;
+        } else continue;
+      }
+      if (p.s11Ghost) continue; // extra pellet of a burst gun: slide 11 fired it
+      if (p.setEleven) {
+        // Slide 11's round keeps its own frames; slide 1 decides where it is.
+        this.s11.carry(p.setEleven, p.x, p.y, Math.atan2(p.vy, p.vx));
+        continue;
+      }
+      if (p.setNinePending) {
+        // Slide 9 releases some rounds later than the trigger (charged staffs,
+        // drum bursts); hold the carrier still until its round exists.
+        const made = this.s9.takeShots();
+        if (made.length) {
+          p.setNine = made[0];
+          p.setNinePending = false;
+          p.y = made[0].y;
+        } else continue;
+      }
+      if (p.s9Ghost) continue; // extra pellet of a burst gun: slide 9 fired it
+      if (p.setNine) {
+        // Slide 9's round keeps its own frames (trail, sub-particles, spin);
+        // slide 1 decides where it actually is.
+        this.s9.carry(p.setNine, p.x, p.y, Math.atan2(p.vy, p.vx));
+        continue;
+      }
+      if (p.setSevenPending) {
+        // Slide 7 releases some shots later than the trigger (the staff charges
+        // first); hold the carrier still until its shot exists.
+        const made = this.s7.takeShots();
+        if (made.length) {
+          p.setSeven = made[0];
+          p.setSevenPending = false;
+          p.y = made[0].y;
+          this.s7Last = made[0];
+        } else continue;
+      }
+      if (p.s7Ghost) continue; // extra pellet of a burst gun: slide 7 shot it
+      if (p.setOne) {
+        this.s1.trail(p.setOne, p.x, p.y, s);
+        continue;
+      }
+      if (p.setSeven) {
+        // Slide 7's own frame: `update()` schedules its sub-projectiles (the
+        // minigun drum, the swarm…) and spawns its trail; slide 1 decides where
+        // the round actually is, so the position is handed over every frame.
+        const shot = p.setSeven;
+        shot.x = p.x;
+        shot.y = p.y - shot.vy * s;
+        shot.update(s);
+        shot.x = p.x;
+        shot.y = p.y;
+        continue;
+      }
       if (tw.id === 'firework') {
         spawnFirework8FlightSparks(this.getFwState(), p.x, p.y, p.hue ?? gunState.rocketHue);
         continue;
@@ -3154,7 +3992,12 @@ export class Game {
       }
       // Xeno projectile: shed droplets + green smoke (game-3)
       if (tw.id === 'xeno') {
-        if (Math.random() < 0.7) this.sink.push({ x: p.x + rand(-7, 7), y: p.y + rand(10, 40), vx: rand(-70, 70), vy: rand(-200, 100), life: rand(0.5, 1), max: 1, size: rand(1.5, 3.5), color: '#b6ff1a', kind: 'drop', rot: 0, vr: 0, g: 1100, drag: 0.15 });
+        // sampled tail for the metaball body (game-3 p.trail)
+        p.t = (p.t ?? 0) + s;
+        p.trail = p.trail ?? [];
+        p.trail.unshift({ x: p.x + rand(-1, 1), y: p.y });
+        if (p.trail.length > 12) p.trail.pop();
+        if (Math.random() < 0.7) this.sink.push({ x: p.x + rand(-7, 7), y: p.y + rand(10, 40), vx: rand(-70, 70), vy: rand(-200, 100), life: rand(0.5, 1), max: 1, size: rand(1.5, 3.5), color: '#b6ff1a', kind: 'acid', rot: 0, vr: 0, g: 1100, drag: 0.15 });
         if (Math.random() < 0.3) this.sink.push({ x: p.x + rand(-6, 6), y: p.y + 20, vx: rand(-20, 20), vy: rand(-20, 20), life: 0.8, max: 0.8, size: rand(6, 12), color: '182,255,26', kind: 'smoke', rot: 0, vr: 0, g: 0, drag: 0 });
         continue;
       }
@@ -3241,6 +4084,7 @@ export class Game {
     this.hitFlash = Math.max(0, this.hitFlash - dt * 7);
     this.shake *= Math.exp(-dt * 9);
     this.flashWhite = Math.max(0, this.flashWhite - dt * 2.5);
+    this.wheelFlash = Math.max(0, this.wheelFlash - dt * 5);
     this.flashRed = Math.max(0, this.flashRed - dt * 1.8);
     for (const it of this.items) {
       it.age += s;
@@ -3254,11 +4098,29 @@ export class Game {
         const wp = this.worldPos(it.angle, this.level.radius);
         const hx = wp.x, hy = wp.y;
         if (it.w === 'xeno') {
-          // acid drips falling from rim (game-3: green drops)
-          if (Math.random() < dt * 3) {
+          // Ported from game-3: the blob sags, then a drip stretches until it
+          // detaches and falls into the fluid layer, plus acid vapour/bubbles.
+          if (it.acid) {
+            const R0 = this.level.radius;
             const a = it.angle + this.rot;
-            const dx = hx + Math.cos(a + Math.PI / 2) * rand(-4, 4);
-            this.sink.push({ x: dx, y: hy + 4, vx: rand(-20, 20), vy: rand(80, 160), life: rand(0.5, 1), max: 1, size: rand(3, 5), color: '#b6ff1a', kind: 'drop', rot: 0, vr: 0, g: 600, drag: 0.5 });
+            const bx = CX + Math.cos(a) * (R0 + 8);
+            const by = this.targetY + Math.sin(a) * (R0 + 8);
+            it.acid.dripT -= dt;
+            if (it.acid.dripT <= 0) {
+              it.acid.drip += dt * 14;
+              if (it.acid.drip > 12) {
+                this.sink.push({ x: bx + rand(-4, 4), y: by + 6, vx: rand(-10, 10), vy: 30, life: 1.8, max: 1.8, size: rand(3, 4.2), color: '#b6ff1a', kind: 'acid', rot: 0, vr: 0, g: 1100, drag: 0.15 });
+                it.acid.drip = 0;
+                it.acid.dripT = rand(0.8, 2.2);
+              }
+            }
+            if (Math.random() < dt * 5) {
+              this.sink.push({ x: bx + rand(-8, 8), y: by - 4, vx: rand(-15, 15), vy: rand(-45, -15), life: rand(1, 1.8), max: 1.8, size: rand(6, 12), color: '168,224,74', kind: 'smoke', rot: 0, vr: 0, g: 0, drag: 0 });
+            }
+            if (Math.random() < dt * 6) {
+              this.sink.push({ x: bx + rand(-10, 10), y: by + rand(-10, 10), vx: 0, vy: -10, life: rand(0.3, 0.7), max: 0.7, size: rand(0.8, 1.8), color: '244,255,154', kind: 'bubble', rot: 0, vr: 0, g: 0, grow: 2 });
+            }
+            void hx; void hy;
           }
         } else if (it.w === 'dora') {
           // wind particles swirling around rim (game-3: white wind streaks, tangent direction)
@@ -3292,21 +4154,65 @@ export class Game {
       if (b.flash) b.flash = Math.max(0, b.flash - dt * 3.5);
     }
     if (this.weapon.id === 'firework' || (this.fwState && (this.fwState.particles.length > 0 || this.fwState.glows.length > 0 || this.fwState.rings.length > 0 || this.fwState.sky.length > 0))) {
-      const fw = this.getFwState();
-      const stuckPins: { x: number; y: number; worldA: number; hue: number }[] = [];
-      for (const it of this.items) {
-        if (it.type === 'bullet' && it.w === 'firework') {
-          const worldA = it.angle + this.rot;
-          const dist = this.level.radius - FIREWORK_EMBED_NOSE + FIREWORK_PL;
-          stuckPins.push({
-            x: CX + Math.cos(worldA) * dist,
-            y: this.targetY + Math.sin(worldA) * dist,
-            worldA,
-            hue: it.hue ?? 340,
-          });
-        }
+      // Slide 2 runs its sky show on the menu / game over only — mirror that here.
+      // (Gun Hit's idle screen uses its own menu backdrop, so 'over' is the match.)
+      updateFirework8State(this.getFwState(), dt, this.state === 'over');
+    }
+    if (
+      this.slide2Void || this.s2.particles.length > 0 || this.s2.glows.length > 0
+      || this.s2.rings.length > 0 || this.s2.voids.length > 0 || this.s2.jets.length > 0
+      || this.s2.beams.length > 0 || this.s2.smokes.length > 0 || this.s2.fireballs.length > 0
+      || this.s2.flashes.length > 0 || this.s2.texts.length > 0 || this.s2.timers.length > 0
+    ) {
+      this.s2.update(dt);
+    }
+    if (this.s1State && (this.s1State.busy || this.setOneLive)) this.s1State.update(dt);
+    // Slide-7 SET 2..5: its own clock, its animation springs (recoil, pump,
+    // heat, spin, charge…) and the idle ambience that keeps the gun alive.
+    if (this.s7State || this.setSevenId) {
+      const fx = this.s7;
+      const id = this.setSevenId;
+      if (id) {
+        fx.weaponId = id;
+        fx.time = this.time;
+        fx.syncWheel();
+        updateSevenAnim(fx, dt);
       }
-      updateFirework8State(fw, dt, stuckPins);
+      fx.update(dt);
+    }
+    // Slide 11: its own clock, particles, rounds, marks and beams.
+    if (this.setElevenLive || (this.s11State && this.s11State.busy)) {
+      const fx = this.s11;
+      const id = this.setElevenId;
+      if (id) {
+        fx.weaponId = id;
+        fx.syncWheel();
+      }
+      // Holding the trigger keeps a slide-11 channel (flame, beam) flowing,
+      // exactly like slide 11's own `press()`; slide 1 still owns every shot.
+      fx.advance(dt, this.state === 'play' && this.holding);
+    }
+    // Slide 9: its own clock, particles, rounds, beams and entry holes. Only
+    // while that shot (or its leftover FX) is live, so a slide-9 layer can never
+    // animate for a gun that is firing slide 11 instead.
+    if (this.setNineLive || (this.s9State && this.s9State.busy)) {
+      const fx = this.s9;
+      const id = this.setNineId;
+      if (id) {
+        fx.weaponId = id;
+        fx.time = this.time;
+        fx.syncWheel();
+      }
+      fx.update(dt);
+    }
+    if (this.state === 'play' && this.slide2Void) {
+      // Slide 2 keeps tearing voids open in the sky while the gun is live.
+      ambientBlackHole2(this.s2, CX, GUN_Y, dt);
+      this.s2Ambient -= dt;
+      if (this.s2Ambient <= 0) {
+        launchVoidSky2(this.s2, rand(0.8, 1.15), () => slide2Sfx.voidOpen(), () => slide2Sfx.voidBoom(1));
+        this.s2Ambient = rand(1.6, 2.6);
+      }
     }
     if (
       this.weapon.id === 'yoyo' ||
@@ -3449,6 +4355,7 @@ export class Game {
         p.hist.push({ x: p.x, y: p.y });
         if (p.hist.length > ghostN) p.hist.shift();
       }
+      if (this.slide2Void) trailBlackHole2(this.s2, p.x, p.y, this.s2Hue);
       const dist = Math.hypot(p.vx, p.vy) * s;
       const steps = Math.max(1, Math.ceil(dist / 7));
       let r: StepRes = { res: 'none' };
@@ -3826,6 +4733,29 @@ export class Game {
         && (this.weapon.id !== 'yoyo' || this.projs.length === 0));
     gunState.sinceShot = this.state === 'idle' ? 9 : this.rt - this.lastShotRT;
     gunState.reloadT = this.reloadT;
+    // Slide-7 SET 1..7 artwork: hand the live motion over to the real renderer.
+    gunState.s7Anim = this.setSevenId && getGunVariant(this.weapon.id) === 'set7'
+      ? buildSevenAnim({ sinceShot: gunState.sinceShot, charge: gunState.charge, spin: this.spin })
+      : null;
+    // Slide 9's own draw state: its recoil curve, cycle, held charge and how
+    // many of its rounds are still out (the identity disc uses that).
+    gunState.s9Live = this.setNineLive;
+    // Slide 11's own weapon state (recoil, charge, channel, shot clock) drives
+    // its artwork inside the normal gun pipeline.
+    gunState.elevenLive = this.setElevenLive;
+    gunState.elevenState = this.setElevenId ? this.s11State?.state ?? null : null;
+    gunState.s9State = this.setNineId
+      ? {
+        t: this.time,
+        recoil: gunState.sinceShot >= 0.16 ? 0 : 1 - gunState.sinceShot / 0.16,
+        charge: gunState.charge,
+        cycle: Math.min(1, Math.max(0, gunState.sinceShot) / 0.35),
+        out: this.projs.filter((p) => p.setNine).length,
+        catchT: gunState.sinceShot,
+      }
+      : null;
+    const totalAmmo = this.level.ammo * this.maxAmmoMult;
+    gunState.ammoRatio = totalAmmo > 0 ? Math.max(0, Math.min(1, this.ammoLeft / totalAmmo)) : 1;
     // xeno/pred animation state
     const wId = this.weapon.id;
     gunState.jaw = wId === 'xeno' ? Math.max(0, 1 - gunState.sinceShot / 0.3) : 0;
@@ -4139,6 +5069,7 @@ export class Game {
       if (this.level.mode !== 'treasure') c.rotate(this.rot);
       for (const it of this.items) {
         if (it.type === 'bullet' || it.type === 'old') {
+          if (it.hideArt) continue; // slide 9 paints its own entry hole
           c.save();
           c.rotate(it.angle - Math.PI / 2);
           const sink = it.type === 'bullet' ? Math.max(0, 1 - it.age * 12) * 6 : 0;
@@ -4330,6 +5261,17 @@ export class Game {
       if (this.kerisState && this.kerisState.crawlArcs.length > 0) {
         drawKerisSurfaceArcs(c, this.kerisState, R, 0, this.time);
       }
+      if (this.wheelFlash > 0 && this.level.mode !== 'treasure') {
+        // Slide-7 impact tint: only the target lights up (game-3 wheelFlash).
+        c.save();
+        c.globalCompositeOperation = 'lighter';
+        c.globalAlpha = this.wheelFlash * 0.2;
+        c.beginPath();
+        c.arc(0, 0, R, 0, TAU);
+        c.fillStyle = `rgb(${this.wheelFlashRgb})`;
+        c.fill();
+        c.restore();
+      }
       if (this.hitFlash > 0 && !isSpecial(this.level.mode)) {
         c.beginPath();
         c.arc(0, 0, R, 0, TAU);
@@ -4506,6 +5448,21 @@ export class Game {
       const wid = this.weapon.id;
       const trailCol = this.weapon.trail;
       const ang = Math.atan2(p.vx, this.weapon.speed);
+      // Slide-7 SET 1 rounds are painted by slide 7's own renderers.
+      if (p.setOne) {
+        this.s1.drawShot(c, p.setOne, p.x, p.y);
+        continue;
+      }
+      // …and so are the SET 2..5 rounds.
+      if (p.setSeven) {
+        p.setSeven.draw(c);
+        continue;
+      }
+      if (p.setSevenPending) continue;
+      // Slide 9 draws its own rounds (and beams) from its own layer.
+      if (p.setNine || p.setNinePending || p.s9Ghost) continue;
+      // …and so does slide 11.
+      if (p.setEleven || p.setElevenPending || p.s11Ghost) continue;
       if (this.weapon.rope) {
         if (wid === 'yoyo') {
           const gunX = p.originX ?? CX;
@@ -4546,7 +5503,11 @@ export class Game {
       }
       // The moving singularity pulls a helical light tether from its actual
       // muzzle (both muzzles when doubled). It still collides as a projectile.
-      if (wid === 'blackhole' && getGunEffect(wid) === 'new') {
+      if (wid === 'blackhole' && this.slide2Void) {
+        drawBlackHoleShot2(c, p.x, p.y, this.s2Hue, this.time);
+        continue;
+      }
+      if (wid === 'blackhole' && getGunEffect(wid) === 'new' && this.slide2Void) {
         drawVoidTether(c, p.x, p.y, p.originX ?? CX,
           GUN_Y + this.recoil * 22, this.time);
       }
@@ -4555,7 +5516,9 @@ export class Game {
       c.rotate(-ang);
       // Water/snow have material trails, and a portal must remain a compact
       // ring; the usual white laser wedge made all three look like tadpoles.
-      if (!drawMaterialTrail(c, wid, wid === 'diamond' ? 'new' : undefined)) {
+      // The xenomorph glob is painted by the metaball layer; drawing the old
+      // sprite + wedge on top of it produced the "stacked circles" look.
+      if (wid !== 'xeno' && !drawMaterialTrail(c, wid, wid === 'diamond' ? 'new' : undefined)) {
         const tl = Math.min(260, 50 + this.weapon.speed * 0.045) * fxp.streak;
         const tw = Math.max(2, this.weapon.half) * 1.25
           * projectileSizeMultiplier(wid, !!p.mini, !!p.giant);
@@ -4615,7 +5578,7 @@ export class Game {
         c.rotate(this.time * 28);
         c.translate(0, -l2 / 2);
       }
-      this.drawProj(c, wid);
+      if (wid !== 'xeno') this.drawProj(c, wid);
       gunState.rocketFlash = 0;
       gunState.yoyoFlash = 0;
       gunState.diamondFlash = 0;
@@ -4653,6 +5616,18 @@ export class Game {
 
     if (this.state !== 'idle') {
       this.drawGunNow(c);
+      this.drawTriLaser(c);
+    }
+
+    // ---- acid fluid (metaball) layer — slide 7 Acid Spitter parity ----
+    // Drawn after the gun and the wheel, exactly like games/game-3, so the
+    // glob covers the muzzle and the acid on the rim melts into one body.
+    if (this.state !== 'idle' && this.hasAcidLayer()) {
+      this.collectAcidBlobs();
+      const hot = this.weapon.id === 'xeno'
+        ? this.projs.filter((p) => !(p.spawnDelay && p.spawnDelay > 0)).map((p) => ({ x: p.x + Math.sin((p.t ?? 0) * 40) * 1.5, y: p.y }))
+        : [];
+      this.acidFluid.render(c, W, H, hot);
     }
 
     // Real gold pieces leap out of the chest, scatter, fall and bounce, then
@@ -4663,12 +5638,19 @@ export class Game {
       drawBonusCoin(c, coin.x, coin.y, coin.r * scale, this.time, coin.phase, true);
     }
 
+    // Droplets are one batched path per colour; the loop below skips them.
+    drawDropParticles(c, this.particles);
+
     // particles
     for (const p of this.particles) {
       const a = Math.max(0, p.life / p.max);
+      // Below ~4% alpha nothing is visible on a phone screen, but each one still
+      // costs a fill. Skipping them keeps a paintball burst from paying for a
+      // hundred invisible droplets.
+      if ((a < 0.04 && p.kind !== 'text') || p.kind === 'drop') continue;
       switch (p.kind) {
         case 'spark':
-          c.strokeStyle = p.color;
+          c.strokeStyle = cssColor(p.color);
           c.globalAlpha = a;
           c.lineWidth = p.size;
           c.beginPath();
@@ -4682,22 +5664,23 @@ export class Game {
           c.globalAlpha = Math.min(1, a * 2);
           c.translate(p.x, p.y);
           c.rotate(p.rot);
-          c.fillStyle = p.color;
+          c.fillStyle = cssColor(p.color);
           c.fillRect(-p.size / 2, -p.size / 3, p.size, p.size * 0.66);
           c.restore();
           break;
         case 'smoke':
-          c.fillStyle = `${p.color}${a * 0.25})`;
-          c.beginPath();
-          c.arc(p.x, p.y, p.size * (1.6 - a * 0.6), 0, TAU);
-          c.fill();
+          // Soft plumes: a filled arc left a hard-edged disc, while slide 7
+          // draws smoke through its glow sprite. Gradient falloff matches it,
+          // and the gradient is cached per colour instead of being rebuilt for
+          // every plume on every frame.
+          drawSmokeParticle(c, p, a);
           break;
         case 'shell':
           c.save();
           c.translate(p.x, p.y);
           c.rotate(p.rot);
           c.globalAlpha = Math.min(1, a * 3);
-          c.fillStyle = p.color;
+          c.fillStyle = cssColor(p.color);
           c.fillRect(-3.5, -7, 7, 13);
           c.fillStyle = 'rgba(255,255,255,0.5)';
           c.fillRect(-1.5, -6, 1.5, 11);
@@ -4708,10 +5691,10 @@ export class Game {
         case 'bolt': {
           c.save();
           c.globalCompositeOperation = 'lighter';
-          c.shadowColor = p.color;
+          c.shadowColor = cssColor(p.color);
           c.shadowBlur = 12;
           c.lineJoin = 'round';
-          for (const [lw, col] of [[p.size * 2.5 * a, p.color], [p.size * 0.8 * a, '#ffffff']] as const) {
+          for (const [lw, col] of [[p.size * 2.5 * a, cssColor(p.color)], [p.size * 0.8 * a, '#ffffff']] as const) {
             c.strokeStyle = col;
             c.lineWidth = lw;
             c.beginPath();
@@ -4734,8 +5717,8 @@ export class Game {
           const r = p.size * (0.5 + a * 0.8);
           const gg = c.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 2);
           gg.addColorStop(0, `rgba(255,255,255,${a})`);
-          gg.addColorStop(0.3, `rgba(${p.color},${a * 0.9})`);
-          gg.addColorStop(1, `rgba(${p.color},0)`);
+          gg.addColorStop(0.3, cssColor(p.color, a * 0.9));
+          gg.addColorStop(1, cssColor(p.color, 0));
           c.fillStyle = gg;
           c.beginPath();
           c.arc(p.x, p.y, r * 2, 0, TAU);
@@ -4745,7 +5728,7 @@ export class Game {
         }
         case 'ring': {
           const t = 1 - a;
-          c.strokeStyle = p.color;
+          c.strokeStyle = cssColor(p.color);
           c.globalAlpha = a * 0.8;
           c.lineWidth = 4 * a + 1;
           c.beginPath();
@@ -4772,7 +5755,7 @@ export class Game {
           c.strokeStyle = '#ffffff'; c.lineWidth = p.size * 0.14;
           c.strokeText(p.text || '', 0, 0);
           const tg = c.createLinearGradient(0, -p.size / 2, 0, p.size / 2);
-          tg.addColorStop(0, '#fff6b0'); tg.addColorStop(0.5, p.color); tg.addColorStop(1, '#ff7a00');
+          tg.addColorStop(0, '#fff6b0'); tg.addColorStop(0.5, cssColor(p.color)); tg.addColorStop(1, '#ff7a00');
           c.fillStyle = tg;
           c.fillText(p.text || '', 0, 0);
           c.restore();
@@ -4786,6 +5769,40 @@ export class Game {
 
     if (this.state !== 'idle' && (this.weapon.id === 'firework' || (this.fwState && (this.fwState.particles.length > 0 || this.fwState.rings.length > 0)))) {
       drawFirework8ParticlesAndRings(c, this.getFwState());
+    }
+    // Slide-2 FX layer (black-hole voids, jets, warped starlight, smoke).
+    if (this.s2State && (this.slide2Void || this.s2State.particles.length > 0 || this.s2State.voids.length > 0
+      || this.s2State.glows.length > 0 || this.s2State.rings.length > 0 || this.s2State.jets.length > 0
+      || this.s2State.beams.length > 0 || this.s2State.smokes.length > 0 || this.s2State.fireballs.length > 0
+      || this.s2State.flashes.length > 0 || this.s2State.texts.length > 0)) {
+      this.s2State.draw(c, this.time);
+    }
+    // Slide 9 layer: entry holes ride the wheel, rounds and bursts on top.
+    if (this.s11State && (this.s11State.busy || this.setElevenLive)) {
+      // A bad frame from slide 11's own art must not blank slide 1.
+      try {
+        this.s11State.drawWheel(c, CX, this.targetY + this.bump * 7, this.level.radius, this.rot);
+        this.s11State.drawBeam(c);
+        this.s11State.draw(c);
+      } catch {
+        /* keep drawing slide 1 */
+      }
+    }
+    if (this.s9State && (this.s9State.busy || this.setNineLive)) {
+      this.s9State.drawWheel(c, CX, this.targetY + this.bump * 7, this.level.radius, this.rot);
+      this.s9State.draw(c);
+    }
+    // Slide-7 SET 2..5 layer: wheel-space FX, then particles and FX objects.
+    if (this.s7State && (this.s7State.busy || this.setSevenLive)) {
+      this.s7State.drawWheel(c, CX, this.targetY + this.bump * 7, this.level.radius, this.rot);
+      this.s7State.draw(c);
+      this.s7State.drawFront(c);
+    }
+    // Slide-7 SET 1 layer: wheel-space sparks first, then its particles/FX.
+    if (this.s1State && (this.s1State.busy || this.setOneLive)) {
+      this.s1State.drawWheel(c, CX, this.targetY + this.bump * 7);
+      this.s1State.draw(c);
+      this.s1State.drawFront(c);
     }
     if (
       this.state !== 'idle' &&

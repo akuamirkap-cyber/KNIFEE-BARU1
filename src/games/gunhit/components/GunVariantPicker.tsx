@@ -2,23 +2,62 @@ import { useEffect, useRef } from 'react';
 import type { Weapon } from '../game/weapons';
 import { drawGunCentered } from '../game/art/drawCentered';
 import { getGunMetrics } from '../game/art/metrics';
-import { GUN_VARIANTS, GUN_EFFECTS, getGunVariantOptions, getGunEffectOptions, type GunVariant, type GunEffect, type EditableWeapon } from '../game/art/gunVariants';
+import { getGunVariantOptions, getGunEffectOptions, type GunVariant, type GunEffect, type EditableWeapon } from '../game/art/gunVariants';
 import ShotEffectCanvas from './ShotEffectCanvas';
 
-type Description = Record<EditableWeapon, readonly string[]>;
+type Description = Partial<Record<EditableWeapon, readonly string[]>>;
 const DESCRIPTIONS: Description = {
   chicken: ['Peluncur ayam karet klasik', 'Ayam pompa berayun', 'Ayam karet dengan sayap, grip, dan squeaker'],
   dragon: ['Naga merah klasik', 'Naga bersayap dan api', 'Kepala naga, sayap terlipat, grip kulit'],
   diamond: ['Permata dan bodi platinum', 'Kristal bersinar modern', 'Pistol berfaset dengan pegangan tegas'],
   rainbow: ['Busur pelangi klasik', 'Spektrum bercahaya', 'Prisma pelangi dalam pistol mutiara'],
   meteor: ['Batuan lava klasik', 'Inti meteor menyala', 'Meriam tempa dengan grip dan ventilasi lava'],
-  golden: ['Pistol emas klasik', 'Emas berukir dan reload', 'Meriam emas, silinder dan slide bergerak'],
+  golden: ['Pistol emas klasik', 'Emas berukir dan reload', 'Meriam emas, silinder dan slide bergerak', 'GOLDEN GUN slide 7: pistol emas dengan slide mundur dan selongsong terlempar'],
   moonbeam: ['Bulan sabit klasik', 'Tongkat bulan berbintang', 'Tongkat sihir dengan bintang dan aura'],
   honey: ['Stoples madu klasik dengan tutup kain', 'Blaster lebah dengan pompa dan reservoir madu'],
   cricket: ['Cricket mini lama dengan receiver dan grip mungil', 'Profil krom seperti referensi: laras panjang, pelatuk terbuka, grip hitam'],
   fish: ['Fish Gun dengan grip lama', 'Grip akuatik ramping dengan aksen sirip dan warna amber'],
   electro: ['Electro Gun dengan lilitan dan receiver lama', 'Receiver graphite, kapasitor cyan, dan lilitan tembaga rapi'],
+  blackhole: [
+    'Meriam singularitas klasik slide 1',
+    'Meriam slide 2: cincin foton ganda, inti singularitas, dan orb mengisi di moncong',
+    'BLACK HOLE slide 7: tongkat singularitas dengan orb mengisi dan cakar energi',
+  ],
+  slingshot: [
+    'Ketapel kayu sawo slide 1',
+    'KETAPEL slide 7: kayu bercabang, karet ban, kantung kulit dan batu kali berputar',
+  ],
+  blowgun: [
+    'Sumpitan Dayak slide 1',
+    'SUMPIT DAYAK slide 7: buluh panjang, mata tombak, dan jumbai yang bergoyang',
+  ],
+  shotgun: [
+    'Shotgun slide 1',
+    'SHOTGUN slide 7: pompa kayu, selongsong terlempar dan kepulan asap pekat',
+  ],
+  soaker: [
+    'Pistol air neon slide 1',
+    'SUPER SOAKER slide 7: tangki berisi air, pengukur tekanan dan pompa yang bergerak',
+  ],
 };
+
+/**
+ * Every slide-7 card explains itself even without a hand-written paragraph:
+ * the SET 1..5 card always says that the shape, the shot and the sound are
+ * slide 7's own, and every other card is the slide-1 design it replaces.
+ */
+function describeFallback(weapon: Weapon, variant: GunVariant, label: string): string {
+  if (variant === 'set11') {
+    return `${label}: ${weapon.name} dengan bentuk, efek tembakan dan suara asli dari slide 11`;
+  }
+  if (variant === 'set9') {
+    return `${label}: ${weapon.name} dengan bentuk, efek tembakan dan suara asli dari slide 9`;
+  }
+  if (variant === 'set1' || variant === 'set7') {
+    return `${label}: ${weapon.name} dengan bentuk, efek tembakan dan suara asli dari slide 7`;
+  }
+  return `${label}: desain ${weapon.name} di slide 1`;
+}
 
 function VariantCanvas({ weapon, variant }: { weapon: Weapon; variant: GunVariant }) {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -79,7 +118,9 @@ export default function GunVariantPicker({ weapon, variantId, selected, effect, 
               <span className="relative flex min-w-0 flex-1 flex-col gap-1.5">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-300">0{index + 1} / 0{designs.length}</span>
                 <span className="text-base font-black text-white sm:text-lg">{label}</span>
-                <span className="text-[11px] leading-snug text-indigo-200 sm:text-xs">{DESCRIPTIONS[variantId][index]}</span>
+                <span className="text-[11px] leading-snug text-indigo-200 sm:text-xs">
+                  {DESCRIPTIONS[variantId]?.[index] ?? describeFallback(weapon, id, label)}
+                </span>
                 <span className={`w-fit rounded-full px-2 py-1 text-[10px] font-black ${selected === id ?
                   'bg-amber-300 text-[#271528]' : 'bg-white/10 text-white/80'}`}>
                   {selected === id ? '✓ DIPAKAI' : 'PILIH DESAIN'}
@@ -92,7 +133,7 @@ export default function GunVariantPicker({ weapon, variantId, selected, effect, 
           <div className="mb-2 text-center text-[10px] font-black uppercase tracking-[0.18em] text-fuchsia-200">
             ✦ EFEK TEMBAKAN · PILIH TERPISAH ✦
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className={`grid gap-2 ${effects.length > 3 ? 'grid-cols-4' : effects.length > 2 ? 'grid-cols-3' : 'grid-cols-2'}`}>
             {effects.map(({ id, label }) => (
               <button key={id} type="button" onClick={() => onEffectSelect(id)}
                 aria-pressed={effect === id} aria-label={`Pilih efek ${label} untuk ${weapon.name}`}
@@ -116,7 +157,7 @@ export default function GunVariantPicker({ weapon, variantId, selected, effect, 
         </p>}
         <button onClick={onClose}
           className="mt-3 w-full rounded-xl border border-amber-200/80 bg-gradient-to-b from-amber-300 to-amber-500 py-2.5 text-sm font-black text-[#231432] shadow-lg transition hover:brightness-110 active:scale-[0.98]">
-          GUNAKAN DESAIN {GUN_VARIANTS.find((v) => v.id === selected)?.label.toUpperCase()} · EFEK {GUN_EFFECTS.find((v) => v.id === effect)?.label.toUpperCase()}
+          GUNAKAN DESAIN {(designs.find((v) => v.id === selected)?.label ?? '').toUpperCase()} · EFEK {(effects.find((v) => v.id === effect)?.label ?? '').toUpperCase()}
         </button>
       </div>
     </div>
