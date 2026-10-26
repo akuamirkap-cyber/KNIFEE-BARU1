@@ -81,6 +81,12 @@ const canvas = {
 
 const { Game, makeLevel } = await import('../src/games/gunhit/game/Game.ts');
 const { WEAPONS, getWeapon } = await import('../src/games/gunhit/game/weapons.ts');
+const { K } = await import('../games/game-4/src/game/particles.ts');
+
+/** Slide-7 particle kinds, for the per-frame histogram. */
+const KIND_NAME: Record<number, string> = Object.fromEntries(
+  Object.entries(K).map(([name, value]) => [value as number, name]),
+);
 
 const DT = 1 / 60;
 const FRAMES = 150; // 2.5 s of held trigger
@@ -102,6 +108,8 @@ function audit(id: string) {
   let peakOwn = 0;
   let peakSet7 = 0;
   let shots = 0;
+  const ownKinds: Record<string, number> = {};
+  const set7Kinds: Record<string, number> = {};
 
   // Warm-up: the first frame builds every cached sprite.
   game.shoot();
@@ -135,6 +143,8 @@ function audit(id: string) {
     updateNs += performance.now() - t0;
     peakOwn = Math.max(peakOwn, game.particles.length);
     peakSet7 = Math.max(peakSet7, game.s7?.particles?.list?.length ?? 0);
+    for (const p of game.particles) ownKinds[p.kind] = (ownKinds[p.kind] ?? 0) + 1;
+    for (const p of game.s7?.particles?.list ?? []) set7Kinds[KIND_NAME[p.k] ?? String(p.k)] = (set7Kinds[KIND_NAME[p.k] ?? String(p.k)] ?? 0) + 1;
     t0 = performance.now();
     game.render();
     renderNs += performance.now() - t0;
@@ -158,10 +168,13 @@ function audit(id: string) {
     blends: perSec('globalCompositeOperation'),
     peakOwn,
     peakSet7,
+    ownKinds,
+    set7Kinds,
   };
 }
 
-const wanted = process.argv.slice(2);
+const args = process.argv.slice(2);
+const wanted = args.filter((a) => !a.startsWith('--'));
 const ids = wanted.length ? wanted : WEAPONS.map((w: { id: string }) => w.id);
 
 const rows: ReturnType<typeof audit>[] = [];
@@ -181,6 +194,15 @@ const line = (cells: (string | number)[]) => cells.map((c, i) => String(c).padEn
 console.log(line(header));
 for (const r of rows) {
   console.log(line([r.id, r.shots, r.jsUpdateMs, r.jsRenderMs, r.fills, r.strokes, r.images, r.paths, r.gradients, r.blurs, r.blends, r.peakOwn, r.peakSet7]));
+}
+
+if (args.includes('--kinds')) {
+  for (const r of rows) {
+    const avg = (o: Record<string, number>) => Object.fromEntries(
+      Object.entries(o).map(([k, v]) => [k, +(v / FRAMES).toFixed(1)]).filter(([, v]) => (v as number) >= 1),
+    );
+    console.log(`${r.id}: own`, JSON.stringify(avg(r.ownKinds)), 'slide7', JSON.stringify(avg(r.set7Kinds)));
+  }
 }
 
 restore();
