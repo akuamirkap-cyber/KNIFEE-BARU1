@@ -148,6 +148,22 @@ export function supportsLatestDesign(id: VariantWeapon): id is LatestDesignWeapo
   return !isFixedClassicGun(id) && !(NO_LATEST_DESIGN as readonly string[]).includes(id);
 }
 
+/**
+ * True when the gun gained slide 7's own artwork and shot (SET 1..7). The
+ * arsenal marks these with a green "NEW" badge so the updated guns are easy to
+ * find among the 80.
+ */
+export function hasSlide7Update(id: WeaponId | 'old'): boolean {
+  return isSetOneDesignWeapon(id) || isSetSevenDesignWeapon(id);
+}
+
+/** Which slide-7 set an updated gun came from (1 for the first batch). */
+export function slide7UpdateSet(id: WeaponId | 'old'): number | null {
+  if (isSetOneDesignWeapon(id)) return 1;
+  if (isSetSevenDesignWeapon(id)) return SET_SEVEN_SETS[SET_SEVEN_BY_SLIDE1_ID[id]];
+  return null;
+}
+
 export function isTwoCardGun(id: WeaponId | 'old'): boolean {
   return (TWO_CARD_WEAPONS as readonly string[]).includes(id);
 }

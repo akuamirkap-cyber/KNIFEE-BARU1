@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { drawGun, drawProjectile, getWeapon, RARITY_COLOR, WEAPONS, type WeaponId } from '../game/weapons';
+import { hasSlide7Update } from '../game/art/gunVariants';
 import { gunState } from '../game/art/kit';
 import { fitInkBoxQuarterTurn, getGunInkBox } from '../game/art/metrics';
 
@@ -151,6 +152,11 @@ export default function WeaponPicker({
           <div className="text-lg font-bold leading-tight drop-shadow font-game text-white flex items-center justify-center gap-1.5">
             <span>{w.emoji}</span>
             <span>{w.name}</span>
+            {hasSlide7Update(w.id) && (
+              <span className="rounded-full border border-emerald-200/80 bg-gradient-to-r from-emerald-400 to-green-500 px-1.5 py-px text-[8px] font-black tracking-widest text-[#052e16] leading-none shadow-[0_0_8px_rgba(52,211,153,0.8)]">
+                NEW
+              </span>
+            )}
           </div>
         </div>
 
@@ -181,7 +187,7 @@ export default function WeaponPicker({
               key={x.id}
               data-id={x.id}
               onClick={() => onChange(x.id)}
-              className="flex h-8 min-w-8 shrink-0 items-center justify-center rounded-lg text-base transition active:scale-90 border"
+              className="relative flex h-8 min-w-8 shrink-0 items-center justify-center rounded-lg text-base transition active:scale-90 border"
               style={{
                 background: sel ? `${c}40` : 'rgba(255,255,255,0.05)',
                 borderColor: sel ? c : 'rgba(255,255,255,0.08)',
@@ -191,6 +197,9 @@ export default function WeaponPicker({
               aria-label={x.name}
             >
               {x.emoji}
+              {hasSlide7Update(x.id) && (
+                <span className="pointer-events-none absolute right-0 top-0 h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.95)]" />
+              )}
             </button>
           );
         })}

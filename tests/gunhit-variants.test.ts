@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   getGunVariant, setGunVariant, getGunEffect, setGunEffect, supportsGunVariants,
   canChooseGunDesign, VARIANT_WEAPONS, EDITABLE_WEAPONS, FIXED_CLASSIC_WEAPONS,
+  hasSlide7Update, slide7UpdateSet,
   GUN_VARIANTS, GUN_EFFECTS, getGunVariantOptions, getGunEffectOptions,
   type GunVariant, type GunEffect, type VariantWeapon,
 } from '../src/games/gunhit/game/art/gunVariants';
@@ -192,6 +193,26 @@ test('eleven editable guns show the old and new actual shot renderers', () => {
   assert.equal(canChooseGunDesign('blackhole'), true);
   assert.deepEqual(getGunVariantOptions('blackhole').map(v => v.id), ['original', 'latest', 'set1']);
   assert.notEqual(effectArt('blackhole', 'new'), effectArt('blackhole', 'original'));
+});
+
+test('every updated gun carries the green NEW badge, and only those guns', () => {
+  for (const id of EDITABLE_WEAPONS) {
+    assert.equal(hasSlide7Update(id), true, `${id} has slide-7 artwork and shot`);
+    const set = slide7UpdateSet(id);
+    assert.ok(set !== null && set >= 1 && set <= 7, `${id} reports its slide-7 set`);
+  }
+  // UNCHANGED guns: no badge, no set.
+  for (const id of ['pistol', 'ak47', 'nail', 'yoyo', 'acid', 'anchor', 'xeno', 'dora', 'pred',
+    'plasma', 'laser'] as const) {
+    assert.equal(hasSlide7Update(id), false, `${id} is unchanged`);
+    assert.equal(slide7UpdateSet(id), null, `${id} has no slide-7 set`);
+  }
+  // The SET numbers come from slide 7 itself.
+  assert.equal(slide7UpdateSet('golden'), 1);
+  assert.equal(slide7UpdateSet('snowball'), 2);
+  assert.equal(slide7UpdateSet('wand'), 5);
+  assert.equal(slide7UpdateSet('card'), 6);
+  assert.equal(slide7UpdateSet('blaster'), 7); // slide-1 calls WARS BLASTER 'blaster'
 });
 
 test('honey old/new effects persist independently of design and leave gameplay rules intact', () => {
