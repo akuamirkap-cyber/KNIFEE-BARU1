@@ -1,4 +1,5 @@
 import type { Weapon } from '../weapons';
+import { drawGlow } from './glowSprite';
 
 const TAU = Math.PI * 2;
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
@@ -9,8 +10,10 @@ const prng = (seed: number) => {
   return () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
 };
 const rgba = (h: string, a: number) => { const n = parseInt(h.slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; };
+// Soft bloom instead of a filled disc (slide 7 glowSprite): the acid entry
+// crater used to show a flat neon-green circle around it.
 const glowAt = (c: CanvasRenderingContext2D, x: number, y: number, r: number, color: string, a: number) => {
-  c.save(); c.globalCompositeOperation = 'lighter'; c.globalAlpha = Math.min(1, a); c.fillStyle = color; c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill(); c.restore();
+  drawGlow(c, x, y, r, color, a);
 };
 
 // -------------------------------------------------------------

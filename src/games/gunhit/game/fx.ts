@@ -6,13 +6,40 @@ const TAU = Math.PI * 2;
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 const pick = <T,>(arr: T[]) => arr[Math.floor(Math.random() * arr.length)];
 
+
+// ---------------------------------------------------------------- colors
+/**
+ * Particle colors arrive in three shapes across the codebase: hex (`#b6ff1a`),
+ * bare rgb triplets (`182,255,26`, used by the slide-7 port) and already
+ * wrapped rgba strings. `fill()`/`stroke()` silently ignore a bare triplet, so
+ * whole rings, bolts, sparks and smoke plumes from the elemental weapons were
+ * invisible. Normalising here restores them everywhere.
+ */
+export function cssColor(color: string, alpha = 1): string {
+  if (!color) return `rgba(255,255,255,${alpha})`;
+  if (color[0] === '#') {
+    let hex = color.slice(1);
+    if (hex.length === 3) hex = hex.split('').map((ch) => ch + ch).join('');
+    if (hex.length !== 6) return color;
+    const n = parseInt(hex, 16);
+    return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
+  }
+  const triplet = color.match(/^\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*$/);
+  if (triplet) return `rgba(${+triplet[1]},${+triplet[2]},${+triplet[3]},${alpha})`;
+  const open = color.match(/^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*$/);
+  if (open) return `rgba(${+open[1]},${+open[2]},${+open[3]},${alpha})`;
+  const full = color.match(/^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*(?:,\s*[\d.]+\s*)?\)$/);
+  if (full) return `rgba(${+full[1]},${+full[2]},${+full[3]},${alpha})`;
+  return color;
+}
+
 // ---------------------------------------------------------------- particles
 export type PKind =
   | 'spark' | 'chip' | 'smoke' | 'shell' | 'text' | 'ring' | 'glow' | 'bolt'
   | 'star' | 'shard' | 'shock' | 'drop' | 'streak' | 'petal'
   | 'snowflake' | 'snowChunk' | 'snowDust' | 'waterDrop' | 'waterSplash' | 'honeyDrop' | 'honeySplash'
   | 'bananaDrop' | 'bananaSplash' | 'slap' | 'pencilShaving' | 'paintSplat' | 'prism' | 'feather'
-  | 'ringE' | 'puff' | 'wind' | 'ash' | 'bubble';
+  | 'ringE' | 'puff' | 'wind' | 'ash' | 'bubble' | 'acid' | 'speed';
 
 export interface Particle {
   tx?: number; ty?: number;
@@ -865,7 +892,7 @@ export function drawFxParticle(c: CanvasRenderingContext2D, p: Particle, time: n
       c.translate(p.x, p.y);
       c.rotate(ang);
       c.globalAlpha = Math.min(1, a * 2.2);
-      c.strokeStyle = p.color;
+      c.strokeStyle = cssColor(p.color);
       c.lineWidth = 2.4 * a;
       c.lineCap = 'round';
       for (let i = -1; i <= 1; i++) {
@@ -882,7 +909,7 @@ export function drawFxParticle(c: CanvasRenderingContext2D, p: Particle, time: n
       c.globalAlpha = Math.min(1, a * 2);
       c.translate(p.x, p.y);
       c.rotate(p.rot);
-      c.fillStyle = p.color;
+      c.fillStyle = cssColor(p.color);
       c.beginPath();
       c.arc(0, 0, p.size, 0, Math.PI * 1.3);
       c.arc(0, 0, p.size * 0.65, Math.PI * 1.3, 0, true);
@@ -900,7 +927,7 @@ export function drawFxParticle(c: CanvasRenderingContext2D, p: Particle, time: n
       c.save();
       c.translate(p.x, p.y);
       c.globalAlpha = Math.min(1, a * 1.8);
-      c.fillStyle = p.color;
+      c.fillStyle = cssColor(p.color);
       const r = p.size * (0.4 + t * 0.6);
       c.beginPath();
       c.arc(0, 0, r, 0, TAU);
@@ -917,7 +944,7 @@ export function drawFxParticle(c: CanvasRenderingContext2D, p: Particle, time: n
       c.globalAlpha = Math.min(1, a * 2);
       c.translate(p.x, p.y);
       c.rotate(p.rot);
-      c.fillStyle = p.color;
+      c.fillStyle = cssColor(p.color);
       c.beginPath();
       c.moveTo(0, -p.size);
       c.lineTo(p.size * 0.8, -p.size * 0.2);
@@ -963,7 +990,7 @@ export function drawFxParticle(c: CanvasRenderingContext2D, p: Particle, time: n
       c.globalAlpha = Math.min(1, a * 1.5);
       c.translate(p.x, p.y);
       c.rotate(p.rot * 0.15);
-      c.fillStyle = p.color;
+      c.fillStyle = cssColor(p.color);
       c.beginPath();
       c.moveTo(0, -r);
       c.quadraticCurveTo(0, 0, r, 0);
@@ -984,7 +1011,7 @@ export function drawFxParticle(c: CanvasRenderingContext2D, p: Particle, time: n
       c.translate(p.x, p.y);
       c.rotate(p.rot);
       c.shadowColor = '#93c5fd'; c.shadowBlur = 3;
-      c.strokeStyle = p.color;
+      c.strokeStyle = cssColor(p.color);
       c.lineCap = 'round'; c.lineWidth = Math.max(0.7, p.size * 0.16);
       for (let i = 0; i < 3; i++) {
         c.rotate(TAU / 6);
@@ -1002,7 +1029,7 @@ export function drawFxParticle(c: CanvasRenderingContext2D, p: Particle, time: n
       c.globalAlpha = Math.min(1, a * 1.7);
       const r = p.size * (0.7 + t * 0.35);
       const powder = c.createRadialGradient(-r * 0.2, -r * 0.25, 0, 0, 0, r * 1.55);
-      powder.addColorStop(0, p.color);
+      powder.addColorStop(0, cssColor(p.color));
       powder.addColorStop(0.48, 'rgba(246,252,255,0.86)');
       powder.addColorStop(1, 'rgba(244,251,255,0)');
       c.fillStyle = powder;
@@ -1017,7 +1044,7 @@ export function drawFxParticle(c: CanvasRenderingContext2D, p: Particle, time: n
       c.rotate(p.rot);
       const s = p.size;
       const packed = c.createRadialGradient(-s * 0.35, -s * 0.45, s * 0.08, 0, 0, s * 1.25);
-      packed.addColorStop(0, '#ffffff'); packed.addColorStop(0.52, p.color); packed.addColorStop(1, '#c5dee9');
+      packed.addColorStop(0, '#ffffff'); packed.addColorStop(0.52, cssColor(p.color)); packed.addColorStop(1, '#c5dee9');
       c.fillStyle = packed;
       c.beginPath();
       c.moveTo(-s * 0.92, -s * 0.14);
@@ -1039,7 +1066,7 @@ export function drawFxParticle(c: CanvasRenderingContext2D, p: Particle, time: n
       c.globalAlpha = Math.min(1, a * 2);
       c.translate(p.x, p.y);
       c.rotate(p.rot);
-      c.fillStyle = p.color;
+      c.fillStyle = cssColor(p.color);
       c.beginPath();
       c.moveTo(0, -p.size);
       c.lineTo(p.size * 0.5, p.size * 0.6);
@@ -1054,7 +1081,7 @@ export function drawFxParticle(c: CanvasRenderingContext2D, p: Particle, time: n
       const r = p.size * (0.2 + 0.8 * e);
       c.save();
       c.globalCompositeOperation = 'lighter';
-      c.strokeStyle = `rgba(${p.color},${0.65 * a})`;
+      c.strokeStyle = cssColor(p.color, 0.65 * a);
       c.lineWidth = Math.max(1, 2.4 * a);
       c.beginPath();
       c.arc(p.x, p.y, r, 0, TAU);
@@ -1068,7 +1095,7 @@ export function drawFxParticle(c: CanvasRenderingContext2D, p: Particle, time: n
       c.translate(p.x, p.y);
       c.rotate(p.rot);
       c.scale(1, 0.4 + 0.6 * Math.abs(Math.sin(time * 6 + p.rot)));
-      c.fillStyle = p.color;
+      c.fillStyle = cssColor(p.color);
       c.beginPath();
       c.ellipse(0, 0, p.size, p.size * 0.5, 0, 0, TAU);
       c.fill();
@@ -1104,7 +1131,7 @@ export function drawFxParticle(c: CanvasRenderingContext2D, p: Particle, time: n
       c.save(); c.translate(p.x, p.y); c.rotate(Math.atan2(p.vy, p.vx));
       c.globalAlpha = Math.min(1, a * 1.9);
       const r = p.size;
-      c.fillStyle = p.color;
+      c.fillStyle = cssColor(p.color);
       c.beginPath(); c.moveTo(-r * 1.5, 0);
       c.bezierCurveTo(-r * 0.7, -r * 0.25, -r * 0.25, -r * 0.9, r * 0.3, -r * 0.8);
       c.quadraticCurveTo(r * 1.27, -r * 0.45, r * 0.86, r * 0.65);
@@ -1234,7 +1261,7 @@ export function drawFxParticle(c: CanvasRenderingContext2D, p: Particle, time: n
       c.globalAlpha = Math.min(1, a * 2);
       c.translate(p.x, p.y);
       c.rotate(ang);
-      c.fillStyle = p.color;
+      c.fillStyle = cssColor(p.color);
       c.beginPath();
       c.ellipse(0, 0, p.size * sp, p.size * 0.7, 0, 0, TAU);
       c.fill();
@@ -1249,7 +1276,7 @@ export function drawFxParticle(c: CanvasRenderingContext2D, p: Particle, time: n
       c.save();
       c.globalCompositeOperation = 'lighter';
       c.globalAlpha = a * 0.85;
-      c.strokeStyle = p.color;
+      c.strokeStyle = cssColor(p.color);
       c.lineWidth = p.size;
       c.lineCap = 'round';
       c.beginPath();
@@ -1260,7 +1287,7 @@ export function drawFxParticle(c: CanvasRenderingContext2D, p: Particle, time: n
       break;
     }
     case 'ringE': {
-      c.strokeStyle = p.color;
+      c.strokeStyle = cssColor(p.color);
       c.globalAlpha = a * 0.9;
       c.lineWidth = 1 + a * 2.5;
       c.beginPath();
@@ -1279,7 +1306,7 @@ export function drawFxParticle(c: CanvasRenderingContext2D, p: Particle, time: n
       const lobes = [[0, 0, 1], [-0.55, 0.15, 0.7], [0.55, 0.1, 0.72], [0.1, -0.5, 0.65], [-0.2, 0.45, 0.6]];
       c.fillStyle = 'rgba(120,150,190,0.45)';
       for (const [lx, ly, lr] of lobes) { c.beginPath(); c.arc(lx * s + 3, ly * s + 4, lr * s, 0, TAU); c.fill(); }
-      c.fillStyle = p.color;
+      c.fillStyle = cssColor(p.color);
       for (const [lx, ly, lr] of lobes) { c.beginPath(); c.arc(lx * s, ly * s, lr * s, 0, TAU); c.fill(); }
       c.fillStyle = 'rgba(255,255,255,0.9)';
       c.beginPath(); c.arc(-s * 0.25, -s * 0.3, s * 0.4, 0, TAU); c.fill();
@@ -1291,7 +1318,7 @@ export function drawFxParticle(c: CanvasRenderingContext2D, p: Particle, time: n
       const sp = Math.hypot(p.vx, p.vy) || 1;
       const ux = p.vx / sp, uy = p.vy / sp;
       const len = p.size * (0.6 + a);
-      c.strokeStyle = p.color;
+      c.strokeStyle = cssColor(p.color);
       c.globalAlpha = a * 0.8;
       c.lineWidth = 1.6;
       c.lineCap = 'round';
@@ -1304,21 +1331,45 @@ export function drawFxParticle(c: CanvasRenderingContext2D, p: Particle, time: n
     }
     case 'ash': {
       c.globalAlpha = a * 0.8;
-      c.fillStyle = p.color;
+      c.fillStyle = cssColor(p.color);
       c.beginPath();
       c.arc(p.x, p.y, p.size * 0.5, 0, TAU);
       c.fill();
       c.globalAlpha = 1;
       break;
     }
+    case 'speed': {
+      // 28 manga spokes that race outward from the impact (game-3 'speed')
+      const seed = (p.rot || 1) * 9301 + 49297;
+      let rs = seed % 233280;
+      const rnd = () => { rs = (rs * 9301 + 49297) % 233280; return rs / 233280; };
+      const R0 = p.size * (0.25 + t * 0.5);
+      const R1 = p.size * (0.6 + t * 0.6);
+      c.save();
+      c.globalCompositeOperation = 'lighter';
+      c.strokeStyle = cssColor(p.color, a * 0.8);
+      c.lineCap = 'round';
+      for (let i = 0; i < 28; i++) {
+        const an = (i / 28) * TAU + rnd() * 0.2;
+        const l0 = R0 + rnd() * p.size * 0.2;
+        const l1 = R1 + rnd() * p.size * 0.3;
+        c.lineWidth = 1 + rnd() * 2.5;
+        c.beginPath();
+        c.moveTo(p.x + Math.cos(an) * l0, p.y + Math.sin(an) * l0);
+        c.lineTo(p.x + Math.cos(an) * l1, p.y + Math.sin(an) * l1);
+        c.stroke();
+      }
+      c.restore();
+      break;
+    }
     case 'bubble': {
       c.globalAlpha = a * 0.7;
-      c.strokeStyle = p.color;
+      c.strokeStyle = cssColor(p.color);
       c.lineWidth = 1.2;
       c.beginPath();
       c.arc(p.x, p.y, p.size, 0, TAU);
       c.stroke();
-      c.fillStyle = p.color;
+      c.fillStyle = cssColor(p.color);
       c.beginPath();
       c.arc(p.x - p.size * 0.3, p.y - p.size * 0.3, p.size * 0.3, 0, TAU);
       c.fill();

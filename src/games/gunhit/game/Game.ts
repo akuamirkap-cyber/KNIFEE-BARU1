@@ -6,8 +6,10 @@ import { sfx4 } from './sfx4';
 import { sfx6 } from './sfx6';
 import { sfx5 } from './sfx5';
 import { gunState } from './art/kit';
-import { FX, spawnImpact, spawnMuzzle, spawnSpeedLines, drawFxParticle, type Particle, type FxSink } from './fx';
+import { FX, spawnImpact, spawnMuzzle, spawnSpeedLines, drawFxParticle, cssColor, type Particle, type FxSink } from './fx';
 import { drawPreciseWeaponDecal } from './art/decalSystem';
+import { drawGlow } from './art/glowSprite';
+import { AcidFluid, type AcidStuckBlob } from './acidFluid';
 import { SNOWBALL_MAG_SIZE } from './art/guns2';
 import { drawMaterialTrail } from './art/projectileTrails';
 import { drawClassicBeam, drawLaserBeam, drawVoidTether } from './art/beamEffects';
@@ -220,8 +222,9 @@ const HIT_SFX: Partial<Record<WeaponId, () => void>> = {
 const PAINT = ['244,63,94', '250,204,21', '34,211,238', '168,85,247', '74,222,128', '251,146,60'];
 
 type ItemType = 'bullet' | 'old' | 'spike' | 'coin' | 'diamond_chest';
-interface Item { angle: number; type: ItemType; age: number; w?: WeaponId; scale?: number; vel?: number; harvested?: boolean; tint?: string; big?: number; hits?: number; hue?: number; flash?: number }
-interface Proj { x: number; y: number; vx: number; vy: number; originX?: number; pierced?: number; hist?: { x: number; y: number }[]; tint?: string; big?: number; mini?: boolean; giant?: boolean; hue?: number; flash?: number; spawnDelay?: number; wob?: number; lastEcho?: number; t?: number }
+interface AcidStuck { blobs: AcidStuckBlob[]; dripT: number; drip: number; seed: number }
+interface Item { angle: number; type: ItemType; age: number; w?: WeaponId; scale?: number; vel?: number; harvested?: boolean; tint?: string; big?: number; hits?: number; hue?: number; flash?: number; acid?: AcidStuck }
+interface Proj { x: number; y: number; vx: number; vy: number; originX?: number; pierced?: number; hist?: { x: number; y: number }[]; tint?: string; big?: number; mini?: boolean; giant?: boolean; hue?: number; flash?: number; spawnDelay?: number; wob?: number; lastEcho?: number; t?: number; trail?: { x: number; y: number }[] }
 type StepRes = { res: 'none' | 'stick' | 'fail' | 'hit'; spike?: boolean; local?: number };
 interface Light { x: number; y: number; r: number; rgb: string; life: number; max: number }
 interface Fragment { x: number; y: number; vx: number; vy: number; rot: number; vr: number; a0: number; a1: number }
@@ -361,6 +364,8 @@ export class Game {
   private items: Item[] = [];
   private projs: Proj[] = [];
   private particles: Particle[] = [];
+  /** Metaball acid layer (slide-7 Xenomorph Acid Spitter parity). */
+  private acidFluid = new AcidFluid();
   private frags: Fragment[] = [];
   private flyers: Flyer[] = [];
   private ammoLeft = 0;
@@ -376,6 +381,9 @@ export class Game {
   private timeScale = 1;
   private bump = 0;
   private hitFlash = 0;
+  /** game-3 wheelFlash: tints only the target, never the whole screen. */
+  private wheelFlash = 0;
+  private wheelFlashRgb = '200,255,128';
   private introT = 0;
   private wheelScale = 1;
   private stateT = 0;
@@ -640,6 +648,7 @@ export class Game {
     this.canvas.style.height = `${H}px`;
     this.canvas.width = Math.round(W * this.dpr);
     this.canvas.height = Math.round(H * this.dpr);
+    this.acidFluid.resize(W, H);
     // Resizing clears the backing store. Restore a single still frame even
     // if the game is paused rather than leaving an empty thumbnail.
     if (this.hasRendered && !this.active) this.render();
@@ -1134,15 +1143,17 @@ export class Game {
         // 16 viscous droplets behind the glob (game-3 fire())
         for (let i = 0; i < 16; i++) {
           const k = i / 16;
-          this.sink.push({ x: CX + ox + rand(-3, 3), y: GUN_Y - 4 - k * 12, vx: rand(-25, 25), vy: vy * (0.45 + k * 0.5), life: rand(0.7, 1.2), max: 1.2, size: rand(2.5, 6.5) * (1 - k * 0.5) + 1.5, color: '#b6ff1a', kind: 'drop', rot: 0, vr: 0, g: 900 });
+          this.sink.push({ x: CX + ox + rand(-3, 3), y: GUN_Y - 4 - k * 12, vx: rand(-25, 25), vy: vy * (0.45 + k * 0.5), life: rand(0.7, 1.2), max: 1.2, size: rand(2.5, 6.5) * (1 - k * 0.5) + 1.5, color: '#b6ff1a', kind: 'acid', rot: 0, vr: 0, g: 900 });
         }
         // 10 fine mist (game-3: vy rand(-900, -300))
         for (let i = 0; i < 10; i++) {
-          this.sink.push({ x: CX + ox + rand(-6, 6), y: GUN_Y - 4 - rand(0, 4), vx: rand(-120, 120), vy: rand(-900, -300), life: rand(0.4, 0.8), max: 0.8, size: rand(1.2, 2.2), color: '#b6ff1a', kind: 'smoke', rot: 0, vr: 0, g: 1200 });
+          this.sink.push({ x: CX + ox + rand(-6, 6), y: GUN_Y - 4 - rand(0, 4), vx: rand(-120, 120), vy: rand(-900, -300), life: rand(0.4, 0.8), max: 0.8, size: rand(1.2, 2.2), color: '#b6ff1a', kind: 'acid', rot: 0, vr: 0, g: 1200 });
         }
-        // flash + ring (game-3: flash size 80, ring size 8 grow 220)
+        // flash + ring (game-3: flash size 80, ring size 8 grow 220).
+        // The flash is a soft bloom, not a filled disc.
         this.sink.light(CX + ox, GUN_Y - 6, 80, '182,255,26', 0.2);
-        this.sink.push({ x: CX + ox, y: GUN_Y - 6, vx: 0, vy: 0, life: 0.3, max: 0.3, size: 80, color: '182,255,26', kind: 'ring', rot: 0, vr: 0, g: 0 });
+        this.sink.push({ x: CX + ox, y: GUN_Y - 6, vx: 0, vy: 0, life: 0.2, max: 0.2, size: 34, color: '182,255,26', kind: 'glow', rot: 0, vr: 0, g: 0 });
+        this.sink.push({ x: CX + ox, y: GUN_Y - 6, vx: 0, vy: 0, life: 0.3, max: 0.3, size: 26, color: '182,255,26', kind: 'ring', rot: 0, vr: 0, g: 0 });
         // 6 smoke puffs (game-3: color #9bd13a, size rand(10,20))
         for (let i = 0; i < 6; i++) {
           this.sink.push({ x: CX + ox + rand(-14, 14), y: GUN_Y - 6, vx: rand(-40, 40), vy: rand(-90, -30), life: rand(0.8, 1.4), max: 1.4, size: rand(10, 20), color: '155,209,58', kind: 'smoke', rot: 0, vr: 0, g: 30, drag: 2 });
@@ -1763,6 +1774,8 @@ export class Game {
     this.sink.push({ x, y, vx: 0, vy: 0, life: 0.35, max: 0.35, size: 20, color: '255,255,255', kind: 'ringE', rot: 0, vr: 0, g: 0 });
     // star burst
     this.sink.push({ x, y, vx: 0, vy: 0, life: 0.22, max: 0.22, size: 90 * k, color: '#fff4a0', kind: 'star', rot: 0, vr: 0, g: 0 });
+    // manga speed lines radiating out of the slam (game-3 'speed' particle)
+    this.sink.push({ x, y, vx: 0, vy: 0, life: 0.28, max: 0.28, size: 240 * k, color: '#ffffff', kind: 'speed', rot: 0, vr: 0, g: 0 });
     // 22 puff particles in a ring
     const n = Math.round(22 * k);
     for (let i = 0; i < n; i++) {
@@ -1815,19 +1828,161 @@ export class Game {
     // pancake: blobs sliding sideways along the rim then falling
     for (let i = 0; i < 10; i++) {
       const side = i % 2 ? 1 : -1;
-      this.sink.push({ x: x + side * i * 2, y: y + 2, vx: side * rand(90, 420) * k, vy: rand(-60, 20), life: rand(0.5, 0.9), max: 0.9, size: rand(4, 8), color: '#b6ff1a', kind: 'drop', rot: 0, vr: 0, g: 1300, drag: 0.15 });
+      this.sink.push({ x: x + side * i * 2, y: y + 2, vx: side * rand(90, 420) * k, vy: rand(-60, 20), life: rand(0.5, 0.9), max: 0.9, size: rand(4, 8), color: '#b6ff1a', kind: 'acid', rot: 0, vr: 0, g: 1300, drag: 0.15 });
     }
     // main fan of drops (bounce downward/sideways)
     for (let i = 0; i < 48 * k; i++) {
       const a = down + rand(-1.55, 1.55);
       const s = rand(120, 640) * k;
-      this.sink.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: rand(0.7, 1.4), max: 1.4, size: rand(1.8, 5.2), color: '#b6ff1a', kind: 'drop', rot: 0, vr: 0, g: 1100, drag: 0.15 });
+      this.sink.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: rand(0.7, 1.4), max: 1.4, size: rand(1.8, 5.2), color: '#b6ff1a', kind: 'acid', rot: 0, vr: 0, g: 1100, drag: 0.15 });
     }
     // sprays upward (ricochet over the rim)
-    for (let i = 0; i < 10; i++) this.sink.push({ x: x + rand(-10, 10), y, vx: rand(-240, 240), vy: rand(-420, -120), life: rand(0.5, 1), max: 1, size: rand(1.5, 3.2), color: '#b6ff1a', kind: 'drop', rot: 0, vr: 0, g: 1100, drag: 0.15 });
+    for (let i = 0; i < 10; i++) this.sink.push({ x: x + rand(-10, 10), y, vx: rand(-240, 240), vy: rand(-420, -120), life: rand(0.5, 1), max: 1, size: rand(1.5, 3.2), color: '#b6ff1a', kind: 'acid', rot: 0, vr: 0, g: 1100, drag: 0.15 });
     for (let i = 0; i < 18; i++) this.sink.push({ x: x + rand(-20, 20), y: y + rand(0, 10), vx: rand(-50, 50), vy: rand(-90, -20), life: rand(1.4, 2.6), max: 2.6, size: rand(12, 26), color: pick(['143,194,58', '200,255,90', '90,122,42']), kind: 'smoke', rot: 0, vr: 0, g: 0, drag: 2 });
     for (let i = 0; i < 14; i++) this.sink.push({ x: x + rand(-18, 18), y: y + rand(-6, 6), vx: rand(-20, 20), vy: rand(-30, 10), life: rand(0.3, 0.8), max: 0.8, size: rand(1.5, 4), color: '155,209,58', kind: 'bubble', rot: 0, vr: 0, g: 0, grow: 6 });
     for (let i = 0; i < 14; i++) { const a = down + rand(-1.6, 1.6); const sp = rand(100, 400); this.sink.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 0.4, max: 0.4, size: 1.5, color: pick(['255,255,255', '155,209,58']), kind: 'spark', rot: 0, vr: 0, g: 700, drag: 3 }); }
+  }
+
+  /** True while the acid layer has something to composite. */
+  private hasAcidLayer(): boolean {
+    if (this.weapon.id === 'xeno' && this.projs.length) return true;
+    for (const p of this.particles) if (p.kind === 'acid') return true;
+    for (const it of this.items) if (it.acid) return true;
+    return false;
+  }
+
+  /**
+   * Collect every acid source as metaballs, ported 1:1 from game-3
+   * collectBlobs(): flying glob (head + body + tail + sampled trail), free
+   * droplets, and the blobs stuck on the wheel (sagging, wobbling + drip).
+   */
+  private collectAcidBlobs() {
+    const fluid = this.acidFluid;
+    fluid.begin();
+    const t = this.time;
+    // Match the transform used by render(): the wheel bobs and breathes, so the
+    // acid stuck to it must ride along or it would drift off the rim.
+    const wScale = (this.wheelScale ?? 1) * (1 + this.bump * 0.035);
+    const cy = this.targetY + this.bump * 7;
+    const R = this.level.radius * wScale;
+
+    if (this.weapon.id === 'xeno') {
+      for (const p of this.projs) {
+        if (p.spawnDelay && p.spawnDelay > 0) continue;
+        const pt = p.t ?? 0;
+        fluid.add(p.x, p.y, 13);
+        fluid.add(p.x, p.y + 9, 11);
+        fluid.add(p.x + Math.sin(pt * 40) * 1.5, p.y + 19, 8.5);
+        const trail = p.trail ?? [];
+        for (let i = 2; i < trail.length; i++) {
+          const k = i / trail.length;
+          const tp = trail[i];
+          fluid.add(tp.x + Math.sin(i * 1.7 + pt * 25) * k * 3, tp.y + 24 + i * 3, 7.5 * (1 - k) + 1.5);
+        }
+      }
+    }
+
+    for (const p of this.particles) {
+      if (p.kind !== 'acid') continue;
+      const k = p.life / p.max;
+      const r = p.size * (k < 0.75 ? 1 : 1 - (k - 0.75) / 0.25);
+      if (r < 0.6) continue;
+      fluid.add(p.x, p.y, r);
+      // teardrop streak along the velocity
+      const sp = Math.hypot(p.vx, p.vy);
+      if (sp > 150 && r > 1.5) {
+        const f = Math.min(0.03, 6 / sp);
+        fluid.add(p.x - p.vx * f, p.y - p.vy * f, r * 0.65);
+      }
+    }
+
+    for (const it of this.items) {
+      if (!it.acid || it.type !== 'bullet') continue;
+      const a = it.angle + this.rot;
+      const ca = Math.cos(a);
+      const sa = Math.sin(a);
+      const sag = Math.min(1, it.age / 1.2);
+      for (const b of it.acid.blobs) {
+        const wob = Math.sin(t * 3 + b.ph) * 1.2;
+        const d = R + b.d * (0.6 + 0.4 * sag) + wob;
+        const sd = b.s + Math.cos(t * 2.5 + b.ph) * 0.8;
+        fluid.add(CX + ca * d - sa * sd, cy + sa * d + ca * sd, b.r);
+      }
+      if (it.acid.drip > 0) {
+        const bx = CX + ca * (R + 8);
+        const by = cy + sa * (R + 8);
+        fluid.add(bx, by + it.acid.drip * 0.5, 3.5);
+        fluid.add(bx, by + it.acid.drip, 3 + it.acid.drip * 0.12);
+      }
+    }
+  }
+
+  /**
+   * Predator shoulder-caster tri-laser (game-3 drawTriLaser): three faint red
+   * beams converge on a lock-on triangle of dots on the target, tightening into
+   * a reticle while the core charges.
+   */
+  private drawTriLaser(c: CanvasRenderingContext2D) {
+    if (this.state !== 'play' || this.weapon.id !== 'pred' || this.level.mode === 'treasure') return;
+    const t = this.time;
+    const ch = this.charging ? Math.min(1, this.chargeT) : 0;
+    const ap = { x: CX, y: this.targetY + this.level.radius - 18 };
+    const lift = -this.spin * 6 + this.recoil * 8;
+    const ex = CX - 50;
+    const ey = GUN_Y - 92 + this.recoil * 14 + lift + 15;
+    const jitter = () => (Math.random() - 0.5) * (1.2 - ch);
+    const spreadR = 10 + (1 - ch) * 14 + Math.sin(t * 2) * 2;
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * TAU - Math.PI / 2 + t * 0.6;
+      const dx = ap.x + Math.cos(a) * spreadR + jitter();
+      const dy = ap.y + 8 + Math.sin(a) * spreadR * 0.45 + jitter();
+      const g = c.createLinearGradient(ex, ey, dx, dy);
+      g.addColorStop(0, 'rgba(255,30,30,0.45)');
+      g.addColorStop(0.5, 'rgba(255,30,30,0.12)');
+      g.addColorStop(1, 'rgba(255,30,30,0.5)');
+      c.strokeStyle = g;
+      c.lineWidth = 1.2 + ch * 0.6;
+      const eo = [[-5, 2], [5, 2], [0, -4]][i];
+      c.beginPath();
+      c.moveTo(ex + eo[0], ey + eo[1]);
+      c.lineTo(dx, dy);
+      c.stroke();
+      drawGlow(c, dx, dy, 9 + ch * 4, '#ff1e1e', 0.9);
+      drawGlow(c, dx, dy, 3, '#ffffff', 0.9);
+      c.fillStyle = '#ff5050';
+      c.beginPath();
+      c.arc(dx, dy, 1.6, 0, TAU);
+      c.fill();
+    }
+    c.strokeStyle = `rgba(255,30,30,${0.25 + ch * 0.5})`;
+    c.lineWidth = 1;
+    c.beginPath();
+    for (let i = 0; i <= 3; i++) {
+      const a = (i / 3) * TAU - Math.PI / 2 + t * 0.6;
+      const x = ap.x + Math.cos(a) * spreadR;
+      const y = ap.y + 8 + Math.sin(a) * spreadR * 0.45;
+      if (i) c.lineTo(x, y);
+      else c.moveTo(x, y);
+    }
+    c.stroke();
+    if (ch > 0) {
+      c.strokeStyle = `rgba(255,30,30,${ch * 0.8})`;
+      c.lineWidth = 1.5;
+      const r = 26 - ch * 10;
+      c.beginPath();
+      c.ellipse(ap.x, ap.y + 8, r, r * 0.45, 0, 0, TAU);
+      c.stroke();
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * TAU + t * 3;
+        c.beginPath();
+        c.moveTo(ap.x + Math.cos(a) * r * 0.8, ap.y + 8 + Math.sin(a) * r * 0.36);
+        c.lineTo(ap.x + Math.cos(a) * r * 1.3, ap.y + 8 + Math.sin(a) * r * 0.58);
+        c.stroke();
+      }
+    }
+    c.restore();
   }
 
   private stickAt(local: number, p?: Proj) {
@@ -1854,7 +2009,8 @@ export class Game {
     if (w.id === 'dora') {
       const hp = this.worldPos(local, R);
       this.bump = Math.max(this.bump, 18);
-      this.flashWhite = Math.max(this.flashWhite, 1);
+      this.wheelFlash = Math.max(this.wheelFlash, 0.8);
+      this.wheelFlashRgb = '220,242,255';
       this.shake = Math.max(this.shake, 13);
       this.airBlast(hp.x, hp.y, 1);
       sfx6.doraHit();
@@ -1863,7 +2019,8 @@ export class Game {
     if (w.id === 'pred') {
       const hp = this.worldPos(local, R);
       this.bump = Math.max(this.bump, 14);
-      this.flashWhite = Math.max(this.flashWhite, 1);
+      this.wheelFlash = Math.max(this.wheelFlash, 1);
+      this.wheelFlashRgb = '200,235,255';
       this.shake = Math.max(this.shake, 15);
       this.plasmaImpact(hp.x, hp.y, 1);
       sfx6.predHit();
@@ -1872,8 +2029,26 @@ export class Game {
     if (w.id === 'xeno') {
       const hp = this.worldPos(local, R);
       this.bump = Math.max(this.bump, 8);
-      this.flashWhite = Math.max(this.flashWhite, 1);
+      this.wheelFlash = Math.max(this.wheelFlash, 1);
+      this.wheelFlashRgb = '200,255,128';
       this.shake = Math.max(this.shake, 7);
+      // The glob now lives in the metaball layer: five sub-blobs that sag,
+      // wobble and eventually drip down the rim — exactly like slide 7.
+      const stuckItem = this.items[this.items.length - 1];
+      if (stuckItem) {
+        stuckItem.acid = {
+          blobs: [
+            { d: 5, s: 0, r: 11, ph: rand(0, TAU) },
+            { d: 13, s: rand(-3, 3), r: 8, ph: rand(0, TAU) },
+            { d: 1, s: rand(6, 10), r: 6, ph: rand(0, TAU) },
+            { d: 1, s: rand(-10, -6), r: 6, ph: rand(0, TAU) },
+            { d: 20, s: rand(-2, 2), r: 4.5, ph: rand(0, TAU) },
+          ],
+          dripT: rand(0.5, 1.5),
+          drip: 0,
+          seed: Math.random() * 1000,
+        };
+      }
       this.splash(hp.x, hp.y, 1);
       sfx6.xenoHit();
     }
@@ -2059,6 +2234,21 @@ export class Game {
     if (this.weapon.id === 'bazooka') {
       this.getBazookaState().onHit(p.x, p.y, 1.45);
     }
+    // The blunt slam and the plasma detonation also fire when the shot is
+    // wasted on an obstacle (game-3 resolveHit: fail branch).
+    if (this.weapon.id === 'dora') this.airBlast(p.x, p.y, 1.3);
+    if (this.weapon.id === 'pred') this.plasmaImpact(p.x, p.y, 1.3);
+    // Acid splashes off the obstacle (game-3 resolveHit fail branch).
+    if (this.weapon.id === 'xeno') {
+      this.splash(p.x, p.y + 10, 1.4);
+      this.sink.light(p.x, p.y, 90, '255,255,255', 0.15);
+      this.sink.push({ x: p.x, y: p.y, vx: 0, vy: 0, life: 0.25, max: 0.25, size: 6, color: '255,255,255', kind: 'ring', rot: 0, vr: 0, g: 0 });
+      for (let i = 0; i < 24; i++) {
+        const a = Math.PI / 2 + rand(-1.5, 1.5);
+        const sp = rand(200, 700);
+        this.sink.push({ x: p.x, y: p.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 0.5, max: 0.5, size: 2, color: pick(['#ffffff', '#fff2b0', '182,255,26']), kind: 'spark', rot: 0, vr: 0, g: 900, drag: 3 });
+      }
+    }
     sfx.fail(this.weapon.id);
     this.shake = 16;
     this.flashRed = 1;
@@ -2117,6 +2307,52 @@ export class Game {
     }
     if (this.weapon.id === 'bazooka') {
       this.getBazookaState().onStageClear(CX, this.targetY);
+    }
+    // Xenomorph acid detonation: the burst soaks the arena in acid rain
+    // (game-3 explodeWheel()).
+    if (this.weapon.id === 'xeno') {
+      for (const it of this.items) {
+        if (!it.acid) continue;
+        const wa = it.angle + this.rot;
+        const sx = CX + Math.cos(wa) * (R + 10);
+        const sy = this.targetY + Math.sin(wa) * (R + 10);
+        for (let i = 0; i < 8; i++) {
+          this.sink.push({ x: sx, y: sy, vx: Math.cos(wa) * rand(100, 500) + rand(-100, 100), vy: Math.sin(wa) * rand(100, 500) - 200, life: 1.6, max: 1.6, size: rand(3, 7), color: '#b6ff1a', kind: 'acid', rot: 0, vr: 0, g: 1100, drag: 0.15 });
+        }
+      }
+      for (let i = 0; i < 90; i++) {
+        const a = rand(0, TAU);
+        const sp = rand(150, 850);
+        this.sink.push({ x: CX, y: this.targetY, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(1, 1.8), max: 1.8, size: rand(2.5, 7), color: '#b6ff1a', kind: 'acid', rot: 0, vr: 0, g: 1100, drag: 0.15 });
+      }
+      for (let i = 0; i < 30; i++) {
+        this.sink.push({ x: CX + rand(-40, 40), y: this.targetY + rand(-40, 40), vx: rand(-200, 200), vy: rand(-200, 200), life: rand(1.5, 2.8), max: 2.8, size: rand(25, 55), color: '106,138,58', kind: 'smoke', rot: 0, vr: 0, g: 0, drag: 2 });
+      }
+    }
+    // Air cannon detonation: a wall of cartoon puffs, manga speed lines and the
+    // big DOKAAAN!! (game-3 explodeWheel dora branch).
+    if (this.weapon.id === 'dora') {
+      for (let i = 0; i < 40; i++) {
+        const a = rand(0, TAU);
+        const sp = rand(200, 700);
+        this.sink.push({ x: CX, y: this.targetY, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(1, 1.8), max: 1.8, size: rand(20, 44), color: '#ffffff', kind: 'puff', rot: rand(0, TAU), vr: rand(-2, 2), g: 0, drag: 2.2 });
+      }
+      this.sink.push({ x: CX, y: this.targetY, vx: 0, vy: 0, life: 0.5, max: 0.5, size: 520, color: '#ffffff', kind: 'speed', rot: 3.7, vr: 0, g: 0 });
+      this.sink.push({ x: CX, y: this.targetY - 40, vx: 0, vy: -60, life: 1.4, max: 1.4, size: 64, color: '#ffd23a', kind: 'text', rot: -0.12, vr: 0, g: 0, text: 'DOKAAAN!!' });
+    }
+    // Plasma detonation: blinding core, lightning web and molten embers
+    // (game-3 explodeWheel pred branch).
+    if (this.weapon.id === 'pred') {
+      this.sink.light(CX, this.targetY, 600, '111,211,255', 0.6);
+      for (let i = 0; i < 18; i++) {
+        const a = rand(0, TAU);
+        this.sink.push({ x: CX, y: this.targetY, vx: Math.cos(a) * rand(120, 280), vy: Math.sin(a) * rand(120, 280), life: 0.35, max: 0.35, size: 3, color: i % 2 ? '255,255,255' : '111,211,255', kind: 'bolt', rot: 0, vr: 0, g: 0 });
+      }
+      for (let i = 0; i < 80; i++) {
+        const a = rand(0, Math.PI);
+        const sp = rand(300, 1200);
+        this.sink.push({ x: CX, y: this.targetY, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 1.4, max: 1.4, size: 2.6, color: pick(['255,176,96', '255,112,48', '111,211,255']), kind: 'glow', rot: 0, vr: 0, g: 500, drag: 1.5 });
+      }
     }
     this.items = [];
     const cols = STYLE_COLORS[this.level.style].chips;
@@ -2803,6 +3039,31 @@ export class Game {
         }
         this.sink.light(CX + ox, GUN_Y, 60 + Math.min(1, this.chargeT) * 120, stage === 2 ? '254,240,138' : '125,211,252', 0.05);
       }
+      // Predator: ions spiral into the shoulder-caster core, plus crackling
+      // arcs — the slide-7 charge telegraph (game-3 startCharge block).
+      if (this.weapon.id === 'pred') {
+        const coreY = GUN_Y - 72;
+        for (const ox of this.gunOffsets) {
+          if (Math.random() < 0.9) {
+            const a = rand(0, TAU);
+            const d = rand(40, 90);
+            this.sink.push({
+              x: CX + ox + Math.cos(a) * d, y: coreY + Math.sin(a) * d,
+              vx: -Math.cos(a) * d * 4, vy: -Math.sin(a) * d * 4,
+              life: 0.25, max: 0.25, size: 1.4, color: Math.random() < 0.5 ? '#ffffff' : '111,211,255',
+              kind: 'spark', rot: 0, vr: 0, g: 0,
+            });
+          }
+          if (Math.random() < Math.min(1, this.chargeT) * 0.5) {
+            const a = rand(0, TAU);
+            this.sink.push({
+              x: CX + ox, y: coreY, vx: Math.cos(a) * rand(14, 34), vy: Math.sin(a) * rand(14, 34),
+              life: 0.08, max: 0.08, size: 2, color: '111,211,255', kind: 'bolt', rot: 0, vr: 0, g: 0,
+            });
+          }
+          this.sink.light(CX + ox, coreY, 40 + Math.min(1, this.chargeT) * 90, '111,211,255', 0.12);
+        }
+      }
       if (stage === 2 && Math.random() < 0.15) sfx4.chargeHum(2);
     }
     gunState.charge = this.charging ? Math.min(1, this.chargeT) : Math.max(0, gunState.charge - dt * 3);
@@ -3154,7 +3415,12 @@ export class Game {
       }
       // Xeno projectile: shed droplets + green smoke (game-3)
       if (tw.id === 'xeno') {
-        if (Math.random() < 0.7) this.sink.push({ x: p.x + rand(-7, 7), y: p.y + rand(10, 40), vx: rand(-70, 70), vy: rand(-200, 100), life: rand(0.5, 1), max: 1, size: rand(1.5, 3.5), color: '#b6ff1a', kind: 'drop', rot: 0, vr: 0, g: 1100, drag: 0.15 });
+        // sampled tail for the metaball body (game-3 p.trail)
+        p.t = (p.t ?? 0) + s;
+        p.trail = p.trail ?? [];
+        p.trail.unshift({ x: p.x + rand(-1, 1), y: p.y });
+        if (p.trail.length > 12) p.trail.pop();
+        if (Math.random() < 0.7) this.sink.push({ x: p.x + rand(-7, 7), y: p.y + rand(10, 40), vx: rand(-70, 70), vy: rand(-200, 100), life: rand(0.5, 1), max: 1, size: rand(1.5, 3.5), color: '#b6ff1a', kind: 'acid', rot: 0, vr: 0, g: 1100, drag: 0.15 });
         if (Math.random() < 0.3) this.sink.push({ x: p.x + rand(-6, 6), y: p.y + 20, vx: rand(-20, 20), vy: rand(-20, 20), life: 0.8, max: 0.8, size: rand(6, 12), color: '182,255,26', kind: 'smoke', rot: 0, vr: 0, g: 0, drag: 0 });
         continue;
       }
@@ -3241,6 +3507,7 @@ export class Game {
     this.hitFlash = Math.max(0, this.hitFlash - dt * 7);
     this.shake *= Math.exp(-dt * 9);
     this.flashWhite = Math.max(0, this.flashWhite - dt * 2.5);
+    this.wheelFlash = Math.max(0, this.wheelFlash - dt * 5);
     this.flashRed = Math.max(0, this.flashRed - dt * 1.8);
     for (const it of this.items) {
       it.age += s;
@@ -3254,11 +3521,29 @@ export class Game {
         const wp = this.worldPos(it.angle, this.level.radius);
         const hx = wp.x, hy = wp.y;
         if (it.w === 'xeno') {
-          // acid drips falling from rim (game-3: green drops)
-          if (Math.random() < dt * 3) {
+          // Ported from game-3: the blob sags, then a drip stretches until it
+          // detaches and falls into the fluid layer, plus acid vapour/bubbles.
+          if (it.acid) {
+            const R0 = this.level.radius;
             const a = it.angle + this.rot;
-            const dx = hx + Math.cos(a + Math.PI / 2) * rand(-4, 4);
-            this.sink.push({ x: dx, y: hy + 4, vx: rand(-20, 20), vy: rand(80, 160), life: rand(0.5, 1), max: 1, size: rand(3, 5), color: '#b6ff1a', kind: 'drop', rot: 0, vr: 0, g: 600, drag: 0.5 });
+            const bx = CX + Math.cos(a) * (R0 + 8);
+            const by = this.targetY + Math.sin(a) * (R0 + 8);
+            it.acid.dripT -= dt;
+            if (it.acid.dripT <= 0) {
+              it.acid.drip += dt * 14;
+              if (it.acid.drip > 12) {
+                this.sink.push({ x: bx + rand(-4, 4), y: by + 6, vx: rand(-10, 10), vy: 30, life: 1.8, max: 1.8, size: rand(3, 4.2), color: '#b6ff1a', kind: 'acid', rot: 0, vr: 0, g: 1100, drag: 0.15 });
+                it.acid.drip = 0;
+                it.acid.dripT = rand(0.8, 2.2);
+              }
+            }
+            if (Math.random() < dt * 5) {
+              this.sink.push({ x: bx + rand(-8, 8), y: by - 4, vx: rand(-15, 15), vy: rand(-45, -15), life: rand(1, 1.8), max: 1.8, size: rand(6, 12), color: '168,224,74', kind: 'smoke', rot: 0, vr: 0, g: 0, drag: 0 });
+            }
+            if (Math.random() < dt * 6) {
+              this.sink.push({ x: bx + rand(-10, 10), y: by + rand(-10, 10), vx: 0, vy: -10, life: rand(0.3, 0.7), max: 0.7, size: rand(0.8, 1.8), color: '244,255,154', kind: 'bubble', rot: 0, vr: 0, g: 0, grow: 2 });
+            }
+            void hx; void hy;
           }
         } else if (it.w === 'dora') {
           // wind particles swirling around rim (game-3: white wind streaks, tangent direction)
@@ -4330,6 +4615,17 @@ export class Game {
       if (this.kerisState && this.kerisState.crawlArcs.length > 0) {
         drawKerisSurfaceArcs(c, this.kerisState, R, 0, this.time);
       }
+      if (this.wheelFlash > 0 && this.level.mode !== 'treasure') {
+        // Slide-7 impact tint: only the target lights up (game-3 wheelFlash).
+        c.save();
+        c.globalCompositeOperation = 'lighter';
+        c.globalAlpha = this.wheelFlash * 0.2;
+        c.beginPath();
+        c.arc(0, 0, R, 0, TAU);
+        c.fillStyle = `rgb(${this.wheelFlashRgb})`;
+        c.fill();
+        c.restore();
+      }
       if (this.hitFlash > 0 && !isSpecial(this.level.mode)) {
         c.beginPath();
         c.arc(0, 0, R, 0, TAU);
@@ -4555,7 +4851,9 @@ export class Game {
       c.rotate(-ang);
       // Water/snow have material trails, and a portal must remain a compact
       // ring; the usual white laser wedge made all three look like tadpoles.
-      if (!drawMaterialTrail(c, wid, wid === 'diamond' ? 'new' : undefined)) {
+      // The xenomorph glob is painted by the metaball layer; drawing the old
+      // sprite + wedge on top of it produced the "stacked circles" look.
+      if (wid !== 'xeno' && !drawMaterialTrail(c, wid, wid === 'diamond' ? 'new' : undefined)) {
         const tl = Math.min(260, 50 + this.weapon.speed * 0.045) * fxp.streak;
         const tw = Math.max(2, this.weapon.half) * 1.25
           * projectileSizeMultiplier(wid, !!p.mini, !!p.giant);
@@ -4615,7 +4913,7 @@ export class Game {
         c.rotate(this.time * 28);
         c.translate(0, -l2 / 2);
       }
-      this.drawProj(c, wid);
+      if (wid !== 'xeno') this.drawProj(c, wid);
       gunState.rocketFlash = 0;
       gunState.yoyoFlash = 0;
       gunState.diamondFlash = 0;
@@ -4653,6 +4951,18 @@ export class Game {
 
     if (this.state !== 'idle') {
       this.drawGunNow(c);
+      this.drawTriLaser(c);
+    }
+
+    // ---- acid fluid (metaball) layer — slide 7 Acid Spitter parity ----
+    // Drawn after the gun and the wheel, exactly like games/game-3, so the
+    // glob covers the muzzle and the acid on the rim melts into one body.
+    if (this.state !== 'idle' && this.hasAcidLayer()) {
+      this.collectAcidBlobs();
+      const hot = this.weapon.id === 'xeno'
+        ? this.projs.filter((p) => !(p.spawnDelay && p.spawnDelay > 0)).map((p) => ({ x: p.x + Math.sin((p.t ?? 0) * 40) * 1.5, y: p.y }))
+        : [];
+      this.acidFluid.render(c, W, H, hot);
     }
 
     // Real gold pieces leap out of the chest, scatter, fall and bounce, then
@@ -4668,7 +4978,7 @@ export class Game {
       const a = Math.max(0, p.life / p.max);
       switch (p.kind) {
         case 'spark':
-          c.strokeStyle = p.color;
+          c.strokeStyle = cssColor(p.color);
           c.globalAlpha = a;
           c.lineWidth = p.size;
           c.beginPath();
@@ -4682,22 +4992,30 @@ export class Game {
           c.globalAlpha = Math.min(1, a * 2);
           c.translate(p.x, p.y);
           c.rotate(p.rot);
-          c.fillStyle = p.color;
+          c.fillStyle = cssColor(p.color);
           c.fillRect(-p.size / 2, -p.size / 3, p.size, p.size * 0.66);
           c.restore();
           break;
-        case 'smoke':
-          c.fillStyle = `${p.color}${a * 0.25})`;
+        case 'smoke': {
+          // Soft plumes: a filled arc left a hard-edged disc, while slide 7
+          // draws smoke through its glow sprite. Gradient falloff matches it.
+          const r = p.size * (1.6 - a * 0.6);
+          const sg = c.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
+          sg.addColorStop(0, cssColor(p.color, a * 0.45));
+          sg.addColorStop(0.55, cssColor(p.color, a * 0.2));
+          sg.addColorStop(1, cssColor(p.color, 0));
+          c.fillStyle = sg;
           c.beginPath();
-          c.arc(p.x, p.y, p.size * (1.6 - a * 0.6), 0, TAU);
+          c.arc(p.x, p.y, r, 0, TAU);
           c.fill();
           break;
+        }
         case 'shell':
           c.save();
           c.translate(p.x, p.y);
           c.rotate(p.rot);
           c.globalAlpha = Math.min(1, a * 3);
-          c.fillStyle = p.color;
+          c.fillStyle = cssColor(p.color);
           c.fillRect(-3.5, -7, 7, 13);
           c.fillStyle = 'rgba(255,255,255,0.5)';
           c.fillRect(-1.5, -6, 1.5, 11);
@@ -4708,10 +5026,10 @@ export class Game {
         case 'bolt': {
           c.save();
           c.globalCompositeOperation = 'lighter';
-          c.shadowColor = p.color;
+          c.shadowColor = cssColor(p.color);
           c.shadowBlur = 12;
           c.lineJoin = 'round';
-          for (const [lw, col] of [[p.size * 2.5 * a, p.color], [p.size * 0.8 * a, '#ffffff']] as const) {
+          for (const [lw, col] of [[p.size * 2.5 * a, cssColor(p.color)], [p.size * 0.8 * a, '#ffffff']] as const) {
             c.strokeStyle = col;
             c.lineWidth = lw;
             c.beginPath();
@@ -4734,8 +5052,8 @@ export class Game {
           const r = p.size * (0.5 + a * 0.8);
           const gg = c.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 2);
           gg.addColorStop(0, `rgba(255,255,255,${a})`);
-          gg.addColorStop(0.3, `rgba(${p.color},${a * 0.9})`);
-          gg.addColorStop(1, `rgba(${p.color},0)`);
+          gg.addColorStop(0.3, cssColor(p.color, a * 0.9));
+          gg.addColorStop(1, cssColor(p.color, 0));
           c.fillStyle = gg;
           c.beginPath();
           c.arc(p.x, p.y, r * 2, 0, TAU);
@@ -4745,7 +5063,7 @@ export class Game {
         }
         case 'ring': {
           const t = 1 - a;
-          c.strokeStyle = p.color;
+          c.strokeStyle = cssColor(p.color);
           c.globalAlpha = a * 0.8;
           c.lineWidth = 4 * a + 1;
           c.beginPath();
@@ -4772,7 +5090,7 @@ export class Game {
           c.strokeStyle = '#ffffff'; c.lineWidth = p.size * 0.14;
           c.strokeText(p.text || '', 0, 0);
           const tg = c.createLinearGradient(0, -p.size / 2, 0, p.size / 2);
-          tg.addColorStop(0, '#fff6b0'); tg.addColorStop(0.5, p.color); tg.addColorStop(1, '#ff7a00');
+          tg.addColorStop(0, '#fff6b0'); tg.addColorStop(0.5, cssColor(p.color)); tg.addColorStop(1, '#ff7a00');
           c.fillStyle = tg;
           c.fillText(p.text || '', 0, 0);
           c.restore();

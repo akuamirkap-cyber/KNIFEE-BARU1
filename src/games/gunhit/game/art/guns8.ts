@@ -1,5 +1,6 @@
 import type { WeaponId } from '../weapons';
 import { TAU, rand, gunState } from './kit';
+import { drawGlow } from './glowSprite';
 
 type C = CanvasRenderingContext2D;
 
@@ -12,15 +13,10 @@ function clamp(v: number, a = 0, b = 1) { return Math.max(a, Math.min(b, v)); }
 function hexRgb(h: string) { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
 function rgba(h: string, a: number) { const [r, g, b] = hexRgb(h); return `rgba(${r},${g},${b},${a})`; }
 
+// Soft bloom (slide 7 glowSprite). A plain filled arc here produced the hard
+// "solid circle" disc that appeared behind the Xenomorph Acid Spitter.
 function glowAt(c: C, x: number, y: number, r: number, color: string, a: number) {
-  c.save();
-  c.globalCompositeOperation = 'lighter';
-  c.globalAlpha = Math.min(1, a);
-  c.fillStyle = color;
-  c.beginPath();
-  c.arc(x, y, r, 0, TAU);
-  c.fill();
-  c.restore();
+  drawGlow(c, x, y, r, color, a);
 }
 
 function sinceShot(max: number) { return Math.max(0, 1 - gunState.sinceShot / max); }
