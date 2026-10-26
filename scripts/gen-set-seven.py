@@ -3,11 +3,11 @@ weapon code, straight out of `games/game-4/src/game/Game.ts`.
 
 Two files are produced, both machine-copied so no number is retyped by hand:
 
-  src/games/gunhit/game/setSevenFire.ts  — the 36 fire recipes
+  src/games/gunhit/game/setSevenFire.ts  — the 65 fire recipes
   src/games/gunhit/game/setSevenAnim.ts  — the animation springs (recoil, slide,
                                            pump, heat, spin, charge…) plus the
                                            per-weapon idle ambience of the same
-                                           36 weapons
+                                           65 weapons
 
 The only edit is the receiver: slide 7's `this` (its `Game`) becomes the
 slide-1 host of `setSevenFx.ts`, which forwards particles, FX, timers, shake,
@@ -34,10 +34,39 @@ TARGETS = {
     'sandal': 'fireSandal', 'paintball': 'firePaintball', 'wand': 'fireWand',
     'shark': 'fireShark', 'ghost': 'fireGhost', 'ufo': 'fireUfo',
     'rainbow': 'fireRainbow', 'meteor': 'fireMeteor', 'diamond': 'fireDiamond',
+    # SET 6 — slide-7 `Weapon Hit 71 Senjata`, second batch
+    'fish': 'fireFish', 'rpg': 'fireRpg', 'cricket': 'fireCricket',
+    'electro': 'fireElectro', 'bazooka': 'fireBazooka', 'freeze': 'fireFreeze',
+    'rail': 'fireRail', 'shrink': 'fireSizeRay', 'grow': 'fireSizeRay',
+    'magnet': 'fireMagnet', 'pirate': 'firePirate', 'card': 'fireCard',
+    # SET 7 — the last seventeen of the 71 weapons
+    'holy': 'fireHoly', 'unicorn': 'fireUnicorn', 'obliterator': 'fireObliterator',
+    'coin': 'fireCoin', 'saber': 'fireSaber', 'gauntlet': 'fireGauntlet',
+    'ruby': 'fireRuby', 'emerald': 'fireEmerald', 'sapphire': 'fireSapphire',
+    'crystal': 'fireCrystal', 'beerifle': 'fireBeeRifle', 'charge': 'fireCharge',
+    'pulse': 'firePulse', 'cryo': 'fireCryo', 'hyperdrive': 'fireHyper',
+    'quantum': 'fireQuantum', 'wars': 'fireWars',
 }
+
+# The size rays share one method with a `grow` flag; slide 1 needs two recipes.
+GROW_FLAG = {'shrink': 'false', 'grow': 'true'}
 
 
 def method_body(name: str) -> str:
+    if name == 'fireSizeRay':
+        m = re.search(r'\n  private fireSizeRay\(mx: number, my: number, grow: boolean\) \{', game)
+        if not m:
+            raise SystemExit('missing fireSizeRay')
+        start = game.index('{', m.start())
+        depth = 0
+        for i in range(start, len(game)):
+            if game[i] == '{':
+                depth += 1
+            elif game[i] == '}':
+                depth -= 1
+                if depth == 0:
+                    return game[start + 1:i]
+        raise SystemExit('unbalanced fireSizeRay')
     m = re.search(r'\n  private %s\(mx: number, my: number\) \{' % name, game)
     if not m:
         raise SystemExit('missing ' + name)
@@ -104,7 +133,7 @@ fire_imports, _ = import_header(
 )
 
 fire_out = ['''/**
- * SET 2..5 fire recipes of slide 7 (`Weapon Hit 71 Senjata`), copied verbatim
+ * SET 2..7 fire recipes of slide 7 (`Weapon Hit 71 Senjata`), copied verbatim
  * from the real `games/game-4/src/game/Game.ts` by `scripts/gen-set-seven.py`
  * (run it again after slide 7 changes; never edit this file by hand).
  *
@@ -120,12 +149,14 @@ fire_out = ['''/**
 
 for wid, meth in TARGETS.items():
     body = bodies[wid]
+    if wid in GROW_FLAG:
+        body = re.sub(r'\bgrow\b', GROW_FLAG[wid], body)
     body = body.replace('this.projectiles.push(new ', 'host.shots.push(new ')
     body = re.sub(r'new (\w+)\(this,', r'new \1(host.g,', body)
     body = re.sub(r'\bthis\.', 'host.', body)
     fire_out.append('export function fire_%s(host: SevenHost, mx: number, my: number) {%s}\n' % (wid, body))
 
-fire_out.append('/** Slide-7 fire recipe per weapon (all 36 of SET 2..5). */')
+fire_out.append('/** Slide-7 fire recipe per weapon (all 65 of SET 2..7). */')
 fire_out.append('export const FIRE_RECIPES = {')
 for wid in TARGETS:
     fire_out.append('  %s: fire_%s,' % (wid, wid))
@@ -168,7 +199,7 @@ anim_code = anim_code.replace('GUN_X', 'host.gunX').replace('GUN_Y', 'host.gunY'
 anim_imports, _ = import_header(anim_code, "import * as S from '../../../../games/game-4/src/game/spawn7';")
 
 anim_out = ['''/**
- * Slide-7 weapon animation and idle ambience of SET 2..5, copied verbatim from
+ * Slide-7 weapon animation and idle ambience of SET 2..7, copied verbatim from
  * `games/game-4/src/game/Game.ts` by `scripts/gen-set-seven.py`.
  *
  * `updateSevenAnim` integrates the same springs slide 7 does (recoil, slide,

@@ -17,7 +17,7 @@ import { SetOneFx, type SetOneHooks, type SetOneShot } from './setOneFx';
 import { fireSetOne, impactSetOne } from './setOneWeapons';
 import { setOneIdFor, type SetOneId } from './setOneArt';
 import { SetSevenFx, type SevenHooks } from './setSevenFx';
-import { setSevenIdFor, type SevenId } from './setSevenArt';
+import { buildSevenAnim, setSevenIdFor, type SevenId } from './setSevenArt';
 import { FIRE_RECIPES } from './setSevenFire';
 import { updateSevenAnim } from './setSevenAnim';
 import { newAnim } from '../../../../games/game-4/src/game/weapons';
@@ -4420,6 +4420,10 @@ export class Game {
         && (this.weapon.id !== 'yoyo' || this.projs.length === 0));
     gunState.sinceShot = this.state === 'idle' ? 9 : this.rt - this.lastShotRT;
     gunState.reloadT = this.reloadT;
+    // Slide-7 SET 1..7 artwork: hand the live motion over to the real renderer.
+    gunState.s7Anim = this.setSevenId && getGunVariant(this.weapon.id) === 'set7'
+      ? buildSevenAnim({ sinceShot: gunState.sinceShot, charge: gunState.charge, spin: this.spin })
+      : null;
     const totalAmmo = this.level.ammo * this.maxAmmoMult;
     gunState.ammoRatio = totalAmmo > 0 ? Math.max(0, Math.min(1, this.ammoLeft / totalAmmo)) : 1;
     // xeno/pred animation state

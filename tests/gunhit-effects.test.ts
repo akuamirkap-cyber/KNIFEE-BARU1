@@ -7,7 +7,7 @@ import { SNOWBALL_RADIUS } from '../src/games/gunhit/game/art/projectiles2';
 import { SNOWBALL_MAG_SIZE } from '../src/games/gunhit/game/art/guns2';
 import { drawMaterialTrail } from '../src/games/gunhit/game/art/projectileTrails';
 import { drawClassicBeam } from '../src/games/gunhit/game/art/beamEffects';
-import { getGunEffect, getGunEffectOptions, setGunEffect } from '../src/games/gunhit/game/art/gunVariants';
+import { getGunEffect, getGunEffectOptions, setGunEffect, setGunVariant } from '../src/games/gunhit/game/art/gunVariants';
 import { goldenSlideOffset } from '../src/games/gunhit/game/art/guns';
 import { bananaPeelOpen, bananaFleshFill } from '../src/games/gunhit/game/art/guns2';
 import { dragonFlameSurge } from '../src/games/gunhit/game/art/guns3';
@@ -1101,6 +1101,8 @@ test('Magnet Gun uses upgraded 3D horseshoe + solenoid coil design and stuck mag
     set: () => true,
   });
 
+  // The Set 6 card is the default now; this test describes slide-1's design.
+  setGunVariant('magnet', 'original');
   drawGun(ctx, 'magnet', 210, 575, 0.5, 0, true);
   assert.ok(texts.includes('N') && texts.includes('S'), 'Magnet Gun draws N and S pole markings on the horseshoe crown');
 
@@ -1135,6 +1137,7 @@ test('Laser Beam, Freeze Ray, Ghost Gun, UFO Ray, and Rainbow Gun use upgraded r
 
   stops.length = 0;
   rotations.length = 0;
+  setGunVariant('freeze', 'original');
   drawGun(ctx, 'freeze', 210, 575, 0.5, 0, true);
   assert.ok(rotations.some(r => Math.abs(r - (-0.72)) < 1e-4), 'Freeze Ray uses ergonomic angled cryo grip');
   assert.ok(stops.includes('#00e5ff') && stops.includes('#80f5ff'), 'Freeze Ray renders glowing cyan coolant capsule and rear cryo orb');
@@ -1395,7 +1398,11 @@ test('Bazooka in SGA keeps SGA gun shape with Slide #3 shell projectile, glow, m
     items: [], stuck: 0, combo: 0, lastHit: -10, time: 1, hitFlash: 0,
     faceCtx: noopCtx, faceScale: 2,
   });
+  // Slide 1's bazooka is what this test describes; its shot effect is the
+  // slide-7 SET 6 one by default, so ask for the slide-1 effect explicitly.
+  setGunEffect('bazooka', 'new');
   game.shoot();
+  setGunEffect('bazooka', 'set7');
   assert.ok(game.bazookaState, 'bazookaState is initialized when Bazooka fires');
   assert.ok(game.bazookaState!.particles.length >= 50, 'spawns Slide #3 forward fire cone, backblast flames, and gravity sparks');
   assert.ok(game.bazookaState!.smokes.length >= 20, 'spawns Slide #3 backblast, muzzle smoke, and ground dust');

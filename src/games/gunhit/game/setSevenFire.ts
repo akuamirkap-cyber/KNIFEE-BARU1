@@ -1,5 +1,5 @@
 /**
- * SET 2..5 fire recipes of slide 7 (`Weapon Hit 71 Senjata`), copied verbatim
+ * SET 2..7 fire recipes of slide 7 (`Weapon Hit 71 Senjata`), copied verbatim
  * from the real `games/game-4/src/game/Game.ts` by `scripts/gen-set-seven.py`
  * (run it again after slide 7 changes; never edit this file by hand).
  *
@@ -17,14 +17,19 @@ import { BambooBlast, BananaPop, FrostFlash, SniperFlash } from '../../../../gam
 import { ArcWaves, PartyPop, PlasmaFlash } from '../../../../games/game-4/src/game/fx3';
 import { DragonBreathFlash, GravityPulse, HexBurst, Mandala, RadialFlash, SpiralFX } from '../../../../games/game-4/src/game/fx4';
 import { MoonSlash, RainbowBurst, RainbowRings, RuneCircle } from '../../../../games/game-4/src/game/fx5';
-import { K, Light, Lightning } from '../../../../games/game-4/src/game/particles';
+import { ConvergeRings, FieldLines, FrostBloom } from '../../../../games/game-4/src/game/fx6';
+import { GlitchBurst, HaloRing, RadiationPulse, SaberSlash, WarpLines } from '../../../../games/game-4/src/game/fx7';
+import { K, Light, Lightning, SplashSheet } from '../../../../games/game-4/src/game/particles';
 import { BambooShot, BananaShot, BubbleShot, FlameJet, SniperShot, SnowballShot } from '../../../../games/game-4/src/game/projectiles2';
 import { ChickenShot, ConfettiShot, CrossbowShot, HarpoonShot, LaserBeam, MinigunBurst, PizzaShot, PlasmaShot, SeedShot } from '../../../../games/game-4/src/game/projectiles3';
 import { BeeSwarm, CoconutShot, DragonFire, FireworkShot, GravityShot, HoneyShot, KerisShot, NoteShot, SakuraShot } from '../../../../games/game-4/src/game/projectiles4';
 import { DiamondShot, GhostShot, MeteorShot, MoonShot, PaintShot, PencilShot, RainbowShot, SandalShot, SharkShot, StormShot, UfoShot, WandShot } from '../../../../games/game-4/src/game/projectiles5';
+import { BazookaShot, CardShot, CricketShot, ElectroShot, FishShot, FreezeBeam, MagnetShot, PirateShot, RailShot, RpgShot, SizeShot } from '../../../../games/game-4/src/game/projectiles6';
+import { BeeRifleShot, ChargeShot, CoinShot, CryoShot, CrystalShot, EmeraldBeam, GauntletShot, HolyShot, HyperShot, ObliteratorShot, PulseShot, QuantumShot, RubyShot, SaberShot, SapphireBlast, UnicornShot, WarsShot } from '../../../../games/game-4/src/game/projectiles7';
 import { drawRifleCasing } from '../../../../games/game-4/src/game/shapes2';
 import { ROCKET_COLS } from '../../../../games/game-4/src/game/shapes4';
 import { PAINT, RAINBOW } from '../../../../games/game-4/src/game/shapes5';
+import { AMETHYST, EMERALD, SAPPHIRE } from '../../../../games/game-4/src/game/shapes7';
 import * as S from '../../../../games/game-4/src/game/spawn7';
 import type { SevenHost } from './setSevenFx';
 import type { SevenId } from './setSevenArt';
@@ -760,7 +765,562 @@ export function fire_diamond(host: SevenHost, mx: number, my: number) {
     sfx.play('diamond_fire');
   }
 
-/** Slide-7 fire recipe per weapon (all 36 of SET 2..5). */
+export function fire_fish(host: SevenHost, mx: number, my: number) {
+    const a = host.anim;
+    const ps = host.particles;
+    const y = my - 18;
+    a.fireT = 0;
+    a.recoilV += 7;
+    host.addFX(new SplashSheet(mx, y - 6, -Math.PI / 2, 46, 0.22));
+    host.addFX(new Light(mx, y - 8, 180, '150,215,255', 0.55, 0.22));
+    S.droplets(ps, mx, y - 4, 22, -Math.PI / 2, 0.5, [260, 640], [1, 2.6], '170,225,255', 600);
+    S.smoke(ps, mx, y - 6, 7, '230,244,255', [10, 40], { vx: [-70, 70], vy: [-170, -50], alpha: 0.4, life: [0.5, 0.9] });
+    for (let i = 0; i < 5; i++) S.miniBubble(ps, mx + rand(-12, 12), y - 8, rand(-60, 60), rand(-190, -70), rand(2.6, 6), rand(0.5, 0.95));
+    S.ring(ps, mx, y - 4, 4, 60, '190,230,255', 3.5, 0.3, true);
+    host.shots.push(new FishShot(host.g, mx, y - 10));
+    host.shake(5);
+    sfx.play('fish_fire');
+  }
+
+export function fire_rpg(host: SevenHost, mx: number, my: number) {
+    const a = host.anim;
+    const ps = host.particles;
+    const y = my + 24;
+    a.fireT = 0;
+    a.recoilV += 11;
+    host.addFX(new RadialFlash(mx, y - 8, ['255,170,70', '255,240,200', '255,120,40'], 0.14, 60, 12));
+    host.addFX(new Light(mx, y - 10, 220, '255,150,60', 0.7, 0.26));
+    S.fire(ps, mx, y - 6, 12, -Math.PI / 2, 0.5, [200, 480], [20, 34], [40, 70], [0.2, 0.4], { g: -100 });
+    S.smoke(ps, mx, y - 6, 8, '215,215,220', [12, 50], { vx: [-90, 90], vy: [-170, -50], alpha: 0.5, life: [0.6, 1.1], drag: 2.2 });
+    for (const s of [-1, 1]) S.smoke(ps, mx + s * 16, my + 90, 5, '225,225,228', [12, 44], { vx: [s * 70, s * 210], vy: [-30, 30], alpha: 0.45, life: [0.6, 1], drag: 2.4 });
+    S.sparks(ps, mx, y - 6, 14, -Math.PI / 2, 0.9, [200, 560], '255,210,120', 1.4, 300);
+    S.ring(ps, mx, y - 4, 4, 56, '255,200,140', 3, 0.26, true);
+    host.shots.push(new RpgShot(host.g, mx, my - 2));
+    host.shake(8);
+    sfx.play('rpg_fire');
+  }
+
+export function fire_cricket(host: SevenHost, mx: number, my: number) {
+    const a = host.anim;
+    const ps = host.particles;
+    const y = my + 26;
+    a.fireT = 0;
+    a.recoilV += 26;
+    host.addFX(new RadialFlash(mx, y - 6, ['190,110,255', '240,215,255', '255,255,255', '150,90,255'], 0.18, 90, 16));
+    host.addFX(new Light(mx, y - 10, 300, '170,90,255', 0.95, 0.34));
+    host.flashScreen('190,120,255', 0.16);
+    S.ring(ps, mx, y - 4, 5, 100, '190,120,255', 6, 0.38, true);
+    S.ring(ps, mx, y - 4, 3, 60, '255,255,255', 3, 0.24, true);
+    S.sparks(ps, mx, y - 4, 26, -Math.PI / 2, 1.2, [200, 680], '215,160,255', 1.6, 200);
+    S.stars(ps, mx, y - 6, 10, '235,205,255', [80, 280], [8, 14], -Math.PI / 2, 1.1);
+    S.smoke(ps, mx, y - 8, 6, '100,60,150', [10, 40], { vx: [-70, 70], vy: [-150, -40], alpha: 0.4, life: [0.6, 1] });
+    ps.add({ k: K.TEXT, x: mx + 34, y: my - 12, vy: -70, drag: 1.8, size: 20, text: 'KRIK!', color: '225,190,255', life: 0.7 });
+    host.shots.push(new CricketShot(host.g, mx, y - 4));
+    host.shake(13);
+    sfx.play('cricket_fire');
+  }
+
+export function fire_electro(host: SevenHost, mx: number, my: number) {
+    const a = host.anim;
+    const ps = host.particles;
+    const y = my - 12;
+    a.fireT = 0;
+    a.recoilV += 6;
+    for (let i = 0; i < 5; i++) host.addFX(new Lightning(mx + rand(-30, 30), y + rand(14, 90), mx + rand(-14, 14), y + rand(-4, 6), 0.2, '130,205,255', 1.3, 1, 0.04));
+    host.addFX(new RadialFlash(mx, y, ['110,190,255', '230,245,255', '255,215,90'], 0.14, 70, 14));
+    host.addFX(new Light(mx, y - 6, 230, '110,190,255', 0.8, 0.26));
+    S.ring(ps, mx, y, 4, 70, '130,205,255', 4, 0.3, true);
+    S.sparks(ps, mx, y, 22, -Math.PI / 2, 1.3, [180, 560], '170,225,255', 1.5, 200);
+    S.sparks(ps, mx, y, 8, -Math.PI / 2, 1.0, [200, 520], '255,220,110', 1.3, 200);
+    host.shots.push(new ElectroShot(host.g, mx, y - 4));
+    host.shake(5);
+    sfx.play('electro_fire');
+  }
+
+export function fire_bazooka(host: SevenHost, mx: number, my: number) {
+    const a = host.anim;
+    const ps = host.particles;
+    const y = my + 24;
+    a.fireT = 0;
+    a.recoilV += 16;
+    host.addFX(new RadialFlash(mx, y - 8, ['255,170,70', '255,240,200', '255,120,40'], 0.16, 80, 14));
+    host.addFX(new Light(mx, y - 12, 280, '255,150,60', 0.85, 0.3));
+    host.flashScreen('255,180,90', 0.16);
+    S.fire(ps, mx, y - 6, 16, -Math.PI / 2, 0.55, [220, 540], [22, 38], [44, 80], [0.22, 0.45], { g: -110 });
+    S.smokeRing(ps, mx, y - 6, 14, '235,235,240', 14, 210, 0.3);
+    for (const s of [-1, 1]) S.smoke(ps, mx + s * 20, my + 100, 6, '230,230,234', [14, 50], { vx: [s * 80, s * 240], vy: [-30, 30], alpha: 0.5, life: [0.7, 1.2], drag: 2.4 });
+    S.sparks(ps, mx, y - 6, 18, -Math.PI / 2, 0.9, [220, 600], '255,210,120', 1.5, 300);
+    S.ring(ps, mx, y - 4, 5, 80, '255,210,150', 3.5, 0.3, true);
+    host.shots.push(new BazookaShot(host.g, mx, my + 2));
+    host.shake(12);
+    sfx.play('bazooka_fire');
+  }
+
+export function fire_freeze(host: SevenHost, mx: number, my: number) {
+    const a = host.anim;
+    const ps = host.particles;
+    a.charging = true;
+    a.charge = 0;
+    sfx.play('freeze_fire');
+    host.orbTarget.x = mx;
+    host.orbTarget.y = my - 14;
+    for (let i = 0; i < 26; i++) {
+      const an = rand(0, TAU);
+      const d = rand(40, 95);
+      ps.add({ k: K.SPARK, add: true, x: mx + Math.cos(an) * d, y: my - 14 + Math.sin(an) * d, target: host.orbTarget, pull: 1600, size: rand(1, 2.2), len: 0.03, life: 0.5, color: pick(['190,240,255', '255,255,255', '120,215,255']) });
+    }
+    S.snowflakes(ps, mx, my - 14, 8, -Math.PI / 2, Math.PI, [30, 100]);
+    host.addFX(new Light(mx, my - 10, 160, '110,215,255', 0.5, 0.26));
+    host.after(0.2, () => {
+      a.charging = false;
+      a.charge = 0;
+      a.fireT = 0;
+      a.recoilV += 5;
+      host.addFX(new FrostBloom(mx, my - 18, 0.45, 0.5));
+      host.addFX(new Light(mx, my - 14, 230, '110,215,255', 0.85, 0.3));
+      S.ring(ps, mx, my - 14, 4, 70, '150,230,255', 4, 0.32, true);
+      S.snowflakes(ps, mx, my - 16, 10, -Math.PI / 2, 1.1, [120, 340]);
+      S.sparks(ps, mx, my - 16, 14, -Math.PI / 2, 1.1, [150, 460], '200,240,255', 1.3, 200);
+      host.shots.push(new FreezeBeam(host.g, mx, my - 16));
+      host.shake(4);
+      sfx.play('freeze_fire');
+    });
+  }
+
+export function fire_rail(host: SevenHost, mx: number, my: number) {
+    const a = host.anim;
+    const ps = host.particles;
+    a.charging = true;
+    a.charge = 0;
+    sfx.play('rail_charge');
+    host.orbTarget.x = mx;
+    host.orbTarget.y = my + 2;
+    for (let i = 0; i < 26; i++) {
+      const an = rand(0, TAU);
+      const d = rand(40, 100);
+      ps.add({ k: K.SPARK, add: true, x: mx + Math.cos(an) * d, y: my + 2 + Math.sin(an) * d, target: host.orbTarget, pull: 1800, size: rand(1, 2.2), len: 0.03, life: 0.5, color: pick(['150,190,255', '200,160,255', '255,255,255']) });
+    }
+    host.after(0.3, () => {
+      a.charging = false;
+      a.charge = 0;
+      a.fireT = 0;
+      a.recoilV += 22;
+      host.addFX(new Light(mx, my - 6, 320, '130,170,255', 1, 0.3));
+      host.flashScreen('200,220,255', 0.2);
+      S.ring(ps, mx, my - 2, 5, 100, '130,175,255', 6, 0.36, true);
+      S.sparks(ps, mx, my - 2, 24, -Math.PI / 2, 1.0, [220, 700], '170,205,255', 1.6, 200);
+      host.shots.push(new RailShot(host.g, mx, my - 4));
+      host.shake(12);
+      sfx.play('rail_fire');
+    });
+  }
+
+export function fire_shrink(host: SevenHost, mx: number, my: number) {
+    const a = host.anim;
+    const ps = host.particles;
+    const rgb = false ? '255,160,50' : '70,255,140';
+    a.fireT = 0;
+    a.recoilV += 5;
+    host.addFX(new ConvergeRings(mx, my + 4, rgb, false ? 1 : -1, 0.5, 0.65));
+    host.addFX(new Light(mx, my, 190, rgb, 0.65, 0.26));
+    S.ring(ps, mx, my + 4, 4, 56, rgb, 3, 0.28, true);
+    S.sparks(ps, mx, my + 4, 16, -Math.PI / 2, 1.2, [160, 480], rgb, 1.4, 200);
+    S.stars(ps, mx, my, 6, rgb, [60, 220], [7, 12], -Math.PI / 2, 1.1);
+    S.plusMinus(ps, mx, my - 8, 3, false ? '+' : '-', rgb, [80, 200]);
+    host.shots.push(new SizeShot(host.g, mx, my - 4, false));
+    host.shake(4);
+    sfx.play(false ? 'grow_fire' : 'shrink_fire');
+  }
+
+export function fire_grow(host: SevenHost, mx: number, my: number) {
+    const a = host.anim;
+    const ps = host.particles;
+    const rgb = true ? '255,160,50' : '70,255,140';
+    a.fireT = 0;
+    a.recoilV += 5;
+    host.addFX(new ConvergeRings(mx, my + 4, rgb, true ? 1 : -1, 0.5, 0.65));
+    host.addFX(new Light(mx, my, 190, rgb, 0.65, 0.26));
+    S.ring(ps, mx, my + 4, 4, 56, rgb, 3, 0.28, true);
+    S.sparks(ps, mx, my + 4, 16, -Math.PI / 2, 1.2, [160, 480], rgb, 1.4, 200);
+    S.stars(ps, mx, my, 6, rgb, [60, 220], [7, 12], -Math.PI / 2, 1.1);
+    S.plusMinus(ps, mx, my - 8, 3, true ? '+' : '-', rgb, [80, 200]);
+    host.shots.push(new SizeShot(host.g, mx, my - 4, true));
+    host.shake(4);
+    sfx.play(true ? 'grow_fire' : 'shrink_fire');
+  }
+
+export function fire_magnet(host: SevenHost, mx: number, my: number) {
+    const a = host.anim;
+    const ps = host.particles;
+    a.fireT = 0;
+    a.recoilV += 5;
+    host.addFX(new FieldLines(mx, my + 6, 0.7, 0.85));
+    host.addFX(new Light(mx, my, 190, '255,130,150', 0.6, 0.26));
+    S.sparks(ps, mx - 30, my + 6, 12, -Math.PI / 2, 1.0, [160, 460], '255,110,110', 1.4, 200);
+    S.sparks(ps, mx + 30, my + 6, 12, -Math.PI / 2, 1.0, [160, 460], '130,170,255', 1.4, 200);
+    S.ring(ps, mx, my + 4, 4, 60, '255,200,210', 3, 0.28, true);
+    host.shots.push(new MagnetShot(host.g, mx, my - 12));
+    host.shake(4);
+    sfx.play('magnet_fire');
+  }
+
+export function fire_pirate(host: SevenHost, mx: number, my: number) {
+    const a = host.anim;
+    const ps = host.particles;
+    a.fuse = 0.2;
+    sfx.play('bamboo_fuse');
+    S.sparks(ps, mx + 38, my + 16, 14, -Math.PI / 2, Math.PI, [60, 220], '255,220,120', 1.3, 500);
+    S.glow(ps, mx + 38, my + 16, 40, 10, '255,200,100', 0.2, 1);
+    host.after(0.2, () => {
+      a.fireT = 0;
+      a.recoilV += 22;
+      host.addFX(new RadialFlash(mx, my + 6, ['255,170,70', '255,240,200', '255,120,40'], 0.17, 100, 16));
+      host.addFX(new Light(mx, my - 10, 340, '255,150,60', 1, 0.34));
+      host.flashScreen('255,190,90', 0.22);
+      S.fire(ps, mx, my + 8, 18, -Math.PI / 2, 0.6, [220, 520], [24, 40], [46, 84], [0.25, 0.5], { g: -120 });
+      S.smokeRing(ps, mx, my + 8, 16, '175,170,165', 16, 230, 0.32);
+      S.smoke(ps, mx, my - 6, 12, '110,106,102', [24, 90], { vx: [-70, 70], vy: [-190, -60], alpha: 0.6, life: [1.1, 1.8] });
+      S.embers(ps, mx, my + 6, 22, -Math.PI / 2, 0.9, [200, 640]);
+      S.sparks(ps, mx, my + 6, 20, -Math.PI / 2, 0.8, [250, 700], '255,210,120', 1.5, 300);
+      S.coins(ps, mx, my + 8, 6, -Math.PI / 2, 0.8, [260, 520]);
+      S.ring(ps, mx, my + 8, 6, 120, '255,200,120', 6, 0.36, true);
+      host.shots.push(new PirateShot(host.g, mx, my - 2));
+      host.shake(13);
+      sfx.play('pirate_fire');
+    });
+  }
+
+export function fire_card(host: SevenHost, mx: number, my: number) {
+    const a = host.anim;
+    const ps = host.particles;
+    const suit = a.idx;
+    a.idx = (a.idx + 1) % 4;
+    a.fireT = 0;
+    a.recoilV += 4;
+    host.addFX(new Light(mx, my + 6, 170, '255,225,210', 0.5, 0.22));
+    S.cards(ps, mx, my + 8, 8, -Math.PI / 2, 0.95, [200, 470], 0.6);
+    S.stars(ps, mx, my + 6, 8, '255,235,170', [60, 240], [7, 13], -Math.PI / 2, 1);
+    S.sparks(ps, mx, my + 6, 12, -Math.PI / 2, 0.9, [160, 460], '255,235,190', 1.3, 300);
+    S.ring(ps, mx, my + 6, 3, 46, '255,200,210', 2.5, 0.26, true);
+    host.shots.push(new CardShot(host.g, mx, my - 4, suit));
+    host.shake(3);
+    sfx.play('card_fire');
+  }
+
+export function fire_holy(host: SevenHost, mx: number, my: number) {
+    const a = host.anim;
+    const ps = host.particles;
+    a.fireT = 0;
+    a.recoilV += 6;
+    host.addFX(new HaloRing(mx, my - 18, 0.45, 0.9));
+    host.addFX(new Light(mx, my - 14, 200, '255,230,150', 0.7, 0.26));
+    S.feathers(ps, mx, my - 10, 10, -Math.PI / 2, 0.9, [120, 360]);
+    S.stars(ps, mx, my - 12, 10, '255,236,170', [80, 280], [7, 13], -Math.PI / 2, 1);
+    S.sparks(ps, mx, my - 12, 14, -Math.PI / 2, 1.0, [160, 480], '255,225,140', 1.4, 200);
+    S.embers(ps, mx, my - 10, 10, -Math.PI / 2, 0.9, [60, 200], '255,230,150', 2);
+    S.ring(ps, mx, my - 14, 4, 60, '255,235,170', 3, 0.3, true);
+    host.shots.push(new HolyShot(host.g, mx, my - 16));
+    host.shake(4);
+    sfx.play('holy_fire');
+  }
+
+export function fire_unicorn(host: SevenHost, mx: number, my: number) {
+    const a = host.anim;
+    const ps = host.particles;
+    a.fireT = 0;
+    a.recoilV += 5;
+    host.addFX(new RainbowBurst(mx, my - 4, 0.26, 0.8));
+    host.addFX(new RainbowRings(mx, my - 4, 0.5, 0.5));
+    host.addFX(new Light(mx, my - 6, 190, '255,200,245', 0.6, 0.24));
+    S.hearts(ps, mx, my - 6, 8, -Math.PI / 2, 1.0, [100, 300]);
+    S.rainbowSparks(ps, mx, my - 6, 20, -Math.PI / 2, 1.2, [160, 520], 1.5);
+    for (let i = 0; i < 7; i++) S.stars(ps, mx, my - 6, 1, RAINBOW[i], [60, 240], [7, 13], -Math.PI / 2, 1.2);
+    host.shots.push(new UnicornShot(host.g, mx, my - 4));
+    host.shake(4);
+    sfx.play('unicorn_fire');
+  }
+
+export function fire_obliterator(host: SevenHost, mx: number, my: number) {
+    const a = host.anim;
+    const ps = host.particles;
+    a.charging = true;
+    a.charge = 0;
+    sfx.play('obl_charge');
+    host.orbTarget.x = mx;
+    host.orbTarget.y = my - 13;
+    for (let i = 0; i < 26; i++) {
+      const an = rand(0, TAU);
+      const d = rand(40, 95);
+      ps.add({ k: K.SPARK, add: true, x: mx + Math.cos(an) * d, y: my - 13 + Math.sin(an) * d, target: host.orbTarget, pull: 1700, size: rand(1, 2.2), len: 0.03, life: 0.5, color: pick(['150,255,100', '210,255,170', '100,230,60']) });
+    }
+    host.addFX(new Light(mx, my - 10, 160, '110,255,80', 0.5, 0.3));
+    host.after(0.26, () => {
+      a.charging = false;
+      a.charge = 0;
+      a.fireT = 0;
+      a.recoilV += 8;
+      host.addFX(new RadiationPulse(mx, my - 12, 0.5, 0.55));
+      host.addFX(new Light(mx, my - 12, 230, '110,255,80', 0.85, 0.3));
+      S.smoke(ps, mx, my - 12, 8, '80,190,60', [12, 46], { vx: [-70, 70], vy: [-160, -40], alpha: 0.45, life: [0.6, 1.1] });
+      S.goo(ps, mx, my - 12, 8, -Math.PI / 2, 0.8, [160, 420], [1.4, 3], '110,255,80', '30,110,20');
+      S.ring(ps, mx, my - 12, 5, 80, '120,255,90', 5, 0.38, true);
+      S.sparks(ps, mx, my - 12, 18, -Math.PI / 2, 1.1, [160, 520], '150,255,100', 1.5, 200);
+      host.shots.push(new ObliteratorShot(host.g, mx, my - 14));
+      host.shake(8);
+      sfx.play('obl_fire');
+    });
+  }
+
+export function fire_coin(host: SevenHost, mx: number, my: number) {
+    const a = host.anim;
+    const ps = host.particles;
+    a.fireT = 0;
+    a.recoilV += 5;
+    host.addFX(new Light(mx, my - 10, 170, '255,215,100', 0.55, 0.22));
+    S.coins(ps, mx, my - 10, 6, -Math.PI / 2, 0.9, [260, 520]);
+    S.stars(ps, mx, my - 12, 8, '255,230,130', [60, 240], [7, 13], -Math.PI / 2, 1);
+    S.sparks(ps, mx, my - 12, 12, -Math.PI / 2, 1.0, [160, 460], '255,225,120', 1.4, 300);
+    S.ring(ps, mx, my - 10, 3, 50, '255,215,100', 3, 0.28, true);
+    host.shots.push(new CoinShot(host.g, mx, my - 12));
+    host.shake(3);
+    sfx.play('coin_fire');
+  }
+
+export function fire_saber(host: SevenHost, mx: number, my: number) {
+    const a = host.anim;
+    const ps = host.particles;
+    const ty = my - 114;
+    a.fireT = 0;
+    a.recoilV += 3;
+    host.addFX(new SaberSlash(mx, ty + 20, 0.3, 150, 0.26));
+    host.addFX(new Light(mx, ty + 10, 220, '90,210,255', 0.7, 0.26));
+    S.sparks(ps, mx, ty + 10, 18, -Math.PI / 2, 1.3, [160, 520], '140,235,255', 1.5, 200);
+    S.stars(ps, mx, ty + 10, 8, '200,245,255', [60, 240], [7, 13], -Math.PI / 2, 1.2);
+    S.ring(ps, mx, ty + 14, 4, 60, '110,225,255', 3, 0.28, true);
+    host.shots.push(new SaberShot(host.g, mx, ty));
+    host.shake(5);
+    sfx.play('saber_fire');
+  }
+
+export function fire_gauntlet(host: SevenHost, mx: number, my: number) {
+    const a = host.anim;
+    const ps = host.particles;
+    a.fireT = 0;
+    a.recoilV += 16;
+    host.addFX(new RadialFlash(mx, my + 10, ['255,170,70', '255,240,200', '255,120,40'], 0.14, 60, 12));
+    host.addFX(new Light(mx, my + 4, 220, '255,150,60', 0.7, 0.26));
+    S.smoke(ps, mx, my + 50, 10, '215,218,224', [12, 46], { vx: [-100, 100], vy: [-90, 10], alpha: 0.5, life: [0.6, 1.1], drag: 2.2 });
+    for (const s of [-1, 1]) S.smoke(ps, mx + s * 28, my + 54, 4, '225,228,232', [10, 36], { vx: [s * 60, s * 190], vy: [-40, 20], alpha: 0.45, life: [0.5, 0.9], drag: 2.4 });
+    S.chips(ps, mx, my + 40, 6, -Math.PI / 2, 1.2, [100, 280], ['150,156,166', '110,116,126', '200,206,216']);
+    S.sparks(ps, mx, my + 20, 16, -Math.PI / 2, 1.2, [200, 560], '255,200,110', 1.4, 300);
+    S.ring(ps, mx, my + 6, 4, 62, '255,200,130', 3, 0.28, true);
+    host.shots.push(new GauntletShot(host.g, mx, my));
+    host.shake(9);
+    sfx.play('gauntlet_fire');
+  }
+
+export function fire_ruby(host: SevenHost, mx: number, my: number) {
+    const a = host.anim;
+    const ps = host.particles;
+    a.fireT = 0;
+    a.recoilV += 7;
+    a.spinV += 14;
+    host.addFX(new RadialFlash(mx, my - 4, ['255,70,100', '255,200,215', '255,255,255'], 0.12, 70, 14));
+    host.addFX(new Light(mx, my - 6, 180, '255,80,110', 0.65, 0.22));
+    S.stars(ps, mx, my - 4, 8, '255,150,175', [80, 260], [7, 12], -Math.PI / 2, 1);
+    S.sparks(ps, mx, my - 4, 14, -Math.PI / 2, 0.9, [200, 540], '255,110,140', 1.4, 300);
+    S.smoke(ps, mx, my - 6, 3, '230,215,220', [8, 28], { vy: [-120, -40], vx: [-40, 40], alpha: 0.28, life: [0.5, 0.9] });
+    host.shots.push(new RubyShot(host.g, mx, my - 2));
+    host.shake(4);
+    sfx.play('ruby_fire');
+  }
+
+export function fire_emerald(host: SevenHost, mx: number, my: number) {
+    const a = host.anim;
+    const ps = host.particles;
+    a.charging = true;
+    a.charge = 0;
+    sfx.play('emerald_charge');
+    host.orbTarget.x = mx;
+    host.orbTarget.y = my - 11;
+    for (let i = 0; i < 24; i++) {
+      const an = rand(0, TAU);
+      const d = rand(40, 90);
+      ps.add({ k: K.SPARK, add: true, x: mx + Math.cos(an) * d, y: my - 11 + Math.sin(an) * d, target: host.orbTarget, pull: 1700, size: rand(1, 2.2), len: 0.03, life: 0.5, color: pick(['120,255,180', '200,255,225', '60,230,130']) });
+    }
+    host.after(0.22, () => {
+      a.charging = false;
+      a.charge = 0;
+      a.fireT = 0;
+      a.recoilV += 5;
+      host.addFX(new RadialFlash(mx, my - 12, ['60,255,150', '200,255,225', '255,255,255'], 0.16, 80, 14));
+      host.addFX(new Light(mx, my - 12, 230, '60,255,150', 0.85, 0.3));
+      S.ring(ps, mx, my - 12, 4, 70, '90,255,170', 4, 0.32, true);
+      S.gemShards(ps, mx, my - 12, 6, -Math.PI / 2, 1.0, [160, 400], EMERALD);
+      S.sparks(ps, mx, my - 12, 14, -Math.PI / 2, 1.1, [150, 460], '120,255,180', 1.3, 200);
+      host.shots.push(new EmeraldBeam(host.g, mx, my - 14));
+      host.shake(4);
+      sfx.play('emerald_fire');
+    });
+  }
+
+export function fire_sapphire(host: SevenHost, mx: number, my: number) {
+    const a = host.anim;
+    const ps = host.particles;
+    a.fireT = 0;
+    a.recoilV += 18;
+    host.addFX(new RadialFlash(mx, my - 6, ['90,160,255', '210,228,255', '255,255,255', '60,110,230'], 0.12, 100, 16));
+    host.addFX(new Light(mx, my - 20, 300, '90,160,255', 0.9, 0.22));
+    host.flashScreen('150,190,255', 0.12);
+    S.gemShards(ps, mx, my - 4, 10, -Math.PI / 2, 0.5, [260, 640], SAPPHIRE);
+    S.smoke(ps, mx, my - 10, 9, '165,175,205', [12, 58], { vy: [-150, -50], vx: [-45, 45], alpha: 0.45, life: [1, 1.6], drag: 1.8 });
+    S.sparks(ps, mx, my - 6, 18, -Math.PI / 2, 0.6, [300, 760], '130,180,255', 1.5, 200);
+    S.embers(ps, mx, my - 6, 12, -Math.PI / 2, 0.5, [300, 700], '130,180,255');
+    host.shots.push(new SapphireBlast(host.g, mx, my - 4));
+    host.shake(9);
+    sfx.play('sapphire_fire');
+  }
+
+export function fire_crystal(host: SevenHost, mx: number, my: number) {
+    const a = host.anim;
+    const ps = host.particles;
+    a.fireT = 0;
+    a.recoilV += 9;
+    host.addFX(new RadialFlash(mx, my - 6, ['195,120,255', '240,215,255', '255,255,255'], 0.14, 80, 14));
+    host.addFX(new Light(mx, my - 10, 220, '180,100,255', 0.7, 0.26));
+    S.gemShards(ps, mx, my - 8, 8, -Math.PI / 2, 1.0, [160, 440], AMETHYST);
+    S.stars(ps, mx, my - 8, 8, '225,180,255', [60, 240], [7, 13], -Math.PI / 2, 1.1);
+    S.ring(ps, mx, my - 8, 4, 64, '190,120,255', 3, 0.3, true);
+    S.smoke(ps, mx, my - 8, 4, '170,110,230', [10, 38], { vy: [-120, -40], vx: [-40, 40], alpha: 0.3, life: [0.6, 1] });
+    host.shots.push(new CrystalShot(host.g, mx, my - 8));
+    host.shake(5);
+    sfx.play('crystal_fire');
+  }
+
+export function fire_beerifle(host: SevenHost, mx: number, my: number) {
+    const a = host.anim;
+    const ps = host.particles;
+    a.fireT = 0;
+    a.recoilV += 9;
+    host.addFX(new Light(mx, my - 30, 170, '255,210,70', 0.55, 0.22));
+    S.bees(ps, mx, my - 30, 6, -Math.PI / 2, 0.8, [180, 480]);
+    S.goo(ps, mx, my - 28, 5, -Math.PI / 2, 0.7, [160, 360], [1.3, 2.6], '255,184,30', '150,80,0');
+    S.hexes(ps, mx, my - 30, 5, -Math.PI / 2, 0.9, [100, 300]);
+    S.sparks(ps, mx, my - 30, 12, -Math.PI / 2, 0.9, [160, 460], '255,215,80', 1.3, 300);
+    ps.add({ k: K.TEXT, x: mx, y: my - 62, vy: -70, drag: 1.8, size: 22, text: 'BZZ!', color: '255,226,80', life: 0.75 });
+    host.shots.push(new BeeRifleShot(host.g, mx, my - 32));
+    host.shake(4);
+    sfx.play('beerifle_fire');
+  }
+
+export function fire_charge(host: SevenHost, mx: number, my: number) {
+    const a = host.anim;
+    const ps = host.particles;
+    a.charging = true;
+    a.charge = 0;
+    sfx.play('charge_charge');
+    host.orbTarget.x = mx;
+    host.orbTarget.y = my - 11;
+    for (let i = 0; i < 14; i++) {
+      const an = rand(0, TAU);
+      const d = rand(30, 70);
+      ps.add({ k: K.SPARK, add: true, x: mx + Math.cos(an) * d, y: my - 11 + Math.sin(an) * d, target: host.orbTarget, pull: 2600, size: rand(1, 2), len: 0.03, life: 0.3, color: pick(['150,230,255', '255,255,255', '70,200,255']) });
+    }
+    host.after(0.1, () => {
+      a.charging = false;
+      a.charge = 0;
+      a.fireT = 0;
+      a.recoilV += 11;
+      host.addFX(new RadialFlash(mx, my - 12, ['60,200,255', '210,248,255', '255,255,255'], 0.14, 90, 14));
+      host.addFX(new Light(mx, my - 12, 230, '70,200,255', 0.8, 0.24));
+      S.ring(ps, mx, my - 12, 4, 76, '90,210,255', 4, 0.3, true);
+      S.sparks(ps, mx, my - 12, 16, -Math.PI / 2, 1.1, [180, 540], '150,230,255', 1.4, 200);
+      S.smoke(ps, mx + 18, my + 38, 4, '225,240,250', [8, 30], { vx: [20, 80], vy: [-90, -20], alpha: 0.4, life: [0.5, 0.9] });
+      S.smoke(ps, mx - 18, my + 38, 4, '225,240,250', [8, 30], { vx: [-80, -20], vy: [-90, -20], alpha: 0.4, life: [0.5, 0.9] });
+      host.shots.push(new ChargeShot(host.g, mx, my - 12));
+      host.shake(6);
+      sfx.play('charge_fire');
+    });
+  }
+
+export function fire_pulse(host: SevenHost, mx: number, my: number) {
+    const a = host.anim;
+    const ps = host.particles;
+    a.fireT = 0;
+    a.recoilV += 5;
+    host.addFX(new Light(mx, my - 6, 160, '70,215,255', 0.55, 0.2));
+    for (let k = 0; k < 3; k++) host.after(k * 0.05, () => S.ring(ps, mx, my - 4, 3, 40 + k * 10, '110,225,255', 2.5, 0.22, true));
+    S.sparks(ps, mx, my - 4, 12, -Math.PI / 2, 0.9, [160, 460], '130,230,255', 1.3, 200);
+    S.smoke(ps, mx, my - 4, 3, '215,235,245', [8, 26], { vy: [-100, -30], vx: [-30, 30], alpha: 0.25, life: [0.4, 0.8] });
+    host.shots.push(new PulseShot(host.g, mx, my - 4));
+    host.shake(3);
+    sfx.play('pulse_fire');
+  }
+
+export function fire_cryo(host: SevenHost, mx: number, my: number) {
+    const a = host.anim;
+    const ps = host.particles;
+    a.fireT = 0;
+    a.recoilV += 6;
+    host.addFX(new Light(mx, my - 6, 180, '110,215,255', 0.55, 0.24));
+    S.smoke(ps, mx, my - 6, 10, '220,244,255', [12, 48], { vx: [-80, 80], vy: [-170, -50], alpha: 0.5, life: [0.6, 1.1], drag: 2.2 });
+    S.snowflakes(ps, mx, my - 6, 10, -Math.PI / 2, 1.0, [120, 340]);
+    S.crystalShards(ps, mx, my - 6, 6, -Math.PI / 2, 0.8, [200, 460]);
+    S.stars(ps, mx, my - 6, 6, '200,245,255', [60, 220], [7, 12], -Math.PI / 2, 1);
+    S.ring(ps, mx, my - 6, 4, 56, '150,230,255', 3, 0.28, true);
+    host.shots.push(new CryoShot(host.g, mx, my - 4));
+    host.shake(4);
+    sfx.play('cryo_fire');
+  }
+
+export function fire_hyperdrive(host: SevenHost, mx: number, my: number) {
+    const a = host.anim;
+    const ps = host.particles;
+    a.fireT = 0;
+    a.recoilV += 10;
+    host.addFX(new WarpLines(mx, my - 6, 0.3, 0.7));
+    host.addFX(new RadialFlash(mx, my - 4, ['130,180,255', '230,240,255', '255,255,255'], 0.12, 80, 14));
+    host.addFX(new Light(mx, my - 8, 230, '120,170,255', 0.8, 0.24));
+    S.ring(ps, mx, my - 6, 4, 70, '130,180,255', 4, 0.3, true);
+    S.sparks(ps, mx, my - 6, 20, -Math.PI / 2, 1.0, [220, 640], '170,205,255', 1.4, 200);
+    S.stars(ps, mx, my - 6, 8, '210,228,255', [60, 240], [7, 13], -Math.PI / 2, 1.1);
+    host.shots.push(new HyperShot(host.g, mx, my - 4));
+    host.shake(6);
+    sfx.play('hyper_fire');
+  }
+
+export function fire_quantum(host: SevenHost, mx: number, my: number) {
+    const a = host.anim;
+    const ps = host.particles;
+    a.fireT = 0;
+    a.recoilV += 8;
+    host.addFX(new GlitchBurst(mx, my - 10, 0.4, 0.55));
+    host.addFX(new Light(mx, my - 10, 200, '170,80,255', 0.7, 0.26));
+    S.glitchBits(ps, mx, my - 10, 18, 40);
+    S.ring(ps, mx, my - 10, 4, 66, '190,110,255', 3.5, 0.3, true);
+    S.sparks(ps, mx, my - 10, 14, -Math.PI / 2, 1.1, [160, 480], '210,150,255', 1.4, 200);
+    S.stars(ps, mx, my - 10, 6, '225,185,255', [60, 220], [7, 12], -Math.PI / 2, 1.1);
+    host.shots.push(new QuantumShot(host.g, mx, my - 12));
+    host.shake(5);
+    sfx.play('quantum_fire');
+  }
+
+export function fire_wars(host: SevenHost, mx: number, my: number) {
+    const a = host.anim;
+    const ps = host.particles;
+    a.fireT = 0;
+    a.recoilV += 7;
+    host.addFX(new RadialFlash(mx, my - 6, ['255,70,60', '255,220,210', '255,255,255'], 0.1, 60, 12));
+    host.addFX(new Light(mx, my - 8, 170, '255,70,60', 0.65, 0.2));
+    S.sparks(ps, mx, my - 6, 12, -Math.PI / 2, 0.8, [200, 520], '255,120,100', 1.3, 300);
+    S.smoke(ps, mx, my - 6, 3, '120,110,106', [8, 26], { vy: [-110, -30], vx: [-30, 30], alpha: 0.25, life: [0.4, 0.8] });
+    S.ring(ps, mx, my - 6, 3, 40, '255,90,80', 2.5, 0.22, true);
+    host.shots.push(new WarsShot(host.g, mx, my - 6));
+    host.shake(3);
+    sfx.play('wars_fire');
+  }
+
+/** Slide-7 fire recipe per weapon (all 65 of SET 2..7). */
 export const FIRE_RECIPES = {
   snowball: fire_snowball,
   sniper: fire_sniper,
@@ -798,4 +1358,33 @@ export const FIRE_RECIPES = {
   rainbow: fire_rainbow,
   meteor: fire_meteor,
   diamond: fire_diamond,
+  fish: fire_fish,
+  rpg: fire_rpg,
+  cricket: fire_cricket,
+  electro: fire_electro,
+  bazooka: fire_bazooka,
+  freeze: fire_freeze,
+  rail: fire_rail,
+  shrink: fire_shrink,
+  grow: fire_grow,
+  magnet: fire_magnet,
+  pirate: fire_pirate,
+  card: fire_card,
+  holy: fire_holy,
+  unicorn: fire_unicorn,
+  obliterator: fire_obliterator,
+  coin: fire_coin,
+  saber: fire_saber,
+  gauntlet: fire_gauntlet,
+  ruby: fire_ruby,
+  emerald: fire_emerald,
+  sapphire: fire_sapphire,
+  crystal: fire_crystal,
+  beerifle: fire_beerifle,
+  charge: fire_charge,
+  pulse: fire_pulse,
+  cryo: fire_cryo,
+  hyperdrive: fire_hyperdrive,
+  quantum: fire_quantum,
+  wars: fire_wars,
 } as const satisfies Record<SevenId, (host: SevenHost, mx: number, my: number) => void>;

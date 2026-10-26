@@ -217,11 +217,12 @@ test('themed grips use distinct silhouettes and palettes while leaning like the 
   assert.ok(actualBlackHole.some(event => event.startsWith('rotate(-0.72')), 'the slide-1 Black Hole renderer uses its angled violet grip');
   for (const id of ['freeze', 'fish', 'electro'] as const) {
     const events: string[] = [];
-    drawGunCentered(canvasArt(events), id, 0);
+    // slide-1 art is the "Sebelumnya" card now; the default is slide 7's gun.
+    drawGunCentered(canvasArt(events), id, 0, 0, true, 'current');
     assert.ok(events.some(event => event.startsWith('rotate(-0.72')), `${id} renderer uses its angled themed grip`);
   }
   const cricketEvents: string[] = [];
-  drawGunCentered(canvasArt(cricketEvents), 'cricket', 0);
+  drawGunCentered(canvasArt(cricketEvents), 'cricket', 0, 0, true, 'current');
   assert.ok(cricketEvents.length > 30, 'Noisy Cricket renders its redesigned miniature receiver and emitter');
 });
 

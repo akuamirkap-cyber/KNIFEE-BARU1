@@ -18,6 +18,11 @@ export const SET_SEVEN_SETS = {
   sakura: 4, firework: 4, keris: 4,
   moonbeam: 5, storm: 5, pencil: 5, sandal: 5, paintball: 5, wand: 5,
   shark: 5, ghost: 5, ufo: 5, rainbow: 5, meteor: 5, diamond: 5,
+  fish: 6, rpg: 6, cricket: 6, electro: 6, bazooka: 6, freeze: 6,
+  rail: 6, magnet: 6, shrink: 6, grow: 6, pirate: 6, card: 6,
+  holy: 7, unicorn: 7, obliterator: 7, coin: 7, saber: 7, gauntlet: 7,
+  ruby: 7, emerald: 7, sapphire: 7, crystal: 7, beerifle: 7, charge: 7,
+  pulse: 7, cryo: 7, hyperdrive: 7, quantum: 7, wars: 7,
 } as const;
 
 /** Which slide-7 set a ported weapon belongs to (2..5). */
@@ -63,6 +68,35 @@ export const SET_SEVEN_BY_SLIDE1_ID = {
   rainbow: 'rainbow',
   meteor: 'meteor',
   diamond: 'diamond',
+  fish: 'fish',
+  rpg: 'rpg',
+  cricket: 'cricket',
+  electro: 'electro',
+  bazooka: 'bazooka',
+  freeze: 'freeze',
+  railgun: 'rail',
+  magnet: 'magnet',
+  shrink: 'shrink',
+  grow: 'grow',
+  pirate: 'pirate',
+  card: 'card',
+  holy: 'holy',
+  unicorn: 'unicorn',
+  obliterator: 'obliterator',
+  coingun: 'coin',
+  photon_saber: 'saber',
+  gauntlet_cannon: 'gauntlet',
+  ruby: 'ruby',
+  emerald: 'emerald',
+  sapphire: 'sapphire',
+  crystal: 'crystal',
+  beerifle: 'beerifle',
+  buster: 'charge',
+  pulse_rifle: 'pulse',
+  cryo_blaster: 'cryo',
+  hyperdrive: 'hyperdrive',
+  quantum_destabilizer: 'quantum',
+  blaster: 'wars',
 } as const satisfies Record<string, WeaponId>;
 
 export type SevenSlide1Id = keyof typeof SET_SEVEN_BY_SLIDE1_ID;
@@ -117,5 +151,54 @@ export function restSevenAnim(): WeaponAnim {
   a.orb = 1;
   a.gauge = 0.92;
   a.charge = 0;
+  return a;
+}
+
+/** Live slide-1 state that slide 7's artwork needs to look alive. */
+export interface SevenAnimState {
+  /** Seconds since the last trigger (9 = rested, like slide 7's idle). */
+  sinceShot: number;
+  /** Held charge, 0..1 (CHARGE BLASTER, plasma…). */
+  charge: number;
+  /** Spin-up, 0..1 (minigun, gatling…). */
+  spin: number;
+}
+
+/**
+ * Slide 7 advances a spring per weapon (`WeaponAnim`) from its fire recipes.
+ * Slide 1 fires its own rounds, so the same motion is rebuilt from the state it
+ * already tracks: the trigger age drives recoil/slide/pump/heat, the held
+ * charge drives `charge`, and the spin-up drives the drums.
+ */
+export function buildSevenAnim(st: SevenAnimState): WeaponAnim {
+  const a = newAnim();
+  const ft = Math.max(0, st.sinceShot);
+  a.intro = 1;
+  a.fireT = ft;
+  a.orb = 1;
+  a.gauge = 0.92;
+  a.recoil = 0.5 * Math.exp(-ft * 9) * Math.cos(ft * 26);
+  a.slide = ft < 0.035 ? ft / 0.035 : Math.max(0, 1 - (ft - 0.035) / 0.09);
+  // Pump action: out over 0.12 s, back by 0.27 s — slide 7's own timing.
+  const pump = ft < 0.12 ? ft / 0.12 : ft < 0.27 ? 1 - (ft - 0.12) / 0.15 : 0;
+  a.pump = pump;
+  a.pumpS = pump;
+  // Bolt: lift, pull back, return — again slide 7's curve.
+  const bolt = ft < 0.12 ? 0 : ft < 0.3 ? (ft - 0.12) / 0.18 : ft < 0.4 ? 1
+    : ft < 0.58 ? 1 - (ft - 0.4) / 0.18 : 0;
+  a.bolt = bolt;
+  a.lift = ft < 0.58 ? Math.min(1, ft / 0.12) : 0;
+  a.charge = st.charge;
+  a.charging = st.charge > 0 && ft < 0.25;
+  a.heat = Math.max(st.spin, Math.exp(-ft * 0.9));
+  a.spin = st.spin * 26;
+  a.fan = ft * 20;
+  a.fuse = Math.max(0, 1.6 - ft * 0.6);
+  a.water = 1;
+  a.pouchTarget = ft < 0.2 ? 1 : 0;
+  a.pouchY = a.pouchTarget;
+  a.loaded = true;
+  a.pulse = -1;
+  a.idx = Math.floor(ft * 12) % 12;
   return a;
 }

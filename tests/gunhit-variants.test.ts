@@ -6,6 +6,7 @@ import {
   GUN_VARIANTS, GUN_EFFECTS, getGunVariantOptions, getGunEffectOptions,
   type GunVariant, type GunEffect, type VariantWeapon,
 } from '../src/games/gunhit/game/art/gunVariants';
+import { hasClassicProjectile } from '../src/games/gunhit/game/art/classicProjectiles';
 import { drawProjectile } from '../src/games/gunhit/game/art/projectiles';
 import { drawMaterialTrail } from '../src/games/gunhit/game/art/projectileTrails';
 import { drawSetOneShotShell } from '../src/games/gunhit/game/setOneFx';
@@ -49,8 +50,8 @@ function pathsFor(id: VariantWeapon, variant: GunVariant) {
 test('user loadouts use the requested classic/new combination; only real alternatives can be selected', () => {
   assert.deepEqual(GUN_VARIANTS.map(v => v.label), ['Sebelumnya', 'Sekarang', 'Terbaru']);
   assert.deepEqual(GUN_EFFECTS.map(v => v.label), ['Sebelumnya', 'Baru']);
-  assert.equal(VARIANT_WEAPONS.length, 45);
-  assert.equal(EDITABLE_WEAPONS.length, 43);
+  assert.equal(VARIANT_WEAPONS.length, 71);
+  assert.equal(EDITABLE_WEAPONS.length, 69);
   assert.equal(getGunVariant('pistol'), 'current');
   assert.equal(getGunEffect('pistol'), 'new');
   for (const id of FIXED_CLASSIC_WEAPONS) {
@@ -76,7 +77,7 @@ test('user loadouts use the requested classic/new combination; only real alterna
   // The two-silhouette guns gain slide 7 as their third card.
   assert.deepEqual(getGunVariantOptions('honey').map(v => v.id), ['original', 'current', 'set7']);
   for (const id of ['cricket', 'fish', 'electro'] as const) {
-    assert.deepEqual(getGunVariantOptions(id).map(v => v.id), ['original', 'current']);
+    assert.deepEqual(getGunVariantOptions(id).map(v => v.id), ['original', 'current', 'set7']);
   }
   assert.equal(getGunVariantOptions('chicken').length, 4);
   // SET 1 cards: GOLDEN keeps its three slide-1 designs plus "Set 1".
@@ -170,6 +171,9 @@ function effectArt(id: VariantWeapon, requested: GunEffect) {
 
 test('eleven editable guns show the old and new actual shot renderers', () => {
   for (const id of EDITABLE_WEAPONS) {
+    // Slide 1 only ever had one shot for the SET 6..7 guns, so there is no
+    // older renderer to compare until their effects land.
+    if (!hasClassicProjectile(id) && !FIXED_CLASSIC_WEAPONS.includes(id as never)) continue;
     // A slide-7 gun compares its slide-1 shot against slide 7's own round.
     const before: GunEffect = getGunEffectOptions(id).length > 2 ? 'new' : 'original';
     const after: GunEffect = getGunEffectOptions(id).length > 2 ? 'set7' : 'new';

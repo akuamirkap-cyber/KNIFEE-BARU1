@@ -48,9 +48,9 @@ function host() {
   return { fx, counts };
 }
 
-test('slide 7 SET 2..5 is exactly the 36 weapons slide 1 shares, matched by name', () => {
-  assert.equal(SET_SEVEN_IDS.length, 36);
-  assert.equal(new Set(SET_SEVEN_IDS).size, 36);
+test('slide 7 SET 2..7 is the 65 weapons slide 1 shares, matched by name', () => {
+  assert.equal(SET_SEVEN_IDS.length, 65);
+  assert.equal(new Set(SET_SEVEN_IDS).size, 65);
   // Every slide-1 id of the port exists, and only FLAMETHROWER is renamed.
   for (const [slide1, seven] of Object.entries(SET_SEVEN_BY_SLIDE1_ID)) {
     assert.equal(setSevenIdFor(slide1), seven);
@@ -59,15 +59,17 @@ test('slide 7 SET 2..5 is exactly the 36 weapons slide 1 shares, matched by name
   assert.equal(setSevenIdFor('flamethrower'), 'flame');
   assert.equal(setSevenIdFor('pistol'), null);
   assert.deepEqual(
-    [1, 2, 3, 4, 5].map((n) => SET_SEVEN_IDS.filter((id) => SET_SEVEN_SETS[id] === n).length),
-    [0, 6, 9, 9, 12],
-    'SET 2 = 6, SET 3 = 9, SET 4 = 9, SET 5 = 12 weapons',
+    [1, 2, 3, 4, 5, 6, 7].map((n) => SET_SEVEN_IDS.filter((id) => SET_SEVEN_SETS[id] === n).length),
+    [0, 6, 9, 9, 12, 12, 17],
+    'SET 2 = 6, SET 3 = 9, SET 4 = 9, SET 5 = 12, SET 6 = 12, SET 7 = 17 weapons',
   );
   assert.equal(setSevenSetOf('snowball'), 2);
   assert.equal(setSevenSetOf('wand'), 5);
+  assert.equal(setSevenSetOf('card'), 6);
+  assert.equal(setSevenSetOf('wars'), 7);
 });
 
-test('every one of the 36 fires slide 7’s own recipe, round and impact', () => {
+test('every one of the 65 fires slide 7’s own recipe, round and impact', () => {
   for (const id of SET_SEVEN_IDS) {
     const { fx } = host();
     fx.weaponId = id;

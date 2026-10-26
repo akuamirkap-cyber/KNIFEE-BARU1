@@ -15,7 +15,12 @@ export const EDITABLE_WEAPONS = [
   'pizza', 'minigun', 'crossbow', 'gravity', 'coconut',
   'angklung', 'bee', 'sakura', 'firework', 'keris',
   'storm', 'pencil', 'sandal', 'paintball', 'wand',
-  'shark', 'ghost', 'ufo',
+  'shark', 'ghost', 'ufo', 'rpg', 'bazooka',
+  'freeze', 'railgun', 'magnet', 'shrink', 'grow',
+  'pirate', 'card', 'holy', 'unicorn', 'obliterator',
+  'coingun', 'photon_saber', 'gauntlet_cannon', 'ruby', 'emerald',
+  'sapphire', 'crystal', 'beerifle', 'buster', 'pulse_rifle',
+  'cryo_blaster', 'hyperdrive', 'quantum_destabilizer', 'blaster',
 ] as const satisfies readonly WeaponId[];
 
 /**
@@ -43,7 +48,13 @@ export const SET_SEVEN_DESIGN_WEAPONS = [
   'honey', 'coconut', 'angklung', 'bee', 'sakura',
   'firework', 'keris', 'moonbeam', 'storm', 'pencil',
   'sandal', 'paintball', 'wand', 'shark', 'ghost',
-  'ufo', 'rainbow', 'meteor', 'diamond',
+  'ufo', 'rainbow', 'meteor', 'diamond', 'fish',
+  'rpg', 'cricket', 'electro', 'bazooka', 'freeze',
+  'railgun', 'magnet', 'shrink', 'grow', 'pirate',
+  'card', 'holy', 'unicorn', 'obliterator', 'coingun',
+  'photon_saber', 'gauntlet_cannon', 'ruby', 'emerald', 'sapphire',
+  'crystal', 'beerifle', 'buster', 'pulse_rifle', 'cryo_blaster',
+  'hyperdrive', 'quantum_destabilizer', 'blaster',
 ] as const satisfies readonly WeaponId[];
 export type SetSevenDesignWeapon = (typeof SET_SEVEN_DESIGN_WEAPONS)[number];
 
@@ -68,6 +79,12 @@ const NO_LATEST_DESIGN = [
   'gravity', 'coconut', 'angklung', 'bee', 'sakura',
   'firework', 'keris', 'storm', 'pencil', 'sandal',
   'paintball', 'wand', 'shark', 'ghost', 'ufo',
+  'rpg', 'bazooka', 'freeze', 'railgun', 'magnet',
+  'shrink', 'grow', 'pirate', 'card', 'holy',
+  'unicorn', 'obliterator', 'coingun', 'photon_saber', 'gauntlet_cannon',
+  'ruby', 'emerald', 'sapphire', 'crystal', 'beerifle',
+  'buster', 'pulse_rifle', 'cryo_blaster', 'hyperdrive', 'quantum_destabilizer',
+  'blaster',
 ] as const;
 
 /**
@@ -81,7 +98,12 @@ export const NO_SEPARATE_ORIGINAL = [
   'minigun', 'crossbow', 'gravity', 'coconut', 'angklung',
   'bee', 'sakura', 'firework', 'keris', 'storm',
   'pencil', 'sandal', 'paintball', 'wand', 'shark',
-  'ghost', 'ufo',
+  'ghost', 'ufo', 'rpg', 'bazooka', 'freeze',
+  'railgun', 'magnet', 'shrink', 'grow', 'pirate',
+  'card', 'holy', 'unicorn', 'obliterator', 'coingun',
+  'photon_saber', 'gauntlet_cannon', 'ruby', 'emerald', 'sapphire',
+  'crystal', 'beerifle', 'buster', 'pulse_rifle', 'cryo_blaster',
+  'hyperdrive', 'quantum_destabilizer', 'blaster',
 ] as const;
 export type OriginalDesignWeapon = Exclude<VariantWeapon, (typeof NO_SEPARATE_ORIGINAL)[number]>;
 export function hasSeparateOriginal(id: VariantWeapon): id is OriginalDesignWeapon {
@@ -140,6 +162,11 @@ export function getGunVariantOptions(id: VariantWeapon) {
     if (id === 'honey') return [...GUN_VARIANTS.slice(0, 2), card];
     // Three genuine slide-1 designs: keep all of them, slide 7 last.
     if (supportsLatestDesign(id as LatestDesignWeapon)) return [...GUN_VARIANTS, card];
+    // Guns whose slide-1 art is a separate "Sebelumnya" design (CRICKET, FISH,
+    // ELECTRO) keep both slide-1 cards and gain slide 7 as the newest.
+    if (!(NO_SEPARATE_ORIGINAL as readonly string[]).includes(id)) {
+      return [...GUN_VARIANTS.slice(0, 2), card];
+    }
     // Every other ported gun only ever had one slide-1 look.
     return [GUN_VARIANTS[0], card];
   }
@@ -181,7 +208,12 @@ const DEFAULT_DESIGNS: Record<EditableWeapon, GunVariant> = {
   pizza: 'set7', minigun: 'set7', crossbow: 'set7', gravity: 'set7', coconut: 'set7',
   angklung: 'set7', bee: 'set7', sakura: 'set7', firework: 'set7', keris: 'set7',
   storm: 'set7', pencil: 'set7', sandal: 'set7', paintball: 'set7', wand: 'set7',
-  shark: 'set7', ghost: 'set7', ufo: 'set7',
+  shark: 'set7', ghost: 'set7', ufo: 'set7', rpg: 'set7', bazooka: 'set7',
+  freeze: 'set7', railgun: 'set7', magnet: 'set7', shrink: 'set7', grow: 'set7',
+  pirate: 'set7', card: 'set7', holy: 'set7', unicorn: 'set7', obliterator: 'set7',
+  coingun: 'set7', photon_saber: 'set7', gauntlet_cannon: 'set7', ruby: 'set7', emerald: 'set7',
+  sapphire: 'set7', crystal: 'set7', beerifle: 'set7', buster: 'set7', pulse_rifle: 'set7',
+  cryo_blaster: 'set7', hyperdrive: 'set7', quantum_destabilizer: 'set7', blaster: 'set7',
 };
 const DEFAULT_EFFECTS: Record<EditableWeapon, GunEffect> = {
   dragon: 'set7', diamond: 'set7', rainbow: 'set7', meteor: 'set7', golden: 'new',
@@ -192,7 +224,12 @@ const DEFAULT_EFFECTS: Record<EditableWeapon, GunEffect> = {
   pizza: 'set7', minigun: 'set7', crossbow: 'set7', gravity: 'set7', coconut: 'set7',
   angklung: 'set7', bee: 'set7', sakura: 'set7', firework: 'set7', keris: 'set7',
   storm: 'set7', pencil: 'set7', sandal: 'set7', paintball: 'set7', wand: 'set7',
-  shark: 'set7', ghost: 'set7', ufo: 'set7',
+  shark: 'set7', ghost: 'set7', ufo: 'set7', rpg: 'set7', bazooka: 'set7',
+  freeze: 'set7', railgun: 'set7', magnet: 'set7', shrink: 'set7', grow: 'set7',
+  pirate: 'set7', card: 'set7', holy: 'set7', unicorn: 'set7', obliterator: 'set7',
+  coingun: 'set7', photon_saber: 'set7', gauntlet_cannon: 'set7', ruby: 'set7', emerald: 'set7',
+  sapphire: 'set7', crystal: 'set7', beerifle: 'set7', buster: 'set7', pulse_rifle: 'set7',
+  cryo_blaster: 'set7', hyperdrive: 'set7', quantum_destabilizer: 'set7', blaster: 'set7',
 };
 
 function readChoices(key: string): Record<string, unknown> | null {

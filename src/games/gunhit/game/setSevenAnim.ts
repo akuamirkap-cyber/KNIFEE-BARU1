@@ -1,5 +1,5 @@
 /**
- * Slide-7 weapon animation and idle ambience of SET 2..5, copied verbatim from
+ * Slide-7 weapon animation and idle ambience of SET 2..7, copied verbatim from
  * `games/game-4/src/game/Game.ts` by `scripts/gen-set-seven.py`.
  *
  * `updateSevenAnim` integrates the same springs slide 7 does (recoil, slide,
@@ -234,6 +234,132 @@ export function updateSevenAnim(host: SevenHost, dt: number) {
 
       case 'diamond':
         if (Math.random() < dt * 6) ps.add({ k: K.STAR, add: true, x: mx + rand(-24, 24), y: my + rand(0, 200), size: rand(7, 13), life: rand(0.4, 0.7), color: pick(['235,252,255', '170,230,255']), vrot: rand(-1, 1) });
+        break;
+
+      case 'fish':
+        if (Math.random() < dt * 2.4) S.miniBubble(ps, mx + rand(-6, 6), my - 22, rand(-14, 14), rand(-60, -30), rand(2.4, 5), rand(0.9, 1.6));
+        break;
+
+      case 'rpg':
+        if (a.fireT < 2.2 && Math.random() < dt * 20 * (1 - a.fireT / 2.2)) ps.add({ k: K.SMOKE, x: mx + rand(-8, 8), y: my + 28, vx: rand(-14, 14), vy: rand(-60, -25), size: 5, size2: 28, life: rand(0.9, 1.4), color: '150,148,145', alpha: 0.3, rot: rand(0, TAU) });
+        break;
+
+      case 'cricket':
+        if (Math.random() < dt * 4) S.sparks(ps, mx + 36, my + 3, 1, -Math.PI / 2, 1.4, [30, 100], '210,150,255', 1.2, 60, 0.03);
+        break;
+
+      case 'electro':
+        if (Math.random() < dt * 5) host.addFX(new Lightning(mx - 16, my - 14, mx + 16, my - 14, 0.08, '130,205,255', 1, 0, 0.03));
+        break;
+
+      case 'bazooka':
+        if (a.fireT < 2.6 && Math.random() < dt * 22 * (1 - a.fireT / 2.6)) ps.add({ k: K.SMOKE, x: mx + rand(-10, 10), y: my + 24, vx: rand(-14, 14), vy: rand(-60, -25), size: 6, size2: 30, life: rand(1, 1.5), color: '170,170,172', alpha: 0.3, rot: rand(0, TAU) });
+        break;
+
+      case 'freeze':
+        if (Math.random() < dt * 7) ps.add({ k: K.SMOKE, x: mx + rand(-16, 16), y: my + 6, vx: rand(-14, 14), vy: rand(10, 36), size: 6, size2: 26, life: rand(0.8, 1.3), color: '200,238,255', alpha: 0.28, rot: rand(0, TAU) });
+        if (Math.random() < dt * 3) S.snowflakes(ps, mx + rand(-20, 20), my - 10, 1, -Math.PI / 2, 1.2, [10, 40]);
+        break;
+
+      case 'rail':
+        if (Math.random() < dt * 8) S.sparks(ps, mx + rand(-12, 12), my + rand(0, 160), 1, rand(0, TAU), 0.3, [20, 80], '150,190,255', 1.1, 0, 0.03);
+        break;
+
+      case 'magnet':
+        if (Math.random() < dt * 6) S.sparks(ps, mx + rand(-30, 30), my + rand(-8, 10), 1, -Math.PI / 2, 1.2, [20, 80], Math.random() < 0.5 ? '255,110,110' : '130,170,255', 1.1, 0, 0.03);
+        break;
+
+      case 'shrink':
+        if (Math.random() < dt * 6) S.sparks(ps, mx + rand(-20, 20), my + rand(0, 120), 1, -Math.PI / 2, 1.2, [20, 70], '70,255,140', 1.1, 0, 0.03);
+        break;
+
+      case 'grow':
+        if (Math.random() < dt * 6) S.sparks(ps, mx + rand(-20, 20), my + rand(0, 120), 1, -Math.PI / 2, 1.2, [20, 70], '255,160,50', 1.1, 0, 0.03);
+        break;
+
+      case 'pirate':
+        if (Math.random() < dt * 7) ps.add({ k: K.SMOKE, x: mx + 36, y: my + 16, vx: rand(-8, 8), vy: rand(-50, -25), size: 3, size2: 14, life: rand(0.8, 1.2), color: '190,185,175', alpha: 0.22, rot: rand(0, TAU) });
+        if (a.fireT < 2 && Math.random() < dt * 18 * (1 - a.fireT / 2)) ps.add({ k: K.SMOKE, x: mx + rand(-8, 8), y: my + 6, vx: rand(-12, 12), vy: rand(-60, -25), size: 6, size2: 30, life: rand(0.9, 1.4), color: '120,116,112', alpha: 0.3, rot: rand(0, TAU) });
+        break;
+
+      case 'card':
+        if (Math.random() < dt * 4) ps.add({ k: K.STAR, add: true, x: mx + rand(-30, 30), y: my + rand(40, 200), size: rand(7, 12), life: rand(0.4, 0.7), color: pick(['255,235,190', '255,160,180']), vrot: rand(-1, 1) });
+        break;
+
+      case 'holy':
+        if (Math.random() < dt * 5) S.stars(ps, mx + rand(-30, 30), my + rand(-20, 140), 1, '255,236,170', [10, 40], [6, 11], -Math.PI / 2, 1);
+        if (Math.random() < dt * 1.2) S.feathers(ps, mx + rand(-40, 40), my + rand(40, 120), 1, -Math.PI / 2, 1, [10, 40]);
+        break;
+
+      case 'unicorn':
+        if (Math.random() < dt * 5) S.rainbowSparks(ps, mx + rand(-40, 40), my + rand(60, 160), 1, -Math.PI / 2, 1, [10, 60], 1.2);
+        if (Math.random() < dt * 0.9) S.hearts(ps, mx + rand(-20, 20), my + 60, 1, -Math.PI / 2, 0.6, [30, 70]);
+        break;
+
+      case 'obliterator':
+        if (Math.random() < dt * 4) S.miniBubble(ps, mx + rand(-8, 8), my + rand(50, 150), rand(-6, 6), rand(-50, -20), rand(2, 4), rand(0.6, 1.1));
+        if (Math.random() < dt * 5) ps.add({ k: K.EMBER, add: true, x: mx + rand(-12, 12), y: my - 12, vx: rand(-20, 20), vy: rand(-70, -30), size: 1.6, life: rand(0.5, 0.9), color: '150,255,100', g: -30 });
+        break;
+
+      case 'coin':
+        if (Math.random() < dt * 5) ps.add({ k: K.STAR, add: true, x: mx + rand(-20, 20), y: my + rand(-20, 140), size: rand(6, 11), life: rand(0.4, 0.7), color: '255,230,130', vrot: rand(-1, 1) });
+        break;
+
+      case 'saber':
+        if (Math.random() < dt * 14) ps.add({ k: K.SPARK, add: true, x: mx + rand(-3, 3), y: my - 116, vx: rand(-40, 40), vy: rand(-70, 20), g: 100, drag: 1.5, size: 1.2, len: 0.03, life: rand(0.3, 0.6), color: '140,235,255' });
+        break;
+
+      case 'gauntlet':
+        if (a.fireT < 1.2 && Math.random() < dt * 22 * (1 - a.fireT / 1.2)) ps.add({ k: K.SMOKE, x: mx + rand(-14, 14), y: my + 52, vx: rand(-14, 14), vy: rand(-50, -20), size: 5, size2: 24, life: rand(0.7, 1.1), color: '190,194,200', alpha: 0.3, rot: rand(0, TAU) });
+        break;
+
+      case 'ruby':
+        if (Math.random() < dt * 4) ps.add({ k: K.STAR, add: true, x: mx + rand(-12, 12), y: my + rand(20, 100), size: rand(6, 11), life: rand(0.4, 0.7), color: '255,150,175', vrot: rand(-1, 1) });
+        break;
+
+      case 'emerald':
+        if (Math.random() < dt * 6) S.sparks(ps, mx + rand(-24, 24), my - 12 + rand(-24, 24), 1, -Math.PI / 2, 1.4, [10, 50], '120,255,180', 1.1, -40, 0.03);
+        break;
+
+      case 'sapphire':
+        if (Math.random() < dt * 4) ps.add({ k: K.STAR, add: true, x: mx + rand(-14, 14), y: my + rand(10, 150), size: rand(6, 11), life: rand(0.4, 0.7), color: '170,205,255', vrot: rand(-1, 1) });
+        if (a.fireT < 1.6 && Math.random() < dt * 20 * (1 - a.fireT / 1.6)) ps.add({ k: K.SMOKE, x: mx + rand(-10, 10), y: my - 4, vx: rand(-10, 10), vy: rand(-60, -25), size: 5, size2: 26, life: rand(0.8, 1.2), color: '170,176,196', alpha: 0.3, rot: rand(0, TAU) });
+        break;
+
+      case 'crystal':
+        if (Math.random() < dt * 6) S.sparks(ps, mx + rand(-30, 30), my + rand(-10, 90), 1, -Math.PI / 2, 1.4, [10, 60], '210,150,255', 1.1, -30, 0.03);
+        break;
+
+      case 'beerifle':
+        if (Math.random() < dt * 0.9) S.bees(ps, mx + rand(-10, 10), my + 60, 1, -Math.PI / 2, 1.2, [60, 140]);
+        break;
+
+      case 'charge':
+        if (a.fireT < 1.2 && Math.random() < dt * 22 * (1 - a.fireT / 1.2)) ps.add({ k: K.SMOKE, x: mx + rand(-22, 22), y: my + 40, vx: rand(-12, 12), vy: rand(-50, -20), size: 5, size2: 22, life: rand(0.7, 1.1), color: '225,240,250', alpha: 0.25, rot: rand(0, TAU) });
+        if (Math.random() < dt * 5) S.sparks(ps, mx + rand(-20, 20), my + rand(-8, 8), 1, -Math.PI / 2, 1.3, [20, 80], '130,225,255', 1.1, -30, 0.03);
+        break;
+
+      case 'pulse':
+        if (Math.random() < dt * 6) S.sparks(ps, mx + rand(-14, 14), my + rand(0, 130), 1, rand(0, TAU), 0.3, [20, 70], '110,225,255', 1.1, 0, 0.03);
+        break;
+
+      case 'cryo':
+        if (Math.random() < dt * 6) ps.add({ k: K.SMOKE, x: mx + rand(-10, 10), y: my - 2, vx: rand(-12, 12), vy: rand(-40, -15), size: 5, size2: 22, life: rand(0.8, 1.2), color: '210,240,255', alpha: 0.22, rot: rand(0, TAU) });
+        if (Math.random() < dt * 2.4) S.snowflakes(ps, mx + rand(-20, 20), my - 6, 1, -Math.PI / 2, 1.2, [10, 40]);
+        break;
+
+      case 'hyperdrive':
+        if (Math.random() < dt * 7) ps.add({ k: K.STAR, add: true, x: mx + rand(-14, 14), y: my + rand(0, 150), vx: 0, vy: rand(-90, -40), size: rand(5, 9), life: rand(0.3, 0.6), color: '200,225,255' });
+        break;
+
+      case 'quantum':
+        if (Math.random() < dt * 6) S.glitchBits(ps, mx + rand(-16, 16), my - 8 + rand(-14, 14), 1, 10);
+        break;
+
+      case 'wars':
+        if (Math.random() < dt * 5) ps.add({ k: K.EMBER, add: true, x: mx + rand(-4, 4), y: my - 4, vx: rand(-14, 14), vy: rand(-50, -20), size: rand(1.2, 2), life: rand(0.5, 0.9), color: '255,100,80', g: -20 });
+        break;
+      default:
         break;
     }
 }

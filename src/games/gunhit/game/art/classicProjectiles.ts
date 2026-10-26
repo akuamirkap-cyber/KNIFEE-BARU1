@@ -6,14 +6,18 @@ type C = CanvasRenderingContext2D;
 // Original shot drawings from c0769f5, not a recolor of the new projectile.
 // Only visuals are reused: collisions, speed, stick depth and buffs stay current.
 const NO_CLASSIC_ART = [
-  'slingshot', 'blowgun', 'shotgun', 'soaker',
-  // SET 2..5 guns: slide 1 only ever had one shot for them, so "Sebelumnya"
-  // sends them back through their normal renderer instead of a copy.
-  'snowball',, 'sniper',, 'flamethrower',, 'bubble',, 'bamboo',, 'banana',
-  'harpoon',, 'confetti',, 'seed',, 'pizza',, 'minigun',, 'crossbow',
-  'plasma',, 'laser',, 'gravity',, 'coconut',, 'angklung',, 'bee',
-  'sakura',, 'firework',, 'keris',, 'storm',, 'pencil',, 'sandal',
-  'paintball',, 'wand',, 'shark',, 'ghost',, 'ufo',
+  'slingshot', 'blowgun', 'shotgun', 'soaker', 'snowball',
+  'sniper', 'flamethrower', 'bubble', 'bamboo', 'banana',
+  'harpoon', 'confetti', 'seed', 'pizza', 'minigun',
+  'crossbow', 'plasma', 'laser', 'gravity', 'coconut',
+  'angklung', 'bee', 'sakura', 'firework', 'keris',
+  'storm', 'pencil', 'sandal', 'paintball', 'wand',
+  'shark', 'ghost', 'ufo', 'rpg', 'bazooka',
+  'freeze', 'magnet', 'shrink', 'grow', 'pirate',
+  'card', 'holy', 'unicorn', 'obliterator', 'coingun',
+  'photon_saber', 'gauntlet_cannon', 'ruby', 'emerald', 'sapphire',
+  'crystal', 'beerifle', 'buster', 'pulse_rifle', 'cryo_blaster',
+  'hyperdrive', 'quantum_destabilizer', 'blaster', 'railgun',
 ] as const;
 
 /** True when the gun has a genuine pre-variant shot to show as "Sebelumnya". */
@@ -72,6 +76,33 @@ export function drawClassicProjectile(c: C, kind: VariantWeapon, len: number, t:
     case 'shark':
     case 'ghost':
     case 'ufo':
+      return;
+    case 'rpg':
+    case 'bazooka':
+    case 'freeze':
+    case 'magnet':
+    case 'shrink':
+    case 'grow':
+    case 'pirate':
+    case 'card':
+    case 'holy':
+    case 'unicorn':
+    case 'obliterator':
+    case 'coingun':
+    case 'photon_saber':
+    case 'gauntlet_cannon':
+    case 'ruby':
+    case 'emerald':
+    case 'sapphire':
+    case 'crystal':
+    case 'beerifle':
+    case 'buster':
+    case 'pulse_rifle':
+    case 'cryo_blaster':
+    case 'hyperdrive':
+    case 'quantum_destabilizer':
+    case 'blaster':
+    case 'railgun':
       return;
     default: { const _never: never = kind; return _never; }
   }

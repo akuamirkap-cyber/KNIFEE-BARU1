@@ -86,7 +86,7 @@ const GUN_X = W / 2;
 const GUN_Y = 600;
 const SPIN = 1.9;
 const PURPLES = ['200,140,255', '255,180,255', '150,100,255', '230,200,255'];
-const RECOIL_ROT: Record<WeaponId, number> = {
+export const RECOIL_ROT: Record<WeaponId, number> = {
   golden: 0.11,
   blackhole: 0.02,
   ketapel: 0,
