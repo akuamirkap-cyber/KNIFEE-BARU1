@@ -215,6 +215,8 @@ const DEFAULT_DESIGNS: Record<EditableWeapon, GunVariant> = {
   sapphire: 'set7', crystal: 'set7', beerifle: 'set7', buster: 'set7', pulse_rifle: 'set7',
   cryo_blaster: 'set7', hyperdrive: 'set7', quantum_destabilizer: 'set7', blaster: 'set7',
 };
+// FIREWORK LAUNCHER keeps slide 2's celebrated fireworks as its default effect
+// (explicit request): the SET 4 card is its artwork, not its shot.
 const DEFAULT_EFFECTS: Record<EditableWeapon, GunEffect> = {
   dragon: 'set7', diamond: 'set7', rainbow: 'set7', meteor: 'set7', golden: 'new',
   moonbeam: 'set7', chicken: 'set7', honey: 'set7', cricket: 'set7', fish: 'set7',
@@ -222,7 +224,7 @@ const DEFAULT_EFFECTS: Record<EditableWeapon, GunEffect> = {
   soaker: 'new', snowball: 'set7', sniper: 'set7', flamethrower: 'set7', bubble: 'set7',
   bamboo: 'set7', banana: 'set7', harpoon: 'set7', confetti: 'set7', seed: 'set7',
   pizza: 'set7', minigun: 'set7', crossbow: 'set7', gravity: 'set7', coconut: 'set7',
-  angklung: 'set7', bee: 'set7', sakura: 'set7', firework: 'set7', keris: 'set7',
+  angklung: 'set7', bee: 'set7', sakura: 'set7', firework: 'new', keris: 'set7',
   storm: 'set7', pencil: 'set7', sandal: 'set7', paintball: 'set7', wand: 'set7',
   shark: 'set7', ghost: 'set7', ufo: 'set7', rpg: 'set7', bazooka: 'set7',
   freeze: 'set7', railgun: 'set7', magnet: 'set7', shrink: 'set7', grow: 'set7',

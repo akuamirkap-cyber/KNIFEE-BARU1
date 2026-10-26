@@ -72,7 +72,9 @@ test('user loadouts use the requested classic/new combination; only real alterna
   for (const id of EDITABLE_WEAPONS) {
     assert.equal(canChooseGunDesign(id), true);
     assert.deepEqual([getGunVariant(id), getGunEffect(id)],
-      SET_ONE.includes(id) ? ['set1', 'new'] : ['set7', 'set7'], `${id} default`);
+      SET_ONE.includes(id) ? ['set1', 'new']
+        // FIREWORK LAUNCHER keeps slide 2's fireworks as its default effect.
+        : id === 'firework' ? ['set7', 'new'] : ['set7', 'set7'], `${id} default`);
   }
   // The two-silhouette guns gain slide 7 as their third card.
   assert.deepEqual(getGunVariantOptions('honey').map(v => v.id), ['original', 'current', 'set7']);

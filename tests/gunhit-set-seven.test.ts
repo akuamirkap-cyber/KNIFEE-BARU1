@@ -133,7 +133,9 @@ test('slide 7 designs and shots are the new defaults for the 36, and stay option
     if (RETIRED.includes(slide1)) continue;
     assert.ok(EDITABLE_WEAPONS.includes(slide1 as never), `${slide1} is selectable`);
     assert.equal(getGunVariant(slide1), 'set7', `${slide1} shows slide 7's art by default`);
-    assert.equal(getGunEffect(slide1), 'set7', `${slide1} fires slide 7's shot by default`);
+    // FIREWORK LAUNCHER keeps slide 2's fireworks as its default effect.
+    assert.equal(getGunEffect(slide1), slide1 === 'firework' ? 'new' : 'set7',
+      `${slide1} fires slide 7's shot by default`);
     assert.deepEqual(getGunEffectOptions(slide1 as never).map((o) => o.id),
       ['original', 'new', 'set7'], `${slide1} keeps both slide-1 effects`);
     assert.equal(getGunEffectOptions(slide1 as never).at(-1)?.label, `Set ${SET_SEVEN_SETS[seven]}`);
