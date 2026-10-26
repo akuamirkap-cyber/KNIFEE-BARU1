@@ -16,6 +16,14 @@ import { setOneSfx } from './setOneAudio';
 import { SetOneFx, type SetOneHooks, type SetOneShot } from './setOneFx';
 import { fireSetOne, impactSetOne } from './setOneWeapons';
 import { setOneIdFor, type SetOneId } from './setOneArt';
+import { SetSevenFx, type SevenHooks } from './setSevenFx';
+import { setSevenIdFor, type SevenId } from './setSevenArt';
+import { FIRE_RECIPES } from './setSevenFire';
+import { updateSevenAnim } from './setSevenAnim';
+import { newAnim } from '../../../../games/game-4/src/game/weapons';
+import { RECOIL_ROT } from '../../../../games/game-4/src/game/Game';
+import { easeOutCubic } from '../../../../games/game-4/src/game/core';
+import type { Projectile as SevenShot } from '../../../../games/game-4/src/game/projectiles';
 import { sfx2 } from './sfx2';
 import { sfx3 } from './sfx3';
 import { sfx4 } from './sfx4';
@@ -239,7 +247,7 @@ const PAINT = ['244,63,94', '250,204,21', '34,211,238', '168,85,247', '74,222,12
 type ItemType = 'bullet' | 'old' | 'spike' | 'coin' | 'diamond_chest';
 interface AcidStuck { blobs: AcidStuckBlob[]; dripT: number; drip: number; seed: number }
 interface Item { angle: number; type: ItemType; age: number; w?: WeaponId; scale?: number; vel?: number; harvested?: boolean; tint?: string; big?: number; hits?: number; hue?: number; flash?: number; acid?: AcidStuck }
-interface Proj { x: number; y: number; vx: number; vy: number; originX?: number; setOne?: SetOneShot; pierced?: number; hist?: { x: number; y: number }[]; tint?: string; big?: number; mini?: boolean; giant?: boolean; hue?: number; flash?: number; spawnDelay?: number; wob?: number; lastEcho?: number; t?: number; trail?: { x: number; y: number }[] }
+interface Proj { x: number; y: number; vx: number; vy: number; originX?: number; setOne?: SetOneShot; setSeven?: SevenShot; setSevenPending?: boolean; s7Ghost?: boolean; pierced?: number; hist?: { x: number; y: number }[]; tint?: string; big?: number; mini?: boolean; giant?: boolean; hue?: number; flash?: number; spawnDelay?: number; wob?: number; lastEcho?: number; t?: number; trail?: { x: number; y: number }[] }
 type StepRes = { res: 'none' | 'stick' | 'fail' | 'hit'; spike?: boolean; local?: number };
 interface Light { x: number; y: number; r: number; rgb: string; life: number; max: number }
 interface Fragment { x: number; y: number; vx: number; vy: number; rot: number; vr: number; a0: number; a1: number }
@@ -545,6 +553,60 @@ export class Game {
       },
       addWheelFx: (fx) => { this.s1.addWheel(fx); },
       wheel: () => ({ x: CX, y: this.targetY, R: this.level.radius }),
+    };
+  }
+
+  /**
+   * Slide-7 SET 2..5 FX layer: slide 7's own particles, FX objects, animation
+   * springs and the real slide-7 shots (`projectiles2..5.ts`).
+   */
+  private s7State?: SetSevenFx;
+  private s7Weapon?: SevenId;
+  private get s7(): SetSevenFx {
+    const fx = (this.s7State ??= new SetSevenFx());
+    fx.setHooks(this.s7Hooks());
+    fx.gunX = CX;
+    fx.gunY = GUN_Y;
+    return fx;
+  }
+
+  /** Last slide-7 shot, for special targets (stones/diamonds/gold). */
+  private s7Last?: SevenShot;
+
+  /** The slide-7 weapon behind the equipped slide-1 gun, if any. */
+  private get setSevenId(): SevenId | null {
+    return setSevenIdFor(this.weapon.id);
+  }
+
+  /** True when the equipped gun must fire slide 7's own SET 2..5 shot. */
+  private get setSevenLive(): boolean {
+    return this.setSevenId !== null && getGunEffect(this.weapon.id) === 'set7';
+  }
+
+  /** The slide-7 side effects that need the slide-1 game to act. */
+  private s7Hooks(): SevenHooks {
+    return {
+      shake: (amount) => { this.shake = Math.max(this.shake, amount); },
+      hitStop: (seconds) => { this.hitStop = Math.max(this.hitStop, seconds); },
+      flash: (rgb, strength) => {
+        this.tintRgb = rgb;
+        this.tintA = Math.max(this.tintA, strength);
+      },
+      paintWheel: (draw, R) => {
+        const c = this.faceCtx;
+        c.save();
+        c.beginPath();
+        c.arc(0, 0, Math.max(1, R - 0.6), 0, TAU);
+        c.clip();
+        draw(c);
+        c.restore();
+      },
+      wheelImpact: (power, color) => {
+        this.bump = Math.max(this.bump, Math.min(1.4, power / 7));
+        this.wheelFlash = Math.max(this.wheelFlash, 1);
+        this.wheelFlashRgb = color.replace('rgba(', '').replace(/,\s*$/, '');
+      },
+      wheel: () => ({ x: CX, y: this.targetY, R: this.level.radius, angle: this.rot }),
     };
   }
 
@@ -1105,6 +1167,61 @@ export class Game {
     const vy = -w.speed * this.speedMult;
     const offsets = this.gunOffsets;
     const sizeBuff = { mini: this.treasureBuff === 'mini', giant: this.treasureBuff === 'giant' };
+    // ── Slide-7 SET 2..5 ───────────────────────────────────────────────────
+    // Slide 7's own fire recipe runs (its muzzle FX, its particles, its sound),
+    // and the shot it creates is the real slide-7 projectile: the very class
+    // that paints the flight, the trail and the impact burst on slide 7. Slide 1
+    // still owns the flight and the hit test, so it only carries that shot.
+    const s7id = this.setSevenId;
+    if (s7id && this.setSevenLive) {
+      const fx = this.s7;
+      if (this.s7Weapon !== s7id) {
+        // A different weapon: slide 7 starts its animation from rest.
+        fx.anim = newAnim();
+        fx.particles.clear();
+        fx.fx.length = 0;
+        fx.wheelFx.length = 0;
+        fx.timers.length = 0;
+        fx.shots.length = 0;
+        this.s7Weapon = s7id;
+      }
+      fx.weaponId = s7id;
+      fx.time = this.time;
+      fx.syncWheel();
+      const mx = CX + (offsets[0] ?? 0);
+      const my = GUN_Y - 4;
+      // Slide 7 counts the shot before the recipe runs (the firework cycle
+      // picks its rocket from that counter).
+      fx.shotsFired++;
+      FIRE_RECIPES[s7id](fx, mx, my);
+      const made = fx.takeShots();
+      // Slide 1 still fires one round per pellet (that is how ammo, hits and
+      // the score have always worked). Slide 7's real shot rides the first
+      // one; the extra pellets of a burst gun stay invisible carriers.
+      for (let i = 0; i < n; i++) {
+        const ox = offsets[i] ?? offsets[0] ?? 0;
+        const own = made[i];
+        const proj: Proj = {
+          x: CX + ox, originX: CX + ox, y: own ? own.y : my, vx, vy, big, tint,
+          hue: undefined, ...sizeBuff,
+        };
+        if (own) proj.setSeven = own;
+        else if (i === 0) proj.setSevenPending = true;
+        else proj.s7Ghost = true;
+        this.projs.push(proj);
+      }
+      this.s7Last = made[0];
+      // The bookkeeping slide 1 still owns: cooldown, recoil, reloads. All the
+      // visible parts (muzzle, shake, smoke, casing) are slide 7's own recipe.
+      this.recoil = w.recoil;
+      this.muzzle = 0.07;
+      this.camY += FX[w.id].kick * 0.5;
+      this.cooldown = (w.spinup ? 0.3 - 0.235 * this.spin : w.cooldown)
+        * (this.buff === 'speed' || this.treasureBuff === 'rapid' ? 0.5 : this.treasureBuff === 'mini' ? 0.6 : 1);
+      if (isSpecial(this.level.mode) && this.ammoLeft === 0) this.reloadT = 0.65;
+      else if (w.id === 'snowball' && this.snowLoaded === 0 && this.ammoLeft > 0) this.reloadT = 0.85;
+      return;
+    }
     const fw = w.id === 'firework' ? this.getFwState() : null;
     const yoyo = w.id === 'yoyo' ? this.getYoyoState() : null;
     const keris = w.id === 'keris' ? this.getKerisState() : null;
@@ -2112,6 +2229,8 @@ export class Game {
     const tint = p?.tint;
     /** SET 1 impact burst: slide 7's own recipe replaces slide 1's signature burst. */
     const s1Hit = this.setOneLive && p?.setOne ? p.setOne : null;
+    /** SET 2..5 impact burst: slide 7's own `hit()` on its own round. */
+    const s7Hit = this.setSevenLive && p?.setSeven ? p.setSeven : null;
     const hue = p?.hue ?? (w.id === 'firework' ? gunState.rocketHue : w.id === 'yoyo' ? gunState.yoyoHue : undefined);
     if (w.id === 'firework' && hue !== undefined) gunState.rocketHue = hue;
     if (w.id === 'yoyo' && hue !== undefined) gunState.yoyoHue = hue;
@@ -2213,13 +2332,13 @@ export class Game {
     this.bump = 1;
     this.hitFlash = 1;
     this.shake = Math.max(this.shake, 6);
-    if (!s1Hit) this.crack(local, tint);
+    if (!s1Hit && !s7Hit) this.crack(local, tint);
     if (isSlide23Weapon(w.id)) {
       const hitIdx = Math.max(0, this.stuck - 1);
       if (w.id === 'yoyo') slide23Sfx.hit('yoyo-spin', 0);
       if (w.id === 'firework') fireworkSfx.hit(hitIdx);
       else slide23Sfx.hit(w.id, hitIdx);
-    } else if (!s1Hit) {
+    } else if (!s1Hit && !s7Hit) {
       sfx.hit();
       if (w.energy && !w.slow && !w.pullCoins && !HIT_SFX[w.id]) sfx.zap();
     }
@@ -2228,6 +2347,12 @@ export class Game {
     const hy = hp.y;
     const cols = STYLE_COLORS[this.level.style].chips;
     if (s1Hit) impactSetOne(this.s1, s1Hit, hx, hy, local, this.s1Hooks(), (n) => setOneSfx.play(n));
+    // Slide 7's own impact: cracks painted into the wheel face, the rim glow,
+    // the burst, the stuck round and its sound — all from `projectiles*.ts`.
+    else if (s7Hit) {
+      s7Hit.hit(local, hx, hy);
+      this.s7Last = undefined;
+    }
     this.slide2Impact(hx, hy);
     this.applyPerks(w, hx, hy, R);
     if (w.id === 'yoyo') {
@@ -2339,6 +2464,8 @@ export class Game {
   }
 
   private fail(p: Proj) {
+    // Slide 7's own "blocked" burst (the round is stopped by a stuck weapon).
+    if (this.setSevenLive && p.setSeven) p.setSeven.block(p.x, p.y);
     this.aiming = false;
     this.burnT = 0;
     this.state = 'fail';
@@ -3489,8 +3616,32 @@ export class Game {
     const tw = this.weapon;
     for (const p of this.projs) {
       if (p.spawnDelay && p.spawnDelay > 0) continue;
+      if (p.setSevenPending) {
+        // Slide 7 releases some shots later than the trigger (the staff charges
+        // first); hold the carrier still until its shot exists.
+        const made = this.s7.takeShots();
+        if (made.length) {
+          p.setSeven = made[0];
+          p.setSevenPending = false;
+          p.y = made[0].y;
+          this.s7Last = made[0];
+        } else continue;
+      }
+      if (p.s7Ghost) continue; // extra pellet of a burst gun: slide 7 shot it
       if (p.setOne) {
         this.s1.trail(p.setOne, p.x, p.y, s);
+        continue;
+      }
+      if (p.setSeven) {
+        // Slide 7's own frame: `update()` schedules its sub-projectiles (the
+        // minigun drum, the swarm…) and spawns its trail; slide 1 decides where
+        // the round actually is, so the position is handed over every frame.
+        const shot = p.setSeven;
+        shot.x = p.x;
+        shot.y = p.y - shot.vy * s;
+        shot.update(s);
+        shot.x = p.x;
+        shot.y = p.y;
         continue;
       }
       if (tw.id === 'firework') {
@@ -3728,6 +3879,19 @@ export class Game {
       this.s2.update(dt);
     }
     if (this.s1State && (this.s1State.busy || this.setOneLive)) this.s1State.update(dt);
+    // Slide-7 SET 2..5: its own clock, its animation springs (recoil, pump,
+    // heat, spin, charge…) and the idle ambience that keeps the gun alive.
+    if (this.s7State || this.setSevenId) {
+      const fx = this.s7;
+      const id = this.setSevenId;
+      if (id) {
+        fx.weaponId = id;
+        fx.time = this.time;
+        fx.syncWheel();
+        updateSevenAnim(fx, dt);
+      }
+      fx.update(dt);
+    }
     if (this.state === 'play' && this.slide2Void) {
       // Slide 2 keeps tearing voids open in the sky while the gun is live.
       ambientBlackHole2(this.s2, CX, GUN_Y, dt);
@@ -4954,6 +5118,12 @@ export class Game {
         this.s1.drawShot(c, p.setOne, p.x, p.y);
         continue;
       }
+      // …and so are the SET 2..5 rounds.
+      if (p.setSeven) {
+        p.setSeven.draw(c);
+        continue;
+      }
+      if (p.setSevenPending) continue;
       if (this.weapon.rope) {
         if (wid === 'yoyo') {
           const gunX = p.originX ?? CX;
@@ -5267,6 +5437,12 @@ export class Game {
       || this.s2State.beams.length > 0 || this.s2State.smokes.length > 0 || this.s2State.fireballs.length > 0
       || this.s2State.flashes.length > 0 || this.s2State.texts.length > 0)) {
       this.s2State.draw(c, this.time);
+    }
+    // Slide-7 SET 2..5 layer: wheel-space FX, then particles and FX objects.
+    if (this.s7State && (this.s7State.busy || this.setSevenLive)) {
+      this.s7State.drawWheel(c, CX, this.targetY + this.bump * 7, this.level.radius, this.rot);
+      this.s7State.draw(c);
+      this.s7State.drawFront(c);
     }
     // Slide-7 SET 1 layer: wheel-space sparks first, then its particles/FX.
     if (this.s1State && (this.s1State.busy || this.setOneLive)) {

@@ -4,7 +4,7 @@ import { WEAPONS, getWeapon, type WeaponId } from '../src/games/gunhit/game/weap
 import { COMMON_GUN_IDS, commonGunPreviewState, isCommonGun, shotPulse } from '../src/games/gunhit/game/art/commonGunMotion';
 import { drawGun } from '../src/games/gunhit/game/art/guns';
 import { drawGunCentered } from '../src/games/gunhit/game/art/drawCentered';
-import { getGunVariantOptions, isSetOneDesignWeapon } from '../src/games/gunhit/game/art/gunVariants';
+import { getGunVariantOptions, isSetOneDesignWeapon, isSetSevenDesignWeapon } from '../src/games/gunhit/game/art/gunVariants';
 import { gunState, lin, vlin } from '../src/games/gunhit/game/art/kit';
 import { drawChronoGrip, drawElectroGrip, drawFishGrip, drawFrostGrip, drawFreezeGrip, drawPortalGrip, drawVoidGrip, drawWaterGrip } from '../src/games/gunhit/game/art/gripSystem';
 
@@ -42,7 +42,9 @@ function canvasArt(events: string[]): CanvasRenderingContext2D {
  * (the new default for its six guns) is pinned back to its first card here.
  */
 function slide1Design(id: WeaponId) {
-  return isSetOneDesignWeapon(id) ? getGunVariantOptions(id)[0].id : undefined;
+  // Slide-7's own design is the default now; these tests describe slide 1's art.
+  return isSetOneDesignWeapon(id) || isSetSevenDesignWeapon(id)
+    ? getGunVariantOptions(id)[0].id : undefined;
 }
 
 function render(id: WeaponId, age: number, t: number, ready = true): string {
@@ -226,7 +228,8 @@ test('themed grips use distinct silhouettes and palettes while leaning like the 
 test('Snowball Cannon demonstration only draws the five real hopper chambers, losing one before refill', () => {
   function hopperBalls(t: number): number {
     const events: string[] = [];
-    drawGunCentered(canvasArt(events), 'snowball', t, 0, true, undefined, true);
+    // Slide 1's hopper art is what this test describes; slide 7 is the default now.
+    drawGunCentered(canvasArt(events), 'snowball', t, 0, true, 'original', true);
     return events.filter(e => e.startsWith('arc(') && e.split(',')[2]?.startsWith('5.90')).length;
   }
   assert.equal(hopperBalls(0), 5);

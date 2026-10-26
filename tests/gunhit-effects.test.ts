@@ -153,6 +153,8 @@ test('snowball doubles in size and breaks into clumps of white snow, not blue ic
 });
 
 test('the five Snowball Cannon chambers empty on shots and refill only after a reload', () => {
+  // These assertions describe slide 1's own upgraded effect; slide 7 is the new default.
+  setGunEffect('snowball', 'new');
   const game = probe(7, 'snowball');
   game.ammoLeft = game.level.ammo;
   assert.equal(game.ammoLeft, 8);
@@ -272,7 +274,9 @@ test('embedded hornets point a long sharp sting into the board, not their head',
 
 test('Moonbeam defaults to its original shot while the optional new star beam keeps the same hit rules', () => {
   const moon = getWeapon('moonbeam');
-  assert.equal(getGunEffect('moonbeam'), 'original');
+  // Slide 7's own MOONBEAM is the newest effect; slide 1 keeps both of its own.
+  assert.equal(getGunEffect('moonbeam'), 'set7');
+  setGunEffect('moonbeam', 'original');
   assert.equal(moon.beam, true);
   assert.equal(moon.speed, 14000);
   assert.equal(moon.points, 2);
@@ -302,7 +306,7 @@ test('Moonbeam defaults to its original shot while the optional new star beam ke
     }) as CanvasRenderingContext2D;
     drawProjectile(ctx, 'moonbeam', 42, 1, 1, true);
     assert.ok(translations.includes(42 * 0.53), 'the optional new star stays centered on the target surface');
-  } finally { setGunEffect('moonbeam', 'original'); }
+  } finally { setGunEffect('moonbeam', 'set7'); }
 });
 
 test('viscous honey, stars, rainbow light and dragon fire have their own material trails', () => {
@@ -312,9 +316,9 @@ test('viscous honey, stars, rainbow light and dragon fire have their own materia
     set: () => true,
   }) as CanvasRenderingContext2D;
   for (const weapon of ['honey', 'rainbow', 'dragon', 'meteor'] as const) {
-    assert.equal(drawMaterialTrail(ctx, weapon), true, weapon);
+    assert.equal(drawMaterialTrail(ctx, weapon, 'new'), true, weapon);
   }
-  assert.equal(drawMaterialTrail(ctx, 'moonbeam'), false, 'selected classic shot has no new trail');
+  assert.equal(drawMaterialTrail(ctx, 'moonbeam', 'original'), false, 'selected classic shot has no new trail');
   assert.equal(drawMaterialTrail(ctx, 'moonbeam', 'new'), true, 'the optional new shot still has stars');
 });
 
@@ -605,6 +609,8 @@ test('dragon breath flares beyond the horns after a shot, then settles without e
 });
 
 test('Firework weapon keeps SGA launcher shape while using Firework 8-Gun rocket, muzzle, stick burst, and night-sky background', () => {
+  // These assertions describe slide 1's own upgraded effect; slide 7 is the new default.
+  setGunEffect('firework', 'new');
   const fwWeapon = getWeapon('firework');
   assert.equal(fwWeapon.noSmoke, true, 'no gray firearm smoke puffs');
   assert.equal(drawMaterialTrail({} as CanvasRenderingContext2D, 'firework'), true,
@@ -626,7 +632,7 @@ test('Firework weapon keeps SGA launcher shape while using Firework 8-Gun rocket
     },
   });
   gunState.rocketHue = 210;
-  drawGun(ctx, 'firework', 0, 0, 0.5, 0.8, true);
+  drawGun(ctx, 'firework', 0, 0, 0.5, 0.8, true, undefined, 'original');
   assert.ok(gunFillStyles.includes('#fde047'), 'SGA firework launcher keeps yellow star/cone accents');
   assert.ok(gunFillStyles.some(v => typeof v === 'string' && v.startsWith('hsla(210, 100%, 70%')),
     'muzzle flash draws Slide #3 colored recoil ellipse');
@@ -827,6 +833,8 @@ test('Yoyo Shooter uses Slide #6 gun/yoyo design & animations and Slide #2 launc
 });
 
 test('keris weapon combines Slide #8 Keris gun/effects/background with Slide #4 Luk Keris blade design', () => {
+  // These assertions describe slide 1's own upgraded effect; slide 7 is the new default.
+  setGunEffect('keris', 'new');
   const kerisWeapon = getWeapon('keris');
   assert.equal(kerisWeapon.color, '#4deeea');
   assert.equal(FX.keris.ghost, 0, 'no ghost afterimage trail');
@@ -850,14 +858,14 @@ test('keris weapon combines Slide #8 Keris gun/effects/background with Slide #4 
     },
   });
   gunState.sinceShot = 0.04;
-  drawGun(gunCtx, 'keris', 210, 575, 0.5, 0.9, true);
+  drawGun(gunCtx, 'keris', 210, 575, 0.5, 0.9, true, undefined, 'original');
   assert.ok(gunStops.includes('#1e1107') && gunStops.includes('#593518'), 'Slide #8 Garuda Jawa Hulu wood gradient');
   assert.ok(gunStops.includes('#241409') && gunStops.includes('#663d1d'), 'Slide #8 Ladrang Warangka boat sheath');
   assert.ok(gunStops.includes('#c98a1e') && gunStops.includes('#f0cf7d'), 'Slide #4 Luk 5 Wilah golden-white blade gradient');
   assert.ok(gunFills.includes('#e02547'), 'Slide #4 Naga crest ruby eyes at blade base');
   assert.ok(gunStops.includes('rgba(255, 250, 220, 0.98)') && gunFills.includes('rgba(255, 232, 140, 0.92)'), 'bottom-to-top blade gleam sweep when shooting');
   assert.ok(!gunStrokes.includes('rgba(217,154,38,0.7)'), 'no tip star at the end of the Keris blade');
-  drawGunCentered(gunCtx, 'keris', 0.3, 0, true, undefined, true);
+  drawGunCentered(gunCtx, 'keris', 0.3, 0, true, 'original', true);
 
   // 2. Projectile & stuck Keris match the full Keris weapon shape (Hulu, Mendak, Warangka, Ganja, Luk 5 Wilah & Naga crests)
   //    with yellow/golden lightning (listrik kuning) and zero blue/cyan glow.
@@ -987,7 +995,7 @@ test('Pistol uses Slide #7 Weapon #3 (M1911 LEGACY) design sized like Golden/Chr
 
   bananaStops.length = 0;
   gunState.sinceShot = 9;
-  drawGun(bananaCtx, 'banana', 210, 575, 0.5, 0, true);
+  drawGun(bananaCtx, 'banana', 210, 575, 0.5, 0, true, undefined, 'original');
   assert.ok(bananaStops.includes('#f0e2ad') && bananaStops.includes('#e6d7a2'), 'Slide #7 Weapon #6 banana flesh inside the Banana Gun');
 });
 
@@ -1049,7 +1057,10 @@ test('Slide #2 pentatonic sound rhythm, UI/clear/fail/start SFX, wheel 0.15->1 e
       items: [], stuck: 0, combo: 0, lastHit: -10, time: 1, hitFlash: 0, flashRed: 0, timeScale: 1, frags: [],
       faceCtx: noopCtx, faceScale: 2,
     });
+    // Slide 1's own shot sound (slide 7 plays its own when its effect is on).
+    setGunEffect('diamond', 'new');
     game.shoot();
+    setGunEffect('diamond', 'set7');
     game.stickAt(0.2);
     game.stickAt(0.8);
     assert.deepEqual(calls, ['shoot:diamond', 'hit:diamond:0', 'hit:diamond:1']);
@@ -1129,16 +1140,16 @@ test('Laser Beam, Freeze Ray, Ghost Gun, UFO Ray, and Rainbow Gun use upgraded r
   assert.ok(stops.includes('#00e5ff') && stops.includes('#80f5ff'), 'Freeze Ray renders glowing cyan coolant capsule and rear cryo orb');
 
   stops.length = 0;
-  drawGun(ctx, 'ghost', 210, 575, 0.5, 0, true);
+  drawGun(ctx, 'ghost', 210, 575, 0.5, 0, true, undefined, 'original');
   assert.ok(stops.includes('#88f4ff') && stops.includes('rgba(140,248,255,0.92)'), 'Ghost Gun renders pearlescent bottle body and glowing cyan ghosts');
 
   stops.length = 0;
-  drawGun(ctx, 'ufo', 210, 575, 0.5, 0, true);
+  drawGun(ctx, 'ufo', 210, 575, 0.5, 0, true, undefined, 'original');
   assert.ok(stops.includes('#10b981') && stops.includes('#4ade80'), 'UFO Ray renders glowing emerald dome and neon green plasma spike');
 
   stops.length = 0;
   rotations.length = 0;
-  drawGun(ctx, 'rainbow', 210, 575, 0.5, 0, true);
+  drawGun(ctx, 'rainbow', 210, 575, 0.5, 0, true, undefined, 'original');
   assert.ok(rotations.some(r => Math.abs(r - (-0.28)) < 1e-4), 'Rainbow Gun renders angled rainbow thumb-sight tab and star badge');
 });
 
@@ -1319,6 +1330,8 @@ test('removed weapons are absent and honey, railgun, and snowball render referen
 });
 
 test('Diamond Gun keeps SGA silhouette with Slide #2 muzzle diamond formation, diamond bullet + glow, and diamond shard bursts', () => {
+  // These assertions describe slide 1's own upgraded effect; slide 7 is the new default.
+  setGunEffect('diamond', 'new');
   const game = probe(1, 'diamond') as Probe & {
     stickAt(local: number): void;
     diamondState?: {

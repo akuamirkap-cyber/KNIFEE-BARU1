@@ -10,6 +10,8 @@ import { useSlideActive } from '../../shared/SlideActivity';
 import type { GunEffect } from '../game/art/gunVariants';
 import { drawSetOneShotShell } from '../game/setOneFx';
 import { setOneIdFor } from '../game/setOneArt';
+import { setSevenIdFor } from '../game/setSevenArt';
+import { drawSetSevenShotShell } from '../game/setSevenFx';
 
 /** Tiny live comparison using the exact same projectile/beam renderers as gameplay. */
 export default function ShotEffectCanvas({ weapon, effect }: { weapon: Weapon; effect: GunEffect }) {
@@ -60,6 +62,14 @@ export default function ShotEffectCanvas({ weapon, effect }: { weapon: Weapon; e
           const setOneId = effect === 'new' ? setOneIdFor(weapon.id) : null;
           if (setOneId) {
             drawSetOneShotShell(c, setOneId, 0.06, 24);
+            c.restore();
+            if (active) frame = requestAnimationFrame(paint);
+            return;
+          }
+          // Slide-7 SET 2..5 rounds are painted by slide 7's own renderer.
+          const setSevenId = effect === 'set7' ? setSevenIdFor(weapon.id) : null;
+          if (setSevenId) {
+            drawSetSevenShotShell(c, setSevenId, 0.06, 22);
             c.restore();
             if (active) frame = requestAnimationFrame(paint);
             return;

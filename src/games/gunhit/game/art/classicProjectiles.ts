@@ -5,7 +5,16 @@ type C = CanvasRenderingContext2D;
 
 // Original shot drawings from c0769f5, not a recolor of the new projectile.
 // Only visuals are reused: collisions, speed, stick depth and buffs stay current.
-const NO_CLASSIC_ART = ['slingshot', 'blowgun', 'shotgun', 'soaker'] as const;
+const NO_CLASSIC_ART = [
+  'slingshot', 'blowgun', 'shotgun', 'soaker',
+  // SET 2..5 guns: slide 1 only ever had one shot for them, so "Sebelumnya"
+  // sends them back through their normal renderer instead of a copy.
+  'snowball',, 'sniper',, 'flamethrower',, 'bubble',, 'bamboo',, 'banana',
+  'harpoon',, 'confetti',, 'seed',, 'pizza',, 'minigun',, 'crossbow',
+  'plasma',, 'laser',, 'gravity',, 'coconut',, 'angklung',, 'bee',
+  'sakura',, 'firework',, 'keris',, 'storm',, 'pencil',, 'sandal',
+  'paintball',, 'wand',, 'shark',, 'ghost',, 'ufo',
+] as const;
 
 /** True when the gun has a genuine pre-variant shot to show as "Sebelumnya". */
 export function hasClassicProjectile(id: VariantWeapon): boolean {
@@ -34,6 +43,35 @@ export function drawClassicProjectile(c: C, kind: VariantWeapon, len: number, t:
     case 'blowgun':
     case 'shotgun':
     case 'soaker':
+    case 'snowball':
+    case 'sniper':
+    case 'flamethrower':
+    case 'bubble':
+    case 'bamboo':
+    case 'banana':
+    case 'harpoon':
+    case 'confetti':
+    case 'seed':
+    case 'pizza':
+    case 'minigun':
+    case 'crossbow':
+    case 'plasma':
+    case 'laser':
+    case 'gravity':
+    case 'coconut':
+    case 'angklung':
+    case 'bee':
+    case 'sakura':
+    case 'firework':
+    case 'keris':
+    case 'storm':
+    case 'pencil':
+    case 'sandal':
+    case 'paintball':
+    case 'wand':
+    case 'shark':
+    case 'ghost':
+    case 'ufo':
       return;
     default: { const _never: never = kind; return _never; }
   }

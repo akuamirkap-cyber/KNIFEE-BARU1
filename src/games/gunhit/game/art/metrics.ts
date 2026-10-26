@@ -149,9 +149,9 @@ export const GUN_METRICS: Partial<Record<WeaponId, Partial<GunMetrics>>> = {
 
 // Variant-specific centers also keep the three comparison cards at the same
 // apparent size. The rest of the arsenal retains its existing metrics.
-type VariantMetrics = Partial<Record<GunVariant, GunMetrics>> & { original: GunMetrics };
+type VariantMetrics = Partial<Record<GunVariant, GunMetrics>> & { original?: GunMetrics };
 
-const VARIANT_METRICS: Record<VariantWeapon, VariantMetrics> = {
+const VARIANT_METRICS: Partial<Record<VariantWeapon, VariantMetrics>> = {
   plasma: {
     original: { totalLen: 180, centerOffsetY: 85, centerOffsetX: 15, span: 195 },
     latest: { totalLen: 180, centerOffsetY: 88, centerOffsetX: 9, span: 211 },
@@ -232,11 +232,22 @@ const VARIANT_METRICS: Record<VariantWeapon, VariantMetrics> = {
   },
 };
 
+
+// ── Slide-7 SET 2..5 ────────────────────────────────────────────────────────
+// Measured from the real slide-7 renderer (`drawWeapon`, at the rested pose and
+// mid-animation) with an ink-bounds pass: box → diagonal span (w + h) / √2,
+// centre = box centre. The previews therefore show the whole weapon, never a
+// cropped one — the same rule the SET 1 cards follow.
+const SET_SEVEN_METRICS: Partial<Record<WeaponId, GunMetrics>> = {
+};
+
 export function getGunMetrics(id: WeaponId, variant: GunVariant = getGunVariant(id)): GunMetrics {
   const effectiveVariant = isFixedClassicGun(id) ? 'original'
     : id === 'honey' && variant === 'latest' ? 'current' : variant;
-  const measured = supportsGunVariants(id) && effectiveVariant !== 'current'
-    ? VARIANT_METRICS[id][effectiveVariant] : undefined;
+  const measured = effectiveVariant === 'set7'
+    ? SET_SEVEN_METRICS[id]
+    : supportsGunVariants(id) && effectiveVariant !== 'current'
+      ? VARIANT_METRICS[id]?.[effectiveVariant] : undefined;
   const m = measured ?? GUN_METRICS[id];
   return {
     totalLen: m?.totalLen ?? 175,

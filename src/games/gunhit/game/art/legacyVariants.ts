@@ -1,7 +1,7 @@
 import { TAU, rand, lin, rr, grip, guard, glow, star, radial, chrome, steel, wood, gunState } from './kit';
 import { shotPulse } from './commonGunMotion';
 import { drawPlasmaGrip, drawVoidGrip } from './gripSystem';
-import type { VariantWeapon } from './gunVariants';
+import type { OriginalDesignWeapon } from './gunVariants';
 import { drawSlide2DiamondMuzzleFormation } from '../diamondSlideFx';
 import { slingshot as slingshotSlide1, blowgun as blowgunSlide1, shotgun as shotgunSlide1, soaker as soakerSlide1 } from './guns2';
 
@@ -230,7 +230,7 @@ function originalFishGun(c: CanvasRenderingContext2D, cx: number, y0: number, t:
   c.fill();
 }
 
-export function drawOriginalGun(c: C, id: VariantWeapon, cx: number, y0: number, t: number, ready = true) {
+export function drawOriginalGun(c: C, id: OriginalDesignWeapon, cx: number, y0: number, t: number, ready = true) {
   switch (id) {
     case 'dragon': dragon(c, cx, y0, t); break;
     case 'rainbow': rainbowGun(c, cx, y0, t); break;

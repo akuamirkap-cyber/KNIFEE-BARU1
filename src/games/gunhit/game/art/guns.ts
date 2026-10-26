@@ -1,5 +1,5 @@
 import type { WeaponId } from '../weapons';
-import { getGunVariant, isFixedClassicGun, isSetOneDesignWeapon, supportsGunVariants, supportsLatestDesign, type GunVariant } from './gunVariants';
+import { getGunVariant, hasSeparateOriginal, isFixedClassicGun, isSetOneDesignWeapon, isSetSevenDesignWeapon, supportsGunVariants, supportsLatestDesign, type GunVariant } from './gunVariants';
 import { drawOriginalGun } from './legacyVariants';
 import { drawLatestGun } from './latestVariants';
 import { drawGunExtra, drawFlashExtra } from './guns3';
@@ -8,6 +8,9 @@ import { shotPulse } from './commonGunMotion';
 import { drawSlide3BazookaMuzzleFx } from '../bazookaSlideFx';
 import { drawBlackHoleGun2, type Slide2GunState } from '../slide2Weapons';
 import { drawSetOneGun, setOneIdFor } from '../setOneArt';
+import { drawSetSevenGun, setSevenIdFor } from '../setSevenArt';
+import { restSevenAnim } from '../setSevenArt';
+import type { WeaponAnim } from '../../../../../games/game-4/src/game/weapons';
 
 const TAU = Math.PI * 2;
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
@@ -75,6 +78,16 @@ export function drawGun(
     if (flash > 0) drawFlash(c, id, cx, y0, t, flash);
     return;
   }
+  // Slide-7 SET 2..5: slide 7's own artwork, drawn at the same muzzle origin
+  // with slide 7's own animation state (the live game hands its springs over
+  // through `gunState.s7Anim`; menus and cards get the rested pose).
+  const setSevenId = isSetSevenDesignWeapon(id) && variant === 'set7' ? setSevenIdFor(id) : null;
+  if (setSevenId && supportsGunVariants(id)) {
+    drawSetSevenGun(c, setSevenId, cx, y0, t, gunState.s7Anim ?? restSevenAnim());
+    c.restore();
+    if (flash > 0) drawFlash(c, id, cx, y0, t, flash);
+    return;
+  }
   // Slide-2 guns: the newest design is slide 2's own art, drawn at the same
   // muzzle origin with the same rest/charge animation (loadP 7/s, recoil 6/s).
   if (id === 'blackhole' && variant === 'latest' && supportsGunVariants(id)) {
@@ -94,7 +107,7 @@ export function drawGun(
   // The retired guns ALWAYS render the original, even if an obsolete
   // saved choice or a caller explicitly requests a removed design. Honey has
   // two genuine silhouettes, not a duplicate 'latest' card.
-  if (supportsGunVariants(id) && (isFixedClassicGun(id) || variant === 'original' ||
+  if (supportsGunVariants(id) && (isFixedClassicGun(id) || (variant === 'original' && hasSeparateOriginal(id)) ||
     (variant === 'latest' && supportsLatestDesign(id)))) {
     if (isFixedClassicGun(id) || variant === 'original') drawOriginalGun(c, id, cx, y0, t, ready);
     else if (supportsLatestDesign(id)) drawLatestGun(c, id, cx, y0, t);

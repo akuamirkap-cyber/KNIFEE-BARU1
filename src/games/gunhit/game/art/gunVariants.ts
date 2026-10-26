@@ -1,4 +1,5 @@
 import type { WeaponId } from '../weapons';
+import { SET_SEVEN_BY_SLIDE1_ID, SET_SEVEN_SETS } from '../setSevenArt';
 
 /** These two have been retired to their original art AND shot only. */
 export const FIXED_CLASSIC_WEAPONS = ['plasma', 'laser'] as const satisfies readonly WeaponId[];
@@ -6,14 +7,15 @@ export type FixedClassicWeapon = (typeof FIXED_CLASSIC_WEAPONS)[number];
 
 /** Only guns with an actual design choice appear in the DESAIN tab. */
 export const EDITABLE_WEAPONS = [
-  'dragon', 'diamond', 'rainbow', 'meteor', 'golden', 'moonbeam', 'chicken', 'honey',
-  'cricket', 'fish', 'electro',
-  // Slide-2 guns: the old slide-1 art is kept as "Sebelumnya", the slide-2
-  // art (and its shot) is the new default.
-  'blackhole',
-  // SET 1 of slide 7 (`Weapon Hit 71 Senjata`): KETAPEL, SUMPIT DAYAK,
-  // SHOTGUN and SUPER SOAKER get slide 7's own art as a "Set 1" card.
-  'slingshot', 'blowgun', 'shotgun', 'soaker',
+  'dragon', 'diamond', 'rainbow', 'meteor', 'golden',
+  'moonbeam', 'chicken', 'honey', 'cricket', 'fish',
+  'electro', 'blackhole', 'slingshot', 'blowgun', 'shotgun',
+  'soaker', 'snowball', 'sniper', 'flamethrower', 'bubble',
+  'bamboo', 'banana', 'harpoon', 'confetti', 'seed',
+  'pizza', 'minigun', 'crossbow', 'gravity', 'coconut',
+  'angklung', 'bee', 'sakura', 'firework', 'keris',
+  'storm', 'pencil', 'sandal', 'paintball', 'wand',
+  'shark', 'ghost', 'ufo',
 ] as const satisfies readonly WeaponId[];
 
 /**
@@ -30,6 +32,26 @@ export function isSetOneDesignWeapon(id: WeaponId | 'old'): id is SetOneDesignWe
   return (SET_ONE_DESIGN_WEAPONS as readonly string[]).includes(id);
 }
 /**
+ * Slide-7 SET 2..5 weapons. Their newest design is slide 7's own artwork
+ * (`setSevenArt.drawSetSevenGun`), which becomes the default; the slide-1
+ * silhouette they had before stays pickable as its own card.
+ */
+export const SET_SEVEN_DESIGN_WEAPONS = [
+  'snowball', 'sniper', 'flamethrower', 'bubble', 'bamboo',
+  'banana', 'harpoon', 'chicken', 'confetti', 'seed',
+  'pizza', 'minigun', 'crossbow', 'dragon', 'gravity',
+  'honey', 'coconut', 'angklung', 'bee', 'sakura',
+  'firework', 'keris', 'moonbeam', 'storm', 'pencil',
+  'sandal', 'paintball', 'wand', 'shark', 'ghost',
+  'ufo', 'rainbow', 'meteor', 'diamond',
+] as const satisfies readonly WeaponId[];
+export type SetSevenDesignWeapon = (typeof SET_SEVEN_DESIGN_WEAPONS)[number];
+
+export function isSetSevenDesignWeapon(id: WeaponId | 'old'): id is SetSevenDesignWeapon {
+  return (SET_SEVEN_DESIGN_WEAPONS as readonly string[]).includes(id);
+}
+
+/**
  * Guns that only ever had ONE old look on slide 1, so the picker offers two
  * cards instead of three: "Sebelumnya" (slide-1 art) and "Terbaru" (slide 2).
  */
@@ -38,12 +60,38 @@ export function isSetOneDesignWeapon(id: WeaponId | 'old'): id is SetOneDesignWe
 export const TWO_CARD_WEAPONS = [] as const satisfies readonly WeaponId[];
 export type EditableWeapon = (typeof EDITABLE_WEAPONS)[number];
 /** Guns whose previous/current/latest renderers are three distinct designs. */
-const NO_LATEST_DESIGN = ['honey', 'cricket', 'fish', 'electro', 'slingshot', 'blowgun', 'shotgun', 'soaker'] as const;
+const NO_LATEST_DESIGN = [
+  'honey', 'cricket', 'fish', 'electro', 'slingshot',
+  'blowgun', 'shotgun', 'soaker', 'snowball', 'sniper',
+  'flamethrower', 'bubble', 'bamboo', 'banana', 'harpoon',
+  'confetti', 'seed', 'pizza', 'minigun', 'crossbow',
+  'gravity', 'coconut', 'angklung', 'bee', 'sakura',
+  'firework', 'keris', 'storm', 'pencil', 'sandal',
+  'paintball', 'wand', 'shark', 'ghost', 'ufo',
+] as const;
+
+/**
+ * Guns whose "Sebelumnya" art is NOT a separate silhouette: slide 1 only ever
+ * drew them one way, and that drawing is the gun's normal renderer. They are
+ * excluded from `drawOriginalGun` so nothing is duplicated.
+ */
+export const NO_SEPARATE_ORIGINAL = [
+  'snowball', 'sniper', 'flamethrower', 'bubble', 'bamboo',
+  'banana', 'harpoon', 'confetti', 'seed', 'pizza',
+  'minigun', 'crossbow', 'gravity', 'coconut', 'angklung',
+  'bee', 'sakura', 'firework', 'keris', 'storm',
+  'pencil', 'sandal', 'paintball', 'wand', 'shark',
+  'ghost', 'ufo',
+] as const;
+export type OriginalDesignWeapon = Exclude<VariantWeapon, (typeof NO_SEPARATE_ORIGINAL)[number]>;
+export function hasSeparateOriginal(id: VariantWeapon): id is OriginalDesignWeapon {
+  return !(NO_SEPARATE_ORIGINAL as readonly string[]).includes(id);
+}
 export type LatestDesignWeapon = Exclude<EditableWeapon, (typeof NO_LATEST_DESIGN)[number]>;
 export const VARIANT_WEAPONS = [...EDITABLE_WEAPONS, ...FIXED_CLASSIC_WEAPONS] as const;
 export type VariantWeapon = (typeof VARIANT_WEAPONS)[number];
 
-export type GunVariant = 'original' | 'current' | 'latest' | 'set1';
+export type GunVariant = 'original' | 'current' | 'latest' | 'set1' | 'set7';
 export const GUN_VARIANTS: readonly { id: GunVariant; label: string }[] = [
   { id: 'original', label: 'Sebelumnya' },
   { id: 'current', label: 'Sekarang' },
@@ -51,11 +99,19 @@ export const GUN_VARIANTS: readonly { id: GunVariant; label: string }[] = [
 ];
 /** The slide-7 SET 1 design card (newest for its six weapons). */
 export const SET_ONE_VARIANT: { id: GunVariant; label: string } = { id: 'set1', label: 'Set 1' };
-export type GunEffect = 'original' | 'new';
+/** The slide-7 SET 2..5 design card; the number is the weapon's own set. */
+export function setSevenVariant(id: SetSevenDesignWeapon): { id: GunVariant; label: string } {
+  return { id: 'set7', label: `Set ${SET_SEVEN_SETS[SET_SEVEN_BY_SLIDE1_ID[id]]}` };
+}
+export type GunEffect = 'original' | 'new' | 'set7';
 export const GUN_EFFECTS: readonly { id: GunEffect; label: string }[] = [
   { id: 'original', label: 'Sebelumnya' },
   { id: 'new', label: 'Baru' },
 ];
+/** The slide-7 shot card of SET 2..5, labelled with the weapon's own set. */
+export function setSevenEffect(id: SetSevenDesignWeapon): { id: GunEffect; label: string } {
+  return { id: 'set7', label: `Set ${SET_SEVEN_SETS[SET_SEVEN_BY_SLIDE1_ID[id]]}` };
+}
 
 export function isFixedClassicGun(id: WeaponId | 'old'): id is FixedClassicWeapon {
   return (FIXED_CLASSIC_WEAPONS as readonly string[]).includes(id);
@@ -76,6 +132,17 @@ export function isTwoCardGun(id: WeaponId | 'old'): boolean {
 
 export function getGunVariantOptions(id: VariantWeapon) {
   if (isFixedClassicGun(id)) return GUN_VARIANTS.slice(0, 1);
+  // SET 2..5 weapons: the slide-1 silhouette(s) they already had, plus slide
+  // 7's own artwork as the newest card (and the default).
+  if (isSetSevenDesignWeapon(id)) {
+    const card = setSevenVariant(id);
+    // HONEY already had a second silhouette ("Sekarang"), keep it.
+    if (id === 'honey') return [...GUN_VARIANTS.slice(0, 2), card];
+    // Three genuine slide-1 designs: keep all of them, slide 7 last.
+    if (supportsLatestDesign(id as LatestDesignWeapon)) return [...GUN_VARIANTS, card];
+    // Every other ported gun only ever had one slide-1 look.
+    return [GUN_VARIANTS[0], card];
+  }
   // SET 1 weapons: the slide-1 silhouette(s) plus slide 7's own artwork, which
   // is the newest design and therefore the default.
   if (isSetOneDesignWeapon(id)) {
@@ -96,28 +163,36 @@ export function getGunVariantOptions(id: VariantWeapon) {
     ? GUN_VARIANTS.slice(0, 2) : GUN_VARIANTS;
 }
 export function getGunEffectOptions(id: VariantWeapon) {
-  return isFixedClassicGun(id) ? GUN_EFFECTS.slice(0, 1) : GUN_EFFECTS;
+  if (isFixedClassicGun(id)) return GUN_EFFECTS.slice(0, 1);
+  // Slide 7's own shot is a third card for SET 2..5: the two slide-1 effects
+  // stay pickable, and slide 7 is the newest (and the default).
+  if (isSetSevenDesignWeapon(id)) return [...GUN_EFFECTS, setSevenEffect(id)];
+  return GUN_EFFECTS;
 }
 
 // User-requested loadouts. A new save key makes these take effect even for a
 // player whose earlier choices were stored in v1; further picks persist in v2.
 const DEFAULT_DESIGNS: Record<EditableWeapon, GunVariant> = {
-  dragon: 'original', diamond: 'latest', rainbow: 'original', meteor: 'original',
-  moonbeam: 'original', chicken: 'latest', honey: 'original',
-  cricket: 'current', fish: 'current', electro: 'current',
-  // Slide-7 SET 1 is the newest arsenal, so its own artwork is the default for
-  // the six guns slide 1 shares with it.
-  golden: 'set1', blackhole: 'set1', slingshot: 'set1', blowgun: 'set1',
-  shotgun: 'set1', soaker: 'set1',
+  dragon: 'set7', diamond: 'set7', rainbow: 'set7', meteor: 'set7', golden: 'set1',
+  moonbeam: 'set7', chicken: 'set7', honey: 'set7', cricket: 'set7', fish: 'set7',
+  electro: 'set7', blackhole: 'set1', slingshot: 'set1', blowgun: 'set1', shotgun: 'set1',
+  soaker: 'set1', snowball: 'set7', sniper: 'set7', flamethrower: 'set7', bubble: 'set7',
+  bamboo: 'set7', banana: 'set7', harpoon: 'set7', confetti: 'set7', seed: 'set7',
+  pizza: 'set7', minigun: 'set7', crossbow: 'set7', gravity: 'set7', coconut: 'set7',
+  angklung: 'set7', bee: 'set7', sakura: 'set7', firework: 'set7', keris: 'set7',
+  storm: 'set7', pencil: 'set7', sandal: 'set7', paintball: 'set7', wand: 'set7',
+  shark: 'set7', ghost: 'set7', ufo: 'set7',
 };
 const DEFAULT_EFFECTS: Record<EditableWeapon, GunEffect> = {
-  dragon: 'new', diamond: 'new', rainbow: 'new', meteor: 'new',
-  moonbeam: 'original', chicken: 'new', honey: 'new',
-  cricket: 'new', fish: 'new', electro: 'new',
-  // The slide-7 SET 1 shot (its muzzle recipe, trail, impact burst and its own
-  // sounds) is the newest effect for these six.
-  golden: 'new', blackhole: 'new', slingshot: 'new', blowgun: 'new',
-  shotgun: 'new', soaker: 'new',
+  dragon: 'set7', diamond: 'set7', rainbow: 'set7', meteor: 'set7', golden: 'new',
+  moonbeam: 'set7', chicken: 'set7', honey: 'set7', cricket: 'set7', fish: 'set7',
+  electro: 'set7', blackhole: 'new', slingshot: 'new', blowgun: 'new', shotgun: 'new',
+  soaker: 'new', snowball: 'set7', sniper: 'set7', flamethrower: 'set7', bubble: 'set7',
+  bamboo: 'set7', banana: 'set7', harpoon: 'set7', confetti: 'set7', seed: 'set7',
+  pizza: 'set7', minigun: 'set7', crossbow: 'set7', gravity: 'set7', coconut: 'set7',
+  angklung: 'set7', bee: 'set7', sakura: 'set7', firework: 'set7', keris: 'set7',
+  storm: 'set7', pencil: 'set7', sandal: 'set7', paintball: 'set7', wand: 'set7',
+  shark: 'set7', ghost: 'set7', ufo: 'set7',
 };
 
 function readChoices(key: string): Record<string, unknown> | null {

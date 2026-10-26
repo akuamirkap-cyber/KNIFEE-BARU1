@@ -5,7 +5,7 @@ import { getGunMetrics } from '../game/art/metrics';
 import { GUN_EFFECTS, getGunVariantOptions, getGunEffectOptions, type GunVariant, type GunEffect, type EditableWeapon } from '../game/art/gunVariants';
 import ShotEffectCanvas from './ShotEffectCanvas';
 
-type Description = Record<EditableWeapon, readonly string[]>;
+type Description = Partial<Record<EditableWeapon, readonly string[]>>;
 const DESCRIPTIONS: Description = {
   chicken: ['Peluncur ayam karet klasik', 'Ayam pompa berayun', 'Ayam karet dengan sayap, grip, dan squeaker'],
   dragon: ['Naga merah klasik', 'Naga bersayap dan api', 'Kepala naga, sayap terlipat, grip kulit'],
@@ -40,6 +40,18 @@ const DESCRIPTIONS: Description = {
     'SUPER SOAKER slide 7: tangki berisi air, pengukur tekanan dan pompa yang bergerak',
   ],
 };
+
+/**
+ * Every slide-7 card explains itself even without a hand-written paragraph:
+ * the SET 1..5 card always says that the shape, the shot and the sound are
+ * slide 7's own, and every other card is the slide-1 design it replaces.
+ */
+function describeFallback(weapon: Weapon, variant: GunVariant, label: string): string {
+  if (variant === 'set1' || variant === 'set7') {
+    return `${label}: ${weapon.name} dengan bentuk, efek tembakan dan suara asli dari slide 7`;
+  }
+  return `${label}: desain ${weapon.name} di slide 1`;
+}
 
 function VariantCanvas({ weapon, variant }: { weapon: Weapon; variant: GunVariant }) {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -100,7 +112,9 @@ export default function GunVariantPicker({ weapon, variantId, selected, effect, 
               <span className="relative flex min-w-0 flex-1 flex-col gap-1.5">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-300">0{index + 1} / 0{designs.length}</span>
                 <span className="text-base font-black text-white sm:text-lg">{label}</span>
-                <span className="text-[11px] leading-snug text-indigo-200 sm:text-xs">{DESCRIPTIONS[variantId][index]}</span>
+                <span className="text-[11px] leading-snug text-indigo-200 sm:text-xs">
+                  {DESCRIPTIONS[variantId]?.[index] ?? describeFallback(weapon, id, label)}
+                </span>
                 <span className={`w-fit rounded-full px-2 py-1 text-[10px] font-black ${selected === id ?
                   'bg-amber-300 text-[#271528]' : 'bg-white/10 text-white/80'}`}>
                   {selected === id ? '✓ DIPAKAI' : 'PILIH DESAIN'}
@@ -113,7 +127,7 @@ export default function GunVariantPicker({ weapon, variantId, selected, effect, 
           <div className="mb-2 text-center text-[10px] font-black uppercase tracking-[0.18em] text-fuchsia-200">
             ✦ EFEK TEMBAKAN · PILIH TERPISAH ✦
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className={`grid gap-2 ${effects.length > 2 ? 'grid-cols-3' : 'grid-cols-2'}`}>
             {effects.map(({ id, label }) => (
               <button key={id} type="button" onClick={() => onEffectSelect(id)}
                 aria-pressed={effect === id} aria-label={`Pilih efek ${label} untuk ${weapon.name}`}

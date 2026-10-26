@@ -482,6 +482,7 @@ export function drawSetOneShotShell(
   // The stream hangs from the round back to the muzzle at the origin.
   shot.tailY = 0;
   shot.muzzleY = 0;
+  shot.startY = 0;
   shot.shape = [1, 1, 1, 1, 1, 1, 1, 1, 1];
   if (id === 'shotgun') {
     for (const p of shot.pellets) {
