@@ -1,5 +1,6 @@
 import { sfx } from './audio';
 import { isSlide23Weapon, slide23Sfx } from './slide23Sfx';
+import { fireworkSfx } from './fireworkSlide2Sfx';
 import { sfx2 } from './sfx2';
 import { sfx3 } from './sfx3';
 import { sfx4 } from './sfx4';
@@ -31,7 +32,6 @@ import {
   drawFirework8GunGlow,
   drawFirework8ParticlesAndRings,
   FIREWORK_EMBED_NOSE,
-  FIREWORK_PL,
   firework8ShotHue,
   hsl,
   launchFirework8Sky,
@@ -188,7 +188,7 @@ const FIRE_SFX: Record<WeaponId, () => void> = {
   seed: sfx2.seed, dragon: sfx2.dragon,
   gravity: sfx2.gravity, pizza: sfx2.pizza,
   honey: sfx3.honey, coconut: sfx3.coconut, angklung: sfx3.angklung, bee: sfx3.bee, yoyo: () => slide23Sfx.shoot('yoyo'),
-  sakura: sfx3.sakura, acid: sfx3.acid, keris: () => slide23Sfx.shoot('keris'), firework: () => slide23Sfx.shoot('firework'), anchor: sfx3.anchor,
+  sakura: sfx3.sakura, acid: sfx3.acid, keris: () => slide23Sfx.shoot('keris'), firework: () => fireworkSfx.shoot(), anchor: sfx3.anchor,
   shark: () => slide23Sfx.shoot('shark'), ghost: sfx3.ghost, ufo: sfx3.ufo, rainbow: () => slide23Sfx.shoot('rainbow'), meteor: sfx3.meteor, diamond: () => slide23Sfx.shoot('diamond'),
   moonbeam: sfx3.moonbeam, storm: sfx3.storm,
   obliterator: sfx4.obliterator, buster: sfx4.busterSmall, paintball: sfx4.paintball, holy: sfx4.holy, beerifle: sfx4.beeRifle,
@@ -1467,9 +1467,8 @@ export class Game {
     this.shake = Math.max(this.shake, 8);
     const fw = this.getFwState();
     const h = hue ?? gunState.rocketHue ?? firework8ShotHue(this.level?.n ?? 1, fw.impactIdx);
+    // Slide 2 has no extra flash ring here — the burst brings its own glow + shock ring.
     spawnFirework8StickBurst(fw, x, y, h);
-    this.sink.light(x, y + 20, 140, '255,180,220', 0.35);
-    this.sink.push({ x, y, vx: 0, vy: 0, life: 0.35, max: 0.35, size: 90, color: '#ff80bf', kind: 'ring', rot: 0, vr: 0, g: 0 });
   }
 
   private applySlow(time: number, factor: number, rgb: string, kind: 'ice' | 'water' | 'honey' | 'time') {
@@ -2095,8 +2094,8 @@ export class Game {
     if (isSlide23Weapon(w.id)) {
       const hitIdx = Math.max(0, this.stuck - 1);
       if (w.id === 'yoyo') slide23Sfx.hit('yoyo-spin', 0);
-      slide23Sfx.hit(w.id, hitIdx);
-      if (w.id === 'firework' && hitIdx % 3 === 2) slide23Sfx.boom(1.05);
+      if (w.id === 'firework') fireworkSfx.hit(hitIdx);
+      else slide23Sfx.hit(w.id, hitIdx);
     } else {
       sfx.hit();
       if (w.energy && !w.slow && !w.pullCoins && !HIT_SFX[w.id]) sfx.zap();
@@ -2715,8 +2714,8 @@ export class Game {
     if (isSlide23Weapon(w.id)) {
       const hitIdx = (this.perkCount = (this.perkCount || 0) + 1) - 1;
       if (w.id === 'yoyo') slide23Sfx.hit('yoyo-spin', 0);
-      slide23Sfx.hit(w.id, hitIdx);
-      if (w.id === 'firework' && hitIdx % 3 === 2) slide23Sfx.boom(1.05);
+      if (w.id === 'firework') fireworkSfx.hit(hitIdx);
+      else slide23Sfx.hit(w.id, hitIdx);
     } else if (HIT_SFX[w.id]) {
       HIT_SFX[w.id]!();
     } else if (w.energy && !w.slow && !w.pullCoins) {
@@ -3577,21 +3576,9 @@ export class Game {
       if (b.flash) b.flash = Math.max(0, b.flash - dt * 3.5);
     }
     if (this.weapon.id === 'firework' || (this.fwState && (this.fwState.particles.length > 0 || this.fwState.glows.length > 0 || this.fwState.rings.length > 0 || this.fwState.sky.length > 0))) {
-      const fw = this.getFwState();
-      const stuckPins: { x: number; y: number; worldA: number; hue: number }[] = [];
-      for (const it of this.items) {
-        if (it.type === 'bullet' && it.w === 'firework') {
-          const worldA = it.angle + this.rot;
-          const dist = this.level.radius - FIREWORK_EMBED_NOSE + FIREWORK_PL;
-          stuckPins.push({
-            x: CX + Math.cos(worldA) * dist,
-            y: this.targetY + Math.sin(worldA) * dist,
-            worldA,
-            hue: it.hue ?? 340,
-          });
-        }
-      }
-      updateFirework8State(fw, dt, stuckPins);
+      // Slide 2 runs its sky show on the menu / game over only — mirror that here.
+      // (Gun Hit's idle screen uses its own menu backdrop, so 'over' is the match.)
+      updateFirework8State(this.getFwState(), dt, this.state === 'over');
     }
     if (
       this.weapon.id === 'yoyo' ||

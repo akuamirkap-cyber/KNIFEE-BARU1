@@ -1,4 +1,5 @@
 import { slide23Sfx } from './slide23Sfx';
+import { fireworkSfx } from './fireworkSlide2Sfx';
 
 let actx: AudioContext | null = null;
 let master: GainNode | null = null;
@@ -8,6 +9,7 @@ let muted = false;
 export function setMuted(m: boolean) {
   muted = m;
   slide23Sfx.setMuted(m);
+  fireworkSfx.setMuted(m);
   if (master) master.gain.value = m ? 0 : 0.55;
 }
 
@@ -76,6 +78,7 @@ export const sfx = {
   unlock() {
     ac();
     slide23Sfx.unlock();
+    fireworkSfx.unlock();
   },
   click() {
     slide23Sfx.click();
@@ -203,10 +206,13 @@ export const sfx = {
     slide23Sfx.clear(w);
   },
   clear(w?: string) {
-    slide23Sfx.clear(w);
+    // Slide 2's own stage-clear fanfare for the firework launcher.
+    if (w === 'firework') fireworkSfx.clear();
+    else slide23Sfx.clear(w);
   },
   fail(w?: string) {
-    slide23Sfx.fail(w);
+    if (w === 'firework') fireworkSfx.fail();
+    else slide23Sfx.fail(w);
   },
   coin() {
     tone(988, 988, 0.08, 'square', 0.13);

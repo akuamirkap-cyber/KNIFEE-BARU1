@@ -670,7 +670,7 @@ test('Firework weapon keeps SGA launcher shape while using Firework 8-Gun rocket
   assert.equal((game.projs[0] as Shot & { hue?: number }).hue, firstHue);
   assert.equal(fw.particles.length, 23, '22 muzzle sparks + 1 central flash particle');
   assert.equal(fw.glows.length, 1, 'muzzle glow r=70');
-  assert.equal(fw.rings.length, 1, 'muzzle ring maxR=38');
+  assert.equal(fw.rings.length, 1, 'muzzle shock ring r=38');
 
   // Sticking into the target triggers Slide #3 stick burst and sets flash=1 with 6px nose embed
   const prevParticles = fw.particles.length;
@@ -680,7 +680,7 @@ test('Firework weapon keeps SGA launcher shape while using Firework 8-Gun rocket
   assert.equal(game.items[0].flash, 1);
   assert.equal(FIREWORK_EMBED_NOSE, 6);
   assert.ok(fw.particles.length > prevParticles + 80, 'dual firework bursts spawn on stick');
-  assert.ok(fw.rings.some(r => r.maxR === 90), 'impact shock ring maxR=90 spawns on stick');
+  assert.ok(fw.rings.some(r => r.r === 90 && r.life === 0.45), 'impact shock ring r=90 (0.45s) spawns on stick');
 
   // 4. Target decal leaves no black scorch hole for firework
   const decalCalls: string[] = [];
