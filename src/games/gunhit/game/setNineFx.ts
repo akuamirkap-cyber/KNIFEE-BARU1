@@ -323,13 +323,28 @@ export class SetNineFx implements GameAPI {
     ctx.restore();
   }
 
-  /** Called by slide 1 whenever it moves a carried round. */
+  /**
+   * Called by slide 1 whenever it moves a carried round.
+   *
+   * Slide 9 samples a trail once per 60 Hz frame, so its tail is a fixed
+   * *pixel* length for that weapon (`trailMax * speed / 60`). Slide 1 flies the
+   * same round at its own (often much faster) game speed, so a single sample
+   * per frame left long straight segments behind the bullet - the frozen
+   * tracer look. Resampling at slide 9's own spacing keeps the tail identical
+   * to slide 9 at any frame rate and any slide-1 speed buff.
+   */
   carry(b: Bullet, x: number, y: number, angle: number) {
+    const step = Math.max(2, Math.hypot(b.vx, b.vy) / 60);
+    const dist = Math.hypot(x - b.x, y - b.y);
+    const n = Math.min(Math.max(1, Math.ceil(dist / step)), Math.max(2, b.trailMax));
+    for (let i = 1; i <= n; i++) {
+      const k = i / n;
+      b.trail.push({ x: b.x + (x - b.x) * k, y: b.y + (y - b.y) * k });
+    }
+    while (b.trail.length > b.trailMax) b.trail.shift();
     b.x = x;
     b.y = y;
     b.angle = angle;
-    b.trail.push({ x, y });
-    if (b.trail.length > b.trailMax) b.trail.shift();
   }
 }
 

@@ -195,6 +195,35 @@ function probe(weapon: string) {
   return game;
 }
 
+test('the carried round keeps slide 9’s trail spacing, so it never freezes', () => {
+  const { fx } = host();
+  fx.selectWeapon('ak47');
+  fx.fire(210, 560, -Math.PI / 2, 0);
+  const bullet = fx.takeShots()[0];
+  assert.ok(bullet);
+  // Slide 9 samples its tail once per 60 Hz frame at the bullet's own speed.
+  const step = Math.hypot(bullet.vx, bullet.vy) / 60;
+  // Slide 1 moves the same round at its own game speed - and can stall a frame.
+  let y = 560;
+  for (const travel of [60, 240, 30, 0, 120]) {
+    y -= travel;
+    fx.carry(bullet, 210, y, -Math.PI / 2);
+    for (let i = 1; i < bullet.trail.length; i++) {
+      const gap = Math.hypot(
+        bullet.trail[i].x - bullet.trail[i - 1].x,
+        bullet.trail[i].y - bullet.trail[i - 1].y,
+      );
+      assert.ok(gap <= step * 1.001, `trail gap ${gap.toFixed(1)} > slide-9 step ${step.toFixed(1)}`);
+    }
+    assert.ok(bullet.trail.length <= bullet.trailMax, 'the tail stays as long as slide 9’s');
+    assert.equal(bullet.y, y, 'and it still follows slide 1');
+    // The tail must not grow with the frame rate: its pixel length is fixed.
+    const px = bullet.trail.reduce((sum, p, i) => (i === 0 ? sum : sum + Math.hypot(
+      p.x - bullet.trail[i - 1].x, p.y - bullet.trail[i - 1].y)), 0);
+    assert.ok(px <= step * (bullet.trailMax - 1) + 0.5, 'tail length matches slide 9');
+  }
+});
+
 test('slide 1 flies slide 9’s round, and only slide 9’s shot fires for its guns', () => {
   setGunEffect('longbow', 'set9');
   const game = probe('longbow');
