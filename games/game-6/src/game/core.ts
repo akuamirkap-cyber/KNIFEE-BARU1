@@ -668,9 +668,9 @@ class Synth {
           this.tone(60, 40, 0.35, 0.3, 'square', 0, 0.2);
           break;
         case 'ion':
-          this.tone(1500, 500, 0.12, 0.2, 'square', 0, 0.3);
-          this.tone(2200, 700, 0.1, 0.12, 'sawtooth', 0.01, 0.3, 14);
-          this.noiseBurst(0.08, 0.14, 'highpass', 4000, 1, 0, 0, 0.2);
+          this.tone(1500, 500, 0.12, 0.36, 'square', 0, 0.3);
+          this.tone(2200, 700, 0.1, 0.24, 'sawtooth', 0.01, 0.3, 14);
+          this.noiseBurst(0.08, 0.26, 'highpass', 4000, 1, 0, 0, 0.2);
           break;
         case 'rail':
           this.tone(200, 1800, 0.35, 0.16, 'sawtooth', 0, 0.5);
@@ -685,9 +685,12 @@ class Synth {
           this.noiseBurst(0.25, 0.3, 'lowpass', 400, 1, 0, 0, 0.6);
           break;
         case 'phaser':
-          this.tone(1200, 1650, 0.45, 0.13, 'sine', 0, 0.4);
-          this.tone(1203, 1658, 0.45, 0.1, 'sine', 0, 0.4, 20);
-          this.noiseBurst(0.4, 0.05, 'highpass', 6000, 1, 0, 0, 0.3);
+          // Two detuned sines + air. Slide 9 runs this under a beam that is
+          // already ringing, so 0.13 was plenty there; as slide 1's single fire
+          // voice it barely registered next to the other ported guns.
+          this.tone(1200, 1650, 0.45, 0.3, 'sine', 0, 0.4);
+          this.tone(1203, 1658, 0.45, 0.24, 'sine', 0, 0.4, 20);
+          this.noiseBurst(0.4, 0.14, 'highpass', 6000, 1, 0, 0, 0.3);
           break;
         case 'sword':
           this.noiseBurst(0.3, 0.3, 'bandpass', 600, 1.5, 0, 5200, 0.4);
@@ -695,20 +698,23 @@ class Synth {
           this.tone(110, 110, 0.4, 0.1, 'square', 0, 0.2, 12);
           break;
         case 'plasma':
-          this.tone(1000, 90, 0.5, 0.26, 'triangle', 0, 0.4);
-          this.tone(500, 40, 0.5, 0.2, 'sawtooth', 0, 0.4);
-          this.noiseBurst(0.4, 0.2, 'bandpass', 1200, 2, 0, 200, 0.4);
+          this.tone(1000, 90, 0.5, 0.4, 'triangle', 0, 0.4);
+          this.tone(500, 40, 0.5, 0.32, 'sawtooth', 0, 0.4);
+          this.noiseBurst(0.4, 0.32, 'bandpass', 1200, 2, 0, 200, 0.4);
           break;
         case 'disc':
-          this.tone(500, 1900, 0.14, 0.15, 'sine', 0, 0.4);
-          this.tone(1900, 800, 0.35, 0.13, 'sine', 0.1, 0.5);
-          this.tone(2800, 2400, 0.4, 0.04, 'square', 0.05, 0.4);
+          // Identity disc: a throw-whistle. Slide 9 also plays discBounce and
+          // discCatch around it, so the launch itself was mixed low; on slide 1
+          // it is the whole sound of the shot.
+          this.tone(500, 1900, 0.14, 0.34, 'sine', 0, 0.4);
+          this.tone(1900, 800, 0.35, 0.3, 'sine', 0.1, 0.5);
+          this.tone(2800, 2400, 0.4, 0.09, 'square', 0.05, 0.4);
           break;
         case 'proton':
-          this.tone(90, 130, 0.9, 0.2, 'sawtooth', 0, 0.3);
-          this.tone(93, 134, 0.9, 0.18, 'sawtooth', 0, 0.3, 24);
-          this.noiseBurst(0.9, 0.2, 'bandpass', 2200, 2, 0, 3400, 0.4);
-          this.tone(900, 1300, 0.9, 0.05, 'sine', 0, 0.3);
+          this.tone(90, 130, 0.9, 0.36, 'sawtooth', 0, 0.3);
+          this.tone(93, 134, 0.9, 0.32, 'sawtooth', 0, 0.3, 24);
+          this.noiseBurst(0.9, 0.34, 'bandpass', 2200, 2, 0, 3400, 0.4);
+          this.tone(900, 1300, 0.9, 0.1, 'sine', 0, 0.3);
           break;
         case 'tripod':
           this.tone(110, 1400, 0.3, 0.18, 'sawtooth', 0, 0.5);

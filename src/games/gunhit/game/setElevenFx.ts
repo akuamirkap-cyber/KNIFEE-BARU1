@@ -29,8 +29,29 @@ const NO_HOOKS: ElevenHooks = {
 
 /** Slide 11's own master switch, so slide 1's mute button silences it too. */
 let muted = false;
+/** Every slide-11 sound engine slide 1 has built so far (one per gun shell). */
+const engines = new Set<Game['sfx']>();
+
+function useEngine(sfx: Game['sfx']) {
+  engines.add(sfx);
+  // Slide 11 stores its mute switch in `localStorage` under `arsenal-mute`.
+  // Whoever toggled sound on slide 11 last would otherwise leave every ported
+  // gun silent on slide 1 forever — slide 1 owns the switch here.
+  sfx.muted = muted;
+  // …and slide 11's background music must never start over slide 1's game.
+  sfx.musicOn = false;
+  return sfx;
+}
+
 export function setElevenMuted(m: boolean) {
   muted = m;
+  for (const sfx of engines) {
+    try {
+      sfx.muted = m;
+    } catch {
+      /* an engine that was never unlocked has nothing to mute */
+    }
+  }
 }
 
 function sfxOf(fx: SetElevenFx): Game['sfx'] | null {
@@ -43,7 +64,7 @@ export function unlockElevenAudio(fx: SetElevenFx) {
   const sfx = sfxOf(fx) as unknown as { ensure?: () => boolean; musicOn?: boolean; ac?: AudioContext } | null;
   if (!sfx) return;
   try {
-    sfx.musicOn = false; // slide 1 never wants slide 11's background music
+    useEngine(sfx as unknown as Game['sfx']);
     if (sfx.ensure?.() && sfx.ac && sfx.ac.state === 'suspended') void sfx.ac.resume();
     setElevenMuted(muted);
   } catch {
@@ -89,6 +110,7 @@ export class SetElevenFx {
     if (!canvas) return;
     try {
       const g = new Game(canvas, 1);
+      useEngine(g.sfx);
       // Slide 11's constants become slide 1's, so every authored world point
       // (`g.lw`, `g.muzzlePos`, `g.aim`, embed angles) lands where slide 1 is.
       const raw = g as unknown as Record<string, unknown>;

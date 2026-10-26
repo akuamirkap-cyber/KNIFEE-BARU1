@@ -1,4 +1,4 @@
-import { sfx } from './audio';
+import { sfx, withSfxGain } from './audio';
 import { slide2Sfx } from './slide2Audio';
 import { Slide2Fx } from './slide2Fx';
 import {
@@ -215,24 +215,33 @@ const hexToRgbTriplet = (color: string): string => {
   return rgb ? `${rgb[1]},${rgb[2]},${rgb[3]}` : '255,255,255';
 };
 
-const FIRE_SFX: Record<WeaponId, () => void> = {
+/**
+ * Every weapon's own classic firing sound (the "Sebelumnya" / "Baru" cards).
+ *
+ * The `slide23Sfx.shoot(id, gain)` arms carry a level multiplier: slide 2/3
+ * wrote those recipes as soft accents under their stage music, and as the only
+ * voice of a slide-1 shot they were far quieter than the rest of the arsenal.
+ * ×1.5–×4 brings them to the same peak band as everything else while keeping
+ * their exact timbre and rhythm.
+ */
+export const FIRE_SFX: Record<WeaponId, () => void> = {
   pistol: sfx.shoot, ak47: sfx.shootAk, plasma: sfx.shootPlasma, laser: sfx.shootLaser,
   cricket: sfx.shootCricket, electro: sfx.shootElectro, nail: sfx.shootNail, fish: sfx.shootFish,
-  crossbow: sfx.shootCrossbow, bazooka: () => slide23Sfx.shoot('bazooka'), rpg: () => slide23Sfx.shoot('rpg'), freeze: sfx.shootFreeze,
-  golden: sfx.shootGolden, blackhole: () => slide23Sfx.shoot('blackhole'),
+  crossbow: sfx.shootCrossbow, bazooka: () => slide23Sfx.shoot('bazooka'), rpg: () => slide23Sfx.shoot('rpg', 1.6), freeze: sfx.shootFreeze,
+  golden: sfx.shootGolden, blackhole: () => slide23Sfx.shoot('blackhole', 2.2),
   shotgun: sfx2.shotgun, sniper: sfx2.sniper, minigun: sfx2.minigun, railgun: sfx2.railgun,
   flamethrower: sfx2.flame, slingshot: sfx2.slingshot, blowgun: sfx2.blowgun,
-  bamboo: () => slide23Sfx.shoot('bamboo'), banana: sfx2.banana, magnet: sfx2.magnet, bubble: sfx2.bubble,
-  shrink: sfx2.shrink, grow: sfx2.grow, harpoon: sfx2.harpoon, soaker: () => slide23Sfx.shoot('soaker'),
+  bamboo: () => slide23Sfx.shoot('bamboo', 1.8), banana: sfx2.banana, magnet: sfx2.magnet, bubble: sfx2.bubble,
+  shrink: sfx2.shrink, grow: sfx2.grow, harpoon: sfx2.harpoon, soaker: () => slide23Sfx.shoot('soaker', 3.2),
   snowball: sfx2.snowball, pirate: sfx2.pirate, chicken: sfx2.chicken, card: sfx2.card, confetti: sfx2.confetti,
   seed: sfx2.seed, dragon: sfx2.dragon,
   gravity: sfx2.gravity, pizza: sfx2.pizza,
-  honey: sfx3.honey, coconut: sfx3.coconut, angklung: sfx3.angklung, bee: sfx3.bee, yoyo: () => slide23Sfx.shoot('yoyo'),
-  sakura: sfx3.sakura, acid: sfx3.acid, keris: () => slide23Sfx.shoot('keris'), firework: () => fireworkSfx.shoot(), anchor: sfx3.anchor,
-  shark: () => slide23Sfx.shoot('shark'), ghost: sfx3.ghost, ufo: sfx3.ufo, rainbow: () => slide23Sfx.shoot('rainbow'), meteor: sfx3.meteor, diamond: () => slide23Sfx.shoot('diamond'),
+  honey: sfx3.honey, coconut: sfx3.coconut, angklung: sfx3.angklung, bee: sfx3.bee, yoyo: () => slide23Sfx.shoot('yoyo', 4),
+  sakura: sfx3.sakura, acid: sfx3.acid, keris: () => slide23Sfx.shoot('keris', 3.4), firework: () => fireworkSfx.shoot(), anchor: sfx3.anchor,
+  shark: () => slide23Sfx.shoot('shark', 3.4), ghost: sfx3.ghost, ufo: sfx3.ufo, rainbow: () => slide23Sfx.shoot('rainbow', 4.6), meteor: sfx3.meteor, diamond: () => slide23Sfx.shoot('diamond', 1.8),
   moonbeam: sfx3.moonbeam, storm: sfx3.storm,
   obliterator: sfx4.obliterator, buster: sfx4.busterSmall, paintball: sfx4.paintball, holy: sfx4.holy, beerifle: sfx4.beeRifle,
-  emerald: sfx4.emerald, ruby: sfx4.ruby, sapphire: sfx4.sapphire, crystal: () => slide23Sfx.shoot('crystal'), unicorn: sfx4.unicorn,
+  emerald: sfx4.emerald, ruby: sfx4.ruby, sapphire: sfx4.sapphire, crystal: () => slide23Sfx.shoot('crystal', 4), unicorn: sfx4.unicorn,
   pencil: sfx4.pencil, sandal: sfx4.sandal, wand: sfx4.wand,
   coingun: sfx5.coinGun, blaster: sfx5.blaster,
   photon_saber: sfx6.saberShoot,
@@ -248,13 +257,14 @@ const FIRE_SFX: Record<WeaponId, () => void> = {
   ion_smg: sfx.shootElectro, phaser: sfx.shootLaser, yautja: sfx.shootPlasma,
   identity_disc: sfx2.magnet, proton_pack: sfx3.ghost, heat_ray: sfx2.flame,
   // Slide 11
-  mega_buster: () => slide23Sfx.shoot('bamboo'), harmonic_disruptor: sfx2.magnet,
+  mega_buster: () => slide23Sfx.shoot('bamboo', 1.8), harmonic_disruptor: sfx2.magnet,
   absolute_zero: sfx.shootFreeze, helios_flare: sfx.shootGolden,
   chrono_rifle: sfx2.railgun, orbital_beacon: () => slide23Sfx.shoot('bazooka'),
-  helix_pulsar: sfx2.minigun, singularity: () => slide23Sfx.shoot('blackhole'),
+  helix_pulsar: sfx2.minigun, singularity: () => slide23Sfx.shoot('blackhole', 2.2),
   prism_lance: sfx.shootLaser, nano_swarm: sfx2.minigun,
 };
-const HIT_SFX: Partial<Record<WeaponId, () => void>> = {
+/** The per-weapon impact accent, where the weapon has one of its own. */
+export const HIT_SFX: Partial<Record<WeaponId, () => void>> = {
   coingun: sfx.coin, blaster: sfx5.blasterHit,
   photon_saber: sfx6.saberHit,
   gauntlet_cannon: sfx6.gauntletHit,
@@ -270,6 +280,28 @@ const HIT_SFX: Partial<Record<WeaponId, () => void>> = {
   obliterator: sfx4.obliteratorHit, paintball: sfx4.paintSplat, holy: sfx4.purify, emerald: sfx3.chime, ruby: sfx2.metal,
   sapphire: sfx.ice, crystal: sfx4.shatter, unicorn: sfx4.magic, pencil: sfx4.scribble, sandal: sfx4.plak, wand: sfx4.magic,
 };
+/**
+ * Level trim for slide 1's own recipes.
+ *
+ * A dozen of slide 1's sounds were written as *accents* — a unicorn's sparkle,
+ * a shrink ray's whiff, a ghost's moan — mixed to sit under a bigger blast. On
+ * the guns where that accent is the entire shot, they measured 0.07–0.2 peak
+ * next to a 0.45 peak arsenal, which is exactly the "lirih" that made the
+ * ports feel wrong. The trim keeps each recipe untouched and only lifts its
+ * level into the same band as every other gun.
+ */
+export const FIRE_GAIN: Partial<Record<WeaponId, number>> = {
+  unicorn: 6, emerald: 5.6, shrink: 3.75, ufo: 3.75, buster: 3.75, holy: 3.75,
+  chicken: 3, sakura: 3, ghost: 3, wand: 3, moonbeam: 2.8, magnet: 2.5,
+  seed: 2.25, bee: 2.25, laser: 1.6,
+};
+
+/** Fires a slide-1 gun's own sound at its trimmed level. */
+export function playFireSfx(id: WeaponId) {
+  const k = FIRE_GAIN[id] ?? 1;
+  if (k === 1) FIRE_SFX[id]();
+  else withSfxGain(k, FIRE_SFX[id]);
+}
 const PAINT = ['244,63,94', '250,204,21', '34,211,238', '168,85,247', '74,222,128', '251,146,60'];
 
 type ItemType = 'bullet' | 'old' | 'spike' | 'coin' | 'diamond_chest';
@@ -1570,7 +1602,7 @@ export class Game {
         spawnSpeedLines(this.sink, CX + ox, this.targetY + this.level.radius + 20, GUN_Y - 30, '254,240,138');
       }
     } else if (this.slide2Void) slide2Sfx.shootBH();
-    else if (!setOneLive) FIRE_SFX[w.id]();
+    else if (!setOneLive) playFireSfx(w.id);
     if (w.id === 'xeno') {
       for (const ox of offsets) {
         // 16 viscous droplets behind the glob (game-3 fire())
