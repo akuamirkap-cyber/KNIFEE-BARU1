@@ -7,7 +7,7 @@ import { SNOWBALL_RADIUS } from '../src/games/gunhit/game/art/projectiles2';
 import { SNOWBALL_MAG_SIZE } from '../src/games/gunhit/game/art/guns2';
 import { drawMaterialTrail } from '../src/games/gunhit/game/art/projectileTrails';
 import { drawClassicBeam } from '../src/games/gunhit/game/art/beamEffects';
-import { getGunEffect, setGunEffect } from '../src/games/gunhit/game/art/gunVariants';
+import { getGunEffect, getGunEffectOptions, setGunEffect } from '../src/games/gunhit/game/art/gunVariants';
 import { goldenSlideOffset } from '../src/games/gunhit/game/art/guns';
 import { bananaPeelOpen, bananaFleshFill } from '../src/games/gunhit/game/art/guns2';
 import { dragonFlameSurge } from '../src/games/gunhit/game/art/guns3';
@@ -526,9 +526,12 @@ test('Golden Gun cycles its slide after a shot and while reloading without refil
   assert.equal(timed.ammoLeft, timed.level.ammo);
 });
 
-test('Laser keeps its instant hit with the former beam; BLACK HOLE keeps its compact classic round', () => {
+test('Laser keeps its instant hit with the former beam; the BLACK HOLE classic round stays selectable', () => {
   assert.equal(getGunEffect('laser'), 'original');
-  assert.equal(getGunEffect('blackhole'), 'original');
+  // The black hole now defaults to the slide-2 void shot; the compact classic
+  // round is still there as the "Sebelumnya" effect.
+  assert.equal(getGunEffect('blackhole'), 'new');
+  assert.deepEqual(getGunEffectOptions('blackhole').map(o => o.id), ['original', 'new']);
   assert.equal(getGunEffect('plasma'), 'original');
   assert.equal(getWeapon('laser').beam, true);
   assert.notEqual(getWeapon('blackhole').beam, true);
@@ -552,7 +555,7 @@ test('Laser keeps its instant hit with the former beam; BLACK HOLE keeps its com
   assert.equal(calls.filter(call => call.method === 'fillRect').length, 2,
     'classic beam has a narrow core and a soft glow, not the new filaments');
   calls.length = 0;
-  drawProjectile(ctx, 'blackhole', 36, 1.5, 1, true);
+  drawProjectile(ctx, 'blackhole', 36, 1.5, 1, true, 'original');
   assert.ok(calls.some(call => call.method === 'arc' && call.args[2] === 5.5));
   assert.equal(calls.some(call => call.method === 'arc' && call.args[2] > 24), false,
     'no oversized opaque black circle is placed on a rock or chest');
@@ -560,10 +563,13 @@ test('Laser keeps its instant hit with the former beam; BLACK HOLE keeps its com
   spawnImpact({ push: p => impact.push(p), light: () => {} }, FX.blackhole,
     getWeapon('blackhole'), 210, 360, 0, 1, ['#777777']);
   assert.ok(impact.length);
-  for (const id of ['blackhole', 'plasma'] as const) {
+  for (const id of ['plasma'] as const) {
     assert.equal(drawMaterialTrail(ctx, id, 'new'), false,
       'the retired new trail cannot return through a stale saved choice');
   }
+  // The black hole's slide-2 shot renders its own singularity, so it must not
+  // also paint a generic material trail.
+  assert.equal(drawMaterialTrail(ctx, 'blackhole', 'original'), false);
 });
 
 test('bee-shaped Honey Blaster pumps on impact without altering its sticky slowdown', () => {

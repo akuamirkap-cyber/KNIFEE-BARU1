@@ -199,8 +199,11 @@ test('themed grips use distinct silhouettes and palettes while leaning like the 
     assert.ok(hasSharpHeel, `${name} grip ends in a defined angled heel rather than a rounded blunt end`);
   }
   const actualBlackHole: string[] = [];
-  drawGunCentered(canvasArt(actualBlackHole), 'blackhole', 0);
-  assert.ok(actualBlackHole.some(event => event.startsWith('rotate(-0.72')), 'the active Black Hole renderer uses its angled violet grip');
+  // The active Black Hole design is now slide 2's cannon (see
+  // tests/gunhit-slide2-parity.test.ts); the angled violet grip still belongs
+  // to the slide-1 design, which stays selectable as "Sebelumnya".
+  drawGunCentered(canvasArt(actualBlackHole), 'blackhole', 0, 0, true, 'original');
+  assert.ok(actualBlackHole.some(event => event.startsWith('rotate(-0.72')), 'the slide-1 Black Hole renderer uses its angled violet grip');
   for (const id of ['freeze', 'fish', 'electro'] as const) {
     const events: string[] = [];
     drawGunCentered(canvasArt(events), id, 0);

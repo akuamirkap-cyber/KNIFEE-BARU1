@@ -1,4 +1,15 @@
 import { sfx } from './audio';
+import { slide2Sfx } from './slide2Audio';
+import { Slide2Fx } from './slide2Fx';
+import {
+  ambientBlackHole2,
+  drawBlackHoleShot2,
+  fireBlackHole2,
+  launchVoidSky2,
+  setSlide2GunFx,
+  trailBlackHole2,
+  voidBurst2,
+} from './slide2Weapons';
 import { isSlide23Weapon, slide23Sfx } from './slide23Sfx';
 import { fireworkSfx } from './fireworkSlide2Sfx';
 import { sfx2 } from './sfx2';
@@ -14,7 +25,7 @@ import { AcidFluid, type AcidStuckBlob } from './acidFluid';
 import { SNOWBALL_MAG_SIZE } from './art/guns2';
 import { drawMaterialTrail } from './art/projectileTrails';
 import { drawClassicBeam, drawLaserBeam, drawVoidTether } from './art/beamEffects';
-import { getGunEffect } from './art/gunVariants';
+import { getGunEffect, getGunVariant } from './art/gunVariants';
 import { drawWetSurface } from './art/waterSurface';
 import { drawFace, STYLE_COLORS, type Style } from './faces';
 import { drawGun, drawProjectile, WEAPONS, getWeapon, type Weapon, type WeaponId, type ProjKind } from './weapons';
@@ -459,6 +470,38 @@ export class Game {
   private chargeStage = 0;
   private lastPaint = '';
   private stretchPlayed = true;
+  /** Slide-2 FX layer + per-shot hue for the ported slide-2 weapons. */
+  private s2State?: Slide2Fx;
+  private get s2(): Slide2Fx {
+    return (this.s2State ??= new Slide2Fx());
+  }
+  private s2Hue = 265;
+  private s2Ambient = 1.4;
+
+  /**
+   * Slide 2 `voidBurst()` at a hit point: accretion inflow, delayed collapse
+   * flash, bipolar jets and tangential ejecta, plus slide 2's own hit voice.
+   */
+  private slide2Impact(x: number, y: number, scale = 0.8) {
+    if (!this.slide2Void) return;
+    voidBurst2(
+      this.s2,
+      x,
+      y,
+      this.s2Hue,
+      scale,
+      (amount) => { this.shake = Math.max(this.shake, amount); },
+      () => slide2Sfx.voidBoom(scale),
+    );
+    slide2Sfx.hitBH(Math.max(0, this.perkCount));
+    this.sink.light(x, y, 170, '180,120,255', 0.22);
+  }
+
+  /** True when the black-hole gun must run the slide-2 void shot. */
+  private get slide2Void(): boolean {
+    return this.weapon.id === 'blackhole' && getGunEffect('blackhole') === 'new';
+  }
+
   private fwState?: Firework8State;
 
   private getFwState(): Firework8State {
@@ -514,6 +557,9 @@ export class Game {
 
   setWeapon(id: WeaponId) {
     this.weapon = getWeapon(id);
+    // The gun art may only spawn its charge sparks into a live FX layer, never
+    // into menu thumbnails.
+    setSlide2GunFx(id === 'blackhole' && getGunVariant(id) === 'latest' ? this.s2 : null);
     this.aiming = false;
     this.spin = 0;
     // A newly equipped cannon starts with no more balls than the level's
@@ -1067,8 +1113,17 @@ export class Game {
     this.recoil = w.recoil;
     this.muzzle = 0.07;
     const fxp = FX[w.id];
-    if (w.id !== 'firework' && w.id !== 'yoyo' && w.id !== 'keris' && w.id !== 'diamond' && w.id !== 'bazooka') {
+    if (w.id !== 'firework' && w.id !== 'yoyo' && w.id !== 'keris' && w.id !== 'diamond' && w.id !== 'bazooka'
+      && !(w.id === 'blackhole' && this.slide2Void)) {
       for (const ox of offsets) spawnMuzzle(this.sink, fxp, w, CX + ox, GUN_Y - 6);
+    }
+    // Slide 2 black hole: collapsing sparks into the muzzle, cosmic hue band.
+    if (w.id === 'blackhole' && this.slide2Void) {
+      this.s2Hue = 215 + ((gunState.shots * 53) % 105);
+      for (const ox of offsets) {
+        fireBlackHole2(this.s2, CX + ox, GUN_Y - 4, this.s2Hue);
+        this.sink.light(CX + ox, GUN_Y - 6, 90, '170,120,255', 0.22);
+      }
     }
     this.camY += fxp.kick * 0.5;
     if (fxp.speedLines) for (const ox of offsets) {
@@ -1137,7 +1192,8 @@ export class Game {
       if (big === 2) for (const ox of offsets) {
         spawnSpeedLines(this.sink, CX + ox, this.targetY + this.level.radius + 20, GUN_Y - 30, '254,240,138');
       }
-    } else FIRE_SFX[w.id]();
+    } else if (this.slide2Void) slide2Sfx.shootBH();
+    else FIRE_SFX[w.id]();
     if (w.id === 'xeno') {
       for (const ox of offsets) {
         // 16 viscous droplets behind the glob (game-3 fire())
@@ -2104,6 +2160,7 @@ export class Game {
     const hx = hp.x;
     const hy = hp.y;
     const cols = STYLE_COLORS[this.level.style].chips;
+    this.slide2Impact(hx, hy);
     this.applyPerks(w, hx, hy, R);
     if (w.id === 'yoyo') {
       spawnYoyoStickBurst(
@@ -2688,6 +2745,7 @@ export class Game {
     const chips = material === 'rock' ? ['#aab6c6', '#627388', '#e1ebf7']
       : material === 'diamond' ? ['#a5f3fc', '#67e8f9', '#e0f2fe']
         : ['#fbbf24', '#fde68a', '#a16207'];
+    this.slide2Impact(x, y);
     if (w.id !== 'firework' && w.id !== 'yoyo' && w.id !== 'keris' && w.id !== 'diamond' && w.id !== 'bazooka') {
       spawnImpact(this.sink, fx, w, x, y, dx / dist, dy / dist, chips);
     }
@@ -2711,7 +2769,7 @@ export class Game {
       this.tintA = Math.max(this.tintA, fx.tint);
       this.tintRgb = fx.light;
     }
-    if (isSlide23Weapon(w.id)) {
+    if (isSlide23Weapon(w.id) && !(w.id === 'blackhole' && this.slide2Void)) {
       const hitIdx = (this.perkCount = (this.perkCount || 0) + 1) - 1;
       if (w.id === 'yoyo') slide23Sfx.hit('yoyo-spin', 0);
       if (w.id === 'firework') fireworkSfx.hit(hitIdx);
@@ -3581,6 +3639,23 @@ export class Game {
       updateFirework8State(this.getFwState(), dt, this.state === 'over');
     }
     if (
+      this.slide2Void || this.s2.particles.length > 0 || this.s2.glows.length > 0
+      || this.s2.rings.length > 0 || this.s2.voids.length > 0 || this.s2.jets.length > 0
+      || this.s2.beams.length > 0 || this.s2.smokes.length > 0 || this.s2.fireballs.length > 0
+      || this.s2.flashes.length > 0 || this.s2.texts.length > 0 || this.s2.timers.length > 0
+    ) {
+      this.s2.update(dt);
+    }
+    if (this.state === 'play' && this.slide2Void) {
+      // Slide 2 keeps tearing voids open in the sky while the gun is live.
+      ambientBlackHole2(this.s2, CX, GUN_Y, dt);
+      this.s2Ambient -= dt;
+      if (this.s2Ambient <= 0) {
+        launchVoidSky2(this.s2, rand(0.8, 1.15), () => slide2Sfx.voidOpen(), () => slide2Sfx.voidBoom(1));
+        this.s2Ambient = rand(1.6, 2.6);
+      }
+    }
+    if (
       this.weapon.id === 'yoyo' ||
       (this.yoyoState &&
         (this.yoyoState.particles.length > 0 ||
@@ -3721,6 +3796,7 @@ export class Game {
         p.hist.push({ x: p.x, y: p.y });
         if (p.hist.length > ghostN) p.hist.shift();
       }
+      if (this.slide2Void) trailBlackHole2(this.s2, p.x, p.y, this.s2Hue);
       const dist = Math.hypot(p.vx, p.vy) * s;
       const steps = Math.max(1, Math.ceil(dist / 7));
       let r: StepRes = { res: 'none' };
@@ -4829,6 +4905,10 @@ export class Game {
       }
       // The moving singularity pulls a helical light tether from its actual
       // muzzle (both muzzles when doubled). It still collides as a projectile.
+      if (wid === 'blackhole' && this.slide2Void) {
+        drawBlackHoleShot2(c, p.x, p.y, this.s2Hue, this.time);
+        continue;
+      }
       if (wid === 'blackhole' && getGunEffect(wid) === 'new') {
         drawVoidTether(c, p.x, p.y, p.originX ?? CX,
           GUN_Y + this.recoil * 22, this.time);
@@ -5091,6 +5171,13 @@ export class Game {
 
     if (this.state !== 'idle' && (this.weapon.id === 'firework' || (this.fwState && (this.fwState.particles.length > 0 || this.fwState.rings.length > 0)))) {
       drawFirework8ParticlesAndRings(c, this.getFwState());
+    }
+    // Slide-2 FX layer (black-hole voids, jets, warped starlight, smoke).
+    if (this.s2State && (this.slide2Void || this.s2State.particles.length > 0 || this.s2State.voids.length > 0
+      || this.s2State.glows.length > 0 || this.s2State.rings.length > 0 || this.s2State.jets.length > 0
+      || this.s2State.beams.length > 0 || this.s2State.smokes.length > 0 || this.s2State.fireballs.length > 0
+      || this.s2State.flashes.length > 0 || this.s2State.texts.length > 0)) {
+      this.s2State.draw(c, this.time);
     }
     if (
       this.state !== 'idle' &&

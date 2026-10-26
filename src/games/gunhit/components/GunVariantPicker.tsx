@@ -18,6 +18,10 @@ const DESCRIPTIONS: Description = {
   cricket: ['Cricket mini lama dengan receiver dan grip mungil', 'Profil krom seperti referensi: laras panjang, pelatuk terbuka, grip hitam'],
   fish: ['Fish Gun dengan grip lama', 'Grip akuatik ramping dengan aksen sirip dan warna amber'],
   electro: ['Electro Gun dengan lilitan dan receiver lama', 'Receiver graphite, kapasitor cyan, dan lilitan tembaga rapi'],
+  blackhole: [
+    'Meriam singularitas klasik slide 1',
+    'Meriam slide 2: cincin foton ganda, inti singularitas, dan orb mengisi di moncong',
+  ],
 };
 
 function VariantCanvas({ weapon, variant }: { weapon: Weapon; variant: GunVariant }) {

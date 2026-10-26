@@ -45,7 +45,7 @@ test('user loadouts use the requested classic/new combination; only real alterna
   assert.deepEqual(GUN_VARIANTS.map(v => v.label), ['Sebelumnya', 'Sekarang', 'Terbaru']);
   assert.deepEqual(GUN_EFFECTS.map(v => v.label), ['Sebelumnya', 'Baru']);
   assert.equal(VARIANT_WEAPONS.length, 14);
-  assert.equal(EDITABLE_WEAPONS.length, 11);
+  assert.equal(EDITABLE_WEAPONS.length, 12);
   assert.equal(getGunVariant('pistol'), 'current');
   assert.equal(getGunEffect('pistol'), 'new');
   for (const id of FIXED_CLASSIC_WEAPONS) {
@@ -66,6 +66,8 @@ test('user loadouts use the requested classic/new combination; only real alterna
     golden: ['original', 'original'], honey: ['original', 'new'],
     chicken: ['latest', 'new'],
     cricket: ['current', 'new'], fish: ['current', 'new'], electro: ['current', 'new'],
+    // Slide-2 parity: newest design AND newest shot are the defaults.
+    blackhole: ['latest', 'new'],
   } as const;
   for (const id of EDITABLE_WEAPONS) {
     assert.equal(canChooseGunDesign(id), true);
@@ -146,9 +148,14 @@ test('eleven editable guns show the old and new actual shot renderers', () => {
     assert.ok(oldArt.length > 30 && newArt.length > 30, `${id} must draw both shots`);
     assert.notEqual(oldArt, newArt, `${id} must change its shot/beam, not just a label`);
   }
-  for (const id of ['plasma', 'blackhole'] as const) {
+  for (const id of ['plasma'] as const) {
     assert.equal(effectArt(id, 'new'), effectArt(id, 'original'), `${id} new shot retired`);
   }
+  // The black hole gained a real second shot (slide-2 void) and a second
+  // design (slide-2 cannon), so it is no longer a retired classic.
+  assert.equal(canChooseGunDesign('blackhole'), true);
+  assert.deepEqual(getGunVariantOptions('blackhole').map(v => v.id), ['original', 'latest']);
+  assert.notEqual(effectArt('blackhole', 'new'), effectArt('blackhole', 'original'));
 });
 
 test('honey old/new effects persist independently of design and leave gameplay rules intact', () => {

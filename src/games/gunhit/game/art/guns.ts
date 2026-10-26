@@ -6,6 +6,7 @@ import { drawGunExtra, drawFlashExtra } from './guns3';
 import { gunState, lin as sharedLin, radial } from './kit';
 import { shotPulse } from './commonGunMotion';
 import { drawSlide3BazookaMuzzleFx } from '../bazookaSlideFx';
+import { drawBlackHoleGun2, type Slide2GunState } from '../slide2Weapons';
 
 const TAU = Math.PI * 2;
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
@@ -58,7 +59,23 @@ export function drawGun(
   variant: GunVariant = getGunVariant(id),
 ) {
   c.save();
-  // The three retired guns ALWAYS render the original, even if an obsolete
+  // Slide-2 guns: the newest design is slide 2's own art, drawn at the same
+  // muzzle origin with the same rest/charge animation (loadP 7/s, recoil 6/s).
+  if (id === 'blackhole' && variant === 'latest' && supportsGunVariants(id)) {
+    const since = gunState.sinceShot;
+    const st: Slide2GunState = {
+      time: t,
+      recoil: Math.max(0, 1 - since * 6),
+      loadP: Math.min(1, since * 7),
+      hue: 215 + ((gunState.shots * 53) % 105),
+      live: ready,
+    };
+    drawBlackHoleGun2(c, cx, y0, st);
+    c.restore();
+    if (flash > 0) drawFlash(c, id, cx, y0, t, flash);
+    return;
+  }
+  // The retired guns ALWAYS render the original, even if an obsolete
   // saved choice or a caller explicitly requests a removed design. Honey has
   // two genuine silhouettes, not a duplicate 'latest' card.
   if (supportsGunVariants(id) && (isFixedClassicGun(id) || variant === 'original' ||

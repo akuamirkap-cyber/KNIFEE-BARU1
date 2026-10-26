@@ -184,7 +184,10 @@ const VARIANT_METRICS: Record<VariantWeapon, { original: GunMetrics; latest?: Gu
   },
   blackhole: {
     original: { totalLen: 174, centerOffsetY: 84, centerOffsetX: 2, span: 180 },
-    latest: { totalLen: 174, centerOffsetY: 84, centerOffsetX: 2, span: 180 },
+    // Measured from the slide-2 renderer (games/fireworkgun drawBHGun):
+    // ink runs x -117..116, y -76..216 around the muzzle, so the 45° showcase
+    // diagonal is (233 + 292) / √2 ≈ 371. The old 180 cropped the orbit ring.
+    latest: { totalLen: 216, centerOffsetY: 70, centerOffsetX: 0, span: 371 },
   },
   moonbeam: {
     original: { totalLen: 198, centerOffsetY: 88, centerOffsetX: 0, span: 204 },

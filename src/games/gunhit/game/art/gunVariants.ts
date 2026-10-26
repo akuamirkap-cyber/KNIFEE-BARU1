@@ -1,14 +1,22 @@
 import type { WeaponId } from '../weapons';
 
-/** These three have been retired to their original art AND shot only. */
-export const FIXED_CLASSIC_WEAPONS = ['plasma', 'laser', 'blackhole'] as const satisfies readonly WeaponId[];
+/** These two have been retired to their original art AND shot only. */
+export const FIXED_CLASSIC_WEAPONS = ['plasma', 'laser'] as const satisfies readonly WeaponId[];
 export type FixedClassicWeapon = (typeof FIXED_CLASSIC_WEAPONS)[number];
 
 /** Only guns with an actual design choice appear in the DESAIN tab. */
 export const EDITABLE_WEAPONS = [
   'dragon', 'diamond', 'rainbow', 'meteor', 'golden', 'moonbeam', 'chicken', 'honey',
   'cricket', 'fish', 'electro',
+  // Slide-2 guns: the old slide-1 art is kept as "Sebelumnya", the slide-2
+  // art (and its shot) is the new default.
+  'blackhole',
 ] as const satisfies readonly WeaponId[];
+/**
+ * Guns that only ever had ONE old look on slide 1, so the picker offers two
+ * cards instead of three: "Sebelumnya" (slide-1 art) and "Terbaru" (slide 2).
+ */
+export const TWO_CARD_WEAPONS = ['blackhole'] as const satisfies readonly WeaponId[];
 export type EditableWeapon = (typeof EDITABLE_WEAPONS)[number];
 export type LatestDesignWeapon = Exclude<EditableWeapon, 'honey' | 'cricket' | 'fish' | 'electro'>;
 export const VARIANT_WEAPONS = [...EDITABLE_WEAPONS, ...FIXED_CLASSIC_WEAPONS] as const;
@@ -39,8 +47,14 @@ export function supportsLatestDesign(id: VariantWeapon): id is LatestDesignWeapo
   return !isFixedClassicGun(id) && !(['honey', 'cricket', 'fish', 'electro'] as const).includes(id as 'honey' | 'cricket' | 'fish' | 'electro');
 }
 
+export function isTwoCardGun(id: WeaponId | 'old'): boolean {
+  return (TWO_CARD_WEAPONS as readonly string[]).includes(id);
+}
+
 export function getGunVariantOptions(id: VariantWeapon) {
   if (isFixedClassicGun(id)) return GUN_VARIANTS.slice(0, 1);
+  // Only two genuine silhouettes: the old slide-1 art and the slide-2 art.
+  if (isTwoCardGun(id)) return [GUN_VARIANTS[0], GUN_VARIANTS[2]];
   // These have a previous/current comparison only; don't offer a fake third
   // card whose renderer would duplicate one of those two designs.
   return (['honey', 'cricket', 'fish', 'electro'] as const).includes(id as 'honey' | 'cricket' | 'fish' | 'electro')
@@ -56,11 +70,15 @@ const DEFAULT_DESIGNS: Record<EditableWeapon, GunVariant> = {
   dragon: 'original', diamond: 'latest', rainbow: 'original', meteor: 'original',
   golden: 'original', moonbeam: 'original', chicken: 'latest', honey: 'original',
   cricket: 'current', fish: 'current', electro: 'current',
+  // Slide 2 is the newest look, so it is the default.
+  blackhole: 'latest',
 };
 const DEFAULT_EFFECTS: Record<EditableWeapon, GunEffect> = {
   dragon: 'new', diamond: 'new', rainbow: 'new', meteor: 'new',
   golden: 'original', moonbeam: 'original', chicken: 'new', honey: 'new',
   cricket: 'new', fish: 'new', electro: 'new',
+  // The slide-2 void shot (charge sparks, lensing orb, void burst) is default.
+  blackhole: 'new',
 };
 
 function readChoices(key: string): Record<string, unknown> | null {
