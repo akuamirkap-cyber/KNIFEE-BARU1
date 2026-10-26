@@ -27,7 +27,7 @@ export const GUN_METRICS: Partial<Record<WeaponId, Partial<GunMetrics>>> = {
   freeze: { totalLen: 182, centerOffsetY: 82, centerOffsetX: 10, span: 192 },
   golden: { totalLen: 180, centerOffsetY: 86, centerOffsetX: 17, span: 210 },
   blackhole: { totalLen: 174, centerOffsetY: 84, centerOffsetX: 2, span: 180 },
-  slingshot: { totalLen: 176, centerOffsetY: 88, centerOffsetX: 6, span: 184 },
+  slingshot: { totalLen: 176, centerOffsetY: 88, centerOffsetX: 0, span: 184 },
   blowgun: { totalLen: 290, centerOffsetY: 145, centerOffsetX: 5, span: 295 },
   shotgun: { totalLen: 226, centerOffsetY: 113, centerOffsetX: 6, span: 224 },
   soaker: { totalLen: 164, centerOffsetY: 75, centerOffsetX: -1, span: 174 },
@@ -91,6 +91,10 @@ export const GUN_METRICS: Partial<Record<WeaponId, Partial<GunMetrics>>> = {
   cryo_blaster: { totalLen: 158, centerOffsetY: 72, centerOffsetX: -5, span: 168 },
   hyperdrive: { totalLen: 166, centerOffsetY: 78, centerOffsetX: 8, span: 174 },
   quantum_destabilizer: { totalLen: 195, centerOffsetY: 94, centerOffsetX: 12, span: 200 },
+  // ---------------------------------------------------------- ELEMENTAL ARSENAL (slide 7)
+  xeno: { totalLen: 420, centerOffsetY: 180, centerOffsetX: -13, span: 135 },
+  dora: { totalLen: 300, centerOffsetY: 80, centerOffsetX: 0, span: 165 },
+  pred: { totalLen: 310, centerOffsetY: 86, centerOffsetX: -15, span: 200 },
 };
 
 // Variant-specific centers also keep the three comparison cards at the same

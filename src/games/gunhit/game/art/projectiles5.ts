@@ -3,6 +3,39 @@ import { TAU, lin, radial, star } from './kit';
 
 type C = CanvasRenderingContext2D;
 
+// game-3 blob sprite: pow(1-d2,2) falloff creates ultra-soft fluid glow
+let _blobGreen: HTMLCanvasElement | null = null;
+function blobGreen() {
+  if (_blobGreen) return _blobGreen;
+  const S = 64;
+  const c = document.createElement('canvas');
+  c.width = c.height = S;
+  const g = c.getContext('2d')!;
+  const img = g.createImageData(S, S);
+  for (let y = 0; y < S; y++)
+    for (let x = 0; x < S; x++) {
+      const dx = (x + 0.5) / (S / 2) - 1, dy = (y + 0.5) / (S / 2) - 1;
+      const d2 = dx * dx + dy * dy;
+      const v = d2 >= 1 ? 0 : Math.pow(1 - d2, 2);
+      const i = (y * S + x) * 4;
+      // green tint like game-3 xeno acid
+      img.data[i] = Math.round(182 + (244 - 182) * v);
+      img.data[i + 1] = Math.round(255);
+      img.data[i + 2] = Math.round(26 + (154 - 26) * v * v);
+      img.data[i + 3] = Math.round(v * 255);
+    }
+  g.putImageData(img, 0, 0);
+  _blobGreen = c;
+  return _blobGreen;
+}
+
+function drawBlob(c: C, x: number, y: number, r: number, a: number) {
+  c.save();
+  c.globalAlpha = Math.min(1, a);
+  c.drawImage(blobGreen(), x - r, y - r, r * 2, r * 2);
+  c.restore();
+}
+
 function glowE(c: C, y: number, rx: number, ry: number, rgb: string, a: number) {
   c.save();
   c.globalCompositeOperation = 'lighter';
@@ -15,6 +48,7 @@ function glowE(c: C, y: number, rx: number, ry: number, rgb: string, a: number) 
   c.fill();
   c.restore();
 }
+const rgba = (h: string, a: number) => { const n = parseInt(h.slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; };
 
 export function drawProjectileExtra4(c: C, kind: ProjKind, len: number, t: number, embedded = false) {
   switch (kind) {
@@ -342,6 +376,145 @@ export function drawProjectileExtra4(c: C, kind: ProjKind, len: number, t: numbe
       c.beginPath();
       c.arc(0, len / 2, 3, 0, TAU);
       c.fill();
+      break;
+    }
+    // ---------------------------------------------------------- XENOMORPH ACID SPIT
+    case 'xeno': {
+      const pulse = 0.8 + 0.2 * Math.sin(t * 14);
+      // game-3 fluid-layer blob rendering: drawImage of blob sprite with 'lighter'
+      c.save();
+      c.globalCompositeOperation = 'lighter';
+      // head blob (r=13, game-3 line 893)
+      drawBlob(c, 0, len / 2 - 4, 13, 0.9 * pulse);
+      // body blob (r=11, game-3 line 894)
+      drawBlob(c, 0, len / 2 + 5, 11, 0.75 * pulse);
+      // tail blob (r=8.5, game-3 line 895)
+      drawBlob(c, Math.sin(t * 40) * 1.5, len / 2 + 19, 8.5, 0.6 * pulse);
+      // trail blobs (game-3 line 896-897: decreasing radius)
+      for (let i = 1; i <= 4; i++) {
+        const tk = i / 4;
+        const tx = Math.sin(t * 40 - i * 0.8) * 1.5;
+        const tr = 7.5 * (1 - tk) + 1.5;
+        drawBlob(c, tx, len / 2 + 19 + i * 6, tr, 0.5 * pulse * (1 - tk));
+      }
+      c.restore();
+      // viscous body outline (translucent, game-3 line 898-899)
+      c.save();
+      c.globalCompositeOperation = 'lighter';
+      c.strokeStyle = rgba('#b6ff1a', 0.4 * pulse);
+      c.lineWidth = 1.5;
+      c.beginPath();
+      c.moveTo(-7, len - 2);
+      c.bezierCurveTo(-10, len / 2, -5, 0, 0, 2);
+      c.bezierCurveTo(5, 0, 10, len / 2, 7, len - 2);
+      c.bezierCurveTo(0, len + 4, -7, len + 4, -7, len - 2);
+      c.stroke();
+      // inner bright core
+      drawBlob(c, -2, len / 2 - 6, 5, 0.5 * pulse);
+      c.restore();
+      // drips (game-3 line 900: viscous drips trailing)
+      for (let i = 0; i < 5; i++) {
+        const dy = ((t * 0.5 + i * 0.2) % 1) * len;
+        c.globalCompositeOperation = 'lighter';
+        glowE(c, len / 2 + dy * 0.3, 3, 3, '182,255,26', 0.4 * (1 - dy / len));
+        c.globalCompositeOperation = 'source-over';
+      }
+      break;
+    }
+    // ---------------------------------------------------------- DORAEMON AIR RING
+    case 'dora': {
+      const pulse = 0.85 + 0.15 * Math.sin(t * 20);
+      c.save();
+      c.globalCompositeOperation = 'lighter';
+      glowE(c, len / 2, 14, 8, '255,255,255', 0.4 * pulse);
+      c.restore();
+      // torus ring seen edge-on (game-3: 4 ellipse strokes)
+      c.lineCap = 'round';
+      c.strokeStyle = 'rgba(255,255,255,0.22)'; c.lineWidth = 12;
+      c.beginPath(); c.ellipse(0, len / 2, 12, 5, 0, 0, TAU); c.stroke();
+      c.strokeStyle = 'rgba(255,255,255,0.9)'; c.lineWidth = 3;
+      c.beginPath(); c.ellipse(0, len / 2, 12, 5, 0, 0, TAU); c.stroke();
+      c.strokeStyle = 'rgba(159,220,255,0.7)'; c.lineWidth = 1.5;
+      c.beginPath(); c.ellipse(0, len / 2, 20, 9, 0, 0, TAU); c.stroke();
+      c.strokeStyle = 'rgba(255,255,255,0.5)'; c.lineWidth = 1.5;
+      c.beginPath(); c.ellipse(0, len / 2, 3, 1.5, 0, 0, TAU); c.stroke();
+      // vortex curls (game-3: 6 curls)
+      for (let i = 0; i < 6; i++) {
+        const a = t * 18 + (i / 6) * TAU;
+        const px = Math.cos(a) * 12, py = len / 2 + Math.sin(a) * 5;
+        c.strokeStyle = 'rgba(255,255,255,0.7)'; c.lineWidth = 2;
+        c.beginPath(); c.arc(px, py, 6, a, a + 3.5); c.stroke();
+      }
+      // speed lines trailing (game-3: 7 lines)
+      c.save();
+      c.globalCompositeOperation = 'lighter';
+      c.strokeStyle = 'rgba(255,255,255,0.35)'; c.lineWidth = 2;
+      for (let i = 0; i < 7; i++) {
+        const lx = (i - 3) * 13 + Math.sin(t * 50 + i) * 2;
+        const ll = 30 + (3 - Math.abs(i - 3)) * 18;
+        c.beginPath(); c.moveTo(lx, len / 2 + 14); c.lineTo(lx, len / 2 + 14 + ll); c.stroke();
+      }
+      c.restore();
+      break;
+    }
+    // ---------------------------------------------------------- PREDATOR PLASMA BOLT
+    case 'pred': {
+      const pulse = 0.9 + 0.1 * Math.sin(t * 30);
+      c.save();
+      c.globalCompositeOperation = 'lighter';
+      // ion tail (game-3: tapered triangle, white→blue→transparent)
+      const tail = c.createLinearGradient(0, len, 0, 0);
+      tail.addColorStop(0, 'rgba(56,138,255,0)');
+      tail.addColorStop(0.25, 'rgba(111,211,255,0.6)');
+      tail.addColorStop(0.7, 'rgba(150,210,255,0.8)');
+      tail.addColorStop(1, 'rgba(255,255,255,0.95)');
+      c.fillStyle = tail;
+      c.beginPath();
+      c.moveTo(-12, 0); c.quadraticCurveTo(-6, len * 0.5, -1.5, len);
+      c.lineTo(1.5, len); c.quadraticCurveTo(6, len * 0.5, 12, 0);
+      c.closePath(); c.fill();
+      // wobbling plasma filaments in tail (game-3: 3 lines)
+      c.lineWidth = 1.2;
+      for (let k = 0; k < 3; k++) {
+        c.strokeStyle = k ? rgba('111,211,255', 0.6) : rgba('255,255,255', 0.6);
+        c.beginPath(); c.moveTo(0, 0);
+        for (let yy = 0; yy < len * 0.7; yy += 10) c.lineTo(Math.sin(yy * 0.12 + t * 60 + k * 2) * (3 + yy * 0.06), yy);
+        c.stroke();
+      }
+      c.restore();
+      // glow stack (game-3: 3 layers)
+      glowE(c, 2, 34, 46, '56,138,255', 0.7 * pulse);
+      glowE(c, 2, 20, 28, '111,211,255', pulse);
+      glowE(c, 2, 10, 14, '255,255,255', pulse);
+      // elongated core (game-3: scale(1,1.6) + white ellipse)
+      c.save();
+      c.translate(0, 2); c.scale(1, 1.6);
+      c.shadowColor = '#6fd3ff';
+      c.shadowBlur = 14 * pulse;
+      c.fillStyle = '#ffffff';
+      c.beginPath(); c.ellipse(0, 0, 7, 13, 0, 0, TAU); c.fill();
+      c.restore();
+      // electric arcs (game-3: 4 arcs, 4 segments each)
+      c.save();
+      c.globalCompositeOperation = 'lighter';
+      for (let i = 0; i < 4; i++) {
+        const a = t * 40 + i * 1.5;
+        c.strokeStyle = rgba('111,211,255', 0.7); c.lineWidth = 2.5;
+        c.beginPath(); c.moveTo(0, 2);
+        let px = 0, py = 2;
+        for (let k = 0; k < 4; k++) { px += Math.cos(a) * 7 + Math.sin(a + k * 3) * 4; py += Math.sin(a) * 7 + Math.cos(a + k * 3) * 4; c.lineTo(px, py); }
+        c.stroke();
+        c.strokeStyle = '#ffffff'; c.lineWidth = 1;
+        c.stroke();
+      }
+      c.restore();
+      // spinning corona ring (game-3: 2 ellipses)
+      c.save();
+      c.globalCompositeOperation = 'lighter';
+      c.strokeStyle = rgba('255,255,255', 0.8); c.lineWidth = 1.5;
+      c.beginPath(); c.ellipse(0, 2, 20, 7, 0, 0, TAU); c.stroke();
+      c.beginPath(); c.ellipse(0, 2 + 4, 14 + Math.sin(t * 40) * 3, 5, 0, 0, TAU); c.stroke();
+      c.restore();
       break;
     }
     default:

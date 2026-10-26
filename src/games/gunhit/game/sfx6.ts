@@ -145,4 +145,64 @@ export const sfx6 = {
     noise(0.16, 3000, 0.3, 'bandpass', 7000);
     tone(2600, 1200, 0.12, 'sine', 0.1);
   },
+
+  // XENOMORPH ACID SPITTER - wet spit + bubbling (game-3 sfx.spit)
+  xeno() {
+    noise(0.42, 1500, 0.4, 'highpass', 5000);
+    noise(0.18, 900, 0.5, 'bandpass', 300);
+    tone(160, 60, 0.3, 'sawtooth', 0.14);
+    tone(420, 90, 0.2, 'sine', 0.2);
+  },
+  xenoHit() {
+    noise(0.14, 1800, 0.6, 'lowpass', 300);
+    tone(300, 55, 0.3, 'sine', 0.3);
+    noise(1.8, 3500, 0.22, 'highpass', 7000, 0.05);
+    noise(0.9, 2200, 0.15, 'bandpass', 1200, 0.1);
+  },
+
+  // AIR CANNON - DOKAN! air blast (game-3 sfx.dokan)
+  dora() {
+    tone(150, 38, 0.42, 'sine', 0.7);
+    tone(90, 30, 0.3, 'triangle', 0.4);
+    noise(0.12, 1200, 0.6, 'lowpass', 200);
+    noise(0.5, 500, 0.35, 'bandpass', 2600, 0.03);
+  },
+  doraHit() {
+    tone(120, 30, 0.35, 'sine', 0.6);
+    noise(0.06, 1200, 0.6, 'highpass', 900);
+    noise(0.45, 900, 0.4, 'lowpass', 120);
+    tone(220, 60, 0.08, 'square', 0.08);
+  },
+
+  // PREDATOR PLASMA CASTER - plasma release (game-3 sfx.plasma)
+  pred() {
+    noise(0.05, 2000, 0.9, 'highpass', 4000);
+    tone(1400, 120, 0.12, 'square', 0.18);
+    tone(260, 50, 0.45, 'sine', 0.6);
+    tone(900, 140, 0.35, 'sawtooth', 0.14);
+    noise(0.6, 2400, 0.35, 'bandpass', 400, 0.02);
+  },
+  predHit() {
+    noise(0.08, 6000, 0.9, 'lowpass', 2000);
+    tone(140, 30, 0.7, 'sine', 0.75);
+    noise(0.9, 2600, 0.5, 'lowpass', 150);
+    tone(2200, 300, 0.1, 'square', 0.1);
+    noise(1.6, 3500, 0.18, 'highpass', 7000, 0.1);
+  },
+
+  // PREDATOR CHARGE HUM (game-3 sfx.charge)
+  predCharge(dur: number) {
+    tone(70, 140, dur, 'sawtooth', 0.06);
+    tone(180, 1900, dur, 'sine', 0.16);
+    tone(90, 950, dur, 'triangle', 0.1);
+    noise(dur, 600, 0.1, 'bandpass', 5000);
+  },
+
+  // CLANG - acid/plasma hits knife on wheel (game-3 sfx.clang)
+  clang() {
+    tone(1250, 1210, 0.6, 'sine', 0.28);
+    tone(1870, 1840, 0.45, 'sine', 0.18);
+    noise(0.08, 3000, 0.4, 'highpass', 3000);
+    noise(1.2, 3000, 0.25, 'highpass', 7000, 0.05);
+  },
 };

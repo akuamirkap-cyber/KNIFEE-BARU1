@@ -1,6 +1,17 @@
 import type { Weapon } from '../weapons';
 
 const TAU = Math.PI * 2;
+const rand = (a: number, b: number) => a + Math.random() * (b - a);
+const clamp = (v: number, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const prng = (seed: number) => {
+  let s = seed;
+  return () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
+};
+const rgba = (h: string, a: number) => { const n = parseInt(h.slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; };
+const glowAt = (c: CanvasRenderingContext2D, x: number, y: number, r: number, color: string, a: number) => {
+  c.save(); c.globalCompositeOperation = 'lighter'; c.globalAlpha = Math.min(1, a); c.fillStyle = color; c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill(); c.restore();
+};
 
 // -------------------------------------------------------------
 // HIGH-END MATERIAL IMPACT DECAL GENERATOR
@@ -13,7 +24,8 @@ export function drawPreciseWeaponDecal(
   R: number,
   a: number,
   w: Weapon,
-  style: string
+  style: string,
+  time = 0
 ) {
   const x = Math.cos(a) * (R - 2.5);
   const y = Math.sin(a) * (R - 2.5);
@@ -90,6 +102,147 @@ export function drawPreciseWeaponDecal(
 
   // 1. SENJATA LASER / PLASMA / ENERGI (Seperti di screenshot kamu: Plasma/Laser Gun!)
   // Bukan cakar retakan jelek, melainkan burn pin laser mikro mengkilap dengan cincin energi pendaran tipis!
+  // Xenomorph acid: scorched organic blob with bubbling acid (game-3 drawDecal 'acid' kind)
+  if (w.id === 'xeno') {
+    const seed = Math.floor(Math.random() * 1000);
+    const r = prng(seed);
+    const pts = Array.from({ length: 16 }, () => rand(0.7, 1.25));
+    const sc = 1;
+    const t = time;
+    c.save();
+    c.translate(x, y);
+    c.rotate(inward);
+    // scorched wood halo
+    const st = c.createRadialGradient(0, 0, 0, 0, 0, 40 * sc);
+    st.addColorStop(0, 'rgba(30,20,5,0.8)'); st.addColorStop(0.5, 'rgba(60,40,10,0.45)'); st.addColorStop(1, 'rgba(0,0,0,0)');
+    c.fillStyle = st; c.beginPath(); c.arc(0, 0, 40 * sc, 0, TAU); c.fill();
+    // char rim + hole path
+    const path = (k: number) => {
+      c.beginPath();
+      for (let i = 0; i <= 16; i++) { const an = (i / 16) * TAU; const rr = 15 * sc * k * pts[i % 16]; i ? c.lineTo(Math.cos(an) * rr, Math.sin(an) * rr) : c.moveTo(rr, 0); }
+      c.closePath();
+    };
+    path(1.22); c.fillStyle = 'rgba(25,14,4,0.95)'; c.fill();
+    // hole: deep black with greenish acid pooling
+    path(1);
+    const hg = c.createRadialGradient(0, 0, 0, 0, 0, 15 * sc);
+    hg.addColorStop(0, '#0a1a02'); hg.addColorStop(0.6, '#030702'); hg.addColorStop(1, '#1c2e04');
+    c.fillStyle = hg; c.fill();
+    // bubbling acid inside
+    c.globalCompositeOperation = 'lighter';
+    const pulse = 0.55 + 0.3 * Math.sin(t * 5 + seed);
+    const pool = c.createRadialGradient(0, 0, 0, 0, 0, 12 * sc);
+    pool.addColorStop(0, rgba('#c8ff3a', 0.55 * pulse)); pool.addColorStop(1, rgba('#4f8f00', 0));
+    path(0.85); c.fillStyle = pool; c.fill();
+    path(1); c.strokeStyle = rgba('#b6ff1a', pulse); c.lineWidth = 2.2; c.stroke();
+    path(1.1); c.strokeStyle = rgba('#f4ff9a', pulse * 0.4); c.lineWidth = 1; c.stroke();
+    glowAt(c, 0, 0, 30 * sc, '#9aff00', 0.22 + 0.15 * pulse);
+    for (let i = 0; i < 7; i++) {
+      const an = r() * TAU, rr = r() * 10 * sc;
+      const br = Math.max(0, 1.2 + 1.8 * Math.sin(t * 6 + i * 2.1 + seed));
+      c.beginPath(); c.arc(Math.cos(an) * rr, Math.sin(an) * rr, br, 0, TAU);
+      c.strokeStyle = rgba('#f4ff9a', 0.85); c.lineWidth = 1; c.stroke();
+    }
+    c.globalCompositeOperation = 'source-over';
+    c.restore();
+    c.restore();
+    return;
+  }
+  // Dora air cannon: compressed wood dent with radial cracks (game-3 drawDent)
+  if (w.id === 'dora') {
+    const seed = Math.floor(Math.random() * 1000);
+    const r = prng(seed);
+    const pts = Array.from({ length: 12 }, () => rand(0.6, 1.3));
+    c.save();
+    c.translate(x, y);
+    c.rotate(inward);
+    // crushed fibers
+    const g = c.createRadialGradient(-4, 0, 0, 0, 0, 26);
+    g.addColorStop(0, 'rgba(60,35,10,0.95)'); g.addColorStop(0.55, 'rgba(90,55,20,0.6)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    c.fillStyle = g;
+    c.beginPath();
+    for (let i = 0; i <= 12; i++) { const an = (i / 12) * TAU; const rr = 22 * pts[i % 12]; i ? c.lineTo(Math.cos(an) * rr, Math.sin(an) * rr) : c.moveTo(rr, 0); }
+    c.closePath(); c.fill();
+    // highlight rim
+    c.strokeStyle = 'rgba(255,230,180,0.35)'; c.lineWidth = 1.5;
+    c.beginPath(); c.arc(0, 0, 20, 0.6, 2.6); c.stroke();
+    // radial cracks
+    c.lineCap = 'round';
+    for (let i = 0; i < 9; i++) {
+      const a = r() * TAU;
+      let cx = Math.cos(a) * 6, cy = Math.sin(a) * 6;
+      c.beginPath(); c.moveTo(cx, cy);
+      const segs = 3 + Math.floor(r() * 3);
+      for (let k = 0; k < segs; k++) { cx += Math.cos(a + (r() - 0.5) * 0.9) * (8 + r() * 8); cy += Math.sin(a + (r() - 0.5) * 0.9) * (8 + r() * 8); c.lineTo(cx, cy); }
+      c.strokeStyle = 'rgba(35,18,4,0.9)'; c.lineWidth = 2.2 - (i % 3) * 0.5; c.stroke();
+      c.strokeStyle = 'rgba(240,210,150,0.35)'; c.lineWidth = 0.8; c.stroke();
+    }
+    // splinter flaps
+    c.fillStyle = '#d9b47a';
+    for (let i = 0; i < 5; i++) {
+      const a = r() * TAU, rr = 14 + r() * 8;
+      c.save(); c.translate(Math.cos(a) * rr, Math.sin(a) * rr); c.rotate(a);
+      c.beginPath(); c.moveTo(0, -2); c.lineTo(9 + r() * 6, 0); c.lineTo(0, 2); c.closePath(); c.fill();
+      c.restore();
+    }
+    c.restore();
+    c.restore();
+    return;
+  }
+  // Predator plasma: molten crater in wood (game-3 drawPlasmaCrater)
+  if (w.id === 'pred') {
+    const seed = Math.floor(Math.random() * 1000);
+    const r = prng(seed);
+    const pts = Array.from({ length: 14 }, () => rand(0.75, 1.25));
+    const hot = 1;
+    const t = time;
+    c.save();
+    c.translate(x, y);
+    c.rotate(inward);
+    // scorched halo
+    const halo = c.createRadialGradient(0, 0, 0, 0, 0, 44);
+    halo.addColorStop(0, 'rgba(10,6,2,0.95)'); halo.addColorStop(0.5, 'rgba(30,16,5,0.7)'); halo.addColorStop(1, 'rgba(0,0,0,0)');
+    c.fillStyle = halo; c.beginPath(); c.arc(0, 0, 44, 0, TAU); c.fill();
+    // burn rays
+    c.lineCap = 'round';
+    for (let i = 0; i < 12; i++) {
+      const a = r() * TAU, l = 18 + r() * 22;
+      c.beginPath(); c.moveTo(Math.cos(a) * 8, Math.sin(a) * 8); c.lineTo(Math.cos(a) * l, Math.sin(a) * l);
+      c.strokeStyle = 'rgba(15,8,2,0.85)'; c.lineWidth = 1.5 + r() * 2.5; c.stroke();
+    }
+    // crater bowl
+    const path = (k: number) => {
+      c.beginPath();
+      for (let i = 0; i <= 14; i++) { const an = (i / 14) * TAU; const rr = 17 * k * pts[i % 14]; i ? c.lineTo(Math.cos(an) * rr, Math.sin(an) * rr) : c.moveTo(rr, 0); }
+      c.closePath();
+    };
+    path(1.15); c.fillStyle = '#120a04'; c.fill();
+    path(1);
+    const bowl = c.createRadialGradient(0, 0, 0, 0, 0, 17);
+    bowl.addColorStop(0, `rgb(${lerp(20, 255, hot)},${lerp(10, 240, hot)},${lerp(5, 200, hot)})`);
+    bowl.addColorStop(0.5, rgba('#ff7a20', 0.4 + hot * 0.6));
+    bowl.addColorStop(1, '#0a0603');
+    c.fillStyle = bowl; c.fill();
+    // glass-like cooled plasma sheen
+    c.globalCompositeOperation = 'lighter';
+    glowAt(c, 0, 0, 30, '#ff7a20', hot * 0.9);
+    glowAt(c, 0, 0, 14, '#ffffff', Math.pow(hot, 2));
+    const pulse = 0.5 + 0.5 * Math.sin(t * 10 + seed);
+    glowAt(c, 0, 0, 24, '#6fd3ff', (0.12 + hot * 0.35) * pulse);
+    path(1.02); c.strokeStyle = rgba('#6fd3ff', 0.25 + hot * 0.6); c.lineWidth = 1.5; c.stroke();
+    // residual micro arcs
+    if (Math.random() < 0.15 + hot * 0.4) {
+      const a = r() * TAU + t;
+      c.beginPath(); c.moveTo(0, 0);
+      let ax = 0, ay = 0;
+      for (let k = 0; k < 4; k++) { ax += Math.cos(a) * 5 + rand(-4, 4); ay += Math.sin(a) * 5 + rand(-4, 4); c.lineTo(ax, ay); }
+      c.strokeStyle = '#ffffff'; c.lineWidth = 1; c.stroke();
+    }
+    c.globalCompositeOperation = 'source-over';
+    c.restore();
+    c.restore();
+    return;
+  }
   if (w.energy || w.beam || w.id === 'plasma' || w.id === 'laser' || w.id === 'emerald' || w.id === 'buster') {
     c.save();
     c.translate(x, y);
