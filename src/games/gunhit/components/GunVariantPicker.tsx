@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import type { Weapon } from '../game/weapons';
 import { drawGunCentered } from '../game/art/drawCentered';
 import { getGunMetrics } from '../game/art/metrics';
-import { GUN_EFFECTS, getGunVariantOptions, getGunEffectOptions, type GunVariant, type GunEffect, type EditableWeapon } from '../game/art/gunVariants';
+import { getGunVariantOptions, getGunEffectOptions, type GunVariant, type GunEffect, type EditableWeapon } from '../game/art/gunVariants';
 import ShotEffectCanvas from './ShotEffectCanvas';
 
 type Description = Partial<Record<EditableWeapon, readonly string[]>>;
@@ -47,6 +47,9 @@ const DESCRIPTIONS: Description = {
  * slide 7's own, and every other card is the slide-1 design it replaces.
  */
 function describeFallback(weapon: Weapon, variant: GunVariant, label: string): string {
+  if (variant === 'set9') {
+    return `${label}: ${weapon.name} dengan bentuk, efek tembakan dan suara asli dari slide 9`;
+  }
   if (variant === 'set1' || variant === 'set7') {
     return `${label}: ${weapon.name} dengan bentuk, efek tembakan dan suara asli dari slide 7`;
   }
@@ -127,7 +130,7 @@ export default function GunVariantPicker({ weapon, variantId, selected, effect, 
           <div className="mb-2 text-center text-[10px] font-black uppercase tracking-[0.18em] text-fuchsia-200">
             ✦ EFEK TEMBAKAN · PILIH TERPISAH ✦
           </div>
-          <div className={`grid gap-2 ${effects.length > 2 ? 'grid-cols-3' : 'grid-cols-2'}`}>
+          <div className={`grid gap-2 ${effects.length > 3 ? 'grid-cols-4' : effects.length > 2 ? 'grid-cols-3' : 'grid-cols-2'}`}>
             {effects.map(({ id, label }) => (
               <button key={id} type="button" onClick={() => onEffectSelect(id)}
                 aria-pressed={effect === id} aria-label={`Pilih efek ${label} untuk ${weapon.name}`}
@@ -151,7 +154,7 @@ export default function GunVariantPicker({ weapon, variantId, selected, effect, 
         </p>}
         <button onClick={onClose}
           className="mt-3 w-full rounded-xl border border-amber-200/80 bg-gradient-to-b from-amber-300 to-amber-500 py-2.5 text-sm font-black text-[#231432] shadow-lg transition hover:brightness-110 active:scale-[0.98]">
-          GUNAKAN DESAIN {(designs.find((v) => v.id === selected)?.label ?? '').toUpperCase()} · EFEK {(GUN_EFFECTS.find((v) => v.id === effect)?.label ?? '').toUpperCase()}
+          GUNAKAN DESAIN {(designs.find((v) => v.id === selected)?.label ?? '').toUpperCase()} · EFEK {(effects.find((v) => v.id === effect)?.label ?? '').toUpperCase()}
         </button>
       </div>
     </div>

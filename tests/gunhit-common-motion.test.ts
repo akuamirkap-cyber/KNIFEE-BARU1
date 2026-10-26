@@ -62,9 +62,9 @@ function render(id: WeaponId, age: number, t: number, ready = true): string {
   return events.join(';');
 }
 
-test('the complete UMUM rarity has 14 distinct animated weapons, and the shot curve ends cleanly', () => {
+test('the complete UMUM rarity has 16 distinct animated weapons, and the shot curve ends cleanly', () => {
   assert.deepEqual([...COMMON_GUN_IDS].sort(), WEAPONS.filter(w => w.rarity === 'UMUM').map(w => w.id).sort());
-  assert.equal(new Set(COMMON_GUN_IDS).size, 14);
+  assert.equal(new Set(COMMON_GUN_IDS).size, 16);
   assert.ok(COMMON_GUN_IDS.every(isCommonGun));
   assert.equal(isCommonGun('golden'), false);
   assert.equal(shotPulse(-1), 0);

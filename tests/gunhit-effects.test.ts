@@ -7,7 +7,7 @@ import { SNOWBALL_RADIUS } from '../src/games/gunhit/game/art/projectiles2';
 import { SNOWBALL_MAG_SIZE } from '../src/games/gunhit/game/art/guns2';
 import { drawMaterialTrail } from '../src/games/gunhit/game/art/projectileTrails';
 import { drawClassicBeam } from '../src/games/gunhit/game/art/beamEffects';
-import { getGunEffect, getGunEffectOptions, setGunEffect, setGunVariant } from '../src/games/gunhit/game/art/gunVariants';
+import { getGunEffect, getGunEffectOptions, isSetNineDesignWeapon, setGunEffect, setGunVariant } from '../src/games/gunhit/game/art/gunVariants';
 import { goldenSlideOffset } from '../src/games/gunhit/game/art/guns';
 import { bananaPeelOpen, bananaFleshFill } from '../src/games/gunhit/game/art/guns2';
 import { dragonFlameSurge } from '../src/games/gunhit/game/art/guns3';
@@ -354,11 +354,19 @@ test('both barrels own their muzzle rings, glow and projectiles in rock and trea
     assert.equal(game.ammoLeft, 11);
   }
 
-  const pistol = probe(3, 'pistol', 'boulder');
-  Object.assign(pistol, { twinGuns: true });
-  pistol.shoot();
-  const casings = pistol.particles.filter(p => p.kind === 'shell');
-  assert.deepEqual(casings.map(p => p.x), [164, 256], 'mirrored guns eject outward');
+  // PISTOL fires slide 9's own shot now; this assertion is about slide 1's
+  // classic twin-barrel slide, so the classic effect is pinned for the probe.
+  const previousEffect = getGunEffect('pistol');
+  setGunEffect('pistol', 'original');
+  try {
+    const pistol = probe(3, 'pistol', 'boulder');
+    Object.assign(pistol, { twinGuns: true });
+    pistol.shoot();
+    const casings = pistol.particles.filter(p => p.kind === 'shell');
+    assert.deepEqual(casings.map(p => p.x), [164, 256], 'mirrored guns eject outward');
+  } finally {
+    setGunEffect('pistol', previousEffect);
+  }
 });
 
 test('special-stage explosions keep the weapon’s normal impact burst', () => {
@@ -967,7 +975,9 @@ test('Pistol uses Slide #7 Weapon #3 (M1911 LEGACY) design sized like Golden/Chr
     },
   });
   gunState.sinceShot = 0.08;
-  drawGun(pistolCtx, 'pistol', 210, 575, 0.5, 0, true);
+  // PISTOL's newest design is slide 9's Beretta 92FS; this test describes the
+  // slide-1 M1911 silhouette, which stays pickable as the first card.
+  drawGun(pistolCtx, 'pistol', 210, 575, 0.5, 0, true, undefined, 'original');
   assert.ok(pistolStops.includes('#aebfd2') && pistolStops.includes('#4a5866'), 'Slide #7 M1911 blued-steel slide gradient');
   assert.ok(pistolStops.includes('#5b3a1e') && pistolStops.includes('#43290f'), 'Slide #7 M1911 checkered walnut grip gradient');
   assert.ok(pistolFills.includes('#7fb3ff'), 'Slide #7 M1911 .45 LEGACY ammo pips');
@@ -1186,8 +1196,9 @@ test('pistol, ak47, laser, freeze, ghost, golden, ufo, rainbow, and gauntlet_can
         return true;
       },
     });
-    drawGun(ctx, w, 210, 575, 0.5, 0, true, 'classic');
-    drawGun(ctx, w, 210, 575, 0.5, 0, true, 'new');
+    const slide1 = isSetNineDesignWeapon(w) ? 'original' as const : undefined;
+    drawGun(ctx, w, 210, 575, 0.5, 0, true, undefined, slide1);
+    drawGun(ctx, w, 210, 575, 0.5, 0, true, undefined, slide1);
     assert.deepEqual(thickDarkStrokes, [], `${w} should not have thick dark contour outlines`);
   }
 });

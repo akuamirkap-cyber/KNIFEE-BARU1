@@ -27,7 +27,9 @@ test('span matches the silhouettes: (width + height) / sqrt(2) for a 45° showca
   for (const id of ELEMENTAL) {
     const box = getGunInkBox(id)!;
     const side = (box.x1 - box.x0 + (box.y1 - box.y0)) / Math.SQRT2;
-    const span = getGunMetrics(id).span;
+    // PRED's default design is slide 9's plasmacaster now; these numbers were
+    // measured from the slide-1 silhouette, which keeps the first card.
+    const span = getGunMetrics(id, 'original').span;
     // Within 6%: a too-small span zooms the gun until it clips.
     assert.ok(
       Math.abs(span - side) / side < 0.06,
@@ -41,7 +43,7 @@ test('span matches the silhouettes: (width + height) / sqrt(2) for a 45° showca
 test('pivot centre matches the measured silhouette centre', () => {
   for (const id of ELEMENTAL) {
     const box = getGunInkBox(id)!;
-    const m = getGunMetrics(id);
+    const m = getGunMetrics(id, 'original');
     const cx = (box.x0 + box.x1) / 2;
     const cy = (box.y0 + box.y1) / 2;
     assert.ok(Math.abs(m.centerOffsetX - cx) <= 6, `${id} centreOffsetX ${m.centerOffsetX} vs ${cx}`);

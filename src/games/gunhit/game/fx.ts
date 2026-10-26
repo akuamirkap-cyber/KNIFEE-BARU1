@@ -179,6 +179,17 @@ export const FX: Record<WeaponId, FxProfile> = {
   xeno: P('energy', 'splash', 'energy', '182,255,26', 180, { hitstop: 0.03, kick: 4, ghost: 3, tint: 0.15, decalColors: ['#3f8a00', '#b6ff1a'] }),
   dora: P('sonic', 'dent', 'energy', '255,255,255', 200, { hitstop: 0.04, kick: 5, ghost: 2, tint: 0.1, speedLines: true }),
   pred: P('energy', 'scorch', 'energy', '111,211,255', 220, { hitstop: 0.05, kick: 6, ghost: 4, tint: 0.2, speedLines: true, decalColors: ['#1a5cff', '#6fd3ff'] }),
+  // Slide 9 (games/game-6): the classic fallback profiles of the ported guns.
+  longbow: P('blade', 'slit', 'quiet', '255,240,200', 70, { hitstop: 0.04, kick: 4, streak: 1.3, speedLines: true }),
+  mp5: P('bullet', 'hole', 'fire', '125,211,252', 70, { hitstop: 0.01, kick: 2 }),
+  tesla_rifle: P('electric', 'glow', 'energy', '56,189,248', 180, { hitstop: 0.04, kick: 5, ghost: 3, decalColors: ['#082f49', '#38bdf8'] }),
+  ion_smg: P('energy', 'glow', 'energy', '192,132,252', 130, { hitstop: 0.02, kick: 3, ghost: 2, decalColors: ['#2e1065', '#c084fc'] }),
+  phaser: P('energy', 'glow', 'energy', '251,146,60', 150, { hitstop: 0.04, kick: 4, ghost: 3, decalColors: ['#431407', '#fb923c'] }),
+  yautja: P('energy', 'glow', 'energy', '163,230,53', 170, { hitstop: 0.05, kick: 5, ghost: 3, decalColors: ['#1a2e05', '#a3e635'] }),
+  identity_disc: P('energy', 'glow', 'energy', '34,211,238', 150, { hitstop: 0.04, kick: 5, ghost: 4, tint: 0.15, decalColors: ['#042f2e', '#22d3ee'] }),
+  proton_pack: P('electric', 'glow', 'energy', '253,224,71', 190, { hitstop: 0.05, kick: 6, ghost: 4, decalColors: ['#422006', '#fde047'] }),
+  heat_ray: P('fire', 'burn', 'fire', '255,77,77', 200, { hitstop: 0.06, kick: 7, tint: 0.2 }),
+
 };
 
 // ---------------------------------------------------------------- helpers

@@ -20,6 +20,9 @@ import { SetSevenFx, type SevenHooks } from './setSevenFx';
 import { buildSevenAnim, setSevenIdFor, type SevenId } from './setSevenArt';
 import { FIRE_RECIPES } from './setSevenFire';
 import { updateSevenAnim } from './setSevenAnim';
+import { SetNineFx, unlockNineAudio, type NineHooks } from './setNineFx';
+import { setNineIdFor, type NineId } from './setNineArt';
+import type { Bullet as NineBullet } from '../../../../games/game-6/src/game/types';
 import { newAnim } from '../../../../games/game-4/src/game/weapons';
 import { RECOIL_ROT } from '../../../../games/game-4/src/game/Game';
 import { easeOutCubic } from '../../../../games/game-4/src/game/core';
@@ -197,6 +200,17 @@ const angDiff = (a: number, b: number) => {
   return d;
 };
 const pick = <T,>(arr: T[]) => arr[Math.floor(Math.random() * arr.length)];
+/** Slide 9 flashes with any CSS colour; slide 1's tint wants an `r,g,b` triple. */
+const hexToRgbTriplet = (color: string): string => {
+  const hex = color.trim().match(/^#([\da-f]{3}|[\da-f]{6})$/i);
+  if (hex) {
+    const raw = hex[1].length === 3 ? hex[1].split('').map((ch) => ch + ch).join('') : hex[1];
+    const n = parseInt(raw, 16);
+    return `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`;
+  }
+  const rgb = color.match(/(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})/);
+  return rgb ? `${rgb[1]},${rgb[2]},${rgb[3]}` : '255,255,255';
+};
 
 const FIRE_SFX: Record<WeaponId, () => void> = {
   pistol: sfx.shoot, ak47: sfx.shootAk, plasma: sfx.shootPlasma, laser: sfx.shootLaser,
@@ -225,6 +239,11 @@ const FIRE_SFX: Record<WeaponId, () => void> = {
   xeno: sfx6.xeno,
   dora: sfx6.dora,
   pred: sfx6.pred,
+  // Slide 9 ports: their own synthesizer plays while the SET 9 effect is
+  // selected; these are the classic sounds of the older effect cards.
+  longbow: sfx.shootCrossbow, mp5: sfx.shootNail, tesla_rifle: sfx.shootElectro,
+  ion_smg: sfx.shootElectro, phaser: sfx.shootLaser, yautja: sfx.shootPlasma,
+  identity_disc: sfx2.magnet, proton_pack: sfx3.ghost, heat_ray: sfx2.flame,
 };
 const HIT_SFX: Partial<Record<WeaponId, () => void>> = {
   coingun: sfx.coin, blaster: sfx5.blasterHit,
@@ -246,8 +265,8 @@ const PAINT = ['244,63,94', '250,204,21', '34,211,238', '168,85,247', '74,222,12
 
 type ItemType = 'bullet' | 'old' | 'spike' | 'coin' | 'diamond_chest';
 interface AcidStuck { blobs: AcidStuckBlob[]; dripT: number; drip: number; seed: number }
-interface Item { angle: number; type: ItemType; age: number; w?: WeaponId; scale?: number; vel?: number; harvested?: boolean; tint?: string; big?: number; hits?: number; hue?: number; flash?: number; acid?: AcidStuck }
-interface Proj { x: number; y: number; vx: number; vy: number; originX?: number; setOne?: SetOneShot; setSeven?: SevenShot; setSevenPending?: boolean; s7Ghost?: boolean; pierced?: number; hist?: { x: number; y: number }[]; tint?: string; big?: number; mini?: boolean; giant?: boolean; hue?: number; flash?: number; spawnDelay?: number; wob?: number; lastEcho?: number; t?: number; trail?: { x: number; y: number }[] }
+interface Item { angle: number; type: ItemType; age: number; w?: WeaponId; scale?: number; vel?: number; harvested?: boolean; tint?: string; big?: number; hits?: number; hue?: number; flash?: number; acid?: AcidStuck; hideArt?: boolean }
+interface Proj { x: number; y: number; vx: number; vy: number; originX?: number; setOne?: SetOneShot; setSeven?: SevenShot; setSevenPending?: boolean; s7Ghost?: boolean; setNine?: NineBullet; setNinePending?: boolean; s9Ghost?: boolean; pierced?: number; hist?: { x: number; y: number }[]; tint?: string; big?: number; mini?: boolean; giant?: boolean; hue?: number; flash?: number; spawnDelay?: number; wob?: number; lastEcho?: number; t?: number; trail?: { x: number; y: number }[] }
 type StepRes = { res: 'none' | 'stick' | 'fail' | 'hit'; spike?: boolean; local?: number };
 interface Light { x: number; y: number; r: number; rgb: string; life: number; max: number }
 interface Fragment { x: number; y: number; vx: number; vy: number; rot: number; vr: number; a0: number; a1: number }
@@ -582,6 +601,45 @@ export class Game {
     this.s7State?.clear();
     this.s7Weapon = undefined;
     this.s7Last = undefined;
+    this.s9State?.clear();
+  }
+
+  /**
+   * Slide-9 (`games/game-6`) layer: its own particles, rounds, beams, entry
+   * holes, timers and synthesizer.
+   */
+  private s9State?: SetNineFx;
+
+  private get s9(): SetNineFx {
+    const fx = (this.s9State ??= new SetNineFx());
+    fx.setHooks(this.nineHooks());
+    fx.W = W;
+    fx.H = H;
+    fx.floorY = H;
+    return fx;
+  }
+
+  /** The slide-9 weapon behind the equipped slide-1 gun, if any. */
+  private get setNineId(): NineId | null {
+    return setNineIdFor(this.weapon.id);
+  }
+
+  /** True when the equipped gun must fire slide 9's own shot. */
+  private get setNineLive(): boolean {
+    return this.setNineId !== null && getGunEffect(this.weapon.id) === 'set9';
+  }
+
+  /** The slide-9 side effects that need the slide-1 game to act. */
+  private nineHooks(): NineHooks {
+    return {
+      shake: (amount) => { this.shake = Math.max(this.shake, amount * 0.55); },
+      flash: (color, strength) => {
+        this.tintRgb = hexToRgbTriplet(color);
+        this.tintA = Math.max(this.tintA, Math.min(0.36, strength * 0.45));
+      },
+      hitStop: (seconds) => { this.hitStop = Math.max(this.hitStop, Math.min(0.12, seconds)); },
+      wheel: () => ({ x: CX, y: this.targetY, R: this.level.radius, angle: this.rot }),
+    };
   }
 
   /** The slide-7 weapon behind the equipped slide-1 gun, if any. */
@@ -1184,6 +1242,41 @@ export class Game {
     const vy = -w.speed * this.speedMult;
     const offsets = this.gunOffsets;
     const sizeBuff = { mini: this.treasureBuff === 'mini', giant: this.treasureBuff === 'giant' };
+    // ── Slide 9 (games/game-6) ─────────────────────────────────────────────
+    // Slide 9's own `fire()` runs: its muzzle FX, its particles, its sounds and
+    // the real slide-9 projectile or beam. Slide 1 still owns the flight, the
+    // hit test and the score, so it only carries that round.
+    const s9id = this.setNineId;
+    if (s9id && this.setNineLive) {
+      const fx = this.s9;
+      fx.selectWeapon(s9id);
+      fx.time = this.time;
+      fx.syncWheel();
+      const mx = CX + (offsets[0] ?? 0);
+      const my = GUN_Y - 4;
+      unlockNineAudio();
+      fx.fire(mx, my, -Math.PI / 2, w.charge ? this.chargeLevel : 0);
+      const made = fx.takeShots();
+      for (let i = 0; i < n; i++) {
+        const ox = offsets[i] ?? offsets[0] ?? 0;
+        const own = made[i];
+        const proj: Proj = {
+          x: CX + ox, originX: CX + ox, y: own ? own.y : my, vx, vy, big, tint, ...sizeBuff,
+        };
+        if (own) proj.setNine = own;
+        else if (i === 0) proj.setNinePending = true;
+        else proj.s9Ghost = true;
+        this.projs.push(proj);
+      }
+      this.recoil = w.recoil;
+      this.muzzle = 0.07;
+      this.camY += FX[w.id].kick * 0.5;
+      this.cooldown = (w.spinup ? 0.3 - 0.235 * this.spin : w.cooldown)
+        * (this.buff === 'speed' || this.treasureBuff === 'rapid' ? 0.5 : this.treasureBuff === 'mini' ? 0.6 : 1);
+      if (isSpecial(this.level.mode) && this.ammoLeft === 0) this.reloadT = 0.65;
+      else if (w.id === 'snowball' && this.snowLoaded === 0 && this.ammoLeft > 0) this.reloadT = 0.85;
+      return;
+    }
     // ── Slide-7 SET 2..5 ───────────────────────────────────────────────────
     // Slide 7's own fire recipe runs (its muzzle FX, its particles, its sound),
     // and the shot it creates is the real slide-7 projectile: the very class
@@ -2249,6 +2342,8 @@ export class Game {
     const s1Hit = this.setOneLive && p?.setOne ? p.setOne : null;
     /** SET 2..5 impact burst: slide 7's own `hit()` on its own round. */
     const s7Hit = this.setSevenLive && p?.setSeven ? p.setSeven : null;
+    /** Slide 9 impact: its own `onImpact()` plus the entry hole it paints. */
+    const s9Hit = this.setNineLive && p?.setNine ? p.setNine : null;
     const hue = p?.hue ?? (w.id === 'firework' ? gunState.rocketHue : w.id === 'yoyo' ? gunState.yoyoHue : undefined);
     if (w.id === 'firework' && hue !== undefined) gunState.rocketHue = hue;
     if (w.id === 'yoyo' && hue !== undefined) gunState.yoyoHue = hue;
@@ -2262,6 +2357,9 @@ export class Game {
       hue,
       flash: w.id === 'firework' || w.id === 'yoyo' || w.id === 'diamond' || w.id === 'bazooka' ? 1 : undefined,
       scale: big ? embeddedProjectileScale(big) : undefined,
+      // Slide 9 paints its own entry hole into the wheel (`drawMark`), so the
+      // slide-1 bullet art must not be drawn on top of it.
+      hideArt: s9Hit ? true : undefined,
     });
     this.stuck++;
     // Dora airBlast hit FX (game-3)
@@ -2350,13 +2448,13 @@ export class Game {
     this.bump = 1;
     this.hitFlash = 1;
     this.shake = Math.max(this.shake, 6);
-    if (!s1Hit && !s7Hit) this.crack(local, tint);
-    if (isSlide23Weapon(w.id)) {
+    if (!s1Hit && !s7Hit && !s9Hit) this.crack(local, tint);
+    if (isSlide23Weapon(w.id) && !s9Hit) {
       const hitIdx = Math.max(0, this.stuck - 1);
       if (w.id === 'yoyo') slide23Sfx.hit('yoyo-spin', 0);
       if (w.id === 'firework') fireworkSfx.hit(hitIdx);
       else slide23Sfx.hit(w.id, hitIdx);
-    } else if (!s1Hit && !s7Hit) {
+    } else if (!s1Hit && !s7Hit && !s9Hit) {
       sfx.hit();
       if (w.energy && !w.slow && !w.pullCoins && !HIT_SFX[w.id]) sfx.zap();
     }
@@ -2371,6 +2469,8 @@ export class Game {
       s7Hit.hit(local, hx, hy);
       this.s7Last = undefined;
     }
+    // Slide 9's own impact: its burst, its sound and the entry hole it paints.
+    else if (s9Hit) this.s9.impact(hx, hy, local);
     this.slide2Impact(hx, hy);
     this.applyPerks(w, hx, hy, R);
     if (w.id === 'yoyo') {
@@ -2484,6 +2584,7 @@ export class Game {
   private fail(p: Proj) {
     // Slide 7's own "blocked" burst (the round is stopped by a stuck weapon).
     if (this.setSevenLive && p.setSeven) p.setSeven.block(p.x, p.y);
+    if (this.setNineLive && p.setNine) this.s9.block(p.x, p.y);
     this.aiming = false;
     this.burnT = 0;
     this.state = 'fail';
@@ -3635,6 +3736,23 @@ export class Game {
     const tw = this.weapon;
     for (const p of this.projs) {
       if (p.spawnDelay && p.spawnDelay > 0) continue;
+      if (p.setNinePending) {
+        // Slide 9 releases some rounds later than the trigger (charged staffs,
+        // drum bursts); hold the carrier still until its round exists.
+        const made = this.s9.takeShots();
+        if (made.length) {
+          p.setNine = made[0];
+          p.setNinePending = false;
+          p.y = made[0].y;
+        } else continue;
+      }
+      if (p.s9Ghost) continue; // extra pellet of a burst gun: slide 9 fired it
+      if (p.setNine) {
+        // Slide 9's round keeps its own frames (trail, sub-particles, spin);
+        // slide 1 decides where it actually is.
+        this.s9.carry(p.setNine, p.x, p.y, Math.atan2(p.vy, p.vx));
+        continue;
+      }
       if (p.setSevenPending) {
         // Slide 7 releases some shots later than the trigger (the staff charges
         // first); hold the carrier still until its shot exists.
@@ -3908,6 +4026,17 @@ export class Game {
         fx.time = this.time;
         fx.syncWheel();
         updateSevenAnim(fx, dt);
+      }
+      fx.update(dt);
+    }
+    // Slide 9: its own clock, particles, rounds, beams and entry holes.
+    if (this.s9State || this.setNineId) {
+      const fx = this.s9;
+      const id = this.setNineId;
+      if (id) {
+        fx.weaponId = id;
+        fx.time = this.time;
+        fx.syncWheel();
       }
       fx.update(dt);
     }
@@ -4443,6 +4572,19 @@ export class Game {
     gunState.s7Anim = this.setSevenId && getGunVariant(this.weapon.id) === 'set7'
       ? buildSevenAnim({ sinceShot: gunState.sinceShot, charge: gunState.charge, spin: this.spin })
       : null;
+    // Slide 9's own draw state: its recoil curve, cycle, held charge and how
+    // many of its rounds are still out (the identity disc uses that).
+    gunState.s9Live = this.setNineLive;
+    gunState.s9State = this.setNineId
+      ? {
+        t: this.time,
+        recoil: gunState.sinceShot >= 0.16 ? 0 : 1 - gunState.sinceShot / 0.16,
+        charge: gunState.charge,
+        cycle: Math.min(1, Math.max(0, gunState.sinceShot) / 0.35),
+        out: this.projs.filter((p) => p.setNine).length,
+        catchT: gunState.sinceShot,
+      }
+      : null;
     const totalAmmo = this.level.ammo * this.maxAmmoMult;
     gunState.ammoRatio = totalAmmo > 0 ? Math.max(0, Math.min(1, this.ammoLeft / totalAmmo)) : 1;
     // xeno/pred animation state
@@ -4758,6 +4900,7 @@ export class Game {
       if (this.level.mode !== 'treasure') c.rotate(this.rot);
       for (const it of this.items) {
         if (it.type === 'bullet' || it.type === 'old') {
+          if (it.hideArt) continue; // slide 9 paints its own entry hole
           c.save();
           c.rotate(it.angle - Math.PI / 2);
           const sink = it.type === 'bullet' ? Math.max(0, 1 - it.age * 12) * 6 : 0;
@@ -5147,6 +5290,8 @@ export class Game {
         continue;
       }
       if (p.setSevenPending) continue;
+      // Slide 9 draws its own rounds (and beams) from its own layer.
+      if (p.setNine || p.setNinePending || p.s9Ghost) continue;
       if (this.weapon.rope) {
         if (wid === 'yoyo') {
           const gunX = p.originX ?? CX;
@@ -5460,6 +5605,11 @@ export class Game {
       || this.s2State.beams.length > 0 || this.s2State.smokes.length > 0 || this.s2State.fireballs.length > 0
       || this.s2State.flashes.length > 0 || this.s2State.texts.length > 0)) {
       this.s2State.draw(c, this.time);
+    }
+    // Slide 9 layer: entry holes ride the wheel, rounds and bursts on top.
+    if (this.s9State && (this.s9State.busy || this.setNineLive)) {
+      this.s9State.drawWheel(c, CX, this.targetY + this.bump * 7, this.level.radius, this.rot);
+      this.s9State.draw(c);
     }
     // Slide-7 SET 2..5 layer: wheel-space FX, then particles and FX objects.
     if (this.s7State && (this.s7State.busy || this.setSevenLive)) {

@@ -12,6 +12,8 @@ import { drawSetOneShotShell } from '../game/setOneFx';
 import { setOneIdFor } from '../game/setOneArt';
 import { setSevenIdFor } from '../game/setSevenArt';
 import { drawSetSevenShotShell } from '../game/setSevenFx';
+import { setNineIdFor } from '../game/setNineArt';
+import { drawSetNineShotShell } from '../game/setNineFx';
 
 /** Tiny live comparison using the exact same projectile/beam renderers as gameplay. */
 export default function ShotEffectCanvas({ weapon, effect }: { weapon: Weapon; effect: GunEffect }) {
@@ -62,6 +64,14 @@ export default function ShotEffectCanvas({ weapon, effect }: { weapon: Weapon; e
           const setOneId = effect === 'new' ? setOneIdFor(weapon.id) : null;
           if (setOneId) {
             drawSetOneShotShell(c, setOneId, 0.06, 24);
+            c.restore();
+            if (active) frame = requestAnimationFrame(paint);
+            return;
+          }
+          // Slide-9 rounds and beams are painted by slide 9's own renderer.
+          const setNineId = effect === 'set9' ? setNineIdFor(weapon.id) : null;
+          if (setNineId) {
+            drawSetNineShotShell(c, setNineId, 0.06, 26);
             c.restore();
             if (active) frame = requestAnimationFrame(paint);
             return;

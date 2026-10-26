@@ -103,6 +103,19 @@ export function drawClassicProjectile(c: C, kind: VariantWeapon, len: number, t:
     case 'quantum_destabilizer':
     case 'blaster':
     case 'railgun':
+    // Slide 9 ports (and the nine guns it added) draw their own rounds.
+    case 'pistol':
+    case 'ak47':
+    case 'pred':
+    case 'longbow':
+    case 'mp5':
+    case 'tesla_rifle':
+    case 'ion_smg':
+    case 'phaser':
+    case 'yautja':
+    case 'identity_disc':
+    case 'proton_pack':
+    case 'heat_ray':
       return;
     default: { const _never: never = kind; return _never; }
   }

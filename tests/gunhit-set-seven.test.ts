@@ -129,18 +129,29 @@ test('slide 7 designs and shots are the new defaults for the 36, and stay option
     assert.equal(getGunVariant(id), 'original');
     assert.equal(getGunEffect(id), 'original');
   }
+  // Slide 9 supersedes slide 7 for the five guns it also adopted: slide 9's
+  // own artwork/shot is the default, and the slide-7 card stays pickable.
+  const SUPERSEDED = ['sniper', 'railgun', 'dragon', 'photon_saber', 'gauntlet_cannon'];
   for (const [slide1, seven] of Object.entries(SET_SEVEN_BY_SLIDE1_ID)) {
     if (RETIRED.includes(slide1)) continue;
+    const superseded = SUPERSEDED.includes(slide1);
     assert.ok(EDITABLE_WEAPONS.includes(slide1 as never), `${slide1} is selectable`);
-    assert.equal(getGunVariant(slide1), 'set7', `${slide1} shows slide 7's art by default`);
+    assert.equal(getGunVariant(slide1), superseded ? 'set9' : 'set7',
+      `${slide1} shows the newest art by default`);
     // FIREWORK LAUNCHER keeps slide 2's fireworks as its default effect.
-    assert.equal(getGunEffect(slide1), slide1 === 'firework' ? 'new' : 'set7',
-      `${slide1} fires slide 7's shot by default`);
-    assert.deepEqual(getGunEffectOptions(slide1 as never).map((o) => o.id),
-      ['original', 'new', 'set7'], `${slide1} keeps both slide-1 effects`);
-    assert.equal(getGunEffectOptions(slide1 as never).at(-1)?.label, `Set ${SET_SEVEN_SETS[seven]}`);
+    assert.equal(getGunEffect(slide1), superseded ? 'set9' : slide1 === 'firework' ? 'new' : 'set7',
+      `${slide1} fires the newest shot by default`);
+    const effectIds = getGunEffectOptions(slide1 as never).map((o) => o.id);
+    assert.deepEqual(effectIds, superseded
+      ? ['original', 'new', 'set7', 'set9'] : ['original', 'new', 'set7'],
+    `${slide1} keeps both slide-1 effects`);
+    assert.equal(
+      getGunEffectOptions(slide1 as never)[superseded ? effectIds.length - 2 : effectIds.length - 1]?.label,
+      `Set ${SET_SEVEN_SETS[seven]}`,
+    );
     const designs = getGunVariantOptions(slide1 as never).map((o) => o.id);
-    assert.equal(designs.at(-1), 'set7');
+    assert.equal(designs.at(-1), superseded ? 'set9' : 'set7');
+    if (superseded) assert.equal(designs.at(-2), 'set7');
     assert.ok(designs.includes('original'));
   }
   for (const id of SET_ONE) assert.equal(getGunVariant(id), 'set1');

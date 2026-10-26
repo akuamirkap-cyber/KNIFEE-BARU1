@@ -1,5 +1,6 @@
 import type { WeaponId } from '../weapons';
 import { SET_SEVEN_BY_SLIDE1_ID, SET_SEVEN_SETS } from '../setSevenArt';
+import { SET_NINE_NEW_WEAPONS, isNineNewWeapon } from '../setNineArt';
 
 /** These two have been retired to their original art AND shot only. */
 export const FIXED_CLASSIC_WEAPONS = ['plasma', 'laser'] as const satisfies readonly WeaponId[];
@@ -21,6 +22,12 @@ export const EDITABLE_WEAPONS = [
   'coingun', 'photon_saber', 'gauntlet_cannon', 'ruby', 'emerald',
   'sapphire', 'crystal', 'beerifle', 'buster', 'pulse_rifle',
   'cryo_blaster', 'hyperdrive', 'quantum_destabilizer', 'blaster',
+  // Slide 9 (games/game-6): the eight slide-1 guns it updates and the nine
+  // weapons it added that slide 1 never had.
+  'pistol', 'ak47', 'pred', 'sniper', 'railgun',
+  'dragon', 'photon_saber', 'gauntlet_cannon',
+  'longbow', 'mp5', 'tesla_rifle', 'ion_smg', 'phaser',
+  'yautja', 'identity_disc', 'proton_pack', 'heat_ray',
 ] as const satisfies readonly WeaponId[];
 
 /**
@@ -63,6 +70,25 @@ export function isSetSevenDesignWeapon(id: WeaponId | 'old'): id is SetSevenDesi
 }
 
 /**
+ * Slide-9 (`games/game-6`) weapons. Their newest design is slide 9's own
+ * artwork (`setNineArt.drawSetNineGun`), which becomes the default; whatever
+ * the gun looked like before stays pickable on its own card. The nine guns
+ * slide 1 never had (`longbow`, `mp5`, `tesla_rifle`, `ion_smg`, `phaser`,
+ * `yautja`, `identity_disc`, `proton_pack`, `heat_ray`) only have this card.
+ */
+export const SET_NINE_DESIGN_WEAPONS = [
+  'pistol', 'ak47', 'pred', 'sniper', 'railgun',
+  'dragon', 'photon_saber', 'gauntlet_cannon',
+  'longbow', 'mp5', 'tesla_rifle', 'ion_smg', 'phaser',
+  'yautja', 'identity_disc', 'proton_pack', 'heat_ray',
+] as const satisfies readonly WeaponId[];
+export type SetNineDesignWeapon = (typeof SET_NINE_DESIGN_WEAPONS)[number];
+
+export function isSetNineDesignWeapon(id: WeaponId | 'old'): id is SetNineDesignWeapon {
+  return (SET_NINE_DESIGN_WEAPONS as readonly string[]).includes(id);
+}
+
+/**
  * Guns that only ever had ONE old look on slide 1, so the picker offers two
  * cards instead of three: "Sebelumnya" (slide-1 art) and "Terbaru" (slide 2).
  */
@@ -85,6 +111,8 @@ const NO_LATEST_DESIGN = [
   'ruby', 'emerald', 'sapphire', 'crystal', 'beerifle',
   'buster', 'pulse_rifle', 'cryo_blaster', 'hyperdrive', 'quantum_destabilizer',
   'blaster',
+  'pistol', 'ak47', 'pred', 'longbow', 'mp5', 'tesla_rifle', 'ion_smg',
+  'phaser', 'yautja', 'identity_disc', 'proton_pack', 'heat_ray',
 ] as const;
 
 /**
@@ -104,6 +132,8 @@ export const NO_SEPARATE_ORIGINAL = [
   'photon_saber', 'gauntlet_cannon', 'ruby', 'emerald', 'sapphire',
   'crystal', 'beerifle', 'buster', 'pulse_rifle', 'cryo_blaster',
   'hyperdrive', 'quantum_destabilizer', 'blaster',
+  'pistol', 'ak47', 'pred', 'longbow', 'mp5', 'tesla_rifle', 'ion_smg',
+  'phaser', 'yautja', 'identity_disc', 'proton_pack', 'heat_ray',
 ] as const;
 export type OriginalDesignWeapon = Exclude<VariantWeapon, (typeof NO_SEPARATE_ORIGINAL)[number]>;
 export function hasSeparateOriginal(id: VariantWeapon): id is OriginalDesignWeapon {
@@ -113,7 +143,7 @@ export type LatestDesignWeapon = Exclude<EditableWeapon, (typeof NO_LATEST_DESIG
 export const VARIANT_WEAPONS = [...EDITABLE_WEAPONS, ...FIXED_CLASSIC_WEAPONS] as const;
 export type VariantWeapon = (typeof VARIANT_WEAPONS)[number];
 
-export type GunVariant = 'original' | 'current' | 'latest' | 'set1' | 'set7';
+export type GunVariant = 'original' | 'current' | 'latest' | 'set1' | 'set7' | 'set9';
 export const GUN_VARIANTS: readonly { id: GunVariant; label: string }[] = [
   { id: 'original', label: 'Sebelumnya' },
   { id: 'current', label: 'Sekarang' },
@@ -125,7 +155,9 @@ export const SET_ONE_VARIANT: { id: GunVariant; label: string } = { id: 'set1', 
 export function setSevenVariant(id: SetSevenDesignWeapon): { id: GunVariant; label: string } {
   return { id: 'set7', label: `Set ${SET_SEVEN_SETS[SET_SEVEN_BY_SLIDE1_ID[id]]}` };
 }
-export type GunEffect = 'original' | 'new' | 'set7';
+/** The slide-9 design card (newest for every ported slide-9 gun). */
+export const SET_NINE_VARIANT: { id: GunVariant; label: string } = { id: 'set9', label: 'Slide 9' };
+export type GunEffect = 'original' | 'new' | 'set7' | 'set9';
 export const GUN_EFFECTS: readonly { id: GunEffect; label: string }[] = [
   { id: 'original', label: 'Sebelumnya' },
   { id: 'new', label: 'Baru' },
@@ -134,6 +166,8 @@ export const GUN_EFFECTS: readonly { id: GunEffect; label: string }[] = [
 export function setSevenEffect(id: SetSevenDesignWeapon): { id: GunEffect; label: string } {
   return { id: 'set7', label: `Set ${SET_SEVEN_SETS[SET_SEVEN_BY_SLIDE1_ID[id]]}` };
 }
+/** The slide-9 shot card: slide 9's own projectile, burst and sounds. */
+export const SET_NINE_EFFECT: { id: GunEffect; label: string } = { id: 'set9', label: 'Slide 9' };
 
 export function isFixedClassicGun(id: WeaponId | 'old'): id is FixedClassicWeapon {
   return (FIXED_CLASSIC_WEAPONS as readonly string[]).includes(id);
@@ -164,11 +198,19 @@ export function slide7UpdateSet(id: WeaponId | 'old'): number | null {
   return null;
 }
 
+/**
+ * True when the gun gained slide 9's own artwork and shot (the 17 ported
+ * weapons). The arsenal marks these with the green "NEW" badge.
+ */
+export function hasSlide9Update(id: WeaponId | 'old'): boolean {
+  return isSetNineDesignWeapon(id);
+}
+
 export function isTwoCardGun(id: WeaponId | 'old'): boolean {
   return (TWO_CARD_WEAPONS as readonly string[]).includes(id);
 }
 
-export function getGunVariantOptions(id: VariantWeapon) {
+function baseGunVariantOptions(id: VariantWeapon) {
   if (isFixedClassicGun(id)) return GUN_VARIANTS.slice(0, 1);
   // SET 2..5 weapons: the slide-1 silhouette(s) they already had, plus slide
   // 7's own artwork as the newest card (and the default).
@@ -205,7 +247,32 @@ export function getGunVariantOptions(id: VariantWeapon) {
   return (NO_LATEST_DESIGN as readonly string[]).includes(id)
     ? GUN_VARIANTS.slice(0, 2) : GUN_VARIANTS;
 }
-export function getGunEffectOptions(id: VariantWeapon) {
+/**
+ * Every design card a gun offers. Slide-9 weapons keep the cards they already
+ * had and gain slide 9's own artwork as the newest one; the nine guns that only
+ * exist because of slide 9 have that single card.
+ */
+export function getGunVariantOptions(id: VariantWeapon): readonly { id: GunVariant; label: string }[] {
+  if (!isSetNineDesignWeapon(id)) return baseGunVariantOptions(id);
+  if (isNineNewWeapon(id)) return [SET_NINE_VARIANT];
+  const hadSeven = SET_SEVEN_DESIGN_WEAPONS.includes(id as SetSevenDesignWeapon);
+  const before = hadSeven
+    ? baseGunVariantOptions(id)
+    // `baseGunVariantOptions` already answers for SET 1 / SET 2..5 guns; for
+    // PISTOL, AK-47 and the PREDATOR caster slide 1 only ever had one look.
+    : [GUN_VARIANTS[0]] as const;
+  return [...before, SET_NINE_VARIANT];
+}
+
+export function getGunEffectOptions(id: VariantWeapon): readonly { id: GunEffect; label: string }[] {
+  if (isSetNineDesignWeapon(id)) {
+    if (isNineNewWeapon(id)) return [SET_NINE_EFFECT];
+    return [...getGunEffectOptionsBase(id), SET_NINE_EFFECT];
+  }
+  return getGunEffectOptionsBase(id);
+}
+
+function getGunEffectOptionsBase(id: VariantWeapon) {
   if (isFixedClassicGun(id)) return GUN_EFFECTS.slice(0, 1);
   // Slide 7's own shot is a third card for SET 2..5: the two slide-1 effects
   // stay pickable, and slide 7 is the newest (and the default).
@@ -216,38 +283,48 @@ export function getGunEffectOptions(id: VariantWeapon) {
 // User-requested loadouts. A new save key makes these take effect even for a
 // player whose earlier choices were stored in v1; further picks persist in v2.
 const DEFAULT_DESIGNS: Record<EditableWeapon, GunVariant> = {
-  dragon: 'set7', diamond: 'set7', rainbow: 'set7', meteor: 'set7', golden: 'set1',
+  dragon: 'set9', diamond: 'set7', rainbow: 'set7', meteor: 'set7', golden: 'set1',
   moonbeam: 'set7', chicken: 'set7', honey: 'set7', cricket: 'set7', fish: 'set7',
   electro: 'set7', blackhole: 'set1', slingshot: 'set1', blowgun: 'set1', shotgun: 'set1',
-  soaker: 'set1', snowball: 'set7', sniper: 'set7', flamethrower: 'set7', bubble: 'set7',
+  soaker: 'set1', snowball: 'set7', sniper: 'set9', flamethrower: 'set7', bubble: 'set7',
   bamboo: 'set7', banana: 'set7', harpoon: 'set7', confetti: 'set7', seed: 'set7',
   pizza: 'set7', minigun: 'set7', crossbow: 'set7', gravity: 'set7', coconut: 'set7',
   angklung: 'set7', bee: 'set7', sakura: 'set7', firework: 'set7', keris: 'set7',
   storm: 'set7', pencil: 'set7', sandal: 'set7', paintball: 'set7', wand: 'set7',
   shark: 'set7', ghost: 'set7', ufo: 'set7', rpg: 'set7', bazooka: 'set7',
-  freeze: 'set7', railgun: 'set7', magnet: 'set7', shrink: 'set7', grow: 'set7',
+  freeze: 'set7', railgun: 'set9', magnet: 'set7', shrink: 'set7', grow: 'set7',
   pirate: 'set7', card: 'set7', holy: 'set7', unicorn: 'set7', obliterator: 'set7',
-  coingun: 'set7', photon_saber: 'set7', gauntlet_cannon: 'set7', ruby: 'set7', emerald: 'set7',
+  coingun: 'set7', photon_saber: 'set9', gauntlet_cannon: 'set9', ruby: 'set7', emerald: 'set7',
   sapphire: 'set7', crystal: 'set7', beerifle: 'set7', buster: 'set7', pulse_rifle: 'set7',
   cryo_blaster: 'set7', hyperdrive: 'set7', quantum_destabilizer: 'set7', blaster: 'set7',
+  // Slide 9: its own artwork is the newest design of the eight guns it updates,
+  // and the only design of the nine guns it added.
+  pistol: 'set9', ak47: 'set9', pred: 'set9',
+  longbow: 'set9', mp5: 'set9', tesla_rifle: 'set9', ion_smg: 'set9', phaser: 'set9',
+  yautja: 'set9', identity_disc: 'set9', proton_pack: 'set9', heat_ray: 'set9',
 };
 // FIREWORK LAUNCHER keeps slide 2's celebrated fireworks as its default effect
 // (explicit request): the SET 4 card is its artwork, not its shot.
 const DEFAULT_EFFECTS: Record<EditableWeapon, GunEffect> = {
-  dragon: 'set7', diamond: 'set7', rainbow: 'set7', meteor: 'set7', golden: 'new',
+  dragon: 'set9', diamond: 'set7', rainbow: 'set7', meteor: 'set7', golden: 'new',
   moonbeam: 'set7', chicken: 'set7', honey: 'set7', cricket: 'set7', fish: 'set7',
   electro: 'set7', blackhole: 'new', slingshot: 'new', blowgun: 'new', shotgun: 'new',
-  soaker: 'new', snowball: 'set7', sniper: 'set7', flamethrower: 'set7', bubble: 'set7',
+  soaker: 'new', snowball: 'set7', sniper: 'set9', flamethrower: 'set7', bubble: 'set7',
   bamboo: 'set7', banana: 'set7', harpoon: 'set7', confetti: 'set7', seed: 'set7',
   pizza: 'set7', minigun: 'set7', crossbow: 'set7', gravity: 'set7', coconut: 'set7',
   angklung: 'set7', bee: 'set7', sakura: 'set7', firework: 'new', keris: 'set7',
   storm: 'set7', pencil: 'set7', sandal: 'set7', paintball: 'set7', wand: 'set7',
   shark: 'set7', ghost: 'set7', ufo: 'set7', rpg: 'set7', bazooka: 'set7',
-  freeze: 'set7', railgun: 'set7', magnet: 'set7', shrink: 'set7', grow: 'set7',
+  freeze: 'set7', railgun: 'set9', magnet: 'set7', shrink: 'set7', grow: 'set7',
   pirate: 'set7', card: 'set7', holy: 'set7', unicorn: 'set7', obliterator: 'set7',
-  coingun: 'set7', photon_saber: 'set7', gauntlet_cannon: 'set7', ruby: 'set7', emerald: 'set7',
+  coingun: 'set7', photon_saber: 'set9', gauntlet_cannon: 'set9', ruby: 'set7', emerald: 'set7',
   sapphire: 'set7', crystal: 'set7', beerifle: 'set7', buster: 'set7', pulse_rifle: 'set7',
   cryo_blaster: 'set7', hyperdrive: 'set7', quantum_destabilizer: 'set7', blaster: 'set7',
+  // Slide 9: its own artwork is the newest design of the eight guns it updates,
+  // and the only design of the nine guns it added.
+  pistol: 'set9', ak47: 'set9', pred: 'set9',
+  longbow: 'set9', mp5: 'set9', tesla_rifle: 'set9', ion_smg: 'set9', phaser: 'set9',
+  yautja: 'set9', identity_disc: 'set9', proton_pack: 'set9', heat_ray: 'set9',
 };
 
 function readChoices(key: string): Record<string, unknown> | null {

@@ -306,12 +306,38 @@ const SET_SEVEN_METRICS: Partial<Record<WeaponId, GunMetrics>> = {
   blaster: { totalLen: 248, centerOffsetY: 108, centerOffsetX: 0, span: 224 }, // -33,-16..32,232
 };
 
+// ── Slide 9 (games/game-6) ──────────────────────────────────────────────────
+// Measured from slide 9's real renderer (`drawSetNineGun`, rested pose) with the
+// same ink-bounds pass: box → diagonal span (w + h) / √2, centre = box centre.
+// Previews therefore show the whole weapon, never a cropped one.
+const SET_NINE_METRICS: Partial<Record<WeaponId, GunMetrics>> = {
+  pistol: { totalLen: 106, centerOffsetY: 53, centerOffsetX: 25, span: 126 }, // -10,0..59,106
+  ak47: { totalLen: 174, centerOffsetY: 87, centerOffsetX: 12, span: 168 }, // -18,0..42,174
+  sniper: { totalLen: 214, centerOffsetY: 107, centerOffsetX: 0, span: 203 }, // -35,0..35,214
+  railgun: { totalLen: 253, centerOffsetY: 110, centerOffsetX: -3, span: 234 }, // -40,-17..34,236
+  dragon: { totalLen: 234, centerOffsetY: 108, centerOffsetX: -10, span: 242 }, // -63,-9..42,225
+  pred: { totalLen: 186, centerOffsetY: 57, centerOffsetX: 1, span: 170 }, // -25,-36..26,150
+  photon_saber: { totalLen: 177, centerOffsetY: 71, centerOffsetX: -5, span: 184 }, // -45,-18..35,159
+  gauntlet_cannon: { totalLen: 122, centerOffsetY: 34, centerOffsetX: 0, span: 125 }, // -26,-27..25,95
+  longbow: { totalLen: 83, centerOffsetY: 19, centerOffsetX: 0, span: 152 }, // -65,-23..64,60
+  mp5: { totalLen: 182, centerOffsetY: 91, centerOffsetX: 12, span: 175 }, // -19,0..43,182
+  tesla_rifle: { totalLen: 225, centerOffsetY: 99, centerOffsetX: 3, span: 213 }, // -34,-14..39,211
+  ion_smg: { totalLen: 198, centerOffsetY: 88, centerOffsetX: 11, span: 186 }, // -20,-11..42,187
+  phaser: { totalLen: 122, centerOffsetY: 47, centerOffsetX: 12, span: 131 }, // -18,-14..42,108
+  yautja: { totalLen: 183, centerOffsetY: 92, centerOffsetX: -2, span: 167 }, // -27,0..23,183
+  identity_disc: { totalLen: 105, centerOffsetY: 56, centerOffsetX: 0, span: 113 }, // -26,3..25,108
+  proton_pack: { totalLen: 245, centerOffsetY: 114, centerOffsetX: 9, span: 225 }, // -26,-9..43,236
+  heat_ray: { totalLen: 184, centerOffsetY: 90, centerOffsetX: 2, span: 190 }, // -39,-2..42,182
+};
+
 export function getGunMetrics(id: WeaponId, variant: GunVariant = getGunVariant(id)): GunMetrics {
   const effectiveVariant = isFixedClassicGun(id) ? 'original'
     : id === 'honey' && variant === 'latest' ? 'current' : variant;
-  const measured = effectiveVariant === 'set7'
-    ? SET_SEVEN_METRICS[id]
-    : supportsGunVariants(id) && effectiveVariant !== 'current'
+  const measured = effectiveVariant === 'set9'
+    ? SET_NINE_METRICS[id]
+    : effectiveVariant === 'set7'
+      ? SET_SEVEN_METRICS[id]
+      : supportsGunVariants(id) && effectiveVariant !== 'current'
       ? VARIANT_METRICS[id]?.[effectiveVariant] : undefined;
   const m = measured ?? GUN_METRICS[id];
   return {

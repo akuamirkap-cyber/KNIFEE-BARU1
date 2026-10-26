@@ -4,6 +4,8 @@ import type { WeaponId } from '../weapons';
 export const COMMON_GUN_IDS = [
   'pistol', 'ak47', 'nail', 'crossbow', 'slingshot', 'blowgun', 'shotgun',
   'soaker', 'snowball', 'honey', 'coconut', 'pencil', 'sandal', 'paintball',
+  // Slide 9's two new common-rarity guns.
+  'longbow', 'mp5',
 ] as const satisfies readonly WeaponId[];
 
 const commonGuns: ReadonlySet<WeaponId> = new Set(COMMON_GUN_IDS);

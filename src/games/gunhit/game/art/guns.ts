@@ -1,5 +1,5 @@
 import type { WeaponId } from '../weapons';
-import { getGunVariant, hasSeparateOriginal, isFixedClassicGun, isSetOneDesignWeapon, isSetSevenDesignWeapon, supportsGunVariants, supportsLatestDesign, type GunVariant } from './gunVariants';
+import { getGunVariant, hasSeparateOriginal, isFixedClassicGun, isSetNineDesignWeapon, isSetOneDesignWeapon, isSetSevenDesignWeapon, supportsGunVariants, supportsLatestDesign, type GunVariant } from './gunVariants';
 import { drawOriginalGun } from './legacyVariants';
 import { drawLatestGun } from './latestVariants';
 import { drawGunExtra, drawFlashExtra } from './guns3';
@@ -10,6 +10,7 @@ import { drawBlackHoleGun2, type Slide2GunState } from '../slide2Weapons';
 import { drawSetOneGun, setOneIdFor } from '../setOneArt';
 import { drawSetSevenGun, setSevenIdFor } from '../setSevenArt';
 import { restSevenAnim } from '../setSevenArt';
+import { drawSetNineGun, isNineNewWeapon, restNineState, setNineIdFor } from '../setNineArt';
 import type { WeaponAnim } from '../../../../../games/game-4/src/game/weapons';
 
 const TAU = Math.PI * 2;
@@ -63,6 +64,25 @@ export function drawGun(
   variant: GunVariant = getGunVariant(id),
 ) {
   c.save();
+  // Slide 9 (games/game-6): the newest design is slide 9's own artwork, drawn
+  // at the same muzzle origin with slide 9's own draw state (recoil, slide,
+  // bolt, pump, charge meter, spin-up, drum index). The nine guns slide 1 never
+  // had only ever exist as this design, so they always render it.
+  const setNineId = variant === 'set9' || isNineNewWeapon(id) ? setNineIdFor(id) : null;
+  if (setNineId) {
+    // Live games hand over their own state; menus and cards rebuild the same
+    // recoil/cycle from the shared shot clock so the gun still reacts to a shot.
+    const sinceShot = Math.max(0, gunState.sinceShot);
+    drawSetNineGun(c, setNineId, cx, y0, t, gunState.s9State ?? restNineState({
+      recoil: sinceShot >= 0.16 ? 0 : 1 - sinceShot / 0.16,
+      charge: gunState.charge,
+      cycle: Math.min(1, sinceShot / 0.35),
+      catchT: sinceShot,
+    }));
+    c.restore();
+    if (flash > 0 && !gunState.s9Live) drawFlash(c, id, cx, y0, t, flash);
+    return;
+  }
   // SET 1 of slide 7: the newest design is slide 7's own artwork, drawn at the
   // same muzzle origin with the same visible animation ranges (slide travel,
   // pump, pouch, charge meter, tank gauge).
