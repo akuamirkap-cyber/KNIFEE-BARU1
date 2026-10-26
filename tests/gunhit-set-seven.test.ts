@@ -207,3 +207,39 @@ test('slide 1 fires slide 7’s round for the ported guns, and slide 1’s for t
   assert.ok(slide1.particles.length > 0, 'slide 1’s muzzle burst is back');
   setGunEffect('snowball', 'set7');
 });
+
+test('a new level starts with an empty wheel: no slide-7 round stays stuck', () => {
+  setGunEffect('fish', 'set7');
+  const game = probe('fish') as Game & Record<string, unknown>;
+  game.shoot();
+  const carrier = (game.projs as unknown[])[0] as { setSeven?: { weapon: string } };
+  assert.equal(carrier.setSeven?.weapon, 'fish', 'fish fires slide 7’s fish');
+  // Land it in the wheel like a real hit: slide 7 stores the stuck round.
+  (game as unknown as { stickAt: (a: number, p: unknown) => void }).stickAt(0.4, carrier);
+  const layer = (game as unknown as { s7: { stuck: unknown[]; particles: { list: unknown[] } } }).s7;
+  assert.ok(layer.stuck.length > 0, 'the fish is stuck in the wheel');
+
+  // Next level: slide 1 clears its own items, and slide 7’s layer too.
+  const doc = Object.getOwnPropertyDescriptor(globalThis, 'document');
+  Object.defineProperty(globalThis, 'document', {
+    configurable: true,
+    value: { createElement: () => ({ width: 0, height: 0, getContext: () => fakeCtx() }) },
+  });
+  try {
+    (game as unknown as { loadLevel: (n: number) => void }).loadLevel(2);
+  } finally {
+    if (doc) Object.defineProperty(globalThis, 'document', doc);
+    else delete (globalThis as { document?: unknown }).document;
+  }
+  assert.equal(layer.stuck.length, 0, 'stuck slide-7 rounds leave with the old level');
+  assert.equal(layer.particles.list.length, 0, 'and so does their FX');
+  const bullets = (game.items as { type: string }[]).filter((it) => it.type === 'bullet');
+  assert.equal(bullets.length, 0, 'slide 1’s wheel keeps no stuck rounds either');
+
+  // Changing gun also drops the previous gun’s stuck rounds.
+  game.shoot();
+  (game as unknown as { stickAt: (a: number, p: unknown) => void }).stickAt(0.4, carrier);
+  game.setWeapon('snowball');
+  assert.equal(layer.stuck.length, 0, 'a different gun starts with a clean wheel');
+  setGunEffect('fish', 'set7');
+});

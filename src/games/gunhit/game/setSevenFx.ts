@@ -294,7 +294,15 @@ export class SetSevenFx implements SevenHost {
     for (const f of this.wheelFx) f.update(dt);
     this.wheelFx = this.wheelFx.filter((f) => !f.done);
     this.shots = this.shots.filter((p) => p.alive);
-    for (const it of this.stuck) it.t += dt;
+    // Stuck rounds ride the wheel exactly like slide 7: their world position and
+    // their "up" frame follow the rim as it turns and bounces.
+    for (const it of this.stuck) {
+      it.t += dt;
+      const a = it.angle + this.wheel.angle;
+      it.world.x = this.wheel.x + Math.cos(a) * this.wheel.R;
+      it.world.y = this.wheel.y + Math.sin(a) * this.wheel.R;
+      it.up = -a;
+    }
   }
 
   /** Slide 7 draws its non-additive particles first… */

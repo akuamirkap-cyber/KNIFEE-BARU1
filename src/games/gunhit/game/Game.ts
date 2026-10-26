@@ -573,6 +573,17 @@ export class Game {
   /** Last slide-7 shot, for special targets (stones/diamonds/gold). */
   private s7Last?: SevenShot;
 
+  /**
+   * Drop slide 7's own layer: its stuck rounds, particles, FX and timers all
+   * belong to the level (and to the gun) that produced them, exactly like slide
+   * 7 clears them on a new level or when the wheel shatters.
+   */
+  private resetSevenLayer() {
+    this.s7State?.clear();
+    this.s7Weapon = undefined;
+    this.s7Last = undefined;
+  }
+
   /** The slide-7 weapon behind the equipped slide-1 gun, if any. */
   private get setSevenId(): SevenId | null {
     return setSevenIdFor(this.weapon.id);
@@ -664,7 +675,10 @@ export class Game {
   };
 
   setWeapon(id: WeaponId) {
+    const changed = this.weapon?.id !== id;
     this.weapon = getWeapon(id);
+    // Rounds stuck in the wheel belong to the gun that fired them.
+    if (changed) this.resetSevenLayer();
     // The gun art may only spawn its charge sparks into a live FX layer, never
     // into menu thumbnails.
     setSlide2GunFx(id === 'blackhole' && getGunVariant(id) === 'latest' ? this.s2 : null);
@@ -858,6 +872,7 @@ export class Game {
     this.level = makeLevel(1);
     this.events.onStageChange?.();
     this.level.style = 'orange';
+    this.resetSevenLayer();
     this.items = [];
     this.projs = [];
     this.bossProjs = [];
@@ -1007,6 +1022,8 @@ export class Game {
   private loadLevel(n: number, forcedMode?: LevelMode) {
     this.level = makeLevel(n, forcedMode);
     this.events.onStageChange?.();
+    // A new level starts with an empty wheel: no rounds stuck from the last one.
+    this.resetSevenLayer();
     this.items = [];
     this.projs = [];
     this.rockFragments = [];
@@ -1183,6 +1200,7 @@ export class Game {
         fx.wheelFx.length = 0;
         fx.timers.length = 0;
         fx.shots.length = 0;
+        fx.stuck.length = 0;
         this.s7Weapon = s7id;
       }
       fx.weaponId = s7id;
@@ -2606,6 +2624,7 @@ export class Game {
         this.sink.push({ x: CX, y: this.targetY, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 1.4, max: 1.4, size: 2.6, color: pick(['255,176,96', '255,112,48', '111,211,255']), kind: 'glow', rot: 0, vr: 0, g: 500, drag: 1.5 });
       }
     }
+    this.resetSevenLayer();
     this.items = [];
     const cols = STYLE_COLORS[this.level.style].chips;
     for (let i = 0; i < 50; i++) {
