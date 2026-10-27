@@ -404,6 +404,18 @@ export class SetSevenFx implements SevenHost {
    * position slide 7 gave them (`my - 6`, `my + 40` for the slingshot pouch,
    * `my - 38` for the blowpipe…), so nothing has to be re-derived here.
    */
+  /**
+   * The star pickup wipes the screen.
+   *
+   * Slide 1 drops every carrier it was flying, but a round it had already
+   * resolved keeps flying on slide 7's own layer (`released`), so it has to go
+   * too — otherwise the screen the star just cleared stays full of slide-7
+   * rounds.
+   */
+  sweepCarried() {
+    this.released.length = 0;
+  }
+
   takeShots(): Projectile[] {
     const made = this.shots;
     this.shots = [];

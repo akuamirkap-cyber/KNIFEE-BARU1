@@ -302,6 +302,24 @@ export class SetElevenFx {
     return made;
   }
 
+  /**
+   * The star pickup wipes the screen.
+   *
+   * Slide 11 never advances a carried round (slide 1 owns its position), so a
+   * round whose carrier was dropped stayed in `projs` and kept being painted —
+   * frozen in mid-air — for the rest of the stage.
+   */
+  sweepCarried() {
+    const g = this.raw;
+    if (!g || !this.carried.size) return;
+    // Mutated in place: other layers keep a reference to this array.
+    const keep = g.projs.filter((p) => !this.carried.has(p));
+    g.projs.length = 0;
+    g.projs.push(...keep);
+    for (const p of this.carried) this.taken.delete(p);
+    this.carried.clear();
+  }
+
   /** True when slide 11 fired a projectile (as opposed to a channel/beam). */
   get hasRound(): boolean {
     return this.raw ? this.raw.projs.length > 0 : false;
@@ -614,6 +632,19 @@ export class SetElevenFx {
   }
 
   /** Slide-11's entry holes, painted into slide 1's wheel. */
+  /** One round of slide 11's own art (slide 1 paints carried rounds itself). */
+  drawShot(ctx: CanvasRenderingContext2D, p: Proj) {
+    const g = this.raw;
+    if (!g) return;
+    ctx.save();
+    try {
+      p.draw(ctx, g, p);
+    } catch {
+      /* a single round's art must not break the frame */
+    }
+    ctx.restore();
+  }
+
   drawWheel(ctx: CanvasRenderingContext2D, cx: number, cy: number, radius: number, rot: number) {
     const g = this.raw;
     if (!g || !g.embeds.length) return;

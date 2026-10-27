@@ -13,6 +13,7 @@ import {
 import { isSlide23Weapon, slide23Sfx } from './slide23Sfx';
 import { fireworkSfx } from './fireworkSlide2Sfx';
 import { setOneSfx } from './setOneAudio';
+import { silentPreview } from './previewAudio';
 import { SetOneFx, type SetOneHooks, type SetOneShot } from './setOneFx';
 import { fireSetOne, impactSetOne } from './setOneWeapons';
 import { setOneIdFor, type SetOneId } from './setOneArt';
@@ -349,7 +350,7 @@ const PAINT = ['244,63,94', '250,204,21', '34,211,238', '168,85,247', '74,222,12
 type ItemType = 'bullet' | 'old' | 'spike' | 'coin' | 'diamond_chest';
 interface AcidStuck { blobs: AcidStuckBlob[]; dripT: number; drip: number; seed: number }
 interface Item { angle: number; type: ItemType; age: number; w?: WeaponId; scale?: number; vel?: number; harvested?: boolean; tint?: string; big?: number; hits?: number; hue?: number; flash?: number; acid?: AcidStuck; hideArt?: boolean; setTwo?: boolean }
-interface Proj { x: number; y: number; vx: number; vy: number; originX?: number; setOne?: SetOneShot; setSeven?: SevenShot; setSevenPending?: boolean; s7Ghost?: boolean; setNine?: NineBullet; setNinePending?: boolean; s9Ghost?: boolean; setEleven?: ElevenProj; setElevenPending?: boolean; s11Ghost?: boolean; setTwo?: TwoRound; pierced?: number; hist?: { x: number; y: number }[]; tint?: string; big?: number; mini?: boolean; giant?: boolean; hue?: number; flash?: number; spawnDelay?: number; wob?: number; lastEcho?: number; t?: number; trail?: { x: number; y: number }[] }
+interface Proj { x: number; y: number; vx: number; vy: number; originX?: number; setOne?: SetOneShot; setSeven?: SevenShot; setSevenPending?: boolean; s7Ghost?: boolean; hold?: number; setNine?: NineBullet; setNinePending?: boolean; s9Ghost?: boolean; setEleven?: ElevenProj; setElevenPending?: boolean; s11Ghost?: boolean; setTwo?: TwoRound; pierced?: number; hist?: { x: number; y: number }[]; tint?: string; big?: number; mini?: boolean; giant?: boolean; hue?: number; flash?: number; spawnDelay?: number; wob?: number; lastEcho?: number; t?: number; trail?: { x: number; y: number }[] }
 type StepRes = { res: 'none' | 'stick' | 'fail' | 'hit'; spike?: boolean; local?: number };
 interface Light { x: number; y: number; r: number; rgb: string; life: number; max: number }
 interface Fragment { x: number; y: number; vx: number; vy: number; rot: number; vr: number; a0: number; a1: number }
@@ -1239,6 +1240,14 @@ export class Game {
     this.chargeLevel = 0;
     gunState.charge = 0;
     this.projs = [];
+    // …and the imported layers forget the rounds slide 1 was flying. They each
+    // draw their own carried round, and a carried round is never advanced by
+    // its layer (slide 1 owns its position), so without this the screen the
+    // star just cleared kept a round frozen in mid-air — slide 11's stayed for
+    // the rest of the stage.
+    this.s7.sweepCarried();
+    this.s9.sweepCarried();
+    this.s11.sweepCarried();
     this.choosingBuff = true;
     sfx4.magic();
     this.flashWhite = Math.max(this.flashWhite, 0.35);
@@ -1427,6 +1436,78 @@ export class Game {
     return (((i - (n - 1) / 2) * 26) * speed) / travel;
   }
 
+  /**
+   * Where each carried round of one trigger starts, and how it drifts.
+   *
+   * Slide 1's own guns walk `gunOffsets` (one round per barrel) and fan a burst
+   * across `burst` lanes. The imported layers hand back their own rounds, whose
+   * count does not have to match: a twin-barrel shotgun has six carriers for
+   * three rounds, a volley gun has two rounds for one carrier. The plan keeps
+   * every carrier on its own lane so two rounds can never fly into each other
+   * (that collision failed the shot and ended the stage on the first trigger),
+   * while a twin-barrel shot still leaves each barrel straight up, exactly the
+   * way slide 1's own guns fly it.
+   */
+  private carrierPlan(n: number, rounds: number, speed: number) {
+    const barrels = this.gunOffsets.length;
+    const lanes = Math.max(n, Math.ceil(rounds / barrels));
+    const plan: { ox: number; vx: number; first: boolean }[] = [];
+    for (let i = 0; i < lanes * barrels; i++) {
+      const barrel = i % barrels;
+      const lane = Math.floor(i / barrels);
+      plan.push({
+        ox: this.gunOffsets[barrel] ?? 0,
+        vx: this.pelletVx(lane, lanes, speed),
+        first: lane === 0,
+      });
+    }
+    return plan;
+  }
+
+  /**
+   * A carrier whose round never arrives.
+   *
+   * Charged recipes (the emerald staff, the buster, the obliterator) build their
+   * round from a charge, so the second barrel of a `double` shot cannot create a
+   * second one — and a burst gun can hand back fewer rounds than slide 1 has
+   * pellets. The carrier used to wait at the muzzle forever: it was invisible,
+   * it never hit anything and it never went away.
+   *
+   * After a short grace period it becomes one of the invisible extra pellets the
+   * imported guns already use (`s7Ghost` and friends) and flies out like them.
+   * Returns true while the carrier should stay put.
+   */
+  private strandCarrier(p: Proj) {
+    p.hold = (p.hold ?? 0) + 1 / 60;
+    if (p.hold < 1) return true;
+    if (p.setSevenPending) p.s7Ghost = (p.setSevenPending = false, true);
+    else if (p.setNinePending) p.s9Ghost = (p.setNinePending = false, true);
+    else if (p.setElevenPending) p.s11Ghost = (p.setElevenPending = false, true);
+    return false;
+  }
+
+  /**
+   * The second barrel of an imported gun.
+   *
+   * Slide 1's own guns fire one round per barrel — `gunOffsets` has two entries
+   * while the treasure star's `double` (or the old `double` stage) is active,
+   * and the classic fire loop walks them. The imported layers build exactly one
+   * round per recipe, so the second barrel drew a gun that never fired: the
+   * `double` card made the weapon *look* doubled while every shot, every hit
+   * and the whole score still came from the left barrel alone.
+   *
+   * Each layer's recipe runs once more at its own muzzle. The ported voices are
+   * muted for that call: slide 1 has always played a single voice per trigger,
+   * so the extra barrel adds a round, not a second bang.
+   */
+  private fireTwinBarrel<T>(made: T[], fire: () => void, take: () => T[]) {
+    if (!this.hasTwinGuns || made.length >= 2) return;
+    silentPreview(() => {
+      fire();
+      made.push(...take());
+    });
+  }
+
   // ---------- actions ----------
   shoot() {
     if (this.state !== 'play' || this.choosingBuff) return;
@@ -1461,15 +1542,18 @@ export class Game {
       unlockNineAudio();
       fx.fire(mx, my, -Math.PI / 2, w.charge ? this.chargeLevel : 0);
       const made = fx.takeShots();
-      for (let i = 0; i < n; i++) {
-        const ox = offsets[i] ?? offsets[0] ?? 0;
+      this.fireTwinBarrel(made,
+        () => fx.fire(CX + (offsets[1] ?? offsets[0] ?? 0), my, -Math.PI / 2, w.charge ? this.chargeLevel : 0),
+        () => fx.takeShots());
+      const plan = this.carrierPlan(n, made.length, w.speed);
+      for (let i = 0; i < plan.length; i++) {
         const own = made[i];
         const proj: Proj = {
-          x: CX + ox, originX: CX + ox, y: own ? own.y : my,
-          vx: vx + this.pelletVx(i, n, w.speed), vy, big, tint, ...sizeBuff,
+          x: CX + plan[i].ox, originX: CX + plan[i].ox, y: own ? own.y : my,
+          vx: vx + plan[i].vx, vy, big, tint, ...sizeBuff,
         };
         if (own) proj.setNine = own;
-        else if (i === 0) proj.setNinePending = true;
+        else if (plan[i].first) proj.setNinePending = true;
         else proj.s9Ghost = true;
         this.projs.push(proj);
       }
@@ -1497,19 +1581,22 @@ export class Game {
       unlockElevenAudio(fx);
       fx.fire(mx, my, w.charge ? big : 0);
       const made = fx.takeShots();
-      for (let i = 0; i < n; i++) {
-        const ox = offsets[i] ?? offsets[0] ?? 0;
+      this.fireTwinBarrel(made,
+        () => fx.fire(CX + (offsets[1] ?? offsets[0] ?? 0), my, w.charge ? big : 0),
+        () => fx.takeShots());
+      // Slide 1 flies the round at slide 11's own projectile speed, so the tail
+      // keeps slide 11's spacing instead of stretching.
+      const sp = made[0] ? Math.hypot(made[0].vx, made[0].vy) : Math.abs(vy);
+      const plan = this.carrierPlan(n, made.length, sp);
+      for (let i = 0; i < plan.length; i++) {
         const own = made[i];
-        // Slide 1 flies the round at slide 11's own projectile speed, so the
-        // tail keeps slide 11's spacing instead of stretching.
-        const sp = own ? Math.hypot(own.vx, own.vy) : Math.abs(vy);
         const proj: Proj = {
-          x: CX + ox, originX: CX + ox, y: own ? own.y : my,
-          vx: vx + this.pelletVx(i, n, Math.abs(sp)), vy: -Math.abs(sp),
+          x: CX + plan[i].ox, originX: CX + plan[i].ox, y: own ? own.y : my,
+          vx: vx + plan[i].vx, vy: -sp,
           big, tint, ...sizeBuff,
         };
         if (own) proj.setEleven = own;
-        else if (i === 0) proj.setElevenPending = true;
+        else if (plan[i].first) proj.setElevenPending = true;
         else proj.s11Ghost = true;
         this.projs.push(proj);
       }
@@ -1537,13 +1624,19 @@ export class Game {
       // `fire()` also hands back the round slide 2 just loaded (its own seed),
       // so the trail and the impact wear exactly the colours slide 2 picked.
       const round = fx.fire(s2id, this.s2HueFor(s2id));
-      for (let i = 0; i < n; i++) {
-        const ox = offsets[i] ?? offsets[0] ?? 0;
+      const rounds = [round];
+      // Its own recipe again for the second barrel: slide 2 hands back a fresh
+      // round seed, so the two barrels do not share one trail.
+      this.fireTwinBarrel(rounds, () => {
+        rounds.push(fx.fire(s2id, this.s2HueFor(s2id)));
+      }, () => []);
+      const plan = this.carrierPlan(n, rounds.length, w.speed);
+      for (let i = 0; i < plan.length; i++) {
         this.projs.push({
-          x: CX + ox, originX: CX + ox, y: GUN_Y - 22,
-          vx: vx + this.pelletVx(i, n, w.speed), vy,
+          x: CX + plan[i].ox, originX: CX + plan[i].ox, y: GUN_Y - 22,
+          vx: vx + plan[i].vx, vy,
           big, tint, ...sizeBuff,
-          setTwo: { ...round },
+          setTwo: { ...(rounds[i] ?? round) },
         });
       }
       this.recoil = w.recoil;
@@ -1585,6 +1678,9 @@ export class Game {
       fx.shotsFired++;
       FIRE_RECIPES[s7id](fx, mx, my);
       const made = fx.takeShots();
+      this.fireTwinBarrel(made,
+        () => FIRE_RECIPES[s7id](fx, CX + (offsets[1] ?? offsets[0] ?? 0), my),
+        () => fx.takeShots());
       // The round slide 7 just launched decides how fast slide 1's carrier
       // travels: its own `vy` is the launch speed its class was built with, so
       // the flight, the trail spacing and the streak in its `draw()` all keep
@@ -1595,16 +1691,16 @@ export class Game {
       // Slide 1 still fires one round per pellet (that is how ammo, hits and
       // the score have always worked). Slide 7's real shot rides the first
       // one; the extra pellets of a burst gun stay invisible carriers.
-      for (let i = 0; i < n; i++) {
-        const ox = offsets[i] ?? offsets[0] ?? 0;
+      const plan = this.carrierPlan(n, made.length, shotSpeed);
+      for (let i = 0; i < plan.length; i++) {
         const own = made[i];
         const proj: Proj = {
-          x: CX + ox, originX: CX + ox, y: own ? own.y : my,
-          vx: vx + this.pelletVx(i, n, shotSpeed), vy: shotVy, big, tint,
+          x: CX + plan[i].ox, originX: CX + plan[i].ox, y: own ? own.y : my,
+          vx: vx + plan[i].vx, vy: shotVy, big, tint,
           hue: undefined, ...sizeBuff,
         };
         if (own) proj.setSeven = own;
-        else if (i === 0) proj.setSevenPending = true;
+        else if (plan[i].first) proj.setSevenPending = true;
         else proj.s7Ghost = true;
         this.projs.push(proj);
       }
@@ -3487,6 +3583,30 @@ export class Game {
     }
   }
 
+  /**
+   * MINI/GIANT for a round that an imported layer paints itself.
+   *
+   * Slide 1 scales its own shot art inside the shared projectile renderer, so
+   * the treasure star's size card never reached a slide-7/9/11/2 round: the
+   * entry hole it made on the rock or the chest was small (`EmbeddedShot.scale`
+   * always carried the buff) while the round in flight stayed full size, which
+   * is why the buff looked like it did nothing at all. The carried round is
+   * drawn through the same multiplier here.
+   */
+  private drawCarriedRound(c: CanvasRenderingContext2D, p: Proj, paint: () => void) {
+    const k = projectileSizeMultiplier(this.weapon.id, !!p.mini, !!p.giant);
+    if (k === 1) {
+      paint();
+      return;
+    }
+    c.save();
+    c.translate(p.x, p.y);
+    c.scale(k, k);
+    c.translate(-p.x, -p.y);
+    paint();
+    c.restore();
+  }
+
   private drawEmbeddedShot(c: CanvasRenderingContext2D, shot: EmbeddedShot, x: number, y: number, surfaceOffset = 0) {
     c.save();
     c.translate(x, y);
@@ -4082,7 +4202,7 @@ export class Game {
           p.setEleven = made[0];
           p.setElevenPending = false;
           p.y = made[0].y;
-        } else continue;
+        } else if (this.strandCarrier(p)) continue;
       }
       if (p.s11Ghost) continue; // extra pellet of a burst gun: slide 11 fired it
       if (p.setEleven) {
@@ -4111,7 +4231,7 @@ export class Game {
           p.setNine = made[0];
           p.setNinePending = false;
           p.y = made[0].y;
-        } else continue;
+        } else if (this.strandCarrier(p)) continue;
       }
       if (p.s9Ghost) continue; // extra pellet of a burst gun: slide 9 fired it
       if (p.setNine) {
@@ -4132,7 +4252,7 @@ export class Game {
           // that moment it travels at slide 7's speed, not slide 1's.
           adoptSevenRound(p, made[0], Math.abs(p.vy) / this.speedMult, this.speedMult);
           this.s7Last = made[0];
-        } else continue;
+        } else if (this.strandCarrier(p)) continue;
       }
       if (p.s7Ghost) continue; // extra pellet of a burst gun: slide 7 shot it
       if (p.setOne) {
@@ -5746,24 +5866,32 @@ export class Game {
       const ang = Math.atan2(p.vx, this.weapon.speed);
       // Slide-7 SET 1 rounds are painted by slide 7's own renderers.
       if (p.setOne) {
-        this.s1.drawShot(c, p.setOne, p.x, p.y);
+        this.drawCarriedRound(c, p, () => this.s1.drawShot(c, p.setOne!, p.x, p.y));
         continue;
       }
       // …and so are the SET 2..5 rounds.
       if (p.setSeven) {
-        p.setSeven.draw(c);
+        this.drawCarriedRound(c, p, () => p.setSeven!.draw(c));
         continue;
       }
       if (p.setSevenPending) continue;
       if (p.s7Ghost) continue;
       // Slide 9 draws its own rounds (and beams) from its own layer.
-      if (p.setNine || p.setNinePending || p.s9Ghost) continue;
+      if (p.setNine) {
+        this.drawCarriedRound(c, p, () => this.s9.drawShot(c, p.setNine!));
+        continue;
+      }
+      if (p.setNinePending || p.s9Ghost) continue;
       // …and so does slide 11.
-      if (p.setEleven || p.setElevenPending || p.s11Ghost) continue;
+      if (p.setEleven) {
+        this.drawCarriedRound(c, p, () => this.s11.drawShot(c, p.setEleven!));
+        continue;
+      }
+      if (p.setElevenPending || p.s11Ghost) continue;
       // Slide 2's own round art (orb, shell, grenade, bolt, stone, drop, rocket).
       if (p.setTwo) {
         const s2id = this.setTwoId;
-        if (s2id) this.s2w.drawRound(c, s2id, p.setTwo, p.x, p.y, this.time);
+        if (s2id) this.drawCarriedRound(c, p, () => this.s2w.drawRound(c, s2id, p.setTwo!, p.x, p.y, this.time));
         continue;
       }
       if (this.weapon.rope) {
