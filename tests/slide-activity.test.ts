@@ -9,8 +9,6 @@ import { getWeapon, type Rarity } from '../src/games/gunhit/game/weapons';
 
 test('Every iframe slide game has its own index.html, main.tsx, and App.tsx so it never falls back to root index.html', () => {
   const iframeSlides = [
-    'fireworkgun',
-    'rainbow',
     'obliterator',
   ];
   for (const id of iframeSlides) {
@@ -24,6 +22,28 @@ test('Every iframe slide game has its own index.html, main.tsx, and App.tsx so i
     const html = fs.readFileSync(htmlPath, 'utf8');
     assert.match(html, /src=["']\.\/src\/main\.tsx["']/);
   }
+});
+
+test('slides 02 (Firework 8-Gun) and 03 (Rainbow Gun) are gone from the hub and the rest is renumbered 01-09', () => {
+  const root = process.cwd();
+  const app = fs.readFileSync(path.join(root, 'src/App.tsx'), 'utf8');
+  const vite = fs.readFileSync(path.join(root, 'vite.config.ts'), 'utf8');
+  for (const id of ['fireworkgun', 'rainbow']) {
+    assert.ok(!app.includes(`id: '${id}'`), `${id} must not be a hub slide`);
+    assert.ok(!app.includes(`games/${id}/`), `${id} must not be loaded by the hub`);
+    assert.ok(!vite.includes(`games/${id}/`), `${id} must not be a build input`);
+    assert.ok(!fs.existsSync(path.join(root, 'games', id, 'index.html')), `${id} must not ship a page`);
+  }
+  assert.ok(!fs.existsSync(path.join(root, 'games/rainbow')));
+  // SGA's "Firework" card still plays slide 2's own sound engine, and its
+  // parity test still drives slide 2's own engine: those two files stay.
+  for (const file of ['engine.ts', 'sfx.ts']) {
+    assert.ok(fs.existsSync(path.join(root, 'games/fireworkgun/src/game', file)), `keep games/fireworkgun/src/game/${file}`);
+  }
+  const numbers = [...app.matchAll(/slideNumber: (\d+),/g)].map(m => Number(m[1]));
+  assert.deepEqual(numbers, [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  const ids = [...app.matchAll(/\n      id: '([a-z0-9]+)',\n      slideNumber:/g)].map(m => m[1]);
+  assert.deepEqual(ids, ['gunhit', 'obliterator', 'game1', 'game2', 'game4', 'game5', 'game6', 'game7', 'game8']);
 });
 
 test('Gun Hit tiers have their own FX Lab rays, including every equipped weapon', () => {
