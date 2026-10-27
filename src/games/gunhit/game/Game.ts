@@ -26,9 +26,9 @@ import { SetNineFx, unlockNineAudio, type NineHooks } from './setNineFx';
 import { SetSixFx, SIX_BEAM_SPEED, type SixHooks } from './setSixFx';
 import { setSixIdFor, sixCooldown, sixStateFor, type SixId } from './setSixArt';
 import { setNineIdFor, type NineId } from './setNineArt';
-import { SetElevenFx, setElevenMuted, unlockElevenAudio, type ElevenHooks } from './setElevenFx';
+import { SetElevenFx, setElevenMuted, unlockElevenAudio, type ElevenHooks, type ElevenWheelMotion } from './setElevenFx';
 import type { Proj as ElevenProj } from '../../../../games/game-8/src/game/types';
-import { setElevenIdFor, type ElevenId } from './setElevenArt';
+import { elevenWeapon, setElevenIdFor, type ElevenId } from './setElevenArt';
 import { SetTwoFx, twoAmmoHue, type TwoRound } from './setTwoFx';
 import {
   drawSetTwoAtmosphere,
@@ -488,6 +488,8 @@ export class Game {
   state: State = 'idle';
   level: LevelCfg;
   private rot = 0;
+  /** Which way the wheel is turning right now (+1 / -1). */
+  private rotDir = 1;
   private levelTime = 0;
   private items: Item[] = [];
   private projs: Proj[] = [];
@@ -842,15 +844,50 @@ export class Game {
     return this.setElevenId !== null && getGunEffect(this.weapon.id) === 'set11';
   }
 
+  /** True while slide 11's layer is out (its gun, or its FX still finishing). */
+  private get elevenActive(): boolean {
+    return !!this.s11State && (this.setElevenLive || this.s11State.busy);
+  }
+
+  /** Slide 11's own wheel state (freeze, spin boost) while its layer is out. */
+  private elevenWheel(): { freeze: number; boost: number } | null {
+    const raw = this.elevenActive ? this.s11State?.raw : null;
+    return raw ? { freeze: raw.wheel.freeze, boost: raw.wheel.boost } : null;
+  }
+
+  /**
+   * Slide 11's kick, squash and shiver for slide 1's wheel this frame. The
+   * rock, the chest and the bonus ring are not slide 11's wheel: they stay put.
+   */
+  private elevenMotion(): ElevenWheelMotion | null {
+    if (!this.elevenActive || isSpecial(this.level.mode)) return null;
+    const m = this.s11State!.wheelMotion();
+    return m.dx || m.dy || m.sx !== 1 || m.sy !== 1 ? m : null;
+  }
+
+  /**
+   * The slide-11 gun brings its own charge-up — the Mega Buster's whine and
+   * glow, the shoulder caster's three-dot lock — so slide 1's generic charge
+   * rings, sparks and voices must not play over it.
+   */
+  private get elevenOwnsCharge(): boolean {
+    const id = this.setElevenId;
+    if (!id || !this.setElevenLive) return false;
+    const w = elevenWeapon(id);
+    return !!(w.onRelease || w.channel);
+  }
+
   private elevenHooks(): ElevenHooks {
     return {
-      shake: (amount) => { this.shake = Math.max(this.shake, amount * 0.5); },
+      // Slide 11's shake is in its own pixels around a wheel the size of slide
+      // 1's, so it carries over one to one (slide 11's own jolt per hit).
+      shake: (amount) => { this.shake = Math.max(this.shake, amount); },
       flash: (color, strength) => {
         this.tintRgb = hexToRgbTriplet(color);
         this.tintA = Math.max(this.tintA, Math.min(0.36, strength * 0.45));
       },
       hitStop: (seconds) => { this.hitStop = Math.max(this.hitStop, Math.min(0.12, seconds)); },
-      wheel: () => ({ x: CX, y: this.targetY, R: this.level.radius, angle: this.rot }),
+      wheel: () => ({ x: CX, y: this.targetY, R: this.level.radius, angle: this.rot, dir: this.rotDir }),
     };
   }
 
@@ -1011,11 +1048,15 @@ export class Game {
       this.holding = false;
       this.aiming = false;
       this.charging = false;
+      // Slide 11's beam hum / charge whine are loops: with the frame loop
+      // stopped nothing would ever fade them out.
+      this.s11State?.silence();
     }
   }
 
   destroy() {
     this.setActive(false);
+    this.s11State?.silence();
     window.removeEventListener('resize', this.resize);
     window.removeEventListener('keydown', this.onKey);
     window.removeEventListener('keyup', this.onKeyUp);
@@ -2167,7 +2208,7 @@ export class Game {
     return false;
   }
 
-  private applyPerks(w: Weapon, hx: number, hy: number, R: number) {
+  private applyPerks(w: Weapon, hx: number, hy: number, R: number, ownVoice = true) {
     if (w.explode) this.explodeAt(hx, hy, w.id === 'bazooka' ? 1.3 : w.id === 'bamboo' ? 1.2 : 1, w.explodeFx ?? 'fire');
     if (w.id === 'cricket') {
       this.particles.push({ x: hx, y: hy, vx: 0, vy: 0, life: 0.5, max: 0.5, size: 180, color: '#7cc8ff', kind: 'ring', rot: 0, vr: 0, g: 0 });
@@ -2214,7 +2255,7 @@ export class Game {
       sfx.coin();
       this.addText(w.luckyText ?? '+1 💰 HOKI!', hx + rand(-40, 40), hy + 50, '#ffd23f', 20);
     }
-    this.applyNewPerks(w, hx, hy, R);
+    this.applyNewPerks(w, hx, hy, R, ownVoice);
     if (w.id === 'fish') sfx.splash();
     if (w.pullCoins) {
       if (!isSlide23Weapon(w.id)) sfx.suck();
@@ -2300,8 +2341,8 @@ export class Game {
     this.particles.push({ x: CX, y: this.targetY, vx: 0, vy: 0, life: 0.5, max: 0.5, size: this.level.radius * 2.6, color: '#fde047', kind: 'ring', rot: 0, vr: 0, g: 0 });
   }
 
-  private applyNewPerks(w: Weapon, hx: number, hy: number, R: number) {
-    if (!isSlide23Weapon(w.id) && HIT_SFX[w.id]) HIT_SFX[w.id]!();
+  private applyNewPerks(w: Weapon, hx: number, hy: number, R: number, ownVoice = true) {
+    if (ownVoice && !isSlide23Weapon(w.id) && HIT_SFX[w.id]) HIT_SFX[w.id]!();
     const isPerk = (k: number) => this.perkCount > 0 && this.perkCount % k === 0;
     this.perkCount++;
     const ring = (color: string, size: number) =>
@@ -2657,9 +2698,18 @@ export class Game {
     for (let i = 0; i < 14; i++) { const a = down + rand(-1.6, 1.6); const sp = rand(100, 400); this.sink.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 0.4, max: 0.4, size: 1.5, color: pick(['255,255,255', '155,209,58']), kind: 'spark', rot: 0, vr: 0, g: 700, drag: 3 }); }
   }
 
+  /**
+   * True while slide 1 flies its own (game-3) xenomorph glob. Slide 11's acid
+   * spitter paints its own glob, trail and drips on its round; growing the
+   * game-3 metaball glob around that carrier as well drew two globs per shot.
+   */
+  private get ownXenoGlob(): boolean {
+    return this.weapon.id === 'xeno' && !this.setElevenLive;
+  }
+
   /** True while the acid layer has something to composite. */
   private hasAcidLayer(): boolean {
-    if (this.weapon.id === 'xeno' && this.projs.length) return true;
+    if (this.ownXenoGlob && this.projs.length) return true;
     for (const p of this.particles) if (p.kind === 'acid') return true;
     for (const it of this.items) if (it.acid) return true;
     return false;
@@ -2680,7 +2730,7 @@ export class Game {
     const cy = this.targetY + this.bump * 7;
     const R = this.level.radius * wScale;
 
-    if (this.weapon.id === 'xeno') {
+    if (this.ownXenoGlob) {
       for (const p of this.projs) {
         if (p.spawnDelay && p.spawnDelay > 0) continue;
         const pt = p.t ?? 0;
@@ -2732,12 +2782,35 @@ export class Game {
   }
 
   /**
+   * Slide 11's aim pass, painted where slide 11 paints it: after the wheel and
+   * under the gun. Its targeting overlay (laser sight, three-dot lock, beacon
+   * designator) runs only while a stage is live; its channel beam joins the
+   * muzzle to the wheel for as long as the channel still glows.
+   */
+  private drawElevenAim(c: CanvasRenderingContext2D) {
+    const fx = this.s11State;
+    if (!fx) return;
+    const live = this.setElevenLive;
+    if (!live && !fx.busy) return;
+    try {
+      if (live && this.state === 'play' && this.level.mode !== 'treasure') fx.drawOverlay(c);
+      fx.drawBeam(c);
+    } catch {
+      /* keep drawing slide 1 */
+    }
+  }
+
+  /**
    * Predator shoulder-caster tri-laser (game-3 drawTriLaser): three faint red
    * beams converge on a lock-on triangle of dots on the target, tightening into
    * a reticle while the core charges.
    */
   private drawTriLaser(c: CanvasRenderingContext2D) {
     if (this.state !== 'play' || this.weapon.id !== 'pred' || this.level.mode === 'treasure') return;
+    // Slide 11's shoulder caster locks on with its own three red dots, from its
+    // own laser module (`drawElevenAim`); this game-3 tri-laser starts where
+    // the game-3 cannon's module sits and floated beside the slide-11 gun.
+    if (this.setElevenLive) return;
     const t = this.time;
     const ch = this.charging ? Math.min(1, this.chargeT) : 0;
     const ap = { x: CX, y: this.targetY + this.level.radius - 18 };
@@ -2853,8 +2926,15 @@ export class Game {
       setTwo: s2Hit ? true : undefined,
     });
     this.stuck++;
+    // The game-3 hit FX below (plasma impact, acid glob + splash) belong to
+    // slide 1's own shot. When slide 11 owns the impact — its xenomorph and its
+    // shoulder caster — slide 11 bursts, marks and sounds the hit itself;
+    // running both sprayed a second, game-3 acid splash (and acid globs stuck
+    // on the rim) or a second plasma blast, plus a second hit voice, over
+    // every hit.
+    const ownHitFx = !(s11Hit || s11Pending);
     // Dora airBlast hit FX (game-3)
-    if (w.id === 'dora') {
+    if (ownHitFx && w.id === 'dora') {
       const hp = this.worldPos(local, R);
       this.bump = Math.max(this.bump, 18);
       this.wheelFlash = Math.max(this.wheelFlash, 0.8);
@@ -2864,7 +2944,7 @@ export class Game {
       sfx6.doraHit();
     }
     // Pred plasmaImpact hit FX (game-3)
-    if (w.id === 'pred') {
+    if (ownHitFx && w.id === 'pred') {
       const hp = this.worldPos(local, R);
       this.bump = Math.max(this.bump, 14);
       this.wheelFlash = Math.max(this.wheelFlash, 1);
@@ -2874,7 +2954,7 @@ export class Game {
       sfx6.predHit();
     }
     // Xeno acid splash hit FX (game-3)
-    if (w.id === 'xeno') {
+    if (ownHitFx && w.id === 'xeno') {
       const hp = this.worldPos(local, R);
       this.bump = Math.max(this.bump, 8);
       this.wheelFlash = Math.max(this.wheelFlash, 1);
@@ -2940,9 +3020,16 @@ export class Game {
     }
     pts *= this.dmgMult; // POWER also doubles classic points / boss damage, not only rock damage.
     this.score += pts;
-    this.bump = 1;
-    this.hitFlash = 1;
-    this.shake = Math.max(this.shake, 6);
+    // A slide-11 shot moves the wheel with slide 11's own reaction — the kick
+    // and squash, the warm flash and the jolt its `g.hit()` gives, sized by
+    // the weapon (a pistol round barely nudges it, the plasma dome slams it).
+    // Slide 1's one-size bump, white flash and shake on top doubled every hit.
+    const elevenHit = !!(s11Hit || s11Pending);
+    if (!elevenHit) {
+      this.bump = 1;
+      this.hitFlash = 1;
+      this.shake = Math.max(this.shake, 6);
+    }
     if (!s1Hit && !s7Hit && !layerHit) this.crack(local, tint);
     if (isSlide23Weapon(w.id) && !layerHit) {
       const hitIdx = Math.max(0, this.stuck - 1);
@@ -2976,7 +3063,9 @@ export class Game {
     // Slide 11's own impact: its burst, its sound and the marks it leaves.
     else if (s11Hit) this.s11.impact(hx, hy, s11Hit);
     else if (s9Pending) this.s9.block(hx, hy);
-    else if (s11Pending) this.s11.block(hx, hy);
+    // A slide-11 shot that is not a round (a beam, the railgun's hitscan, the
+    // sword's delayed slash) paints its own impact where it lands: slide 1's
+    // carrier only scores it, without sparks slide 11 never shows.
     // Slide 2's own impact: the shell burst, the bite mark, the shrapnel and
     // its own hit voice, played where the round actually landed.
     else if (s2Hit) {
@@ -2984,7 +3073,8 @@ export class Game {
       if (s2id) this.s2w.stick(s2id, hx, hy, s2Hit.hue, s2Hit.seed);
     }
     this.slide2Impact(hx, hy);
-    this.applyPerks(w, hx, hy, R);
+    // Slide 11 already voiced the hit (its impact accent + its wood thunk).
+    this.applyPerks(w, hx, hy, R, !elevenHit);
     if (w.id === 'yoyo') {
       spawnYoyoStickBurst(
         this.getYoyoState(),
@@ -3103,7 +3193,13 @@ export class Game {
     }
     if (this.setSixLive && p.setSix) this.s6.block(p.x, p.y);
     if (this.setNineLive && p.setNine) this.s9.block(p.x, p.y);
-    if (this.setElevenLive && p.setEleven) this.s11.block(p.x, p.y);
+    // A slide-11 shot ricochets off the obstacle with slide 11's own ping,
+    // spark star and ring, and the blocked round goes. Then none of slide 11's
+    // rounds may land after GAGAL! — carried or not — nor hang frozen in the
+    // air over the fail screen.
+    const elevenShot = this.setElevenLive && !!(p.setEleven || p.setElevenPending || p.s11Ghost);
+    if (elevenShot) this.s11.block(p.x, p.y, p.setEleven);
+    if (this.s11State) this.s11State.sweepRounds();
     this.aiming = false;
     this.burnT = 0;
     this.state = 'fail';
@@ -3125,11 +3221,12 @@ export class Game {
       this.getBazookaState().onHit(p.x, p.y, 1.45);
     }
     // The blunt slam and the plasma detonation also fire when the shot is
-    // wasted on an obstacle (game-3 resolveHit: fail branch).
+    // wasted on an obstacle (game-3 resolveHit: fail branch) — for slide 1's
+    // own shot only: a slide-11 round already burst with `block()` above.
     if (this.weapon.id === 'dora') this.airBlast(p.x, p.y, 1.3);
-    if (this.weapon.id === 'pred') this.plasmaImpact(p.x, p.y, 1.3);
+    if (this.weapon.id === 'pred' && !elevenShot) this.plasmaImpact(p.x, p.y, 1.3);
     // Acid splashes off the obstacle (game-3 resolveHit fail branch).
-    if (this.weapon.id === 'xeno') {
+    if (this.weapon.id === 'xeno' && !elevenShot) {
       this.splash(p.x, p.y + 10, 1.4);
       this.sink.light(p.x, p.y, 90, '255,255,255', 0.15);
       this.sink.push({ x: p.x, y: p.y, vx: 0, vy: 0, life: 0.25, max: 0.25, size: 6, color: '255,255,255', kind: 'ring', rot: 0, vr: 0, g: 0 });
@@ -3948,14 +4045,19 @@ export class Game {
       if (this.state !== 'play') this.charging = false;
       this.chargeT += dt;
       const stage = this.chargeT >= 1 ? 2 : this.chargeT >= 0.35 ? 1 : 0;
-        if (stage > this.chargeStage) {
-          this.chargeStage = stage;
+      // A slide-11 gun charges with its own whine, glow and lock (see
+      // `elevenOwnsCharge`): slide 1's generic charge-up stays quiet then.
+      const slide1Charge = !this.elevenOwnsCharge;
+      if (stage > this.chargeStage) {
+        this.chargeStage = stage;
+        if (slide1Charge) {
           if (this.weapon.id === 'pred') sfx6.predCharge(stage === 2 ? 1 : 0.65);
           else if (stage === 1) sfx4.chargeStart();
           else sfx4.chargeFull();
-        for (const ox of this.gunOffsets) this.sink.push({ x: CX + ox, y: GUN_Y + 2, vx: 0, vy: 0, life: 0.3, max: 0.3, size: stage === 2 ? 90 : 50, color: stage === 2 ? '254,240,138' : '125,211,252', kind: 'shock', rot: 0, vr: 0, g: 0 });
+          for (const ox of this.gunOffsets) this.sink.push({ x: CX + ox, y: GUN_Y + 2, vx: 0, vy: 0, life: 0.3, max: 0.3, size: stage === 2 ? 90 : 50, color: stage === 2 ? '254,240,138' : '125,211,252', kind: 'shock', rot: 0, vr: 0, g: 0 });
+        }
       }
-      for (const ox of this.gunOffsets) {
+      if (slide1Charge) for (const ox of this.gunOffsets) {
         if (Math.random() < 0.6) {
           const a = rand(0, TAU);
           const d = rand(40, 70);
@@ -3965,7 +4067,7 @@ export class Game {
       }
       // Predator: ions spiral into the shoulder-caster core, plus crackling
       // arcs — the slide-7 charge telegraph (game-3 startCharge block).
-      if (this.weapon.id === 'pred') {
+      if (slide1Charge && this.weapon.id === 'pred') {
         const coreY = GUN_Y - 72;
         for (const ox of this.gunOffsets) {
           if (Math.random() < 0.9) {
@@ -3988,7 +4090,7 @@ export class Game {
           this.sink.light(CX + ox, coreY, 40 + Math.min(1, this.chargeT) * 90, '111,211,255', 0.12);
         }
       }
-      if (stage === 2 && Math.random() < 0.15) sfx4.chargeHum(2);
+      if (slide1Charge && stage === 2 && Math.random() < 0.15) sfx4.chargeHum(2);
     }
     gunState.charge = this.charging ? Math.min(1, this.chargeT) : Math.max(0, gunState.charge - dt * 3);
     this.tintA = Math.max(0, this.tintA - dt * 1.6);
@@ -4013,10 +4115,24 @@ export class Game {
       const f0 = this.slowF;
       const slowF = this.slowT > 0 ? f0 + (1 - f0) * Math.max(0, (0.3 - this.slowT) / 0.3) : 1;
       const aimF = this.aiming ? 0.28 : 1;
+      // A slide-11 gun brings slide 11's own wheel physics (its `update()`):
+      // a frozen wheel — the chrono rifle's stasis — all but stops, at
+      // `1 - 0.98 × freeze` like slide 11's, and every hit pushes the wheel on
+      // with slide 11's spin boost (the chrono's thaw flings it round). Bosses
+      // and the special stages keep their own rhythm: they only ever freeze.
+      const s11w = this.elevenWheel();
+      const freezeF = s11w ? 1 - 0.98 * s11w.freeze : 1;
       // Faster, readable boss rhythms: Knight reverses every 7s, Oni every 5s,
       // while Cyborg and Pirate reverse smoothly on their own distinct cycles.
-      if (this.level.boss) this.rot += bossRotationSpeed(this.level.style as BossType, this.levelTime) * s * slowF * aimF;
-      else this.rot += v * s * slowF * aimF;
+      if (this.level.boss) {
+        const bv = bossRotationSpeed(this.level.style as BossType, this.levelTime);
+        this.rot += bv * s * slowF * aimF * freezeF;
+        if (bv) this.rotDir = bv < 0 ? -1 : 1;
+      } else {
+        const boost = s11w && !isSpecial(this.level.mode) ? s11w.boost : 0;
+        this.rot += (v + boost) * s * slowF * aimF * freezeF;
+        if (v) this.rotDir = v < 0 ? -1 : 1;
+      }
       this.slowT = Math.max(0, this.slowT - s);
     }
     if (this.aiming) {
@@ -4518,6 +4634,9 @@ export class Game {
       for (const it of this.items) {
         if (it.type !== 'bullet') continue;
         if (it.w !== 'xeno' && it.w !== 'dora' && it.w !== 'pred') continue;
+        // A slide-11 hit keeps its own mark alive (slide 11's acid keeps eating,
+        // its plasma scar keeps burning): no game-3 scar FX on top of it.
+        if (it.hideArt && this.setElevenLive) continue;
         const wp = this.worldPos(it.angle, this.level.radius);
         const hx = wp.x, hy = wp.y;
         if (it.w === 'xeno') {
@@ -4629,12 +4748,19 @@ export class Game {
       const fx = this.s11;
       const id = this.setElevenId;
       if (id) {
-        fx.weaponId = id;
+        // The equipped gun's slide-11 weapon is live from the first frame, not
+        // only from the first shot (its idle FX, its aiming overlay).
+        if (this.setElevenLive) fx.follow(id);
+        else fx.weaponId = id;
         fx.syncWheel();
       }
       // Holding the trigger keeps a slide-11 channel (flame, beam) flowing,
       // exactly like slide 11's own `press()`; slide 1 still owns every shot.
-      fx.advance(dt, this.state === 'play' && this.holding);
+      // The caster's lock follows slide 1's charge meter.
+      fx.chargeHint = this.charging ? Math.min(1, this.chargeT) : 0;
+      // Slide 11's world slows to 12% during a hit-stop, as in its own update.
+      const s11dt = (this.hitStop > 0 ? dt * 0.12 : dt) * this.timeScale;
+      fx.advance(s11dt, this.state === 'play' && this.holding);
     }
     // Slide 6: its own clock, beams, particles and scorch marks. Its beam is
     // painted on the trigger, so there is no carried round to follow.
@@ -5536,13 +5662,19 @@ export class Game {
       drawSetTwoAtmosphere(c, this.weapon.id, this.time, CX, this.targetY);
     }
 
+    // Slide 11's scene light: its muzzles and impacts light the whole scene
+    // under the wheel, the way slide 11's own `render()` paints it.
+    if (this.state !== 'idle' && this.elevenActive) this.s11State!.drawLight(c);
+
     // Keep the clean diamond / chest visible through the special-stage celebration.
     if (this.state !== 'idle' && (this.state !== 'clear' || isSpecial(this.level.mode))) {
       const wScale = this.wheelScale ?? 1;
       const sc = wScale * (1 + this.bump * 0.035);
+      // A slide-11 gun's hits kick, squash and shiver the wheel like slide 11's.
+      const wm = this.elevenMotion();
       c.save();
-      c.translate(CX, this.targetY + this.bump * 7);
-      c.scale(sc, sc);
+      c.translate(CX + (wm?.dx ?? 0), this.targetY + this.bump * 7 + (wm?.dy ?? 0));
+      c.scale(sc * (wm?.sx ?? 1), sc * (wm?.sy ?? 1));
       // Slide 2's soft ring of light behind the target.
       if (this.setTwoLook) {
         drawSetTwoWheelGlow(c, R, setTwoWheelHue(this.weapon.id, this.level.n), Math.min(1, this.bump / 14));
@@ -6150,6 +6282,7 @@ export class Game {
     for (const bp of this.bossProjs) drawBossProjectile(c, bp, this.time);
 
     if (this.state !== 'idle') {
+      this.drawElevenAim(c);
       this.drawGunNow(c);
       this.drawTriLaser(c);
     }
@@ -6159,7 +6292,7 @@ export class Game {
     // glob covers the muzzle and the acid on the rim melts into one body.
     if (this.state !== 'idle' && this.hasAcidLayer()) {
       this.collectAcidBlobs();
-      const hot = this.weapon.id === 'xeno'
+      const hot = this.ownXenoGlob
         ? this.projs.filter((p) => !(p.spawnDelay && p.spawnDelay > 0)).map((p) => ({ x: p.x + Math.sin((p.t ?? 0) * 40) * 1.5, y: p.y }))
         : [];
       this.acidFluid.render(c, W, H, hot);
@@ -6337,8 +6470,8 @@ export class Game {
     if (this.s11State && (this.s11State.busy || this.setElevenLive)) {
       // A bad frame from slide 11's own art must not blank slide 1.
       try {
-        this.s11State.drawWheel(c, CX, this.targetY + this.bump * 7, this.level.radius, this.rot);
-        this.s11State.drawBeam(c);
+        this.s11State.drawWheel(c, CX, this.targetY + this.bump * 7, this.level.radius, this.rot,
+          this.elevenMotion() ?? undefined);
         this.s11State.draw(c);
       } catch {
         /* keep drawing slide 1 */

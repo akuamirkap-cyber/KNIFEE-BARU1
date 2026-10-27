@@ -17,8 +17,28 @@ export interface ElevenHooks {
   shake(amount: number): void;
   flash(color: string, strength: number): void;
   hitStop(seconds: number): void;
-  wheel(): { x: number; y: number; R: number; angle: number };
+  /** Slide 1's wheel; `dir` is the way it spins right now (+1 / -1). */
+  wheel(): { x: number; y: number; R: number; angle: number; dir?: number };
 }
+
+/** Slide 11's own wheel motion this frame, applied to slide 1's wheel. */
+export interface ElevenWheelMotion {
+  /** Shiver jitter + the hit kick, in px. */
+  dx: number;
+  dy: number;
+  /** The hit squash. */
+  sx: number;
+  sy: number;
+}
+
+const STILL: ElevenWheelMotion = { dx: 0, dy: 0, sx: 1, sy: 1 };
+
+/**
+ * The shoulder caster's lock time: slide 11 fires its plasma burst by itself
+ * once the three laser dots have converged for this long (`plasmacaster.ts`,
+ * `PERIOD`).
+ */
+const CASTER_LOCK = 2.6;
 
 const NO_HOOKS: ElevenHooks = {
   shake: () => {},
@@ -107,6 +127,18 @@ export class SetElevenFx {
   private taken = new Set<Proj>();
   private carried = new Set<Proj>();
   shotsFired = 0;
+  /**
+   * Slide 1's charge meter (0..1) while the trigger is held. The shoulder
+   * caster's three-dot lock follows it, so the lock closes exactly when slide
+   * 1's charge is full instead of on slide 11's own 2.6 s clock.
+   */
+  chargeHint = 0;
+  /** A channel / charge loop of slide 11's may be sounding right now. */
+  private loopsLive = false;
+  /** The shiver jitter rolled for the current frame (one roll per frame). */
+  private motionAt = -1;
+  private jitterX = 0;
+  private jitterY = 0;
   private hooks: ElevenHooks;
 
   constructor(hooks: ElevenHooks = NO_HOOKS) {
@@ -126,6 +158,7 @@ export class SetElevenFx {
       (g.wheel as { scale: number }).scale = 1;
       this.raw = g;
       this.muteOwnWheelBreak();
+      this.forwardShake(g);
       this.adopt();
       this.selectWeapon('ak47');
     } catch {
@@ -146,6 +179,9 @@ export class SetElevenFx {
     this.wy = w.y;
     this.wheelR = w.R;
     this.rotation = w.angle;
+    // Slide 11 pushes its wheel the way it is turning (every hit's spin boost,
+    // the chrono rifle's thaw), so it has to know which way slide 1's turns.
+    if (this.raw && w.dir) this.raw.wheel.dir = w.dir < 0 ? -1 : 1;
     this.adopt();
   }
 
@@ -200,9 +236,9 @@ export class SetElevenFx {
     raw.R = this.wheelR;
     raw.W = 420;
     raw.H = 760;
-    // The wheel kick shifts `wy`; slide 1 owns the wheel, so pin it.
-    g.wheel.kick = 0;
-    g.wheel.kickV = 0;
+    // The wheel's kick, squash and shiver stay slide 11's own: `step()` runs
+    // their springs and slide 1 draws its wheel with them (`wheelMotion()`).
+    // Only the spawn pop-in is pinned — slide 1 owns the stage flow.
     g.wheel.scale = 1;
     g.wheel.spawnT = 1;
     // Slide 11 stores its entry holes and aim in wheel-local angles, so its own
@@ -234,6 +270,41 @@ export class SetElevenFx {
       this.carried.clear();
       this.shotsFired = 0;
     }
+    this.adopt();
+  }
+
+  /**
+   * Keep slide 11's weapon on the equipped gun from the very first frame.
+   *
+   * Only the trigger used to call `selectWeapon()`, so until the first shot the
+   * layer ran its default AK-47: the gun's idle FX and its aiming overlay (the
+   * sniper beam's laser sight, the shoulder caster's lock) belonged to the
+   * wrong weapon. Slide 11's own `setWeapon()` also plays its "select" blip —
+   * slide 1 never swaps a gun mid-stage, so this switch is silent.
+   */
+  follow(id: ElevenId) {
+    const g = this.raw;
+    if (!g || (this.weaponId === id && g.weapon?.id === id)) {
+      this.weaponId = id;
+      return;
+    }
+    const was = muted;
+    setElevenMuted(true);
+    try {
+      this.selectWeapon(id);
+    } finally {
+      setElevenMuted(was);
+    }
+  }
+
+  /** Start `id` from a clean slate, even when it is already the weapon. */
+  restart(id: ElevenId) {
+    const g = this.raw;
+    this.weaponId = id;
+    if (!g) return;
+    g.setWeapon(elevenWeapon(id));
+    this.state = g.ws;
+    this.clear();
     this.adopt();
   }
 
@@ -274,11 +345,26 @@ export class SetElevenFx {
     } else {
       w.fire?.(g, ws);
     }
-    // Muzzle flash for the guns that draw one in their own coordinates.
-    if (w.muzzle > 0 && w.id !== 'ironman' && w.id !== 'tripod') {
-      const m = this.muzzlePos();
-      g.muzzleFlash(m.x, m.y, { size: 9, color: w.accent });
+    // The shoulder caster has no trigger of its own: slide 11 fires its plasma
+    // burst by itself once its three-dot lock has closed (2.6 s of holding).
+    // Slide 1 fires on release instead — so that lock was never reached, and
+    // the caster's bolt, its muzzle burst and its plasma dome never appeared.
+    // The release closes the lock and the burst leaves now, slide 11's own.
+    if (w.id === 'plasmacaster-mk2' && w.channelUpdate) {
+      const D = (ws.data ??= {}) as { cyc?: number; auto?: boolean; fired?: boolean };
+      D.cyc = CASTER_LOCK;
+      D.auto = true;
+      D.fired = false;
+      try {
+        w.channelUpdate(g, ws, 0);
+      } catch {
+        /* a weapon's own burst must never break the frame */
+      }
     }
+    // No extra flash here: every slide-11 gun throws its own muzzle FX from its
+    // own `fire()` (and its artwork lights up on `fireT`). A generic star used
+    // to be stacked on top of all of them — even the bow and the acid spitter
+    // — which slide 11 never shows.
   }
 
   /** Slide-11's muzzle in slide-1 screen space (the anchor slide 1 draws at). */
@@ -294,7 +380,12 @@ export class SetElevenFx {
   takeShots(): Proj[] {
     const g = this.raw;
     if (!g) return [];
-    const made = g.projs.filter((p) => !this.taken.has(p));
+    // A round that already landed is never a new shot. It used to be handed
+    // over a second time when the next trigger came in the same frame it hit
+    // (every auto-fire gun at full rate): the new carrier spawned right under
+    // the wheel, ran into the bullet that had just stuck and ended the stage
+    // with GAGAL! on the first burst.
+    const made = g.projs.filter((p) => p.alive && !this.taken.has(p));
     // Only hand the round over: it becomes slide 1's on `carry()`. A volley
     // slide 1 cannot carry (a twelve-orb burst, a later timer shot) must keep
     // flying on slide 11's own physics instead of freezing at the muzzle.
@@ -334,34 +425,99 @@ export class SetElevenFx {
     this.carried.add(p);
   }
 
-  /** Slide-11's own impact FX for a round that landed on slide 1's wheel. */
+  /**
+   * Slide-11's own impact FX for a round that landed on slide 1's wheel.
+   *
+   * The round leaves slide 11's list right here, the same frame it lands —
+   * exactly like slide 11's own update, which kills and drops a round in one
+   * step. Left in the list until the next `step()`, the dead round flew one
+   * more frame on slide 11's physics, crossed the rim again and ran `onHit` a
+   * second time: two bursts, two entry holes and a doubled thunk for every
+   * single hit.
+   */
   impact(x: number, y: number, p?: Proj) {
     const g = this.raw;
     if (!g) return;
     const proj = p ?? null;
     if (proj) {
-      proj.alive = false;
-      try {
-        proj.onHit(g, x, y, proj);
-      } catch {
-        /* a weapon's own burst must never break the frame */
+      // A round that already burst by itself in flight (the prism lance's
+      // tracer splits into its seven rays before the wheel) has nothing left
+      // to land: only slide 1's hit counts.
+      if (proj.alive) {
+        proj.alive = false;
+        try {
+          proj.onHit(g, x, y, proj);
+        } catch {
+          /* a weapon's own burst must never break the frame */
+        }
       }
-      this.carried.delete(proj);
-      this.taken.delete(proj);
+      this.drop(proj);
     }
   }
 
-  /** A round that died on an occupied spot still sparks, like slide 11's. */
-  block(x: number, y: number) {
+  /** Take one round out of slide 11's list (in place: it is shared). */
+  private drop(p: Proj) {
+    const g = this.raw;
+    p.alive = false;
+    if (g) {
+      const i = g.projs.indexOf(p);
+      if (i >= 0) g.projs.splice(i, 1);
+    }
+    this.carried.delete(p);
+    this.taken.delete(p);
+  }
+
+  /**
+   * A shot that hit an obstacle: slide 11's own ricochet — the metallic ping,
+   * the spark star, the flash ring and the little wheel jolt slide 11 plays
+   * when a round hits one of its knives.
+   *
+   * The blocked round itself goes away with slide 1's carrier: it used to stay
+   * in slide 11's list, carried but never moved again, and hung frozen next to
+   * the wheel for the whole GAGAL! screen.
+   */
+  block(x: number, y: number, p?: Proj) {
     const g = this.raw;
     if (!g) return;
-    const n = Math.atan2(y - this.wy, x - this.cx);
-    g.burst(x, y, {
-      n: 10, ang: n, spread: 1.1, speed: [180, 520], life: [0.12, 0.3],
-      size: [1.2, 2.4], pal: ['#fff6c8', '#ffd35a', '#ff9a2e'], len: 0.05, ay: 500,
-    });
-    g.glow(x, y, 26, '#ffe9a8', 0.12);
-    g.ring(x, y, 3, 20, '#fff0c0', 0.2, 2.2);
+    if (p) this.drop(p);
+    try {
+      g.ricochet(x, y);
+    } catch {
+      /* the spark must never break the frame */
+    }
+  }
+
+  /**
+   * GAGAL!: every round slide 11 still has in the air goes, carried or not —
+   * a drone or a delayed slash must not land a hit after the stage failed.
+   * Bursts, particles and marks stay and fade out on their own.
+   */
+  sweepRounds() {
+    const g = this.raw;
+    if (!g) return;
+    g.projs.length = 0;
+    this.taken.clear();
+    this.carried.clear();
+  }
+
+  /**
+   * Cut every running slide-11 loop (the beams' hum, the buster's charge
+   * whine) and the delayed booms it scheduled. Slide 1 calls it when it
+   * pauses or leaves, and when a stage resets: a loop keeps sounding until it
+   * is told to stop, and nothing else would tell it then.
+   */
+  silence() {
+    const g = this.raw;
+    this.loopsLive = false;
+    this.state.chan = 0;
+    this.state.minHold = 0;
+    this.state.charge = 0;
+    if (!g) return;
+    try {
+      g.sfx.stopAll();
+    } catch {
+      /* no audio graph yet */
+    }
   }
 
   /** True while slide 11 still has something to draw or animate. */
@@ -387,6 +543,49 @@ export class SetElevenFx {
    * hidden wheel broke again every 15 hits. Slide 1 owns the stages, the hits
    * and the score; slide 11 only lends its guns, rounds and impact FX.
    */
+  /**
+   * Slide 11's screen shake moves slide 1's camera.
+   *
+   * Every slide-11 hit, muzzle and burst calls `g.shake()`, which only ever
+   * set a number slide 1 never read — the plasma dome, the orbital strike and
+   * the singularity's collapse landed without the jolt slide 11 gives them.
+   */
+  private forwardShake(g: Game) {
+    const host = g as unknown as { shake(amount: number): void; shakeAmt: number };
+    host.shake = (amount: number) => {
+      host.shakeAmt = Math.max(host.shakeAmt, amount);
+      this.hooks.shake(amount);
+    };
+  }
+
+  /**
+   * Run one of slide 11's sound loops (`channel()` / `charge()`) for this
+   * frame. Slide 11 stops a loop on its own when the level drops — but not
+   * when it is muted (its mute check returns before the stop), and slide 1's
+   * mute button only flips that flag: so a muted slide 1 cuts the loops here.
+   */
+  private loop(level: number, drive: () => void) {
+    const g = this.raw;
+    if (!g) return;
+    if (muted) {
+      if (this.loopsLive) {
+        this.loopsLive = false;
+        try {
+          g.sfx.stopAll();
+        } catch {
+          /* no audio graph yet */
+        }
+      }
+      return;
+    }
+    try {
+      drive();
+    } catch {
+      /* audio is optional */
+    }
+    if (level > 0.04) this.loopsLive = true;
+  }
+
   private muteOwnWheelBreak() {
     const g = this.raw as unknown as { breakWheel?: () => void; hits: number } | null;
     if (!g) return;
@@ -410,9 +609,23 @@ export class SetElevenFx {
     g.wheel.freezeT = 0;
     g.wheel.flash = 0;
     g.wheel.shiver = 0;
+    g.wheel.kick = 0;
+    g.wheel.kickV = 0;
+    g.wheel.sq = 0;
+    g.wheel.boost = 0;
+    g.lightA = 0;
+    g.hitstop = 0;
     this.state.chan = 0;
     this.state.minHold = 0;
     this.state.recoil = 0;
+    this.state.charge = 0;
+    // A beam's hum or the buster's whine would otherwise outlive the stage.
+    this.loopsLive = false;
+    try {
+      g.sfx.stopAll();
+    } catch {
+      /* no audio graph yet */
+    }
   }
 
   /* ── one frame of slide 11 ────────────────────────────────────────────── */
@@ -438,11 +651,20 @@ export class SetElevenFx {
     ws.recoil *= Math.exp(-dt * 15);
     ws.cd = Math.max(0, ws.cd - dt);
     ws.ready = ws.cdMax > 0 ? 1 - ws.cd / ws.cdMax : 1;
+    // Slide 11's guns read the held trigger themselves (the caster's lock
+    // dots, the buster's charge glow), exactly as slide 11's `press()` sets it.
+    ws.holding = holding;
     if (w.channel) {
       ws.minHold = Math.max(0, ws.minHold - dt);
       const on = holding || ws.minHold > 0;
       ws.chan += ((on ? 1 : 0) - ws.chan) * (1 - Math.exp(-dt * (on ? 16 : 8)));
       if (ws.chan < 0.01 && !on) ws.chan = 0;
+      if (w.id === 'plasmacaster-mk2' && holding) {
+        // The caster's lock follows slide 1's charge meter and never fires on
+        // its own: slide 1's release fires it (see `fire()`).
+        const D = (ws.data ??= {}) as { cyc?: number };
+        D.cyc = Math.max(0, Math.min(CASTER_LOCK - dt - 1e-3, this.chargeHint * CASTER_LOCK));
+      }
       if (ws.chan > 0.01) {
         try {
           w.channelUpdate?.(g, ws, dt);
@@ -450,9 +672,20 @@ export class SetElevenFx {
           /* a channel's own FX must never break the frame */
         }
       }
-    } else if (w.onRelease && holding) {
-      // Slide 1 owns the trigger; only the charge meter grows here.
-      ws.charge = Math.min(w.maxCharge ?? 1.6, ws.charge + dt);
+      // The beam's own hum (heat-ray, repulsor, phaser, proton stream, dragon
+      // fire), started, swelled and faded with the channel like slide 11's
+      // `update()` does every frame.
+      this.loop(ws.chan, () => g.sfx.channel(w.id, ws.chan));
+    } else if (w.onRelease) {
+      if (holding) {
+        // Slide 1 owns the trigger; the charge meter and its whine grow here.
+        ws.charge = Math.min(w.maxCharge ?? 1.6, ws.charge + dt);
+        this.loop(ws.charge, () => g.sfx.charge(w.id, ws.charge));
+      } else if (ws.charge > 0) {
+        // Let go without a shot (slide 1's cooldown): the whine stops.
+        ws.charge = 0;
+        this.loop(0, () => g.sfx.charge(w.id, 0));
+      }
     }
     try {
       w.update?.(g, ws, dt);
@@ -465,8 +698,28 @@ export class SetElevenFx {
     // hit slide 11's own wheel, so a burst that slide 1 never carried still
     // bursts into the target instead of sailing through it.
     for (const p of g.projs) {
+      // A round that already burst never flies (or hits) again.
+      if (!p.alive) continue;
       p.age += dt;
-      if (this.carried.has(p)) continue;
+      if (this.carried.has(p)) {
+        // Slide 1 owns where a carried round is, but the round's own per-frame
+        // FX are still slide 11's: its glowing trail, its drips and sparks —
+        // and the prism lance's split into seven rays, which only happens in
+        // its update. Without this the lance only ever played its impact sound.
+        if (p.update) {
+          const { x, y, vx, vy } = p;
+          try {
+            p.update(g, dt, p);
+          } catch {
+            /* ignore */
+          }
+          p.x = x;
+          p.y = y;
+          p.vx = vx;
+          p.vy = vy;
+        }
+        continue;
+      }
       try {
         p.update?.(g, dt, p);
       } catch {
@@ -551,6 +804,20 @@ export class SetElevenFx {
     wl.freezeT = Math.max(0, wl.freezeT - dt);
     wl.freeze += ((wl.freezeT > 0 ? 1 : 0) - wl.freeze) * (1 - Math.exp(-dt * (wl.freezeT > 0 ? 14 : 5)));
     wl.shiver *= Math.exp(-dt * 6);
+    // Slide 11's own wheel physics from its `update()`: the spin boost every
+    // hit adds (and the chrono rifle's thaw), the kick spring and the squash.
+    // Slide 1 applies them to its own wheel (`wheelMotion()`, its spin).
+    wl.boost *= Math.exp(-dt * 2.5);
+    wl.kickV += (-300 * wl.kick - 15 * wl.kickV) * dt;
+    wl.kick += wl.kickV * dt;
+    wl.sq *= Math.exp(-dt * 10);
+    // The scene light every muzzle and impact throws (`drawLight()`).
+    g.lightA *= Math.exp(-dt * 6);
+    // Slide 11's hit-stop belongs to slide 1's clock.
+    if (g.hitstop > 0) {
+      this.hooks.hitStop(g.hitstop);
+      g.hitstop = 0;
+    }
     for (const e of g.embeds) {
       if (e.fade > 0) e.fade -= dt;
       if (e.fire > 0) {
@@ -631,11 +898,12 @@ export class SetElevenFx {
     }
   }
 
-  /** Slide-11's entry holes, painted into slide 1's wheel. */
   /** One round of slide 11's own art (slide 1 paints carried rounds itself). */
   drawShot(ctx: CanvasRenderingContext2D, p: Proj) {
     const g = this.raw;
-    if (!g) return;
+    // A round that burst by itself in flight (the prism tracer after its
+    // split) is gone, even while slide 1's carrier finishes the flight.
+    if (!g || !p.alive) return;
     ctx.save();
     try {
       p.draw(ctx, g, p);
@@ -645,46 +913,132 @@ export class SetElevenFx {
     ctx.restore();
   }
 
-  drawWheel(ctx: CanvasRenderingContext2D, cx: number, cy: number, radius: number, rot: number) {
+  /**
+   * Slide 11's own wheel motion for this frame — the hit kick, the squash and
+   * the harmonic disruptor's shiver — for slide 1 to move its own wheel with.
+   * One jitter roll per frame, so the wheel, its marks and every overlay of
+   * slide 11 shake together.
+   */
+  wheelMotion(): ElevenWheelMotion {
     const g = this.raw;
-    if (!g || !g.embeds.length) return;
+    if (!g) return STILL;
+    const w = g.wheel;
+    if (this.motionAt !== g.time) {
+      this.motionAt = g.time;
+      const sh = w.shiver > 0.05 ? w.shiver : 0;
+      this.jitterX = sh ? (Math.random() - 0.5) * 2 * sh : 0;
+      this.jitterY = sh ? (Math.random() - 0.5) * 2 * sh : 0;
+    }
+    if (!this.jitterX && !this.jitterY && Math.abs(w.kick) < 0.05 && w.sq < 0.001) return STILL;
+    return { dx: this.jitterX, dy: w.kick + this.jitterY, sx: 1 + w.sq, sy: 1 - w.sq };
+  }
+
+  /**
+   * The scene light slide 11 throws with every muzzle and impact
+   * (`g.light()`), painted the way slide 11's `render()` paints it under its
+   * wheel: one wash around the wheel, one over the gun.
+   */
+  drawLight(ctx: CanvasRenderingContext2D) {
+    const g = this.raw;
+    if (!g || g.lightA <= 0.01) return;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    try {
+      drawGlow(ctx, this.cx, g.wy + 60, 420, g.lightC, g.lightA * 0.45);
+      drawGlow(ctx, this.cx, this.gunY + 110, 300, g.lightC, g.lightA * 0.3);
+    } catch {
+      /* ignore */
+    }
+    ctx.restore();
+  }
+
+  /**
+   * Slide 11's marks and its wheel's mood, painted onto slide 1's wheel: the
+   * entry holes (handles outside, wounds inside), then — world-oriented, like
+   * slide 11's own pass over its face — the heat glow its beams and flares
+   * build up, the icy tint of a frozen wheel and the flash of every hit, and
+   * the flames over burning marks. `cx, cy` is where slide 1 drew its wheel,
+   * and `motion` the kick / squash / shiver it drew it with (`wheelMotion()`).
+   */
+  drawWheel(
+    ctx: CanvasRenderingContext2D,
+    cx: number,
+    cy: number,
+    radius: number,
+    rot: number,
+    motion: ElevenWheelMotion = STILL,
+  ) {
+    const g = this.raw;
+    if (!g) return;
+    const wl = g.wheel;
+    const m = motion;
+    const x0 = cx + m.dx;
+    const y0 = cy + m.dy;
     const self = g as unknown as {
       embedOut(c: CanvasRenderingContext2D, e: Embed): void;
       embedIn(c: CanvasRenderingContext2D, e: Embed): void;
     };
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.rotate(rot);
-    for (const e of g.embeds) {
+    if (g.embeds.length) {
       ctx.save();
-      ctx.rotate(e.a);
-      ctx.translate(radius, 0);
-      ctx.globalAlpha = e.fade > 0 ? clamp(e.fade / 0.4) : 1;
+      ctx.translate(x0, y0);
+      ctx.scale(m.sx, m.sy);
+      ctx.rotate(rot);
+      for (const e of g.embeds) {
+        ctx.save();
+        ctx.rotate(e.a);
+        ctx.translate(radius, 0);
+        ctx.globalAlpha = e.fade > 0 ? clamp(e.fade / 0.4) : 1;
+        try {
+          self.embedOut(ctx, e);
+        } catch {
+          /* ignore */
+        }
+        ctx.restore();
+      }
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(0, 0, radius - 1, 0, TAU);
+      ctx.clip();
+      for (const e of g.embeds) {
+        ctx.save();
+        ctx.rotate(e.a);
+        ctx.translate(radius, 0);
+        ctx.globalAlpha = e.fade > 0 ? clamp(e.fade / 0.4) : 1;
+        try {
+          self.embedIn(ctx, e);
+        } catch {
+          /* ignore */
+        }
+        ctx.restore();
+      }
+      ctx.restore();
+      ctx.restore();
+    }
+
+    // heat, frost and hit flash over the whole face (slide 11's `drawWheel`)
+    if (wl.heat > 0.01 || wl.freeze > 0.01 || wl.flash > 0.01) {
+      ctx.save();
+      ctx.translate(x0, y0);
+      ctx.scale(m.sx, m.sy);
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, TAU);
+      ctx.clip();
+      ctx.globalCompositeOperation = 'lighter';
       try {
-        self.embedOut(ctx, e);
+        if (wl.heat > 0.01) drawGlow(ctx, 0, radius * 0.9, radius * 1.2, wl.heatC, wl.heat * 0.5);
+        if (wl.freeze > 0.01) {
+          ctx.fillStyle = `rgba(90,200,255,${0.1 * wl.freeze})`;
+          ctx.fillRect(-radius, -radius, radius * 2, radius * 2);
+        }
+        if (wl.flash > 0.01) {
+          ctx.fillStyle = `rgba(255,236,205,${Math.min(0.3, wl.flash * 0.26)})`;
+          ctx.fillRect(-radius, -radius, radius * 2, radius * 2);
+        }
       } catch {
         /* ignore */
       }
       ctx.restore();
     }
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(0, 0, radius - 1, 0, TAU);
-    ctx.clip();
-    for (const e of g.embeds) {
-      ctx.save();
-      ctx.rotate(e.a);
-      ctx.translate(radius, 0);
-      ctx.globalAlpha = e.fade > 0 ? clamp(e.fade / 0.4) : 1;
-      try {
-        self.embedIn(ctx, e);
-      } catch {
-        /* ignore */
-      }
-      ctx.restore();
-    }
-    ctx.restore();
-    ctx.restore();
 
     // burning marks glow on the rim, exactly like slide 11's
     ctx.save();
@@ -692,8 +1046,8 @@ export class SetElevenFx {
     for (const e of g.embeds) {
       if (e.fire <= 0 || e.kind === 'acid') continue;
       const an = rot + e.a;
-      const x = cx + Math.cos(an) * radius;
-      const y = cy + Math.sin(an) * radius;
+      const x = x0 + Math.cos(an) * radius * m.sx;
+      const y = y0 + Math.sin(an) * radius * m.sy;
       const f = clamp(e.fire / 0.6);
       const fl = 0.75 + 0.25 * Math.sin(g.time * 30 + e.seed);
       drawGlow(ctx, x, y - 8, 15 * fl, '#ff7a1a', 0.8 * f);
@@ -719,25 +1073,54 @@ export class SetElevenFx {
     ctx.translate(x, y);
     ctx.rotate(-Math.PI / 2);
     ctx.rotate(Math.sin(time * 1.25 + 0.7) * 0.012);
-    ctx.translate(-w.muzzle - ws.recoil * w.kick, -w.muzzleY);
+    // Scale first: the muzzle offset is in the weapon's own units.
     ctx.scale(sc, sc);
+    ctx.translate(-w.muzzle - ws.recoil * w.kick, -w.muzzleY);
     w.draw(ctx, g, ws);
     ctx.restore();
   }
 
-  /** Slide-11's beam / overlay pass, in slide-1 screen space. */
+  /**
+   * Slide-11's aiming overlay — the sniper beam's laser sight, the shoulder
+   * caster's three-dot lock and HUD, the orbital beacon's designator.
+   *
+   * Slide 11 paints it every frame, between its wheel and its gun, in world
+   * space (`g.muzzlePos()`, `g.lw()`, `g.aim()` — bound to slide 1's barrel
+   * and wheel in `adopt()`). Slide 1 never called it, so those guns lost their
+   * whole targeting look.
+   */
+  drawOverlay(ctx: CanvasRenderingContext2D) {
+    const g = this.raw;
+    if (!g) return;
+    const w = g.weapon;
+    if (!w.drawOverlay) return;
+    ctx.save();
+    try {
+      w.drawOverlay(ctx, g, this.state);
+    } catch {
+      /* a weapon's own overlay must never break the frame */
+    }
+    ctx.restore();
+  }
+
+  /**
+   * Slide-11's channel beam (the tripod heat-ray, the repulsor, the phaser,
+   * the proton stream, the dragon's flame), in slide-1 screen space.
+   *
+   * Every slide-11 beam recipe draws in *world* space: it reads its own
+   * `g.muzzlePos()` and `g.aim()`, which `adopt()` binds to slide 1's barrel
+   * and wheel. The beam used to be painted inside the gun's local transform
+   * as well — turned a quarter and scaled — so it left the gun sideways and
+   * showed up as a streak at the edge of the screen, and the wheel only got
+   * the sparks of a beam nobody could see.
+   */
   drawBeam(ctx: CanvasRenderingContext2D) {
     const g = this.raw;
     if (!g) return;
     const w = g.weapon;
     const ws = this.state;
-    if (ws.chan <= 0.02) return;
+    if (!w.channel || ws.chan <= 0.02) return;
     ctx.save();
-    const sc = elevenScale(this.weaponId) * (w.scale ?? 1);
-    ctx.translate(this.gunX, this.gunY);
-    ctx.rotate(-Math.PI / 2);
-    ctx.scale(sc, sc);
-    ctx.translate(-w.muzzle, -w.muzzleY);
     try {
       w.drawBeam?.(ctx, g, ws);
     } catch {
@@ -748,8 +1131,33 @@ export class SetElevenFx {
 }
 
 /**
+ * The picker card's frame (`ShotEffectCanvas`: 152 × 88, painted at 1.15 × 1.1
+ * from its top centre): the target rim it strokes across the top edge, and a
+ * muzzle near the bottom edge.
+ */
+const CARD_WHEEL_Y = -40;
+const CARD_WHEEL_R = 38;
+const CARD_MUZZLE_Y = 54;
+
+/**
+ * The one slide-11 world every card still is painted with.
+ *
+ * The cards repaint about 18 times a second, and a fresh `SetElevenFx` built a
+ * whole new slide-11 `Game` each time — its sprite canvases, and through its
+ * `setWeapon()` a brand-new `AudioContext` that was never closed: roughly
+ * fifteen audio contexts a second for every Slide 11 card on screen.
+ */
+let cardFx: SetElevenFx | null = null;
+
+/**
  * A still of slide 11's round (or beam) at `age` seconds after the muzzle, for
  * the picker's "Slide 11" effect card — slide 11's own draw, nothing redrawn.
+ *
+ * Slide 11's world is set to the card's own frame: its muzzle sits at the
+ * bottom of the card and its wheel is the rim the card draws. A channel beam
+ * then joins that muzzle to that rim, and the muzzle burst blooms on the card
+ * (slide 11's world used to stay on the 420-wide game field, so the beam and
+ * the burst were painted far outside the card).
  */
 export function drawSetElevenShotShell(
   c: CanvasRenderingContext2D,
@@ -757,38 +1165,50 @@ export function drawSetElevenShotShell(
   age: number,
   travel = 26,
 ) {
-  const fx = new SetElevenFx();
+  const fx = (cardFx ??= new SetElevenFx());
   if (!fx.raw) return;
-  fx.selectWeapon(id);
+  fx.cx = 0;
+  fx.wy = CARD_WHEEL_Y;
+  fx.wheelR = CARD_WHEEL_R;
+  fx.restart(id);
   const w = fx.weapon;
-  fx.fire(0, -travel);
+  fx.fire(0, CARD_MUZZLE_Y);
   // Channel weapons (the flame throwers, the beams) and charged guns only show
   // their shot after slide 11 has run a few of its own frames: let it, so the
   // card shows the real flame / beam instead of an empty muzzle.
   const holds = !!w.channel || !!w.onRelease;
+  // The card's wheel is tiny, so a real round would reach it — and burst —
+  // before the card ever painted it. The first round is held where the card
+  // freezes it; any other round of a volley flies on slide 11's own physics.
+  let shown: Proj | undefined;
+  const claim = () => {
+    if (shown) return;
+    shown = fx.takeShots()[0];
+    if (shown) fx.carry(shown, 0, -travel, -Math.PI / 2);
+  };
+  claim();
   // Hitscan beams live in slide 11's `Fx` list for a fraction of a second, so
-  // stop as soon as the weapon has produced anything at all: the card shows the
-  // beam at its brightest, not a frame after it already faded.
-  for (let i = 0; i < 60 && !fx.raw.projs.length && !fx.raw.fx.length; i++) {
+  // stop as soon as the weapon has produced anything you can see: the card
+  // shows the beam at its brightest, not a frame after it already faded. A
+  // timer with nothing to draw (the sword's swing before its slash leaves)
+  // does not count — the card waits for the slash itself.
+  const raw = fx.raw;
+  const shows = () => !!shown || raw.projs.length > 0 || raw.parts.length > 0
+    || raw.fx.some((f) => f.draw.length > 0);
+  for (let i = 0; i < 60 && !shows(); i++) {
     fx.advance(1 / 30, holds);
+    claim();
   }
-  for (let i = 0; i < 2; i++) fx.advance(1 / 60, holds);
-  const proj = fx.takeShots()[0] ?? fx.raw.projs[0];
-  if (proj) {
-    proj.x = 0;
-    proj.y = -travel;
-    proj.age = age;
-    c.save();
-    proj.draw(c, fx.raw, proj);
-    c.restore();
+  for (let i = 0; i < 2; i++) {
+    fx.advance(1 / 60, holds);
+    claim();
   }
-  // Beam weapons (the sniper lance, the pack) are their channel, not a round.
+  if (shown) shown.age = age;
+  // Beam weapons (the heat-ray, the pack) are their channel, not a round.
   if (w.channel) {
-    c.save();
     fx.state.chan = 1;
     fx.drawBeam(c);
-    c.restore();
   }
-  // The muzzle burst / flame body slide 11 itself spawned for this shot.
+  // The round, then the muzzle burst / flame body slide 11 spawned for it.
   fx.draw(c);
 }
