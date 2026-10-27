@@ -18,7 +18,7 @@ import {
   updateParticles,
   type Particle,
 } from '../../../../games/game-6/src/game/core';
-import type { Beam, Bullet, GameAPI, Mark } from '../../../../games/game-6/src/game/types';
+import type { Beam, Bullet, GameAPI, Mark, Weapon as NineWeapon } from '../../../../games/game-6/src/game/types';
 import { NINE_SCALE, nineGunOrigin, nineWeapon, type NineId } from './setNineArt';
 
 /** What slide 1 does for slide 9 (the parts slide 9 needs from its game). */
@@ -39,6 +39,13 @@ const NO_HOOKS: NineHooks = {
   hitStop: () => {},
   wheel: () => ({ x: 0, y: 0, R: 0, angle: 0 }),
 };
+
+/**
+ * How fast slide 1's carrier crosses the field for a slide-9 instant beam
+ * (rail, phaser, proton stream, heat-ray): ~22 ms to the wheel, so the score
+ * and the entry hole land with the beam's own impact.
+ */
+export const NINE_BEAM_SPEED = 9500;
 
 /** Slide 9's muted switch, so slide 1's UI can silence the ported guns too. */
 export function setNineMuted(muted: boolean) {
@@ -84,6 +91,23 @@ export class SetNineFx implements GameAPI {
   private taken = new Set<Bullet>();
   /** Rounds slide 1 is carrying; their position comes from slide 1. */
   private carried = new Set<Bullet>();
+  /**
+   * The frame each carried round was last carried on. Slide 1 carries every
+   * live round once per frame, so a round that missed a frame lost its carrier
+   * without an impact (a coin, a stone, a cleared stage) and must go: slide 9
+   * never flies a carried round, so it would hang frozen in the air.
+   */
+  private carriedAt = new Map<Bullet, number>();
+  private tick = 0;
+  /** Beams of the second barrel: their delayed impact stays silent too. */
+  private quiet = new Set<Beam>();
+
+  /**
+   * Slide 9's wheel recoil (engine.ts `kick`): every hit shoves the wheel away
+   * from the blow by `markSize * 11` px/s and a stiff spring (k 420, damping
+   * 14) snaps it back. Slide 1 draws its wheel at this offset.
+   */
+  kick = { x: 0, y: 0, vx: 0, vy: 0 };
 
   weaponId: NineId = 'ak47';
   /** Slide-9 muzzle in slide-1 screen space (set before every shot). */
@@ -123,8 +147,19 @@ export class SetNineFx implements GameAPI {
    * round does that (and scores), so the ported weapon must not do it twice —
    * the beam still stops exactly on the rim because `hitscan` is real.
    */
-  registerHit(): boolean {
+  registerHit(x: number, y: number, weapon?: NineWeapon): boolean {
+    // Slide 9's beams (and the disc's bounce) register their hit themselves:
+    // the wheel recoils from that blow exactly as in slide 9's `registerHit`.
+    this.wheelKick(x, y, weapon ?? nineWeapon(this.weaponId));
     return true;
+  }
+
+  /** Slide 9's wheel recoil from one blow at (x, y). */
+  private wheelKick(x: number, y: number, w: NineWeapon) {
+    const dir = Math.atan2(this.cy - y, this.cx - x);
+    const imp = w.markSize * 11;
+    this.kick.vx += Math.cos(dir) * imp;
+    this.kick.vy += Math.sin(dir) * imp;
   }
 
   hitscan(x: number, y: number, angle: number) {
@@ -180,6 +215,8 @@ export class SetNineFx implements GameAPI {
       this.timers.length = 0;
       this.taken.clear();
       this.carried.clear();
+      this.carriedAt.clear();
+      this.quiet.clear();
       this.catchT = 9;
       this.shotsFired = 0;
     }
@@ -194,6 +231,25 @@ export class SetNineFx implements GameAPI {
     this.aim = angle;
     this.shotsFired++;
     w.fire(this, x, y, angle, charge);
+  }
+
+  /** The second barrel: same recipe, and even its delayed beam impact is mute. */
+  fireQuiet(x: number, y: number, angle: number, charge = 0) {
+    const before = this.beams.length;
+    const was = nineAudio.muted;
+    nineAudio.muted = true;
+    try {
+      this.fire(x, y, angle, charge);
+    } finally {
+      nineAudio.muted = was;
+    }
+    for (const bm of this.beams.slice(before)) this.quiet.add(bm);
+  }
+
+  /** Seconds until slide 9's newest beam strikes the wheel (0 = instant). */
+  beamDelay(): number {
+    const bm = this.beams[this.beams.length - 1];
+    return bm ? Math.max(0, bm.impactDelay ?? 0) : 0;
   }
 
   /**
@@ -226,34 +282,78 @@ export class SetNineFx implements GameAPI {
     this.bullets.push(...keep);
     for (const b of this.carried) this.taken.delete(b);
     this.carried.clear();
+    this.carriedAt.clear();
   }
 
   /**
-   * Slide-9's impact: the weapon's own burst at the hit point plus the entry
-   * hole it paints into the wheel (`drawMark`).
+   * Slide-9's impact, exactly as its engine resolves a round on the wheel:
+   * the weapon's own burst at the rim — aimed along the round's *flight*
+   * (`b.angle`), so its sparks fan back towards the shooter — the wheel's
+   * recoil, and the entry hole it paints (`drawMark`). The round itself is
+   * spent, except the identity disc: it reflects off the rim (`collide`),
+   * leaves its marker and flies home on slide 9's own physics.
    */
-  impact(hx: number, hy: number, local: number) {
+  impact(hx: number, hy: number, local: number, round?: Bullet, travel = round ? round.angle : this.aim) {
     const w = nineWeapon(this.weaponId);
-    w.onImpact?.(this, hx, hy, local + this.rotation);
+    if (round?.collide) {
+      const n = Math.atan2(hy - this.cy, hx - this.cx);
+      this.carried.delete(round);
+      this.carriedAt.delete(round);
+      round.collide(round, this, { x: hx, y: hy, nx: Math.cos(n), ny: Math.sin(n) });
+    } else {
+      w.onImpact?.(this, hx, hy, travel);
+      this.wheelKick(hx, hy, w);
+      if (round) this.drop(round);
+    }
+    this.addMark(w, local, 0);
+  }
+
+  /**
+   * A beam's hit, once slide 1's carrier has scored it. Slide 9 bursts the
+   * beam itself when it strikes (`impactDelay`) and its `registerHit` already
+   * moved the wheel, so only the entry hole is left — as old as the beam, so
+   * a scorch that fades in after the flame arrives keeps slide 9's timing.
+   */
+  markBeam(local: number) {
+    const w = nineWeapon(this.weaponId);
+    let age = 0;
+    for (let i = this.beams.length - 1; i >= 0; i--) {
+      if (this.beams[i].weapon === w) { age = this.beams[i].age; break; }
+    }
+    this.addMark(w, local, age);
+  }
+
+  private addMark(w: NineWeapon, local: number, age: number) {
     this.marks.push({
       weapon: w,
       a: local,
       r: this.wheelR,
       size: w.markSize,
-      age: 0,
+      age,
       seed: Math.random() * 1000,
     });
   }
 
+  /** A carried round is spent: gone from slide 9's world at once. */
+  private drop(b: Bullet) {
+    const i = this.bullets.indexOf(b);
+    if (i >= 0) this.bullets.splice(i, 1);
+    this.taken.delete(b);
+    this.carried.delete(b);
+    this.carriedAt.delete(b);
+  }
+
   /** A round that bounced off an occupied spot still bursts, like slide 9's. */
-  block(hx: number, hy: number) {
-    nineWeapon(this.weaponId).onImpact?.(this, hx, hy, this.aim);
+  block(hx: number, hy: number, round?: Bullet) {
+    nineWeapon(this.weaponId).onImpact?.(this, hx, hy, round ? round.angle : this.aim);
+    if (round) this.drop(round);
   }
 
   /** True while slide 9 still has something to draw or animate. */
   get busy(): boolean {
     return this.particles.length > 0 || this.bullets.length > 0 || this.beams.length > 0
-      || this.marks.length > 0 || this.timers.length > 0;
+      || this.marks.length > 0 || this.timers.length > 0
+      || Math.abs(this.kick.x) + Math.abs(this.kick.y) + Math.abs(this.kick.vx) + Math.abs(this.kick.vy) > 0.05;
   }
 
   clear() {
@@ -264,21 +364,42 @@ export class SetNineFx implements GameAPI {
     this.timers.length = 0;
     this.taken.clear();
     this.carried.clear();
+    this.carriedAt.clear();
+    this.quiet.clear();
     this.catchT = 9;
+    this.kick = { x: 0, y: 0, vx: 0, vy: 0 };
   }
 
-  /** One frame of slide-9 time: timers, particles, rounds, beams, entry holes. */
-  update(dt: number) {
-    this.time += dt;
-    this.catchT += dt;
+  /**
+   * One frame of slide-9 time: timers, particles, rounds, beams, entry holes.
+   *
+   * `dt` is slide 9's world step (12 % of a frame during a hit-stop), `raw`
+   * the real frame: like slide 9's own `update`, its timers (ejected brass,
+   * delayed bolts), its wheel spring and its hand clock never slow down.
+   */
+  update(dt: number, raw = dt) {
+    this.time += raw;
+    this.catchT += raw;
     for (let i = this.timers.length - 1; i >= 0; i--) {
       const t = this.timers[i];
-      t.t -= dt;
+      t.t -= raw;
       if (t.t <= 0) {
         this.timers.splice(i, 1);
         t.fn();
       }
     }
+    const k = this.kick;
+    k.vx += (-420 * k.x - 14 * k.vx) * raw;
+    k.vy += (-420 * k.y - 14 * k.vy) * raw;
+    k.x += k.vx * raw;
+    k.y += k.vy * raw;
+    if (Math.abs(k.x) + Math.abs(k.y) + Math.abs(k.vx) + Math.abs(k.vy) < 0.01) k.x = k.y = k.vx = k.vy = 0;
+    // A carried round whose carrier vanished without an impact goes (see
+    // `carriedAt`): slide 1 carried every live one earlier this frame.
+    for (const [b, at] of this.carriedAt) {
+      if (at < this.tick) this.drop(b);
+    }
+    this.tick++;
     updateParticles(this.particles, dt);
     for (let i = this.bullets.length - 1; i >= 0; i--) {
       const b = this.bullets[i];
@@ -302,18 +423,36 @@ export class SetNineFx implements GameAPI {
     }
     for (let i = this.beams.length - 1; i >= 0; i--) {
       const bm = this.beams[i];
+      // Slide 9's engine bursts a beam on the wheel once it has travelled
+      // (`impactDelay`): the dragon's flame lands late, the rail at once.
+      if (bm.hit && !bm.impacted && bm.age >= (bm.impactDelay ?? 0)) {
+        bm.impacted = true;
+        if (this.quiet.has(bm)) {
+          const was = nineAudio.muted;
+          nineAudio.muted = true;
+          try {
+            bm.weapon.onImpact?.(this, bm.hitX, bm.hitY, bm.angle);
+          } finally {
+            nineAudio.muted = was;
+          }
+        } else bm.weapon.onImpact?.(this, bm.hitX, bm.hitY, bm.angle);
+      }
       bm.age += dt;
       bm.tick?.(bm, dt, this);
-      if (bm.age >= bm.duration) this.beams.splice(i, 1);
+      if (bm.age >= bm.duration) {
+        this.beams.splice(i, 1);
+        this.quiet.delete(bm);
+      }
     }
     for (const m of this.marks) {
       m.age += dt;
       if (m.weapon.ambient && this.wheelR > 0) {
+        // The hot rim breathes where the wheel is drawn: kick included.
         const wa = this.rotation + m.a;
         m.weapon.ambient(
           this,
-          this.cx + Math.cos(wa) * m.r,
-          this.cy + Math.sin(wa) * m.r,
+          this.cx + this.kick.x + Math.cos(wa) * m.r,
+          this.cy + this.kick.y + Math.sin(wa) * m.r,
           wa,
           m,
           dt,
@@ -323,9 +462,11 @@ export class SetNineFx implements GameAPI {
   }
 
   /**
-   * Beams, then rounds, then every particle slide 9 spawned. Each piece is
-   * guarded: one weapon's renderer throwing must never blank slide 1's frame
-   * (that is what reads as the round freezing or the wheel glitching).
+   * Beams, then every particle, then the free rounds — slide 9's own render
+   * order (its rounds sit on top of their sparks). Rounds slide 1 carries are
+   * painted by slide 1 right after this (`drawShot`), with its size buffs;
+   * painting them here too doubled every round and its glow. Each piece is
+   * guarded: one weapon's renderer throwing must never blank slide 1's frame.
    */
   draw(ctx: CanvasRenderingContext2D) {
     for (const bm of this.beams) {
@@ -335,7 +476,9 @@ export class SetNineFx implements GameAPI {
         /* ignore */
       }
     }
+    drawParticles(ctx, this.particles);
     for (const b of this.bullets) {
+      if (this.carried.has(b)) continue;
       ctx.save();
       try {
         b.draw(ctx, b, this.time);
@@ -344,7 +487,19 @@ export class SetNineFx implements GameAPI {
       }
       ctx.restore();
     }
-    drawParticles(ctx, this.particles);
+  }
+
+  /** Is slide 1 carrying this round right now? */
+  isCarried(b: Bullet): boolean {
+    return this.carried.has(b);
+  }
+
+  /** How many rounds of the current weapon are still out (slide 9's `out`). */
+  out(): number {
+    const w = nineWeapon(this.weaponId);
+    let n = 0;
+    for (const b of this.bullets) if (b.weapon === w && !b.dead) n++;
+    return n;
   }
 
   /** Entry holes, drawn from the wheel centre with the wheel's own spin. */
@@ -415,6 +570,7 @@ export class SetNineFx implements GameAPI {
     // From now on slide 1 owns this round: slide 9 must not fly it again.
     this.taken.add(b);
     this.carried.add(b);
+    this.carriedAt.set(b, this.tick);
   }
 }
 

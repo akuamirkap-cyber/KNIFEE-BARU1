@@ -311,8 +311,9 @@ test('every slide-9 gun is playable on slide 1 and fires without a slide-1 sound
     const game = probe(slide1);
     game.shoot();
     assert.equal(game.projs.length, 1, `${slide1} fires one carrier`);
-    const carrier = (game.projs as unknown[])[0] as { setNine?: unknown; setNinePending?: boolean };
-    assert.ok(carrier.setNine || carrier.setNinePending, `${slide1} carries slide 9's shot`);
+    const carrier = (game.projs as unknown[])[0] as { setNine?: unknown; setNinePending?: boolean; setNineBeam?: number };
+    // A beam gun's carrier only scores: slide 9's beam is the shot.
+    assert.ok(carrier.setNine || carrier.setNinePending || carrier.setNineBeam !== undefined, `${slide1} carries slide 9's shot`);
     // A rendered frame must not throw with the ported gun equipped.
     (game as unknown as { draw: () => void }).draw?.();
   }

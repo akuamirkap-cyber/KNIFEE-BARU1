@@ -123,7 +123,9 @@ export function drawGun(
       charge: gunState.charge,
       cycle: Math.min(1, sinceShot / 0.35),
       catchT: sinceShot,
-    }));
+    }), undefined,
+    // Only the gun standing in a live game (`drawGunNow`), never a card.
+    gunState.nineStage);
     c.restore();
     if (flash > 0 && !gunState.s9Live) drawFlash(c, id, cx, y0, t, flash);
     return;

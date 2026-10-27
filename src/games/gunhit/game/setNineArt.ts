@@ -122,6 +122,9 @@ export function restNineState(overrides: Partial<WeaponDrawState> = {}): WeaponD
  * `state.recoil` is slide 9's 1 → 0 kick; the whole body is pushed back along
  * the barrel by the same amount slide 9's engine pushes it, so the weapon
  * looks identical to slide 9 mid-recoil.
+ *
+ * `live`: the gun standing in a live game holds still, exactly like slide 9's
+ * (its engine never sways the weapon); menus and cards keep a slow idle sway.
  */
 export function drawSetNineGun(
   c: CanvasRenderingContext2D,
@@ -131,17 +134,19 @@ export function drawSetNineGun(
   time: number,
   state: WeaponDrawState = restNineState(),
   scale = NINE_SCALE,
+  live = false,
 ) {
   const w = nineWeapon(id);
   const recoil = Math.max(0, Math.min(1, state.recoil));
-  // Slide 9's global recoil punch (engine.ts `drawPlayer`), in world pixels.
-  const kickBack = recoil * w.recoilAmt * 1.35 * (scale / 0.74);
-  const bounce = Math.sin(recoil * Math.PI) * w.recoilAmt * 0.28 * (scale / 0.74);
+  // Slide 9's global recoil punch (engine.ts `drawPlayer`): world pixels, the
+  // same jump whatever size the weapon is drawn at.
+  const kickBack = recoil * w.recoilAmt * 1.35;
+  const bounce = Math.sin(recoil * Math.PI) * w.recoilAmt * 0.28;
   const origin = nineGunOrigin(id, cx, y0 + kickBack - bounce, scale);
-  // A gun at rest still breathes: the same slow sway slide 1's own guns have,
-  // so the weapon never looks like a frozen photograph between shots.
-  const sway = Math.sin(time * 1.9) * 1.3;
-  const tilt = Math.sin(time * 1.25 + 0.7) * 0.012;
+  // A gun at rest in a menu still breathes: the same slow sway slide 1's own
+  // guns have, so a card never looks like a frozen photograph.
+  const sway = live ? 0 : Math.sin(time * 1.9) * 1.3;
+  const tilt = live ? 0 : Math.sin(time * 1.25 + 0.7) * 0.012;
   c.save();
   c.translate(origin.x, origin.y + sway);
   c.rotate(-Math.PI / 2 + tilt);

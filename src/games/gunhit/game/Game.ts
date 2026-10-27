@@ -22,10 +22,10 @@ import { buildSevenAnim, setSevenIdFor, type SevenId } from './setSevenArt';
 import { FIRE_RECIPES } from './setSevenFire';
 import { updateSevenAnim } from './setSevenAnim';
 import { adoptSevenRound, sevenCooldown, sevenShotSpeed } from './setSevenShot';
-import { SetNineFx, unlockNineAudio, type NineHooks } from './setNineFx';
+import { NINE_BEAM_SPEED, SetNineFx, unlockNineAudio, type NineHooks } from './setNineFx';
 import { SetSixFx, SIX_BEAM_SPEED, type SixHooks } from './setSixFx';
 import { setSixIdFor, sixCooldown, sixStateFor, type SixId } from './setSixArt';
-import { setNineIdFor, type NineId } from './setNineArt';
+import { nineGunOrigin, nineWeapon, setNineIdFor, type NineId } from './setNineArt';
 import { SetElevenFx, setElevenMuted, unlockElevenAudio, type ElevenHooks, type ElevenWheelMotion } from './setElevenFx';
 import type { Proj as ElevenProj } from '../../../../games/game-8/src/game/types';
 import { elevenWeapon, setElevenIdFor, type ElevenId } from './setElevenArt';
@@ -352,7 +352,7 @@ const PAINT = ['244,63,94', '250,204,21', '34,211,238', '168,85,247', '74,222,12
 type ItemType = 'bullet' | 'old' | 'spike' | 'coin' | 'diamond_chest';
 interface AcidStuck { blobs: AcidStuckBlob[]; dripT: number; drip: number; seed: number }
 interface Item { angle: number; type: ItemType; age: number; w?: WeaponId; scale?: number; vel?: number; harvested?: boolean; tint?: string; big?: number; hits?: number; hue?: number; flash?: number; acid?: AcidStuck; hideArt?: boolean; setTwo?: boolean }
-interface Proj { x: number; y: number; vx: number; vy: number; originX?: number; setSix?: true; setOne?: SetOneShot; setSeven?: SevenShot; setSevenPending?: boolean; s7Ghost?: boolean; hold?: number; setNine?: NineBullet; setNinePending?: boolean; s9Ghost?: boolean; setEleven?: ElevenProj; setElevenPending?: boolean; s11Ghost?: boolean; setTwo?: TwoRound; pierced?: number; hist?: { x: number; y: number }[]; tint?: string; big?: number; mini?: boolean; giant?: boolean; hue?: number; flash?: number; spawnDelay?: number; wob?: number; lastEcho?: number; t?: number; trail?: { x: number; y: number }[] }
+interface Proj { x: number; y: number; vx: number; vy: number; originX?: number; setSix?: true; setOne?: SetOneShot; setSeven?: SevenShot; setSevenPending?: boolean; s7Ghost?: boolean; hold?: number; setNine?: NineBullet; setNinePending?: boolean; s9Ghost?: boolean; setNineBeam?: number; setEleven?: ElevenProj; setElevenPending?: boolean; s11Ghost?: boolean; setTwo?: TwoRound; pierced?: number; hist?: { x: number; y: number }[]; tint?: string; big?: number; mini?: boolean; giant?: boolean; hue?: number; flash?: number; spawnDelay?: number; wob?: number; lastEcho?: number; t?: number; trail?: { x: number; y: number }[] }
 type StepRes = { res: 'none' | 'stick' | 'fail' | 'hit'; spike?: boolean; local?: number };
 interface Light { x: number; y: number; r: number; rgb: string; life: number; max: number }
 interface Fragment { x: number; y: number; vx: number; vy: number; rot: number; vr: number; a0: number; a1: number }
@@ -745,6 +745,10 @@ export class Game {
     this.s7Weapon = undefined;
     this.s7Last = undefined;
     this.s9State?.clear();
+    this.nineShake = 0;
+    this.nineFlashA = 0;
+    this.nineStop = 0;
+    this.nineQueued = false;
     this.s11State?.clear();
     this.s6State?.clear();
     this.s2wState?.clear();
@@ -811,12 +815,17 @@ export class Game {
   /** The slide-9 side effects that need the slide-1 game to act. */
   private nineHooks(): NineHooks {
     return {
-      shake: (amount) => { this.shake = Math.max(this.shake, amount * 0.55); },
+      // Slide 9's own jolt (engine.ts `shake`): its shakes add up to 34 and
+      // the scene moves ±0.35 of that, fading ×0.001 per second.
+      shake: (amount) => { this.nineShake = Math.min(34, this.nineShake + amount); },
+      // Slide 9's flash lights the whole screen (additively, at 0.6 of its
+      // strength) and fades at 2.2/s: the newest colour, the strongest flash.
       flash: (color, strength) => {
-        this.tintRgb = hexToRgbTriplet(color);
-        this.tintA = Math.max(this.tintA, Math.min(0.36, strength * 0.45));
+        this.nineFlashRgb = hexToRgbTriplet(color);
+        this.nineFlashA = Math.max(this.nineFlashA, strength);
       },
-      hitStop: (seconds) => { this.hitStop = Math.max(this.hitStop, Math.min(0.12, seconds)); },
+      // Slide 9's hit-stop runs the world at 12 %, not slide 1's 6 %.
+      hitStop: (seconds) => { this.nineStop = Math.max(this.nineStop, seconds); },
       wheel: () => ({ x: CX, y: this.targetY, R: this.level.radius, angle: this.rot }),
     };
   }
@@ -888,6 +897,43 @@ export class Game {
     if (!id || !this.setElevenLive) return false;
     const w = elevenWeapon(id);
     return !(w.onRelease || w.channel);
+  }
+
+  /** True while slide 9's layer is out (its gun, or its FX still finishing). */
+  private get nineActive(): boolean {
+    return !!this.s9State && (this.setNineLive || this.s9State.busy);
+  }
+
+  /**
+   * Every slide-9 gun but the bow fires the moment the trigger goes down, as
+   * on slide 9: the sniper rifle without slide 1's scope and slow-mo, the
+   * plasmacaster without slide 1's charge. Only the "Slide 5" card does this;
+   * the other cards keep slide 1's own trigger.
+   */
+  private get ninePlainTrigger(): boolean {
+    const id = this.setNineId;
+    if (!id || !this.setNineLive) return false;
+    return !nineWeapon(id).charged;
+  }
+
+  /** The slide-9 bow draws its own string: slide 1's charge rings stay quiet. */
+  private get nineOwnsCharge(): boolean {
+    const id = this.setNineId;
+    return !!id && this.setNineLive && !!nineWeapon(id).charged;
+  }
+
+  private get plainTrigger(): boolean {
+    return this.elevenPlainTrigger || this.ninePlainTrigger;
+  }
+
+  private get layerOwnsCharge(): boolean {
+    return this.elevenOwnsCharge || this.nineOwnsCharge;
+  }
+
+  /** Slide 9's wheel recoil this frame (the rock and the chest stay put). */
+  private nineKick(): { x: number; y: number } {
+    if (!this.nineActive || isSpecial(this.level.mode)) return { x: 0, y: 0 };
+    return this.s9State!.kick;
   }
 
   private elevenHooks(): ElevenHooks {
@@ -988,6 +1034,17 @@ export class Game {
    * creeping on through the freeze the way it does on slide 11.
    */
   private elevenStop = 0;
+  /** Slide 9's hit-stop: its world runs at 12 % meanwhile (engine.ts `update`). */
+  private nineStop = 0;
+  /** Slide 9's shake amount (0..34); the screen moves ±0.35 of it. */
+  private nineShake = 0;
+  /** Slide 9's full-screen flash: strength and colour. */
+  private nineFlashA = 0;
+  private nineFlashRgb = '255,255,255';
+  /** Slide 9 remembers a click made up to 0.22 s before the gun is ready. */
+  private nineQueued = false;
+  /** How far the slide-9 bow was drawn when it was let go (0..1). */
+  private nineDraw = 0;
   private camY = 0;
   private tintA = 0;
   private tintRgb = '255,255,255';
@@ -1100,7 +1157,7 @@ export class Game {
   private press() {
     if (this.choosingBuff) return;
     this.holding = true;
-    const plain = this.elevenPlainTrigger;
+    const plain = this.plainTrigger;
     if (this.weapon.scope && !plain) {
       if (this.state === 'play' && this.cooldown <= 0 && this.ammoLeft > 0 && !this.aiming) {
         this.aiming = true;
@@ -1121,6 +1178,8 @@ export class Game {
       }
       return;
     }
+    // Slide 9 remembers a click made just before the gun is ready.
+    if (this.ninePlainTrigger && this.state === 'play' && this.cooldown > 0 && this.cooldown <= 0.22) this.nineQueued = true;
     this.shoot();
   }
 
@@ -1128,9 +1187,12 @@ export class Game {
     if (this.charging) {
       this.charging = false;
       this.chargeLevel = this.chargeT >= 1 ? 2 : this.chargeT >= 0.35 ? 1 : 0;
+      // Slide 9's bow is fully drawn after 1/3.4 s.
+      this.nineDraw = Math.min(1, this.chargeT * 3.4);
       this.chargeT = 0;
       this.shoot();
       this.chargeLevel = 0;
+      this.nineDraw = 0;
       return;
     }
     if (!this.aiming) return;
@@ -1673,36 +1735,53 @@ export class Game {
     const s9id = this.setNineId;
     if (s9id && this.setNineLive) {
       const fx = this.s9;
+      const nw = nineWeapon(s9id);
       fx.selectWeapon(s9id);
       fx.time = this.time;
       fx.syncWheel();
       const mx = CX + (offsets[0] ?? 0);
       const my = GUN_Y - 4;
       unlockNineAudio();
-      fx.fire(mx, my, -Math.PI / 2, w.charge ? this.chargeLevel : 0);
+      this.nineQueued = false;
+      // Only slide 9's bow is charged: it flies as far as it was drawn.
+      const charge = nw.charged ? this.nineDraw : 0;
+      fx.fire(mx, my, -Math.PI / 2, charge);
       const made = fx.takeShots();
       this.fireTwinBarrel(made,
-        () => fx.fire(CX + (offsets[1] ?? offsets[0] ?? 0), my, -Math.PI / 2, w.charge ? this.chargeLevel : 0),
+        () => fx.fireQuiet(CX + (offsets[1] ?? offsets[0] ?? 0), my, -Math.PI / 2, charge),
         () => fx.takeShots());
-      const plan = this.carrierPlan(n, made.length, w.speed);
+      // Slide 9's beams are hitscan: the carrier crosses the field at beam
+      // speed — or exactly as fast as the dragon's flame travels — so the
+      // score and the entry hole land with slide 9's own impact.
+      const beam = nw.mode === 'beam';
+      const delay = beam ? fx.beamDelay() : 0;
+      const reach = Math.max(1, my - (this.targetY + this.level.radius));
+      const beamSpeed = delay > 0 ? reach / delay : NINE_BEAM_SPEED;
+      // A round flies at slide 9's own speed (the pistol 1800 px/s, the sword
+      // 1300, the bow as fast as it was drawn), not at slide 1's.
+      const sp = made[0] ? Math.hypot(made[0].vx, made[0].vy) : Math.abs(vy);
+      const plan = this.carrierPlan(n, made.length, beam ? beamSpeed : sp);
       for (let i = 0; i < plan.length; i++) {
         const own = made[i];
+        const asBeam = beam && !own && plan[i].first;
         const proj: Proj = {
           x: CX + plan[i].ox, originX: CX + plan[i].ox, y: own ? own.y : my,
-          vx: vx + plan[i].vx, vy, big, tint, ...sizeBuff,
+          vx: vx + plan[i].vx, vy: asBeam ? -beamSpeed : -sp, big, tint, ...sizeBuff,
         };
         if (own) proj.setNine = own;
+        else if (asBeam) proj.setNineBeam = delay;
         else if (plan[i].first) proj.setNinePending = true;
         else proj.s9Ghost = true;
         this.projs.push(proj);
       }
-      this.recoil = w.recoil;
+      // Slide 9's recoil punch lives in its own artwork, and slide 9 has no
+      // camera kick: slide 1's 22 px gun jump and its kick are not part of it.
+      this.recoil = 0;
       this.muzzle = 0.07;
-      this.camY += FX[w.id].kick * 0.5;
-      this.cooldown = (w.spinup ? 0.3 - 0.235 * this.spin : w.cooldown)
+      // Slide 9's own trigger interval, plus slide 1's temporary buffs.
+      this.cooldown = nw.cooldown
         * (this.buff === 'speed' || this.treasureBuff === 'rapid' ? 0.5 : this.treasureBuff === 'mini' ? 0.6 : 1);
       if (isSpecial(this.level.mode) && this.ammoLeft === 0) this.reloadT = 0.65;
-      else if (w.id === 'snowball' && this.snowLoaded === 0 && this.ammoLeft > 0) this.reloadT = 0.85;
       return;
     }
     // ── Slide 11 (games/game-8) ────────────────────────────────────────────
@@ -2838,7 +2917,7 @@ export class Game {
     // Slide 11's shoulder caster locks on with its own three red dots, from its
     // own laser module (`drawElevenAim`); this game-3 tri-laser starts where
     // the game-3 cannon's module sits and floated beside the slide-11 gun.
-    if (this.setElevenLive) return;
+    if (this.setElevenLive || this.setNineLive) return;
     const t = this.time;
     const ch = this.charging ? Math.min(1, this.chargeT) : 0;
     const ap = { x: CX, y: this.targetY + this.level.radius - 18 };
@@ -2934,11 +3013,15 @@ export class Game {
     // came) still scores, but it is invisible on slide 11: no slide-1 bullet,
     // crack, burst or voice may appear where it lands either.
     const s11GhostHit = this.setElevenLive && p?.s11Ghost ? true : false;
+    // The same for slide 9: an extra pellet it never fired scores invisibly,
+    // and a beam's carrier only scores — slide 9's beam bursts on its own.
+    const s9GhostHit = this.setNineLive && p?.s9Ghost ? true : false;
+    const s9BeamHit = this.setNineLive && p?.setNineBeam !== undefined ? true : false;
     // Slide 7's own `hit()` calls `landed()`, which draws the stuck round with
     // `drawStuckItem()`; slide 1 keeps its collision entry (spikes, coins, the
     // clear counter) but must not paint a second round on top of it.
     const layerHit = !!(s6Hit || s7Hit || s7GhostHit || s9Hit || s11Hit || s9Pending || s11Pending || s11GhostHit
-      || s2Hit);
+      || s2Hit || s9GhostHit || s9BeamHit);
     // A slide-11 shot moves the wheel and the screen with slide 11's own
     // reaction only — the kick and squash, the warm flash, the jolt and the
     // hit-stop its `g.hit()` gives, sized by the weapon (a pistol round barely
@@ -2946,6 +3029,10 @@ export class Game {
     // reactions on top (bump, white flash, shake, camera kick, screen tint,
     // hit-stop) doubled or replaced it.
     const elevenHit = !!(s11Hit || s11Pending || s11GhostHit);
+    // A slide-9 shot moves the wheel and the screen with slide 9's own
+    // reaction only (its burst, recoil spring, jolt, flash and hit-stop).
+    const nineHit = !!(s9Hit || s9Pending || s9GhostHit || s9BeamHit);
+    const layerFeel = elevenHit || nineHit;
     const hue = s2Hit ? s2Hit.hue : p?.hue ?? (w.id === 'firework' ? gunState.rocketHue : w.id === 'yoyo' ? gunState.yoyoHue : undefined);
     if (w.id === 'firework' && hue !== undefined) gunState.rocketHue = hue;
     if (w.id === 'yoyo' && hue !== undefined) gunState.yoyoHue = hue;
@@ -2972,7 +3059,7 @@ export class Game {
     // running both sprayed a second, game-3 acid splash (and acid globs stuck
     // on the rim) or a second plasma blast, plus a second hit voice, over
     // every hit.
-    const ownHitFx = !elevenHit;
+    const ownHitFx = !layerFeel;
     // Dora airBlast hit FX (game-3)
     if (ownHitFx && w.id === 'dora') {
       const hp = this.worldPos(local, R);
@@ -3029,8 +3116,8 @@ export class Game {
       // A slide-11 charge shot (the Mega Buster's plasma, the caster's burst)
       // lands with slide 11's own hit-stop, light and blast; slide 1's freeze,
       // shock ring and white screen flash are not part of it.
-      if (!elevenHit) this.hitStop = Math.max(this.hitStop, big === 2 ? 0.12 : 0.04);
-      if (big === 2 && !elevenHit) {
+      if (!layerFeel) this.hitStop = Math.max(this.hitStop, big === 2 ? 0.12 : 0.04);
+      if (big === 2 && !layerFeel) {
         const hp0 = this.worldPos(local, R);
         this.sink.light(hp0.x, hp0.y, 360, '254,240,138', 0.5);
         this.sink.push({ x: hp0.x, y: hp0.y, vx: 0, vy: 0, life: 0.6, max: 0.6, size: 220, color: '125,211,252', kind: 'shock', rot: 0, vr: 0, g: 0 });
@@ -3065,7 +3152,7 @@ export class Game {
     this.score += pts;
     // Slide 1's one-size bump, white flash and shake belong to its own shots
     // (`elevenHit`: slide 11 already moved the wheel its own way).
-    if (!elevenHit) {
+    if (!layerFeel) {
       this.bump = 1;
       this.hitFlash = 1;
       this.shake = Math.max(this.shake, 6);
@@ -3099,10 +3186,11 @@ export class Game {
     // into the wheel face, drawn with slide 6's own recipe.
     else if (s6Hit) this.s6.impact(hx, hy, local);
     // Slide 9's own impact: its burst, its sound and the entry hole it paints.
-    else if (s9Hit) this.s9.impact(hx, hy, local);
+    else if (s9Hit) this.s9.impact(hx, hy, local, s9Hit);
     // Slide 11's own impact: its burst, its sound and the marks it leaves.
     else if (s11Hit) this.s11.impact(hx, hy, s11Hit);
-    else if (s9Pending) this.s9.block(hx, hy);
+    else if (s9BeamHit) this.s9.markBeam(local);
+    else if (s9Pending) this.s9.impact(hx, hy, local, undefined, p ? Math.atan2(p.vy, p.vx) : undefined);
     // A slide-11 shot that is not a round (a beam, the railgun's hitscan, the
     // sword's delayed slash) paints its own impact where it lands: slide 1's
     // carrier only scores it, without sparks slide 11 never shows.
@@ -3114,7 +3202,7 @@ export class Game {
     }
     this.slide2Impact(hx, hy);
     // Slide 11 already voiced the hit (its impact accent + its wood thunk).
-    this.applyPerks(w, hx, hy, R, !elevenHit, !elevenHit);
+    this.applyPerks(w, hx, hy, R, !layerFeel, !layerFeel);
     if (w.id === 'yoyo') {
       spawnYoyoStickBurst(
         this.getYoyoState(),
@@ -3152,7 +3240,7 @@ export class Game {
     // tint from the FX table). A slide-11 shot already got slide 11's own
     // from its `g.hit()`: a pistol round barely moves the screen there, while
     // these added a camera jolt, a 3 px+ shake and a colour wash to every hit.
-    if (!elevenHit) {
+    if (!layerFeel) {
       this.hitStop = Math.max(this.hitStop, fxp.hitstop);
       this.camY -= fxp.kick;
       this.shake = Math.max(this.shake, 3 + fxp.kick * 0.8);
@@ -3238,13 +3326,15 @@ export class Game {
       this.s7.release(p.setSeven);
     }
     if (this.setSixLive && p.setSix) this.s6.block(p.x, p.y);
-    if (this.setNineLive && p.setNine) this.s9.block(p.x, p.y);
+    if (this.setNineLive && p.setNine) this.s9.block(p.x, p.y, p.setNine);
     // A slide-11 shot ricochets off the obstacle with slide 11's own ping,
     // spark star and ring, and the blocked round goes. Then none of slide 11's
     // rounds may land after GAGAL! — carried or not — nor hang frozen in the
     // air over the fail screen.
     const elevenShot = this.setElevenLive && !!(p.setEleven || p.setElevenPending || p.s11Ghost);
     if (elevenShot) this.s11.block(p.x, p.y, p.setEleven);
+    // A slide-9 shot already burst its own way (`block()` above, or its beam).
+    const nineShot = this.setNineLive && !!(p.setNine || p.setNinePending || p.s9Ghost || p.setNineBeam !== undefined);
     if (this.s11State) this.s11State.sweepRounds();
     this.aiming = false;
     this.burnT = 0;
@@ -3270,7 +3360,7 @@ export class Game {
     // wasted on an obstacle (game-3 resolveHit: fail branch) — for slide 1's
     // own shot only: a slide-11 round already burst with `block()` above.
     if (this.weapon.id === 'dora') this.airBlast(p.x, p.y, 1.3);
-    if (this.weapon.id === 'pred' && !elevenShot) this.plasmaImpact(p.x, p.y, 1.3);
+    if (this.weapon.id === 'pred' && !elevenShot && !nineShot) this.plasmaImpact(p.x, p.y, 1.3);
     // Acid splashes off the obstacle (game-3 resolveHit fail branch).
     if (this.weapon.id === 'xeno' && !elevenShot) {
       this.splash(p.x, p.y + 10, 1.4);
@@ -4078,10 +4168,11 @@ export class Game {
     if (this.hitStop > 0) {
       this.hitStop -= dt;
       s *= 0.06;
-    } else if (this.elevenStop > 0) {
+    } else if (this.elevenStop > 0 || this.nineStop > 0) {
       s *= 0.12;
     }
     if (this.elevenStop > 0) this.elevenStop -= dt;
+    if (this.nineStop > 0) this.nineStop -= dt;
     this.camY *= Math.exp(-dt * 11);
     this.rt += dt;
     // ketapel: creak when starting to draw the band
@@ -4096,7 +4187,7 @@ export class Game {
       const stage = this.chargeT >= 1 ? 2 : this.chargeT >= 0.35 ? 1 : 0;
       // A slide-11 gun charges with its own whine, glow and lock (see
       // `elevenOwnsCharge`): slide 1's generic charge-up stays quiet then.
-      const slide1Charge = !this.elevenOwnsCharge;
+      const slide1Charge = !this.layerOwnsCharge;
       if (stage > this.chargeStage) {
         this.chargeStage = stage;
         if (slide1Charge) {
@@ -4143,6 +4234,9 @@ export class Game {
     }
     gunState.charge = this.charging ? Math.min(1, this.chargeT) : Math.max(0, gunState.charge - dt * 3);
     this.tintA = Math.max(0, this.tintA - dt * 1.6);
+    this.nineShake *= Math.pow(0.001, dt);
+    if (this.nineShake < 0.01) this.nineShake = 0;
+    this.nineFlashA = Math.max(0, this.nineFlashA - dt * 2.2);
     this.comboPop = Math.max(0, this.comboPop - dt * 4);
     // Tekken-style healthbar delayed red drain effect
     if (this.bossHpRed > this.bossHp) {
@@ -4203,7 +4297,7 @@ export class Game {
       // A slide-11 heat-ray / dragon keeps the burn's points, but the wheel
       // burns the slide-11 way (its own heat glow and burning marks): slide
       // 1's crackle, embers and +1 captions are not part of that look.
-      const burnLook = !this.setElevenLive;
+      const burnLook = !this.setElevenLive && !this.setNineLive;
       if (this.burnTick <= 0) {
         this.burnTick = 0.5;
         this.score += 1;
@@ -4443,6 +4537,10 @@ export class Game {
 
     this.cooldown -= dt;
     if (this.weapon.auto && !this.weapon.spinup && this.holding && this.state === 'play') this.shoot();
+    if (this.nineQueued && this.cooldown <= 0) {
+      this.nineQueued = false;
+      if (this.ninePlainTrigger && this.state === 'play') this.shoot();
+    }
     for (let i = this.beams.length - 1; i >= 0; i--) {
       this.beams[i].life -= dt;
       if (this.beams[i].life <= 0) this.beams.splice(i, 1);
@@ -4488,6 +4586,7 @@ export class Game {
           p.y = made[0].y;
         } else if (this.strandCarrier(p)) continue;
       }
+      if (p.setNineBeam !== undefined) continue; // the beam is the shot: nothing rides the carrier
       if (p.s9Ghost) continue; // extra pellet of a burst gun: slide 9 fired it
       if (p.setNine) {
         // Slide 9's round keeps its own frames (trail, sub-particles, spin);
@@ -4693,7 +4792,7 @@ export class Game {
         if (it.w !== 'xeno' && it.w !== 'dora' && it.w !== 'pred') continue;
         // A slide-11 hit keeps its own mark alive (slide 11's acid keeps eating,
         // its plasma scar keeps burning): no game-3 scar FX on top of it.
-        if (it.hideArt && this.setElevenLive) continue;
+        if (it.hideArt && (this.setElevenLive || this.setNineLive)) continue;
         const wp = this.worldPos(it.angle, this.level.radius);
         const hx = wp.x, hy = wp.y;
         if (it.w === 'xeno') {
@@ -4845,7 +4944,9 @@ export class Game {
         fx.time = this.time;
         fx.syncWheel();
       }
-      fx.update(dt);
+      // Slide 9's world slows to 12 % during a hit-stop; its timers do not.
+      const raw = dt * this.timeScale;
+      fx.update(this.hitStop > 0 || this.elevenStop > 0 || this.nineStop > 0 ? raw * 0.12 : raw, raw);
     }
     if (this.state === 'play' && this.slide2Void) {
       // Slide 2 keeps tearing voids open in the sky while the gun is live.
@@ -5005,12 +5106,14 @@ export class Game {
         if (p.hist.length > ghostN) p.hist.shift();
       }
       if (this.slide2Void) trailBlackHole2(this.s2, p.x, p.y, this.s2Hue);
-      const dist = Math.hypot(p.vx, p.vy) * s;
+      // A slide-9 instant beam is light: its carrier ignores the hit-stop.
+      const ps = p.setNineBeam === 0 ? dt * this.timeScale : s;
+      const dist = Math.hypot(p.vx, p.vy) * ps;
       const steps = Math.max(1, Math.ceil(dist / 7));
       let r: StepRes = { res: 'none' };
       for (let k = 0; k < steps; k++) {
-        p.x += (p.vx * s) / steps;
-        p.y += (p.vy * s) / steps;
+        p.x += (p.vx * ps) / steps;
+        p.y += (p.vy * ps) / steps;
         r = this.stepProj(p);
         if (r.res !== 'none') break;
       }
@@ -5269,6 +5372,83 @@ export class Game {
     drawProjectile(c, kind, l, this.time, age, embedded, kind === 'diamond' ? 'new' : undefined);
   }
 
+  /**
+   * Slide 9's own aim guide (engine.ts `drawAimGuide`): a dashed line in the
+   * weapon's accent from the muzzle to where it meets the wheel, and a
+   * breathing ring with four turning ticks on that spot.
+   */
+  private drawNineAim(c: CanvasRenderingContext2D) {
+    const id = this.setNineId;
+    if (!id || this.level.mode === 'treasure') return;
+    const acc = hexToRgbTriplet(nineWeapon(id).accent);
+    const t = this.time;
+    const R = this.level.radius;
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    for (const ox of this.gunOffsets) {
+      const x = CX + ox;
+      const hy = this.targetY + Math.sqrt(Math.max(0, R * R - ox * ox));
+      c.setLineDash([3, 12]);
+      c.lineDashOffset = -t * 60;
+      c.strokeStyle = `rgba(${acc},0.3)`;
+      c.lineWidth = 1.6;
+      c.beginPath();
+      c.moveTo(x, GUN_Y - 4);
+      c.lineTo(x, hy);
+      c.stroke();
+      c.setLineDash([]);
+      const r = 10 + Math.sin(t * 8) * 2;
+      c.strokeStyle = `rgba(${acc},0.8)`;
+      c.lineWidth = 1.8;
+      c.beginPath();
+      c.arc(x, hy, r, 0, TAU);
+      c.stroke();
+      c.beginPath();
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * TAU + t * 1.5;
+        c.moveTo(x + Math.cos(a) * (r + 3), hy + Math.sin(a) * (r + 3));
+        c.lineTo(x + Math.cos(a) * (r + 9), hy + Math.sin(a) * (r + 9));
+      }
+      c.stroke();
+    }
+    c.restore();
+  }
+
+  /**
+   * Slide 9's stand (engine.ts `drawPlayer`): the accent light pooled under
+   * the weapon and the dark pedestal its grip rests over.
+   */
+  private drawNinePedestal(c: CanvasRenderingContext2D, y0: number) {
+    const id = this.setNineId;
+    if (!id) return;
+    const acc = hexToRgbTriplet(nineWeapon(id).accent);
+    for (const ox of this.gunOffsets) {
+      const o = nineGunOrigin(id, CX + ox, y0);
+      // The left twin is drawn mirrored, so is its grip.
+      const px = ox < 0 ? 2 * (CX + ox) - o.x : o.x;
+      const py = o.y;
+      c.save();
+      c.globalCompositeOperation = 'lighter';
+      const g = c.createRadialGradient(px, py + 40, 4, px, py + 40, 120);
+      g.addColorStop(0, `rgba(${acc},0.3)`);
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      c.fillStyle = g;
+      c.beginPath();
+      c.ellipse(px, py + 42, 120, 32, 0, 0, TAU);
+      c.fill();
+      c.restore();
+      c.save();
+      c.fillStyle = '#121824';
+      c.strokeStyle = 'rgba(150,200,255,0.3)';
+      c.lineWidth = 2;
+      c.beginPath();
+      c.ellipse(px, py + 44, 68, 18, 0, 0, TAU);
+      c.fill();
+      c.stroke();
+      c.restore();
+    }
+  }
+
   private drawGunNow(c: CanvasRenderingContext2D) {
     const sinceShot = this.state === 'idle' ? 9 : this.rt - this.lastShotRT;
     const kerisCharging =
@@ -5305,6 +5485,9 @@ export class Game {
         for (const ox of this.gunOffsets) {
           drawKerisAimGuide(c, CX + ox, y0, this.targetY + R, this.time);
         }
+      } else if (this.setNineLive) {
+        // Slide 9 brings its own aim guide (see `drawNineAim`).
+        this.drawNineAim(c);
       } else if (!this.setElevenLive) {
         // Slide 11 shows no generic aim line: its own sights (the rifle's
         // laser, the caster's three dots, the beacon's designator) come from
@@ -5418,14 +5601,20 @@ export class Game {
       }
       : null;
     gunState.elevenState = this.setElevenId ? this.s11State?.state ?? null : null;
-    gunState.s9State = this.setNineId
+    const nineW = this.setNineId ? nineWeapon(this.setNineId) : null;
+    const since9 = Math.max(0, gunState.sinceShot);
+    gunState.s9State = nineW
       ? {
         t: this.time,
-        recoil: gunState.sinceShot >= 0.16 ? 0 : 1 - gunState.sinceShot / 0.16,
-        charge: gunState.charge,
-        cycle: Math.min(1, Math.max(0, gunState.sinceShot) / 0.35),
-        out: this.projs.filter((p) => p.setNine).length,
-        catchT: gunState.sinceShot,
+        // Slide 9's recoil: 1 → 0 at 6.4 per second.
+        recoil: Math.max(0, 1 - since9 * 6.4),
+        // The bow's string: drawn at 3.4 per second, let go at once.
+        charge: this.setNineLive && nineW.charged && this.charging ? Math.min(1, this.chargeT * 3.4) : 0,
+        // Its action (bolt, slide, pump, capacitor) cycles over its own interval.
+        cycle: nineW.cooldown > 0 ? Math.min(1, since9 / nineW.cooldown) : 1,
+        // Rounds still out — the disc stays out of the hand until it is caught.
+        out: this.s9State ? this.s9State.out() : 0,
+        catchT: this.s9State ? this.s9State.catchT : 9,
       }
       : null;
     const totalAmmo = this.level.ammo * this.maxAmmoMult;
@@ -5477,7 +5666,10 @@ export class Game {
     // The slide-11 gun stands still on its contact shadow here (slide 11's
     // own stance); menu cards keep their idle sway and no shadow.
     gunState.elevenStage = this.setElevenLive;
+    // The slide-9 gun stands still on slide 9's pedestal, in its accent light.
+    gunState.nineStage = this.setNineLive;
     try {
+      if (this.setNineLive) this.drawNinePedestal(c, y0);
       if (this.hasTwinGuns) {
         // Left gun mirrored and right gun normal: their grips/magazines face OUT,
         // matching the side-by-side AK-47 silhouette rather than overlapping.
@@ -5496,6 +5688,7 @@ export class Game {
       }
     } finally {
       gunState.elevenStage = false;
+      gunState.nineStage = false;
     }
 
   }
@@ -5723,7 +5916,18 @@ export class Game {
     if (this.setTwoLook) drawSetTwoStars(c, this.time);
 
     c.save();
+    // Slide 9's cinematic punch-zoom: the scene pushes in a touch on its heavy
+    // shots and hits (engine.ts `render`), around the wheel.
+    const nz = Math.min(1, this.nineShake / 30);
+    if (nz > 0.02) {
+      const zs = 1 + nz * nz * 0.03;
+      c.translate(CX, this.targetY);
+      c.scale(zs, zs);
+      c.translate(-CX, -this.targetY);
+    }
     if (this.shake > 0.1) c.translate(rand(-1, 1) * this.shake, rand(-1, 1) * this.shake);
+    // Slide 9's jolt: ±0.35 of its shake amount.
+    if (this.nineShake > 0.3) c.translate(rand(-1, 1) * this.nineShake * 0.35, rand(-1, 1) * this.nineShake * 0.35);
     c.translate(0, this.camY);
     // The per-weapon atmosphere wash slide 2 paints over its sky.
     if (this.setTwoLook) {
@@ -5740,8 +5944,10 @@ export class Game {
       const sc = wScale * (1 + this.bump * 0.035);
       // A slide-11 gun's hits kick, squash and shiver the wheel like slide 11's.
       const wm = this.elevenMotion();
+      // …and a slide-9 gun's hits shove it back on slide 9's recoil spring.
+      const nk = this.nineKick();
       c.save();
-      c.translate(CX + (wm?.dx ?? 0), this.targetY + this.bump * 7 + (wm?.dy ?? 0));
+      c.translate(CX + (wm?.dx ?? 0) + nk.x, this.targetY + this.bump * 7 + (wm?.dy ?? 0) + nk.y);
       c.scale(sc * (wm?.sx ?? 1), sc * (wm?.sy ?? 1));
       // Slide 2's soft ring of light behind the target.
       if (this.setTwoLook) {
@@ -6180,12 +6386,8 @@ export class Game {
       }
       if (p.setSevenPending) continue;
       if (p.s7Ghost) continue;
-      // Slide 9 draws its own rounds (and beams) from its own layer.
-      if (p.setNine) {
-        this.drawCarriedRound(c, p, () => this.s9.drawShot(c, p.setNine!));
-        continue;
-      }
-      if (p.setNinePending || p.s9Ghost) continue;
+      // Slide 9's rounds are painted with its own layer, on top of its sparks.
+      if (p.setNine || p.setNinePending || p.s9Ghost || p.setNineBeam !== undefined) continue;
       // …and so does slide 11.
       if (p.setEleven) {
         this.drawCarriedRound(c, p, () => this.s11.drawShot(c, p.setEleven!));
@@ -6546,8 +6748,21 @@ export class Game {
       }
     }
     if (this.s9State && (this.s9State.busy || this.setNineLive)) {
-      this.s9State.drawWheel(c, CX, this.targetY + this.bump * 7, this.level.radius, this.rot);
-      this.s9State.draw(c);
+      // A bad frame from slide 9's own art must not blank slide 1.
+      try {
+        const nk = this.nineKick();
+        this.s9State.drawWheel(c, CX + nk.x, this.targetY + this.bump * 7 + nk.y, this.level.radius, this.rot);
+        // Beams, sparks and free rounds, then the rounds slide 1 carries —
+        // slide 9 paints its rounds over their own sparks.
+        this.s9State.draw(c);
+        for (const p of this.projs) {
+          if (p.setNine && this.s9State.isCarried(p.setNine)) {
+            this.drawCarriedRound(c, p, () => this.s9.drawShot(c, p.setNine!));
+          }
+        }
+      } catch {
+        /* keep drawing slide 1 */
+      }
     }
     // Slide-7 SET 2..5 layer: wheel-space FX, then particles and FX objects.
     if (this.s7State && (this.s7State.busy || this.setSevenLive)) {
@@ -6634,6 +6849,15 @@ export class Game {
       c.save();
       c.globalCompositeOperation = 'lighter';
       c.fillStyle = tg2;
+      c.fillRect(0, 0, W, H);
+      c.restore();
+    }
+
+    // Slide 9's flash: the whole screen, additive, at 0.6 of its strength.
+    if (this.nineFlashA > 0.001) {
+      c.save();
+      c.globalCompositeOperation = 'lighter';
+      c.fillStyle = `rgba(${this.nineFlashRgb},${Math.min(1, this.nineFlashA * 0.6)})`;
       c.fillRect(0, 0, W, H);
       c.restore();
     }
@@ -6947,7 +7171,8 @@ export class Game {
     else if (wq.everyBonus) info = `🎰 lucky ${wq.everyBonus.n - (this.perkCount % wq.everyBonus.n)} lagi`;
     else if (wq.meltEvery && wq.meltEvery > 1) info = `✏️ hapus ${wq.meltEvery - (this.perkCount % wq.meltEvery)} lagi`;
     else if (wq.paint && this.lastPaint) info = '🎨 warna terakhir ●';
-    else if (wq.charge) info = this.charging ? `🔋 ${this.chargeT >= 1 ? 'FULL!' : Math.round(Math.min(1, this.chargeT) * 100) + '%'}` : '🔋 tahan untuk charge';
+    // A gun that fires on the press (a Slide 5 / Slide 7 card) has no charge to hold for.
+    else if (wq.charge && !this.plainTrigger) info = this.charging ? `🔋 ${this.chargeT >= 1 ? 'FULL!' : Math.round(Math.min(1, this.chargeT) * 100) + '%'}` : '🔋 tahan untuk charge';
     else if (wq.phaseSpikes) info = '👻 kebal duri';
     else if (wq.notes) info = `🎶 nada ${Math.min(10, Math.max(1, this.combo))}/10`;
     if (info) {
@@ -7005,7 +7230,7 @@ export class Game {
         c.fillStyle = '#ffffff';
         c.fillText(`LEVEL ${n}`, 0, 0);
       }
-      const plain = this.elevenPlainTrigger;
+      const plain = this.plainTrigger;
       const scope = this.weapon.scope && !plain, charge = this.weapon.charge && !plain;
       if (n <= 2 && (this.weapon.auto || scope || charge)) {
         c.font = font(13);
