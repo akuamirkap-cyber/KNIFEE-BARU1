@@ -108,16 +108,19 @@ test('every charged slide-7 gun lands with slide 7’s own stuck art', () => {
   }
 });
 
-test('a burst gun leaves one slide-7 shell, not one per pellet', () => {
+test('a slide-3 burst gun fires one round: one knife and one shell, not one per pellet', () => {
   const game = stage('sapphire');
+  const ammo = game.ammoLeft;
   game.shoot();
+  assert.equal(game.ammoLeft, ammo - 1, 'slide 3 spends one round a trigger');
+  assert.equal(game.projs.length, 1, 'its shards live inside that one round');
   for (let i = 0; i < 90 && game.projs.length > 0; i++) {
     game.state = 'play';
     game.cooldown = 9;
     game.update(DT);
   }
   const bullets = game.items.filter((it) => it.type === 'bullet');
-  assert.ok(bullets.length > 1, 'slide 1 still counts one hit per pellet');
-  assert.ok(bullets.every((it) => it.hideArt), 'but none of them paints a bullet');
-  assert.equal(game.s7.stuck.length, 1, 'slide 7 shows a single sapphire shell');
+  assert.equal(bullets.length, 1, 'one knife for one round, as slide 3 counts it');
+  assert.ok(bullets.every((it) => it.hideArt), 'and slide 1 paints no bullet over it');
+  assert.equal(game.s7.stuck.length, 1, 'slide 3 shows a single sapphire shell');
 });

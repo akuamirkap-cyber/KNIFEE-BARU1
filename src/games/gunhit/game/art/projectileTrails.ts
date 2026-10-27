@@ -1,5 +1,5 @@
 import type { ProjKind } from '../weapons';
-import { getGunEffect, isFixedClassicGun, type GunEffect } from './gunVariants';
+import { getGunEffect, hasNoNewShot, isFixedClassicGun, type GunEffect } from './gunVariants';
 
 type C = CanvasRenderingContext2D;
 
@@ -48,7 +48,7 @@ export function drawMaterialTrail(c: C, kind: ProjKind, effect: GunEffect = getG
   }
   // Classic shots keep the old simple tapered trail. This is strictly visual;
   // it does not alter the projectile's velocity, collision, or embedded depth.
-  if (effect === 'original' || isFixedClassicGun(kind)) return false;
+  if (effect === 'original' || isFixedClassicGun(kind) || hasNoNewShot(kind)) return false;
   if (kind === 'golden') {
     c.save(); c.globalCompositeOperation = 'lighter';
     const ribbon = c.createLinearGradient(0, 10, 0, 100);

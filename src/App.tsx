@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import {
   Flame,
-  Target,
   Sparkles,
   Layers,
   Compass,
@@ -21,7 +20,7 @@ import ScaledFrame from './components/ScaledFrame';
 import { SlideActivityProvider } from './games/shared/SlideActivity';
 import GunHitGame from './games/gunhit/App';
 
-type SlideId = 'gunhit' | 'game2' | 'game4' | 'game5' | 'game6' | 'game7' | 'game8';
+type SlideId = 'gunhit' | 'game2' | 'game4' | 'game6' | 'game8';
 
 export interface GameSlide {
   id: SlideId;
@@ -51,9 +50,7 @@ export default function App() {
     gunhit: 0,
     game2: 0,
     game4: 0,
-    game5: 0,
     game6: 0,
-    game7: 0,
     game8: 0,
   });
 
@@ -220,34 +217,8 @@ export default function App() {
       ),
     },
     {
-      id: 'game5',
-      slideNumber: 4,
-      name: 'Neon Ballistics',
-      fullName: 'ARSENAL - Neon Ballistics (Level 01)',
-      badge: '🔴 Neon Ballistics',
-      tagline: 'Satu roda, tujuh hit bersih, dan 17 senjata 2D dengan animasi presisi dan suara khas.',
-      weapons: ['🎯 17 Senjata', '✨ 7 Clean Hits', '🔊 Sfx Khusus', '📐 Presisi'],
-      icon: Target,
-      themeColor: 'text-rose-400',
-      borderColor: 'border-rose-500/40 hover:border-rose-400/80 shadow-rose-950/40',
-      accentBg: 'bg-rose-500/20 text-rose-400',
-      path: `${cleanBase}games/game-5/index.html`,
-      render: (active: boolean) => (
-        <iframe
-          ref={(el) => {
-            iframeRefs.current.game5 = el;
-          }}
-          key={`game5-${keys.game5}`}
-          src={`${cleanBase}games/game-5/index.html?standby=${active ? '0' : '1'}`}
-          title="Neon Ballistics"
-          className="w-full h-full border-0 bg-black block"
-          allow="autoplay; gamepad"
-        />
-      ),
-    },
-    {
       id: 'game6',
-      slideNumber: 5,
+      slideNumber: 4,
       name: 'Arsenal Wheel Hit Range',
       fullName: 'Arsenal Wheel Hit — 2D Weapon FX Range',
       badge: '🎯 Range Edition',
@@ -272,34 +243,8 @@ export default function App() {
       ),
     },
     {
-      id: 'game7',
-      slideNumber: 6,
-      name: 'Ballistics Lab',
-      fullName: 'Arsenal FX — 2D Ballistics Lab',
-      badge: '🧪 Ballistics Lab',
-      tagline: 'Galeri efek tembakan 2D: bentuk peluru, muzzle flash, impact, dan roda putar.',
-      weapons: ['💥 Shape FX', '⚡ Flash Engine', '💥 Impact Ring', '🎯 Roda Putar'],
-      icon: Target,
-      themeColor: 'text-indigo-400',
-      borderColor: 'border-indigo-500/40 hover:border-indigo-400/80 shadow-indigo-950/40',
-      accentBg: 'bg-indigo-500/20 text-indigo-400',
-      path: `${cleanBase}games/game-7/index.html`,
-      render: (active: boolean) => (
-        <iframe
-          ref={(el) => {
-            iframeRefs.current.game7 = el;
-          }}
-          key={`game7-${keys.game7}`}
-          src={`${cleanBase}games/game-7/index.html?standby=${active ? '0' : '1'}`}
-          title="Ballistics Lab"
-          className="w-full h-full border-0 bg-black block"
-          allow="autoplay; gamepad"
-        />
-      ),
-    },
-    {
       id: 'game8',
-      slideNumber: 7,
+      slideNumber: 5,
       name: 'Knife-Hit Arsenal FX',
       fullName: 'Arsenal FX – Knife-Hit Weapon Effects',
       badge: '🐉 Knife-Hit FX',

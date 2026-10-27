@@ -1,6 +1,6 @@
 import type { ProjKind } from '../weapons';
 import { drawProjectileExtra } from './projectiles2';
-import { getGunEffect, isFixedClassicGun, supportsGunVariants, type GunEffect } from './gunVariants';
+import { getGunEffect, hasNoNewShot, isFixedClassicGun, supportsGunVariants, type GunEffect } from './gunVariants';
 import { drawClassicProjectile, hasClassicProjectile } from './classicProjectiles';
 import { drawSlide3BazookaEmbedded, drawSlide3BazookaShell } from '../bazookaSlideFx';
 import { gunState } from './kit';
@@ -11,7 +11,8 @@ const rand = (a: number, b: number) => a + Math.random() * (b - a);
 // all projectiles: tip at y=0, base at y=len
 export function drawProjectile(c: CanvasRenderingContext2D, kind: ProjKind, len: number, t: number, age = 99, embedded = false, effect: GunEffect = getGunEffect(kind)) {
   c.save();
-  if (supportsGunVariants(kind) && (isFixedClassicGun(kind) || (effect === 'original' && hasClassicProjectile(kind)))) {
+  if (supportsGunVariants(kind) && (isFixedClassicGun(kind)
+    || ((effect === 'original' || (effect === 'new' && hasNoNewShot(kind))) && hasClassicProjectile(kind)))) {
     drawClassicProjectile(c, kind, len, t);
     c.restore();
     return;

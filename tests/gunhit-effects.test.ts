@@ -344,14 +344,22 @@ test('treasure coins form a supported heap inside the rim, without clipped crown
 });
 
 test('both barrels own their muzzle rings, glow and projectiles in rock and treasure', () => {
-  for (const [stage, mode] of [[3, 'boulder'], [6, 'treasure']] as const) {
-    const game = probe(stage, 'plasma', mode);
-    Object.assign(game, { twinGuns: true });
-    game.shoot();
-    assert.deepEqual(game.projs.map(p => p.x), [180, 240]);
-    assert.deepEqual(game.particles.filter(p => p.kind === 'ring').map(p => p.x), [180, 240]);
-    assert.deepEqual(game.lights.map(l => l.x), [180, 240]);
-    assert.equal(game.ammoLeft, 11);
+  // PLASMA fires slide 3's own shot by default now; this is about slide 1's
+  // classic twin-barrel muzzle, so its classic shot is pinned for the probe.
+  const plasmaEffect = getGunEffect('plasma');
+  setGunEffect('plasma', 'original');
+  try {
+    for (const [stage, mode] of [[3, 'boulder'], [6, 'treasure']] as const) {
+      const game = probe(stage, 'plasma', mode);
+      Object.assign(game, { twinGuns: true });
+      game.shoot();
+      assert.deepEqual(game.projs.map(p => p.x), [180, 240]);
+      assert.deepEqual(game.particles.filter(p => p.kind === 'ring').map(p => p.x), [180, 240]);
+      assert.deepEqual(game.lights.map(l => l.x), [180, 240]);
+      assert.equal(game.ammoLeft, 11);
+    }
+  } finally {
+    setGunEffect('plasma', plasmaEffect);
   }
 
   // PISTOL fires slide 9's own shot now; this assertion is about slide 1's
@@ -539,16 +547,22 @@ test('Golden Gun cycles its slide after a shot and while reloading without refil
 });
 
 test('Laser keeps its instant hit with the former beam; the BLACK HOLE classic round stays selectable', () => {
-  assert.equal(getGunEffect('laser'), 'original');
+  // Slide 3's LASER GUN and PLASMA GUN are the defaults now; the classic laser
+  // beam is still the "Sebelumnya" card, pinned here for the probe.
+  assert.equal(getGunEffect('laser'), 'set7');
+  assert.deepEqual(getGunEffectOptions('laser').map(o => o.id), ['original', 'set7']);
+  const laserEffect = getGunEffect('laser');
+  setGunEffect('laser', 'original');
   // The black hole now defaults to the slide-2 void shot; the compact classic
   // round is still there as the "Sebelumnya" effect.
   assert.equal(getGunEffect('blackhole'), 'new');
   assert.deepEqual(getGunEffectOptions('blackhole').map(o => o.id), ['original', 'new']);
-  assert.equal(getGunEffect('plasma'), 'original');
+  assert.equal(getGunEffect('plasma'), 'set7');
   assert.equal(getWeapon('laser').beam, true);
   assert.notEqual(getWeapon('blackhole').beam, true);
   const laser = probe(1, 'laser');
   laser.shoot();
+  setGunEffect('laser', laserEffect);
   assert.equal(laser.projs.length, 1, 'the fast projectile still handles collision');
   assert.equal(laser.beams.length, 1, 'the classic beam is a visual overlay');
   const voidShot = probe(1, 'blackhole');
@@ -1141,7 +1155,8 @@ test('Laser Beam, Freeze Ray, Ghost Gun, UFO Ray, and Rainbow Gun use upgraded r
     set: () => true,
   });
 
-  drawGun(ctx, 'laser', 210, 575, 0.5, 0, true);
+  // The classic LASER BEAM silhouette is its "Sebelumnya" design now.
+  drawGun(ctx, 'laser', 210, 575, 0.5, 0, true, undefined, 'original');
   assert.ok(rotations.some(r => Math.abs(r - (-0.22)) < 1e-4), 'Laser Beam uses contoured rear-flowing grip angle');
   assert.ok(stops.includes('#ff1744') && stops.includes('#ff5c7f'), 'Laser Beam renders 5-cell glowing crimson energy core');
 
@@ -1196,7 +1211,7 @@ test('pistol, ak47, laser, freeze, ghost, golden, ufo, rainbow, and gauntlet_can
         return true;
       },
     });
-    const slide1 = isSetNineDesignWeapon(w) ? 'original' as const : undefined;
+    const slide1 = isSetNineDesignWeapon(w) || w === 'laser' ? 'original' as const : undefined;
     drawGun(ctx, w, 210, 575, 0.5, 0, true, undefined, slide1);
     drawGun(ctx, w, 210, 575, 0.5, 0, true, undefined, slide1);
     assert.deepEqual(thickDarkStrokes, [], `${w} should not have thick dark contour outlines`);

@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 
 import { Game, makeLevel } from '../src/games/gunhit/game/Game';
 import { getWeapon } from '../src/games/gunhit/game/weapons';
-import { SET_SEVEN_DESIGN_WEAPONS, setGunEffect } from '../src/games/gunhit/game/art/gunVariants';
-import { setSevenIdFor } from '../src/games/gunhit/game/setSevenArt';
+import { SET_ONE_DESIGN_WEAPONS, SET_SEVEN_DESIGN_WEAPONS, setGunEffect } from '../src/games/gunhit/game/art/gunVariants';
+import { setSevenIdFor, slideThreeIdFor } from '../src/games/gunhit/game/setSevenArt';
 import { adoptSevenRound, sevenAmmo, sevenCooldown } from '../src/games/gunhit/game/setSevenShot';
 
 /** A context that accepts every call; nothing here inspects pixels. */
@@ -49,9 +49,9 @@ interface Carrier {
   s7Ghost?: boolean;
 }
 
-/** Fire one round of `id` with the slide-7 effect selected. */
-function fireWithSetSeven(id: string) {
-  setGunEffect(id as never, 'set7');
+/** Fire one round of `id` with its slide-3 card (SET 1 keeps the `new` id). */
+function fireWithSetSeven(id: string, effect: 'set7' | 'new' = 'set7') {
+  setGunEffect(id as never, effect);
   const game = probe(id);
   game.shoot();
   const carriers = game.projs as unknown as Carrier[];
@@ -78,14 +78,15 @@ function pendingRelease(game: Game & Record<string, unknown>, carrier: Carrier) 
   adoptSevenRound(carrier, made[0] as { vy: number }, Math.abs(carrier.vy), 1);
 }
 
-test('every slide-7 gun fires on slide 7’s own trigger interval', () => {
-  assert.equal(SET_SEVEN_DESIGN_WEAPONS.length, 63);
-  for (const id of SET_SEVEN_DESIGN_WEAPONS) {
-    const s7 = setSevenIdFor(id);
-    assert.ok(s7, `${id} maps to a slide-7 gun`);
+test('every slide-3 gun (all 71) fires on slide 3’s own trigger interval', () => {
+  assert.equal(SET_SEVEN_DESIGN_WEAPONS.length, 65);
+  assert.equal(SET_ONE_DESIGN_WEAPONS.length, 6);
+  for (const id of [...SET_SEVEN_DESIGN_WEAPONS, ...SET_ONE_DESIGN_WEAPONS]) {
+    const s7 = slideThreeIdFor(id);
+    assert.ok(s7, `${id} maps to a slide-3 gun`);
     const want = sevenCooldown(s7!);
-    assert.ok(want !== null && want > 0, `${s7} has a slide-7 cooldown`);
-    const { game } = fireWithSetSeven(id);
+    assert.ok(want !== null && want > 0, `${s7} has a slide-3 cooldown`);
+    const { game } = fireWithSetSeven(id, setSevenIdFor(id) ? 'set7' : 'new');
     assert.equal(
       (game as unknown as { cooldown: number }).cooldown,
       want,

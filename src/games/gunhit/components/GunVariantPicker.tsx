@@ -44,16 +44,16 @@ const DESCRIPTIONS: Description = {
 /**
  * Every imported card explains itself even without a hand-written paragraph:
  * it names the hub slide its shape, its shot and (where ported) its sound come
- * from, by the hub's current numbering — set11 = Slide 7, set9 = Slide 5,
- * set6 = Slide 2 (beam visuals only, no sounds), SET 1..5 = Slide 3, set2 =
+ * from, by the hub's current numbering — set11 = Slide 5, set9 = Slide 4,
+ * set6 = Slide 2 (beam visuals only, no sounds), SET 1..7 = Slide 3, set2 =
  * Firework 8-Gun (no longer in the hub). Every other card is a slide-1 design.
  */
 function describeFallback(weapon: Weapon, variant: GunVariant, label: string): string {
   if (variant === 'set11') {
-    return `${label}: ${weapon.name} dengan bentuk, efek tembakan dan suara asli dari slide 7`;
+    return `${label}: ${weapon.name} dengan bentuk, efek tembakan dan suara asli dari slide 5`;
   }
   if (variant === 'set9') {
-    return `${label}: ${weapon.name} dengan bentuk, efek tembakan dan suara asli dari slide 5`;
+    return `${label}: ${weapon.name} dengan bentuk, efek tembakan dan suara asli dari slide 4`;
   }
   if (variant === 'set6') {
     return `${label}: ${weapon.name} dengan bentuk dan efek sinar asli dari slide 2`;

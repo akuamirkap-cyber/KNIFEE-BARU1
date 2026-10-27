@@ -223,10 +223,10 @@ test('slide 11 is the newest design and shot of its 27 guns, and older cards sta
     assert.equal(hasSlide11Update(slide1), true, `${slide1} carries the green NEW badge`);
     const designs = getGunVariantOptions(slide1 as never);
     assert.equal(designs.at(-1)?.id, 'set11');
-    assert.equal(designs.at(-1)?.label, 'Slide 7');
+    assert.equal(designs.at(-1)?.label, 'Slide 5');
     const effects = getGunEffectOptions(slide1 as never);
     assert.equal(effects.at(-1)?.id, 'set11');
-    assert.equal(effects.at(-1)?.label, 'Slide 7');
+    assert.equal(effects.at(-1)?.label, 'Slide 5');
     if (isElevenNewSlide1Id(slide1)) {
       assert.deepEqual(designs.map((o) => o.id), ['set11'], `${slide1} never existed before slide 11`);
       assert.deepEqual(effects.map((o) => o.id), ['set11']);

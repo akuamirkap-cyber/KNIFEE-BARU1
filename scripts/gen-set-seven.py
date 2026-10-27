@@ -1,13 +1,13 @@
-"""Generate the slide-1 port of slide-7 (`Weapon Hit 71 Senjata`) SET 2..5
-weapon code, straight out of `games/game-4/src/game/Game.ts`.
+"""Generate the slide-1 port of slide 3 (`Weapon Hit 71 Senjata`, once called
+slide 7) weapon code, straight out of `games/game-4/src/game/Game.ts`.
 
 Two files are produced, both machine-copied so no number is retyped by hand:
 
-  src/games/gunhit/game/setSevenFire.ts  — the 65 fire recipes
+  src/games/gunhit/game/setSevenFire.ts  — the 71 fire recipes (SET 1..7)
   src/games/gunhit/game/setSevenAnim.ts  — the animation springs (recoil, slide,
                                            pump, heat, spin, charge…) plus the
                                            per-weapon idle ambience of the same
-                                           65 weapons
+                                           71 weapons
 
 The only edit is the receiver: slide 7's `this` (its `Game`) becomes the
 slide-1 host of `setSevenFx.ts`, which forwards particles, FX, timers, shake,
@@ -22,6 +22,10 @@ lines = game.split('\n')
 
 # slide-7 id -> fire method name
 TARGETS = {
+    # SET 1 — the first six (slide 1 used to fire these through its own port,
+    # `setOneWeapons.ts`; slide 3's own engine now fires them like the rest)
+    'golden': 'fireGolden', 'blackhole': 'fireBlackHole', 'ketapel': 'fireKetapel',
+    'sumpit': 'fireSumpit', 'shotgun': 'fireShotgun', 'soaker': 'fireSoaker',
     'snowball': 'fireSnowball', 'sniper': 'fireSniper', 'flame': 'fireFlame',
     'bubble': 'fireBubble', 'bamboo': 'fireBamboo', 'banana': 'fireBanana',
     'harpoon': 'fireHarpoon', 'chicken': 'fireChicken', 'confetti': 'fireConfetti',
@@ -133,7 +137,7 @@ fire_imports, _ = import_header(
 )
 
 fire_out = ['''/**
- * SET 2..7 fire recipes of slide 7 (`Weapon Hit 71 Senjata`), copied verbatim
+ * SET 1..7 fire recipes of slide 3 (`Weapon Hit 71 Senjata`), copied verbatim
  * from the real `games/game-4/src/game/Game.ts` by `scripts/gen-set-seven.py`
  * (run it again after slide 7 changes; never edit this file by hand).
  *
@@ -145,7 +149,7 @@ fire_out = ['''/**
  * paint to slide 1.
  */
 ''', fire_imports, "import type { SevenHost } from './setSevenFx';",
-       "import type { SevenId } from './setSevenArt';", local_consts(fire_code), '']
+       "import type { SlideThreeId } from './setSevenArt';", local_consts(fire_code), '']
 
 for wid, meth in TARGETS.items():
     body = bodies[wid]
@@ -156,11 +160,11 @@ for wid, meth in TARGETS.items():
     body = re.sub(r'\bthis\.', 'host.', body)
     fire_out.append('export function fire_%s(host: SevenHost, mx: number, my: number) {%s}\n' % (wid, body))
 
-fire_out.append('/** Slide-7 fire recipe per weapon (all 65 of SET 2..7). */')
+fire_out.append('/** Slide-3 fire recipe per weapon (all 71 of SET 1..7). */')
 fire_out.append('export const FIRE_RECIPES = {')
 for wid in TARGETS:
     fire_out.append('  %s: fire_%s,' % (wid, wid))
-fire_out.append('} as const satisfies Record<SevenId, (host: SevenHost, mx: number, my: number) => void>;\n')
+fire_out.append('} as const satisfies Record<SlideThreeId, (host: SevenHost, mx: number, my: number) => void>;\n')
 open(os.path.join(OUT, 'setSevenFire.ts'), 'w').write('\n'.join(fire_out))
 print('wrote setSevenFire.ts')
 
@@ -199,7 +203,7 @@ anim_code = anim_code.replace('GUN_X', 'host.gunX').replace('GUN_Y', 'host.gunY'
 anim_imports, _ = import_header(anim_code, "import * as S from '../../../../games/game-4/src/game/spawn7';")
 
 anim_out = ['''/**
- * Slide-7 weapon animation and idle ambience of SET 2..7, copied verbatim from
+ * Slide-3 weapon animation and idle ambience of SET 1..7, copied verbatim from
  * `games/game-4/src/game/Game.ts` by `scripts/gen-set-seven.py`.
  *
  * `updateSevenAnim` integrates the same springs slide 7 does (recoil, slide,
@@ -217,3 +221,69 @@ anim_out.append(anim_code)
 anim_out.append('}\n')
 open(os.path.join(OUT, 'setSevenAnim.ts'), 'w').write('\n'.join(anim_out))
 print('wrote setSevenAnim.ts')
+
+# ─────────────────── the wheel: stuck rounds and decals ─────────────────────
+# Slide 3's own `update()` keeps every stuck round alive (the smoke curling off
+# a rocket, the flame's embers, the black hole's lens and sparks) and every
+# decal dripping or smouldering; `drawDecals()` paints them. Copied verbatim.
+upd = next(i for i, l in enumerate(lines) if l.startswith('  update(dt: number) {'))
+
+
+def block_from(start_pred):
+    s = next(i for i in range(upd, len(lines)) if start_pred(lines[i]))
+    depth = 0
+    for i in range(s, len(lines)):
+        depth += lines[i].count('{') - lines[i].count('}')
+        if depth == 0:
+            return lines[s:i + 1]
+    raise SystemExit('unbalanced block')
+
+
+stuck_loop = '\n'.join(block_from(lambda l: l == '    for (const it of this.stuck) {'))
+decal_loop = '\n'.join(block_from(lambda l: l == '    for (const d of this.decals) {'))
+m = re.search(r'\n  private drawDecals\(ctx: Ctx\) \{', game)
+start = game.index('{', m.start())
+depth = 0
+for i in range(start, len(game)):
+    if game[i] == '{':
+        depth += 1
+    elif game[i] == '}':
+        depth -= 1
+        if depth == 0:
+            draw_decals = game[start + 1:i]
+            break
+
+
+def to_host(code: str) -> str:
+    code = re.sub(r'\bthis\.', 'host.', code)
+    return re.sub(r'\bSPIN\b', 'host.spin', code)
+
+
+wheel_code = '\n'.join([to_host(stuck_loop), to_host(decal_loop), to_host(draw_decals)])
+# string literals ('flame', 'goo'…) are weapon/decal names, not imports
+wheel_imports, _ = import_header(re.sub(r"'[^']*'", "''", wheel_code))
+wheel_out = ['''/**
+ * Slide-3 wheel life, copied verbatim from `games/game-4/src/game/Game.ts` by
+ * `scripts/gen-set-seven.py` (never edit by hand):
+ *
+ *   - `updateSevenStuck`  — the stuck-round loop of its `update()`: smoke off
+ *     the rockets, cannonballs and gauntlets, the flamethrower's embers, the
+ *     black hole's lens and sparks, the gravity orb's lens;
+ *   - `updateSevenDecals` — the decal loop: wet and goo stains dripping off
+ *     the turning rim, smouldering scorch marks;
+ *   - `drawSevenDecals`   — `drawDecals()`: poison, goo and wet stains.
+ *
+ * `SPIN` (slide 3's fixed wheel speed) is the live wheel speed of slide 1.
+ */''', wheel_imports, "import type { Ctx } from '../../../../games/game-4/src/game/core';",
+             "import type { WeaponId } from '../../../../games/game-4/src/game/weapons';",
+             "import type { SevenWheelHost } from './setSevenFx';", local_consts(wheel_code), '',
+             '/** Slide 3\'s stuck rounds, one frame (from its `update()`). */',
+             'export function updateSevenStuck(host: SevenWheelHost, dt: number) {',
+             '  const w = host.wheel;', to_host(stuck_loop), '}', '',
+             '/** Slide 3\'s decals, one frame (from its `update()`). */',
+             'export function updateSevenDecals(host: SevenWheelHost, dt: number) {',
+             '  const w = host.wheel;', '  const ps = host.particles;', to_host(decal_loop), '}', '',
+             '/** Slide 3\'s `drawDecals()`, in wheel space (rotated with the wheel). */',
+             'export function drawSevenDecals(host: SevenWheelHost, ctx: Ctx) {' + to_host(draw_decals) + '}', '']
+open(os.path.join(OUT, 'setSevenWheel.ts'), 'w').write('\n'.join(wheel_out))
+print('wrote setSevenWheel.ts')

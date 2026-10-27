@@ -18,10 +18,9 @@ import { SetOneFx, type SetOneHooks, type SetOneShot } from './setOneFx';
 import { fireSetOne, impactSetOne } from './setOneWeapons';
 import { setOneIdFor, type SetOneId } from './setOneArt';
 import { SetSevenFx, type SevenHooks } from './setSevenFx';
-import { buildSevenAnim, setSevenIdFor, type SevenId } from './setSevenArt';
+import { buildSevenAnim, slideThreeIdFor, type SlideThreeId } from './setSevenArt';
 import { FIRE_RECIPES } from './setSevenFire';
-import { updateSevenAnim } from './setSevenAnim';
-import { adoptSevenRound, sevenCooldown, sevenShotSpeed } from './setSevenShot';
+import { adoptSevenRound, isSevenBeam, sevenCarrierSpeed, sevenCooldown, sevenShotSpeed } from './setSevenShot';
 import { NINE_BEAM_SPEED, SetNineFx, unlockNineAudio, type NineHooks } from './setNineFx';
 import { SetSixFx, SIX_BEAM_SPEED, type SixHooks } from './setSixFx';
 import { setSixIdFor, sixCooldown, sixStateFor, type SixId } from './setSixArt';
@@ -41,9 +40,10 @@ import {
 } from './setTwoLook';
 import { setTwoGunFx, setTwoIdFor, type TwoWeapon } from './setTwoArt';
 import type { Bullet as NineBullet } from '../../../../games/game-6/src/game/types';
-import { newAnim } from '../../../../games/game-4/src/game/weapons';
+import { newAnim, type StuckItem } from '../../../../games/game-4/src/game/weapons';
+import { drawStuckItem } from '../../../../games/game-4/src/game/art';
 import { RECOIL_ROT } from '../../../../games/game-4/src/game/Game';
-import { easeOutCubic } from '../../../../games/game-4/src/game/core';
+import { drawSprite, glowSprite } from '../../../../games/game-4/src/game/core';
 import type { Projectile as SevenShot } from '../../../../games/game-4/src/game/projectiles';
 import { sfx2 } from './sfx2';
 import { sfx3 } from './sfx3';
@@ -351,7 +351,7 @@ const PAINT = ['244,63,94', '250,204,21', '34,211,238', '168,85,247', '74,222,12
 
 type ItemType = 'bullet' | 'old' | 'spike' | 'coin' | 'diamond_chest';
 interface AcidStuck { blobs: AcidStuckBlob[]; dripT: number; drip: number; seed: number }
-interface Item { angle: number; type: ItemType; age: number; w?: WeaponId; scale?: number; vel?: number; harvested?: boolean; tint?: string; big?: number; hits?: number; hue?: number; flash?: number; acid?: AcidStuck; hideArt?: boolean; setTwo?: boolean }
+interface Item { angle: number; type: ItemType; age: number; w?: WeaponId; scale?: number; vel?: number; harvested?: boolean; tint?: string; big?: number; hits?: number; hue?: number; flash?: number; acid?: AcidStuck; hideArt?: boolean; setTwo?: boolean; s7Half?: number; s7Protrude?: number }
 interface Proj { x: number; y: number; vx: number; vy: number; originX?: number; setSix?: true; setOne?: SetOneShot; setSeven?: SevenShot; setSevenPending?: boolean; s7Ghost?: boolean; hold?: number; setNine?: NineBullet; setNinePending?: boolean; s9Ghost?: boolean; setNineBeam?: number; setEleven?: ElevenProj; setElevenPending?: boolean; s11Wait?: boolean; s11Ghost?: boolean; setTwo?: TwoRound; pierced?: number; hist?: { x: number; y: number }[]; tint?: string; big?: number; mini?: boolean; giant?: boolean; hue?: number; flash?: number; spawnDelay?: number; wob?: number; lastEcho?: number; t?: number; trail?: { x: number; y: number }[] }
 type StepRes = { res: 'none' | 'stick' | 'fail' | 'hit'; spike?: boolean; local?: number };
 interface Light { x: number; y: number; r: number; rgb: string; life: number; max: number }
@@ -363,7 +363,7 @@ interface BossProjectile { x: number; y: number; vx: number; vy: number; rot: nu
 
 interface RockFragment { x: number; y: number; vx: number; vy: number; rot: number; vr: number; size: number; seed: number; life: number; max: number }
 /** Coordinates and angle are local to a rock cell (or to the open chest). */
-interface EmbeddedShot { x: number; y: number; angle: number; age: number; w: WeaponId; scale: number; big: number; tint?: string; cellId?: number; hue?: number; flash?: number }
+interface EmbeddedShot { x: number; y: number; angle: number; age: number; w: WeaponId; scale: number; big: number; tint?: string; cellId?: number; hue?: number; flash?: number; s7?: SevenShot }
 interface FallingCell { id: number; cx: number; cy: number; x: number; y: number; vx: number; vy: number; rot: number; vr: number; life: number; bullets: EmbeddedShot[] }
 interface Star { x: number; y: number; r: number; vx: number; baseY: number; age: number; life: number; max: number }
 interface BonusCoin { angle: number; radius: number; phase: number; taken: boolean }
@@ -663,14 +663,15 @@ export class Game {
   /**
    * True when the scene should wear slide 2's own look: its night sky, skyline,
    * stars, per-weapon atmosphere, wheel glow and its hand-drawn stuck rounds.
-   * That is the same guns that fire slide 2's shot — plus BLACK HOLE, whose
-   * "Baru" shot already is slide 2's collapsing singularity.
+   * That is the same guns that fire slide 2's shot — plus BLACK HOLE while its
+   * slide-2 cannon fires slide 2's collapsing singularity (with slide 3's staff
+   * the same card is slide 3's own shot, on slide 1's own stage).
    */
   private get setTwoLook(): boolean {
     const weapon = this.weapon;
     if (!weapon || this.setTwoId === null) return false;
     const effect = getGunEffect(weapon.id);
-    return effect === 'set2' || (weapon.id === 'blackhole' && effect === 'new');
+    return effect === 'set2' || (weapon.id === 'blackhole' && this.slide2Void);
   }
 
   /** Plays slide 2's own clear/fail voice; false when it has none to play. */
@@ -694,9 +695,13 @@ export class Game {
     return setOneIdFor(this.weapon.id);
   }
 
-  /** True when the equipped gun must fire the slide-7 SET 1 shot. */
+  /**
+   * True when the equipped gun must fire slide 1's own port of the SET 1 shot.
+   * Never any more: slide 3's own engine fires SET 1 exactly like SET 2..7
+   * (`setSevenLive`), with slide 3's own speed, trigger interval and impact.
+   */
   private get setOneLive(): boolean {
-    return this.setOneId !== null && getGunEffect(this.weapon.id) === 'new' && !this.slide2Void;
+    return false;
   }
 
   /** The slide-7 side effects that only the game itself can perform. */
@@ -723,7 +728,7 @@ export class Game {
    * springs and the real slide-7 shots (`projectiles2..5.ts`).
    */
   private s7State?: SetSevenFx;
-  private s7Weapon?: SevenId;
+  private s7Weapon?: SlideThreeId;
   private get s7(): SetSevenFx {
     const fx = (this.s7State ??= new SetSevenFx());
     fx.setHooks(this.s7Hooks());
@@ -968,25 +973,51 @@ export class Game {
     };
   }
 
-  /** The slide-7 weapon behind the equipped slide-1 gun, if any. */
-  private get setSevenId(): SevenId | null {
-    return setSevenIdFor(this.weapon.id);
+  /** The slide-3 weapon (SET 1..7) behind the equipped slide-1 gun, if any. */
+  private get setSevenId(): SlideThreeId | null {
+    return slideThreeIdFor(this.weapon.id);
   }
 
-  /** True when the equipped gun must fire slide 7's own SET 2..5 shot. */
+  /**
+   * True when the equipped gun fires slide 3's own shot: the "Slide 3" card.
+   * SET 1 keeps the `new` card id its saved choices use (BLACK HOLE only
+   * while slide 3's staff is its design — its slide-2 cannon fires slide 2's
+   * void on that card); SET 2..7 use `set7`.
+   */
   private get setSevenLive(): boolean {
-    return this.setSevenId !== null && getGunEffect(this.weapon.id) === 'set7';
+    const id = this.weapon.id;
+    if (this.setSevenId === null) return false;
+    if (setOneIdFor(id)) return getGunEffect(id) === 'new' && !this.slide2Void;
+    return getGunEffect(id) === 'set7';
+  }
+
+  /**
+   * Slide 3 fires on the press itself — its `pointerdown` calls `fire()` —
+   * once per press: no auto-fire while held, no spin-up, no scope, no held
+   * charge (its charged guns charge inside their own recipe), and a press
+   * while the gun is still cooling is simply ignored.
+   */
+  private get sevenPlainTrigger(): boolean {
+    return this.setSevenLive;
+  }
+
+  /** Slide 3's layer when its wheel is on screen (not the rock or the chest). */
+  private get sevenWheel(): SetSevenFx | null {
+    const fx = this.s7State;
+    if (!fx || isSpecial(this.level.mode) || !(fx.busy || this.setSevenLive)) return null;
+    return fx;
+  }
+
+  /** Slide 3's own hit-stop is running: its world moves at 22 %. */
+  private get sevenStopped(): boolean {
+    return !!this.s7State && this.s7State.feel.stop > 0;
   }
 
   /** The slide-7 side effects that need the slide-1 game to act. */
   private s7Hooks(): SevenHooks {
     return {
+      // Slide 3's shake: max(amount), e^-9t, ±amount a frame — slide 1's model.
       shake: (amount) => { this.shake = Math.max(this.shake, amount); },
-      hitStop: (seconds) => { this.hitStop = Math.max(this.hitStop, seconds); },
-      flash: (rgb, strength) => {
-        this.tintRgb = rgb;
-        this.tintA = Math.max(this.tintA, strength);
-      },
       paintWheel: (draw, R) => {
         const c = this.faceCtx;
         c.save();
@@ -995,11 +1026,6 @@ export class Game {
         c.clip();
         draw(c);
         c.restore();
-      },
-      wheelImpact: (power, color) => {
-        this.bump = Math.max(this.bump, Math.min(1.4, power / 7));
-        this.wheelFlash = Math.max(this.wheelFlash, 1);
-        this.wheelFlashRgb = color.replace('rgba(', '').replace(/,\s*$/, '');
       },
       wheel: () => ({ x: CX, y: this.targetY, R: this.level.radius, angle: this.rot }),
     };
@@ -1182,6 +1208,11 @@ export class Game {
     if (this.choosingBuff) return;
     this.holding = true;
     const plain = this.plainTrigger;
+    // Slide 3 fires on the press (see `sevenPlainTrigger`).
+    if (this.sevenPlainTrigger) {
+      this.shoot();
+      return;
+    }
     // Slide 7's shoulder caster only starts locking on (`elevenCasterTrigger`).
     if (this.elevenCasterTrigger) {
       if (this.state === 'play') this.s11.press();
@@ -1709,16 +1740,19 @@ export class Game {
     if (this.state !== 'play' || this.choosingBuff) return;
     if (this.cooldown > 0 || this.ammoLeft <= 0 || this.reloadT > 0) return;
     const w = this.weapon;
-    if (w.id === 'snowball' && this.snowLoaded <= 0) return;
-    const n = Math.min(w.burst ?? 1, this.ammoLeft);
+    // Slide 3 (`fire()`) spends one round a trigger: no snowball hopper, no
+    // burst, no held charge and no paint roulette — those are slide 1's.
+    const s3 = this.setSevenLive;
+    if (w.id === 'snowball' && this.snowLoaded <= 0 && !s3) return;
+    const n = s3 ? 1 : Math.min(w.burst ?? 1, this.ammoLeft);
     this.ammoLeft -= n;
-    if (w.id === 'snowball') this.snowLoaded = Math.max(0, Math.min(this.snowLoaded - n, this.ammoLeft));
+    if (w.id === 'snowball' && !s3) this.snowLoaded = Math.max(0, Math.min(this.snowLoaded - n, this.ammoLeft));
     this.lastShotRT = this.rt;
     this.stretchPlayed = false;
     gunState.shots++;
     this.events?.onShotFired?.(n);
-    const big = w.charge ? this.chargeLevel : 0;
-    const tint = w.paint ? pick(PAINT) : undefined;
+    const big = w.charge && !s3 ? this.chargeLevel : 0;
+    const tint = w.paint && !s3 ? pick(PAINT) : undefined;
     const vx = 0; // stars never steer the weapon or its shots
     const vy = -w.speed * this.speedMult;
     const offsets = this.gunOffsets;
@@ -1947,13 +1981,17 @@ export class Game {
         this.s7Weapon = s7id;
       }
       fx.weaponId = s7id;
-      fx.time = this.time;
       fx.syncWheel();
+      // Slide 3's muzzle is its gun's own origin (`fire()`: mx = GUN_X,
+      // my = GUN_Y, the point `drawWeaponLayer()` draws the gun from).
       const mx = CX + (offsets[0] ?? 0);
-      const my = GUN_Y - 4;
-      // Slide 7 counts the shot before the recipe runs (the firework cycle
-      // picks its rocket from that counter).
+      const my = GUN_Y;
+      // Slide 3 counts the shot before the recipe runs (the firework cycle
+      // picks its rocket from that counter) and reads its ammo after spending
+      // it (the soaker's tank gauge).
       fx.shotsFired++;
+      fx.ammoLeft = this.ammoLeft;
+      fx.ammoTotal = Math.max(1, this.level.ammo * this.maxAmmoMult);
       FIRE_RECIPES[s7id](fx, mx, my);
       const made = fx.takeShots();
       this.fireTwinBarrel(made,
@@ -1966,28 +2004,36 @@ export class Game {
       // holy light 900 instead of an instant 14000 beam…).
       const shotSpeed = made[0] ? sevenShotSpeed(made[0], w.speed) : w.speed;
       const shotVy = -shotSpeed * this.speedMult;
-      // Slide 1 still fires one round per pellet (that is how ammo, hits and
-      // the score have always worked). Slide 7's real shot rides the first
-      // one; the extra pellets of a burst gun stay invisible carriers.
-      const plan = this.carrierPlan(n, made.length, shotSpeed);
-      for (let i = 0; i < plan.length; i++) {
-        const own = made[i];
-        const proj: Proj = {
-          x: CX + plan[i].ox, originX: CX + plan[i].ox, y: own ? own.y : my,
-          vx: vx + plan[i].vx, vy: shotVy, big, tint,
-          hue: undefined, ...sizeBuff,
-        };
-        if (own) proj.setSeven = own;
-        else if (plan[i].first) proj.setSevenPending = true;
-        else proj.s7Ghost = true;
-        this.projs.push(proj);
+      // One carrier per round slide 3 made — every slide-3 recipe makes one a
+      // barrel — starting exactly where slide 3 put it and flying straight up
+      // at its own speed, as every slide-3 round does (no pellet spread: the
+      // shotgun's nine pellets and the sapphire's shards live inside their one
+      // round). A recipe that releases its round later (the staff's charge,
+      // the blowpipe's breath, the meteor's summon…) leaves one waiting
+      // carrier per barrel.
+      if (made.length) {
+        for (const own of made) {
+          this.projs.push({
+            x: own.x, originX: own.x, y: own.y, vx: 0,
+            vy: -sevenCarrierSpeed(own, w.speed) * this.speedMult,
+            big, tint, hue: undefined, ...sizeBuff, setSeven: own,
+          });
+        }
+      } else {
+        for (const ox of offsets.length ? offsets : [0]) {
+          this.projs.push({
+            x: CX + ox, originX: CX + ox, y: my, vx: 0, vy: shotVy,
+            big, tint, hue: undefined, ...sizeBuff, setSevenPending: true,
+          });
+        }
       }
       this.s7Last = made[0];
-      // The bookkeeping slide 1 still owns: cooldown, recoil, reloads. All the
-      // visible parts (muzzle, shake, smoke, casing) are slide 7's own recipe.
-      this.recoil = w.recoil;
+      // The bookkeeping slide 1 still owns: cooldown and reloads. Everything
+      // you see (muzzle, smoke, casing, the gun's own recoil spring, the
+      // shake) is slide 3's own recipe — slide 3 has no camera kick and no
+      // 22 px gun jump, so slide 1's are not added.
+      this.recoil = 0;
       this.muzzle = 0.07;
-      this.camY += FX[w.id].kick * 0.5;
       // Slide 7's own trigger interval: the bee fires every 0.50 s there, not
       // every 0.10 s; the obliterator every 0.80 s, not 0.95 s. Slide 1's
       // temporary buffs still apply on top, exactly like they do for its own
@@ -1996,7 +2042,6 @@ export class Game {
       this.cooldown = (s7Cool ?? (w.spinup ? 0.3 - 0.235 * this.spin : w.cooldown))
         * (this.buff === 'speed' || this.treasureBuff === 'rapid' ? 0.5 : this.treasureBuff === 'mini' ? 0.6 : 1);
       if (isSpecial(this.level.mode) && this.ammoLeft === 0) this.reloadT = 0.65;
-      else if (w.id === 'snowball' && this.snowLoaded === 0 && this.ammoLeft > 0) this.reloadT = 0.85;
       return;
     }
     const fw = w.id === 'firework' ? this.getFwState() : null;
@@ -2318,6 +2363,8 @@ export class Game {
   private trySave(p: Proj, spike: boolean): boolean {
     const w = this.weapon;
     if (this.savesLeft <= 0 || !w.saveFx) return false;
+    // A slide-3 gun has no rescue perk: a blocked round is GAGAL, as there.
+    if (this.setSevenLive) return false;
     if (w.saveSpikeOnly && !spike) return false;
     this.savesLeft--;
     const R = this.level.radius;
@@ -3132,7 +3179,13 @@ export class Game {
     // A slide-9 shot moves the wheel and the screen with slide 9's own
     // reaction only (its burst, recoil spring, jolt, flash and hit-stop).
     const nineHit = !!(s9Hit || s9Pending || s9GhostHit || s9BeamHit);
-    const layerFeel = elevenHit || nineHit;
+    // A slide-3 shot ("Slide 3" card) reacts the slide-3 way only: its own
+    // `hit()` already kicked the wheel's spring, flashed its rim, shook the
+    // screen and voiced the hit. Slide 1's bump, flashes, freeze, camera kick,
+    // combo beep, perks (slow, burn, chain, explode, lucky coin…) and the
+    // extra bursts of other slides' guns are not part of slide 3.
+    const sevenHit = this.setSevenLive && !!(p?.setSeven || p?.s7Ghost || p?.setSevenPending);
+    const layerFeel = elevenHit || nineHit || sevenHit;
     const hue = s2Hit ? s2Hit.hue : p?.hue ?? (w.id === 'firework' ? gunState.rocketHue : w.id === 'yoyo' ? gunState.yoyoHue : undefined);
     if (w.id === 'firework' && hue !== undefined) gunState.rocketHue = hue;
     if (w.id === 'yoyo' && hue !== undefined) gunState.yoyoHue = hue;
@@ -3245,9 +3298,9 @@ export class Game {
     }
     if (this.combo >= 2) {
       if (this.combo >= 3) pts *= 2;
-      // Slide 7 has no combo voice: its hits sound only like the weapon
-      // (impact accent + thunk). The combo still scores and still pops.
-      if (!elevenHit) sfx.combo(this.combo);
+      // Slide 5 (game-8) and slide 3 have no combo voice: their hits sound
+      // only like the weapon. The combo still scores and still pops.
+      if (!elevenHit && !sevenHit) sfx.combo(this.combo);
       this.comboPop = 1;
     }
     pts *= this.dmgMult; // POWER also doubles classic points / boss damage, not only rock damage.
@@ -3277,7 +3330,17 @@ export class Game {
     // Slide 7's own impact: cracks painted into the wheel face, the rim glow,
     // the burst, the stuck round and its sound — all from `projectiles*.ts`.
     else if (s7Hit) {
+      const before = new Set(this.s7.stuck);
       s7Hit.hit(local, hx, hy);
+      // Slide 3 decides how close the next round may come with its own numbers
+      // (`collide()`: the round's `half` + the stuck one's `half`, met at
+      // its `protrude`), so slide 1's entry keeps the stuck round's.
+      const landed = this.s7.stuck.find((it) => !before.has(it));
+      const entry = this.items[this.items.length - 1];
+      if (entry && entry.type === 'bullet') {
+        entry.s7Half = landed?.half ?? s7Hit.half;
+        entry.s7Protrude = landed?.protrude ?? 12;
+      }
       // Slide 7 keeps updating and drawing a round after it landed (the
       // shotgun's pellet shower, the minigun drum, the water jet…), so the
       // round goes back to slide 7's layer for the rest of its short life.
@@ -3304,8 +3367,9 @@ export class Game {
     }
     this.slide2Impact(hx, hy);
     // Slide 11 already voiced the hit (its impact accent + its wood thunk).
-    this.applyPerks(w, hx, hy, R, !layerFeel, !layerFeel);
-    if (w.id === 'yoyo') {
+    // Slide 3's guns have no perks at all.
+    if (!sevenHit) this.applyPerks(w, hx, hy, R, !layerFeel, !layerFeel);
+    if (w.id === 'yoyo' && !sevenHit) {
       spawnYoyoStickBurst(
         this.getYoyoState(),
         hx,
@@ -3315,7 +3379,7 @@ export class Game {
         GUN_Y - 10,
       );
     }
-    if (w.id === 'keris') {
+    if (w.id === 'keris' && !sevenHit) {
       spawnKerisImpact(
         this.getKerisState(),
         hx,
@@ -3325,10 +3389,10 @@ export class Game {
         local,
       );
     }
-    if (w.id === 'diamond') {
+    if (w.id === 'diamond' && !sevenHit) {
       spawnDiamondStickBurst(this.getDiamondState(), hx, hy, 1);
     }
-    if (w.id === 'bazooka') {
+    if (w.id === 'bazooka' && !sevenHit) {
       this.getBazookaState().onHit(hx, hy, 1.05);
     }
     const fxp = FX[w.id];
@@ -3665,7 +3729,15 @@ export class Game {
     // Exact pixel-perfect raycast radius matching the cutout silhouette of the generated boss head!
     const effectiveR = bType ? getExactBossRadius(bType, local, this.level.radius) : this.level.radius;
     const dist = Math.hypot(px, py);
-    if (dist > effectiveR + L + 4) return { res: 'none' };
+    // A slide-3 round ("Slide 3" card) meets the wheel the way slide 3's own
+    // `collide()` decides it: from its tip (`y - tip`, up to 54 px ahead of
+    // its centre), with its own `half`, against stuck rounds protruding up to
+    // 54 px — and with no slide-1 perk (no piercing old knives, no ghosting
+    // spikes).
+    const s3 = this.setSevenLive;
+    const shot7 = s3 ? p.setSeven : undefined;
+    const reach = dist - (shot7 ? shot7.tip : 0);
+    if (reach > effectiveR + L + 4 + (shot7 ? 60 : 0)) return { res: 'none' };
     if (isSpecial(this.level.mode)) return this.stepSpecialProjectile(p);
     const w = this.weapon;
     const R = effectiveR;
@@ -3685,12 +3757,19 @@ export class Game {
         const totalWeaponLen = it.type === 'old' ? BLEN : (getWeapon(it.w || 'pistol').stick + 12);
         const stickLen = (totalWeaponLen * 0.5) * sc; // hanya terlihat setengah peluru di luar target
         const otherHalf = (it.type === 'old' ? 4.5 : getWeapon(it.w || 'pistol').half) * sc;
-        const myHalf = w.half * (1 + (p.big ?? 0) * 0.3);
+        if (shot7 && it.s7Half !== undefined) {
+          // Two slide-3 rounds: blocked when their `half` angles overlap where
+          // the stuck one protrudes — slide 3's rule, number for number.
+          const lim = itemR + (it.s7Protrude ?? 12);
+          if (d < it.s7Half + shot7.half && reach <= lim && reach >= itemR - 8) return { res: 'fail', spike: false };
+          continue;
+        }
+        const myHalf = shot7 ? shot7.half * Math.max(50, itemR) : w.half * (1 + (p.big ?? 0) * 0.3);
         const contactArc = (myHalf + otherHalf) / Math.max(50, itemR);
 
         // Check if projectile is in the collision arc and depth of stuck bullet
-        if (d < contactArc && dist <= itemR + stickLen && dist >= itemR - 8) {
-          if (it.type === 'old' && (w.pierceOld || p.big === 2) && !p.pierced) {
+        if (d < contactArc && reach <= itemR + stickLen && reach >= itemR - 8) {
+          if (it.type === 'old' && !s3 && (w.pierceOld || p.big === 2) && !p.pierced) {
             p.pierced = 1;
             this.items = this.items.filter((x) => x !== it);
             const wa = it.angle + this.rot;
@@ -3703,7 +3782,7 @@ export class Game {
           return { res: 'fail', spike: false };
         }
       } else if (it.type === 'spike') {
-        if (this.spikeOffT > 0 || w.phaseSpikes) continue;
+        if (this.spikeOffT > 0 || (w.phaseSpikes && !s3)) continue;
         const myHalf = w.half * (1 + (p.big ?? 0) * 0.3);
         const spikeArc = (myHalf + 9 * SPIKE_SCALE) / Math.max(50, itemR);
 
@@ -3733,7 +3812,8 @@ export class Game {
         }
       }
     }
-    if (dist <= R) return { res: 'stick', local };
+    // Slide 3 lands its round the moment the tip crosses the rim.
+    if (reach <= R) return { res: 'stick', local };
     return { res: 'none' };
   }
 
@@ -3881,6 +3961,8 @@ export class Game {
       hue: p.hue ?? (this.weapon.id === 'firework' ? gunState.rocketHue : this.weapon.id === 'yoyo' ? gunState.yoyoHue : undefined),
       flash: this.weapon.id === 'firework' || this.weapon.id === 'yoyo' || this.weapon.id === 'diamond' || this.weapon.id === 'bazooka' ? 1 : undefined,
       scale: (1 + (p.big ?? 0) * 0.3) * projectileSizeMultiplier(this.weapon.id, !!p.mini, !!p.giant),
+      // A slide-3 round is drawn with slide 3's own stuck art (see `s7Embeds`).
+      s7: this.setSevenLive ? p.setSeven : undefined,
     };
   }
 
@@ -3919,6 +4001,7 @@ export class Game {
    * coin and chime still play).
    */
   private elevenSpecialImpact(p: Proj, x: number, y: number): boolean {
+    if (this.sevenSpecialImpact(p, x, y)) return true;
     if (!this.setElevenLive) return false;
     if (p.setEleven) {
       this.s11.impact(x, y, p.setEleven);
@@ -3927,6 +4010,36 @@ export class Game {
     // A beam's or the railgun's hidden knife: slide 7's own hit already played.
     return !!(p.setElevenPending || p.s11Ghost);
   }
+
+  /**
+   * A slide-3 round lands on the rock, the chest or the bonus ring with slide
+   * 3's own `hit()` — its burst, light, shake, hit-stop and voice — where it
+   * struck. Only the wheel-only half of that hit is skipped (cracks painted
+   * into the wheel, decals, the rim bounce, the round stuck in the wheel): the
+   * stuck round is kept instead, so the rock and the chest show slide 3's own
+   * stuck art (`drawStuckItem`) for it.
+   */
+  private sevenSpecialImpact(p: Proj, x: number, y: number): boolean {
+    if (!this.setSevenLive || !(p.setSeven || p.s7Ghost || p.setSevenPending)) return false;
+    const shot = p.setSeven;
+    if (!shot) return true;
+    const fx = this.s7;
+    fx.special = true;
+    fx.captured = null;
+    try {
+      shot.hit(norm(Math.atan2(y - this.targetY, x - CX) - this.rot), x, y);
+    } finally {
+      fx.special = isSpecial(this.level.mode);
+    }
+    if (fx.captured) this.s7Embeds.set(shot, fx.captured);
+    fx.captured = null;
+    fx.release(shot);
+    this.s7Last = undefined;
+    return true;
+  }
+
+  /** Slide 3's stuck round for each round embedded in the rock or the chest. */
+  private s7Embeds = new WeakMap<SevenShot, StuckItem>();
 
   /** Keep the normal weapon's signature hit effect, with the correct material palette. */
   private specialImpact(x: number, y: number, material: 'rock' | 'diamond' | 'gold') {
@@ -4049,6 +4162,19 @@ export class Game {
   }
 
   private drawEmbeddedShot(c: CanvasRenderingContext2D, shot: EmbeddedShot, x: number, y: number, surfaceOffset = 0) {
+    const item = shot.s7 ? this.s7Embeds.get(shot.s7) : undefined;
+    if (item) {
+      // Slide 3's own stuck round, standing out of the surface it struck the
+      // way it stands out of slide 3's wheel rim.
+      item.t = shot.age;
+      c.save();
+      c.translate(x, y);
+      c.rotate(shot.angle);
+      c.translate(surfaceOffset, 0);
+      drawStuckItem(c, item, 0, this.s7State?.time ?? this.time);
+      c.restore();
+      return;
+    }
     c.save();
     c.translate(x, y);
     c.rotate(shot.angle - Math.PI / 2);
@@ -4293,15 +4419,22 @@ export class Game {
     const stop11 = this.elevenStop > 0;
     const s11dt = (this.hitStop > 0 || stop11 ? dt * 0.12 : dt) * this.timeScale;
     const active11 = this.elevenActive;
+    // Slide 3's hit-stop (its `loop()`): every part of its world — the wheel,
+    // the rounds, the gun's cooldown, its particles and timers — runs at 22 %
+    // for that many real seconds.
+    const stop7 = this.sevenStopped;
     let s = dt * this.timeScale;
     if (this.hitStop > 0) {
       this.hitStop -= dt;
       s *= 0.06;
     } else if (this.elevenStop > 0 || this.nineStop > 0) {
       s *= 0.12;
+    } else if (stop7) {
+      s *= 0.22;
     }
     if (this.elevenStop > 0) this.elevenStop -= dt;
     if (this.nineStop > 0) this.nineStop -= dt;
+    if (stop7) this.s7State!.feel.stop -= dt;
     // The top of slide 7's frame: its wheel, its light, its gun and its screen
     // shake settle before any of its guns fire or its rounds land, so whatever
     // happens in this frame is seen at full strength, as on slide 7.
@@ -4312,7 +4445,7 @@ export class Game {
     this.camY *= Math.exp(-dt * 11);
     this.rt += dt;
     // ketapel: creak when starting to draw the band
-    if (this.weapon.id === 'slingshot' && !this.stretchPlayed && this.rt - this.lastShotRT > 0.16) {
+    if (this.weapon.id === 'slingshot' && !this.stretchPlayed && this.rt - this.lastShotRT > 0.16 && !this.setSevenLive) {
       this.stretchPlayed = true;
       if (this.state === 'play' && this.ammoLeft > 0) sfx4.stretch();
     }
@@ -4419,8 +4552,8 @@ export class Game {
       this.aimT += dt;
       if (this.state !== 'play') this.aiming = false;
     }
-    // minigun spin
-    if (this.weapon.spinup) {
+    // minigun spin (slide 1's trigger: slide 3's minigun fires one drum a press)
+    if (this.weapon.spinup && !this.sevenPlainTrigger) {
       if (this.holding && this.state === 'play') this.spin = Math.min(1, this.spin + dt * 1.1);
       else this.spin = Math.max(0, this.spin - dt * 1.6);
       if (this.holding && this.spin > 0.25 && this.state === 'play') this.shoot();
@@ -4674,9 +4807,10 @@ export class Game {
 
     // During slide 7's hit-stop its gun's cooldown and tap buffer run at 12 %,
     // like everything else in its `update()`.
-    const cdDt = stop11 && this.setElevenLive ? dt * 0.12 : dt;
+    const cdDt = stop11 && this.setElevenLive ? dt * 0.12 : stop7 && this.setSevenLive ? dt * 0.22 : dt;
     this.cooldown -= cdDt;
-    if (this.weapon.auto && !this.weapon.spinup && this.holding && this.state === 'play' && !this.elevenPlainTrigger) this.shoot();
+    if (this.weapon.auto && !this.weapon.spinup && this.holding && this.state === 'play' && !this.elevenPlainTrigger
+      && !this.sevenPlainTrigger) this.shoot();
     // Slide 7 fires its plain guns here, in its frame: again and again while
     // the trigger is held (every one of them, not only slide 1's automatics),
     // and once for a press that came up to 0.22 s before the gun was ready.
@@ -4694,6 +4828,28 @@ export class Game {
     for (let i = this.beams.length - 1; i >= 0; i--) {
       this.beams[i].life -= dt;
       if (this.beams[i].life <= 0) this.beams.splice(i, 1);
+    }
+    // Slide 3 (SET 1..7): its own clock (22 % in its hit-stop), its timers, its
+    // wheel's bounce and flash, its stuck rounds and decals, and — whenever
+    // its gun is the one on screen — its animation springs (recoil, pump,
+    // heat, spin, charge…) and the idle ambience that keeps the gun alive.
+    // It runs before the rounds move, as in slide 3's own `update()`: a round a
+    // timer releases this frame (the staff's orb, a beam after its charge)
+    // flies — and a beam lands — in this same frame.
+    if (this.s7State || this.setSevenId) {
+      const fx = this.s7;
+      const id = this.setSevenId;
+      if (id) {
+        fx.weaponId = id;
+        fx.syncWheel();
+      }
+      const variant = getGunVariant(this.weapon.id);
+      const ownGun = !!id && (this.setSevenLive || variant === 'set7' || variant === 'set1');
+      // On the rock, the chest and the bonus ring there is no wheel: whatever a
+      // slide-3 round still does after its burst (the shotgun's pellets, the
+      // minigun's drum) may not leave holes or drips on one.
+      fx.special = isSpecial(this.level.mode);
+      fx.update(stop7 ? dt * 0.22 : dt, ownGun);
     }
     const tw = this.weapon;
     for (const p of this.projs) {
@@ -4760,10 +4916,14 @@ export class Game {
         if (made.length) {
           p.setSeven = made[0];
           p.setSevenPending = false;
+          p.x = p.originX = made[0].x;
           p.y = made[0].y;
+          // The other barrel's round (twin guns) waits for its own carrier.
+          if (made.length > 1) this.s7.shots.push(...made.slice(1));
           // A charged staff releases its round later than the trigger; from
-          // that moment it travels at slide 7's speed, not slide 1's.
+          // that moment it travels at slide 3's speed (a beam lands at once).
           adoptSevenRound(p, made[0], Math.abs(p.vy) / this.speedMult, this.speedMult);
+          if (this.setSevenLive) p.vy = -sevenCarrierSpeed(made[0], Math.abs(p.vy)) * this.speedMult;
           this.s7Last = made[0];
         } else if (this.strandCarrier(p)) continue;
       }
@@ -4773,15 +4933,24 @@ export class Game {
         continue;
       }
       if (p.setSeven) {
-        // Slide 7's own frame: `update()` schedules its sub-projectiles (the
-        // minigun drum, the swarm…) and spawns its trail; slide 1 decides where
-        // the round actually is, so the position is handed over every frame.
+        // Slide 3's own frame: `update()` schedules its sub-projectiles (the
+        // minigun drum, the swarm…), spawns its trail and moves the round its
+        // own way — its speed, the RPG's and the gauntlet's acceleration, the
+        // bubble's wobble, the rocket homing on the wheel's centre. Slide 1's
+        // carrier then makes exactly that move through its own collision
+        // sweep (below), and the round is drawn where the carrier is.
         const shot = p.setSeven;
-        shot.x = p.x;
-        shot.y = p.y - shot.vy * s;
+        const x0 = p.x;
+        const y0 = p.y;
+        shot.x = x0;
+        shot.y = y0;
         shot.update(s);
-        shot.x = p.x;
-        shot.y = p.y;
+        if (this.setSevenLive && s > 0 && !isSevenBeam(shot)) {
+          p.vx = (shot.x - x0) / s;
+          p.vy = (shot.y - y0) / s;
+        }
+        shot.x = x0;
+        shot.y = y0;
         continue;
       }
       if (tw.id === 'firework') {
@@ -5045,19 +5214,6 @@ export class Game {
     }
     else setTwoGunFx(null);
     if (this.s1State && (this.s1State.busy || this.setOneLive)) this.s1State.update(dt);
-    // Slide-7 SET 2..5: its own clock, its animation springs (recoil, pump,
-    // heat, spin, charge…) and the idle ambience that keeps the gun alive.
-    if (this.s7State || this.setSevenId) {
-      const fx = this.s7;
-      const id = this.setSevenId;
-      if (id) {
-        fx.weaponId = id;
-        fx.time = this.time;
-        fx.syncWheel();
-        updateSevenAnim(fx, dt);
-      }
-      fx.update(dt);
-    }
     // Slide 11: its own clock, particles, rounds, marks and beams. A frame
     // that settled slide 7 at the top always runs the rest of its frame too.
     if (active11 || this.setElevenLive || (this.s11State && this.s11State.busy)) {
@@ -5158,7 +5314,7 @@ export class Game {
         this.time,
         CX,
         GUN_Y + this.recoil * 22,
-        this.weapon.id === 'keris' && (this.state === 'play' || this.state === 'intro'),
+        this.weapon.id === 'keris' && !this.setSevenLive && (this.state === 'play' || this.state === 'intro'),
       );
     }
     if (
@@ -5176,7 +5332,7 @@ export class Game {
       const diamond = this.getDiamondState();
       const stuckPins: { x: number; y: number }[] = [];
       for (const it of this.items) {
-        if (it.type === 'bullet' && it.w === 'diamond') {
+        if (it.type === 'bullet' && it.w === 'diamond' && !it.hideArt) {
           const worldA = it.angle + this.rot;
           const itemR = this.level.boss
             ? getExactBossRadius(this.level.style as BossType, it.angle, this.level.radius)
@@ -5192,7 +5348,7 @@ export class Game {
         diamond,
         dt,
         stuckPins,
-        this.weapon.id === 'diamond' && (this.state === 'play' || this.state === 'intro'),
+        this.weapon.id === 'diamond' && !this.setSevenLive && (this.state === 'play' || this.state === 'intro'),
         CX,
         GUN_Y,
       );
@@ -5211,14 +5367,14 @@ export class Game {
     ) {
       const bazooka = this.getBazookaState();
       const flyingShots =
-        this.weapon.id === 'bazooka'
+        this.weapon.id === 'bazooka' && !this.setSevenLive
           ? this.projs
               .filter((p) => !p.spawnDelay || p.spawnDelay <= 0)
               .map((p) => ({ x: p.x, y: p.y }))
           : [];
       bazooka.update(
         dt,
-        this.weapon.id === 'bazooka' && (this.state === 'play' || this.state === 'intro'),
+        this.weapon.id === 'bazooka' && !this.setSevenLive && (this.state === 'play' || this.state === 'intro'),
         CX,
         GUN_Y,
         flyingShots,
@@ -5637,7 +5793,10 @@ export class Game {
 
     // Two upright barrels get two straight sights; a star never steers either.
     if (this.state === 'play' || this.state === 'intro') {
-      if (this.weapon.id === 'firework' || this.weapon.id === 'yoyo') {
+      if (this.setSevenLive) {
+        // Slide 3 shows no aim line — only its sniper's own laser sight.
+        this.drawSevenSight(c, y0);
+      } else if (this.weapon.id === 'firework' || this.weapon.id === 'yoyo') {
         const nextHue =
           this.weapon.id === 'firework'
             ? firework8ShotHue(this.level?.n ?? 1, this.getFwState().shotIdx)
@@ -5744,9 +5903,16 @@ export class Game {
         && (this.weapon.id !== 'yoyo' || this.projs.length === 0));
     gunState.sinceShot = this.state === 'idle' ? 9 : this.rt - this.lastShotRT;
     gunState.reloadT = this.reloadT;
-    // Slide-7 SET 1..7 artwork: hand the live motion over to the real renderer.
-    gunState.s7Anim = this.setSevenId && getGunVariant(this.weapon.id) === 'set7'
-      ? buildSevenAnim({ sinceShot: gunState.sinceShot, charge: gunState.charge, spin: this.spin })
+    // Slide-3 SET 1..7 artwork: hand the live motion over to the real renderer.
+    // Firing slide 3's own shot, that is slide 3's own spring state (every
+    // weapon kicks, pumps and charges with its own numbers); otherwise the
+    // motion is rebuilt from the trigger age.
+    const s3Variant = getGunVariant(this.weapon.id);
+    // (SET 1's staff, pistol, slingshot… rebuild their own pose in
+    // `setOneArt.ts` when slide 3's shot is not the one firing.)
+    gunState.s7Anim = this.setSevenId && (s3Variant === 'set7' || (s3Variant === 'set1' && this.setSevenLive))
+      ? (this.setSevenLive && this.s7State ? this.s7State.anim
+        : buildSevenAnim({ sinceShot: gunState.sinceShot, charge: gunState.charge, spin: this.spin }))
       : null;
     // Slide 9's own draw state: its recoil curve, cycle, held charge and how
     // many of its rounds are still out (the identity disc uses that).
@@ -5802,7 +5968,10 @@ export class Game {
     gunState.servo = wId === 'pred' ? Math.max(0, 1 - gunState.sinceShot / 0.5) : 0;
     gunState.heat = wId === 'pred' ? Math.max(0, 1 - gunState.sinceShot / 0.6) : 0;
     const flash = Math.max(0, this.muzzle / 0.07);
-    if (this.weapon.id === 'firework') {
+    // Slide 3's own gun art brings its own light: the glows other slides paint
+    // under the firework, yo-yo, keris and diamond guns are not part of it.
+    const s3Art = gunState.s7Anim !== null;
+    if (this.weapon.id === 'firework' && !s3Art) {
       const fw = this.getFwState();
       const nextHue = firework8ShotHue(this.level?.n ?? 1, fw.shotIdx);
       gunState.rocketHue = nextHue;
@@ -5810,7 +5979,7 @@ export class Game {
         drawFirework8GunGlow(c, CX + ox, y0 + 50, nextHue, 0);
       }
     }
-    if (this.weapon.id === 'yoyo') {
+    if (this.weapon.id === 'yoyo' && !s3Art) {
       const yoyo = this.getYoyoState();
       const nextHue = yoyoAmmoHue(yoyo.shotIdx);
       gunState.yoyoHue = nextHue;
@@ -5818,7 +5987,7 @@ export class Game {
         drawYoyoSlideGunGlow(c, CX + ox, y0 + 60, nextHue, this.recoil);
       }
     }
-    if (this.weapon.id === 'keris') {
+    if (this.weapon.id === 'keris' && !s3Art) {
       c.save();
       c.fillStyle = 'rgba(0,0,0,0.42)';
       for (const ox of this.gunOffsets) {
@@ -5828,7 +5997,7 @@ export class Game {
       }
       c.restore();
     }
-    if (this.weapon.id === 'diamond') {
+    if (this.weapon.id === 'diamond' && !s3Art) {
       for (const ox of this.gunOffsets) {
         drawDiamondSlideGunGlow(c, CX + ox, y0 + 70, this.recoil);
       }
@@ -5852,6 +6021,7 @@ export class Game {
         for (const ox of this.gunOffsets) {
           c.save();
           c.translate(CX + ox, y0);
+          this.sevenGunPose(c);
           if (ox < 0) c.scale(-1, 1);
           drawGun(c, this.weapon.id, 0, 0, this.time, flash, ready, this.snowLoaded);
           c.restore();
@@ -5859,6 +6029,7 @@ export class Game {
       } else {
         c.save();
         c.translate(CX, y0);
+        this.sevenGunPose(c);
         drawGun(c, this.weapon.id, 0, 0, this.time, flash, ready, this.snowLoaded);
         c.restore();
       }
@@ -5869,11 +6040,64 @@ export class Game {
 
   }
 
+  /**
+   * Slide 3's `drawLaser()`: the sniper's red sight from just above its
+   * muzzle (riding its recoil) to the bottom of the wheel, flickering at 40 Hz,
+   * once the gun has settled 0.1 s after a shot.
+   */
+  private drawSevenSight(c: CanvasRenderingContext2D, y0: number) {
+    const a = this.s7State?.anim;
+    if (this.setSevenId !== 'sniper' || !a || this.state !== 'play' || a.fireT <= 0.1) return;
+    const y1 = this.targetY + (this.s7State?.feel.bumpY ?? 0) + this.level.radius - 1;
+    const fl = 0.85 + 0.15 * Math.sin(this.s7State!.time * 40);
+    for (const ox of this.gunOffsets) {
+      const x = CX + ox;
+      const ys = y0 - 8 + a.recoil * 14;
+      c.save();
+      c.globalCompositeOperation = 'lighter';
+      c.lineCap = 'round';
+      c.strokeStyle = `rgba(255,40,40,${(0.14 * fl).toFixed(3)})`;
+      c.lineWidth = 6;
+      c.beginPath();
+      c.moveTo(x, ys);
+      c.lineTo(x, y1);
+      c.stroke();
+      c.strokeStyle = `rgba(255,70,60,${(0.7 * fl).toFixed(3)})`;
+      c.lineWidth = 1.3;
+      c.stroke();
+      c.strokeStyle = 'rgba(255,215,205,0.55)';
+      c.lineWidth = 0.5;
+      c.stroke();
+      drawSprite(c, glowSprite('255,40,40'), x, y1, 30, 0.8 * fl);
+      drawSprite(c, glowSprite('255,230,220'), x, y1, 9, 0.9);
+      c.restore();
+    }
+  }
+
+  /**
+   * Slide 3's `drawWeaponLayer()` pose: the gun sways 1 px and bobs 1.2 px,
+   * kicks back 14 px per unit of its recoil spring and tips by its own
+   * `RECOIL_ROT` — slide 3's gun motion, in place of slide 1's 22 px jump.
+   */
+  private sevenGunPose(c: CanvasRenderingContext2D) {
+    const id = this.setSevenId;
+    const a = gunState.s7Anim;
+    if (!id || !a || !this.setSevenLive || this.state === 'idle') return;
+    const sway = Math.sin(this.s7State!.time * 1.6) * 1.0;
+    const bob = Math.sin(this.s7State!.time * 2.2) * 1.2;
+    c.translate(sway, bob + a.recoil * 14);
+    c.rotate(-a.recoil * (RECOIL_ROT[id] ?? 0));
+  }
+
   private forestBackdrop: HTMLCanvasElement | null = null;
   private forestBackdropKey = '';
 
   private drawForestBackground(c: CanvasRenderingContext2D, pal: (typeof STYLE_COLORS)[Style], R: number) {
-    if (this.state !== 'idle' && this.weapon.id === 'firework') {
+    // The firework, keris, diamond and bazooka scenes belong to the other
+    // slides those guns came from; slide 3's own shot plays on slide 1's
+    // stage like every other slide-3 gun.
+    const ownScene = !this.setSevenLive;
+    if (this.state !== 'idle' && this.weapon.id === 'firework' && ownScene) {
       drawFirework8Background(
         c,
         this.getFwState(),
@@ -5898,7 +6122,7 @@ export class Game {
       );
       return;
     }
-    if (this.state !== 'idle' && this.weapon.id === 'keris') {
+    if (this.state !== 'idle' && this.weapon.id === 'keris' && ownScene) {
       drawKerisSlideBackground(
         c,
         this.getKerisState(),
@@ -5912,7 +6136,7 @@ export class Game {
       );
       return;
     }
-    if (this.state !== 'idle' && this.weapon.id === 'diamond') {
+    if (this.state !== 'idle' && this.weapon.id === 'diamond' && ownScene) {
       drawDiamondSlideBackground(
         c,
         this.getDiamondState(),
@@ -5925,7 +6149,7 @@ export class Game {
       );
       return;
     }
-    if (this.state !== 'idle' && this.weapon.id === 'bazooka') {
+    if (this.state !== 'idle' && this.weapon.id === 'bazooka' && ownScene) {
       this.getBazookaState().drawBackground(c, W, H);
       return;
     }
@@ -6122,9 +6346,13 @@ export class Game {
       const wm = this.elevenMotion();
       // …and a slide-9 gun's hits shove it back on slide 9's recoil spring.
       const nk = this.nineKick();
+      // …and a slide-3 gun's hits bounce it on slide 3's own spring and pulse
+      // its size (the shrink and grow rays).
+      const s7w = this.sevenWheel;
+      const sf = s7w ? s7w.feel : null;
       c.save();
-      c.translate(CX + (wm?.dx ?? 0) + nk.x, this.targetY + this.bump * 7 + (wm?.dy ?? 0) + nk.y);
-      c.scale(sc * (wm?.sx ?? 1), sc * (wm?.sy ?? 1));
+      c.translate(CX + (wm?.dx ?? 0) + nk.x, this.targetY + this.bump * 7 + (wm?.dy ?? 0) + nk.y + (sf?.bumpY ?? 0));
+      c.scale(sc * (wm?.sx ?? 1) * (1 + (sf?.pulseS ?? 0)), sc * (wm?.sy ?? 1) * (1 + (sf?.pulseS ?? 0)));
       // Slide 2's soft ring of light behind the target.
       if (this.setTwoLook) {
         drawSetTwoWheelGlow(c, R, setTwoWheelHue(this.weapon.id, this.level.n), Math.min(1, this.bump / 14));
@@ -6304,6 +6532,9 @@ export class Game {
           c.restore();
         }
       }
+      // Slide 3 draws its ordinary stuck rounds before its wheel face, so the
+      // part buried in the wood is hidden.
+      if (s7w) s7w.drawStuck(c, R, false);
       const facePad = this.level.boss ? 40 : 4;
       if (this.rock) {
         this.rock.draw(c, R, this.time);
@@ -6320,6 +6551,14 @@ export class Game {
         c.restore();
       } else {
         c.drawImage(this.face, -R - facePad, -R - facePad, (R + facePad) * 2, (R + facePad) * 2);
+      }
+      // Slide 3's decals and its wheel-space FX (clipped to the wheel), then the
+      // rim flash its `wheelImpact()` leaves — slide 3's own wheel order.
+      let s7Frame: DOMMatrix | null = null;
+      if (s7w) {
+        s7w.drawFace(c, R);
+        s7w.drawRim(c, R);
+        s7Frame = typeof c.getTransform === 'function' ? c.getTransform() : null;
       }
       // Slide 2's artist draws every round it leaves in the target — shark jaws
       // clamped on the board, a stone buried in the bamboo, a shell rammed into
@@ -6340,6 +6579,8 @@ export class Game {
       }
       // Slide #8 Keris & Slide #3 Bazooka rim crater on top of target face
       for (const it of this.items) {
+        // Slide 3 / 5 / 4 paint their own rounds: no slide-1 crater under them.
+        if (it.hideArt) continue;
         if (it.type === 'bullet' && it.w === 'keris') {
           c.save();
           c.rotate(it.angle - Math.PI / 2);
@@ -6457,6 +6698,17 @@ export class Game {
       c.restore();
       }
       c.restore();
+      if (s7w) {
+        // Slide 3's lens bends what is already on screen (the gravity orb,
+        // the black hole), then its `front` stuck rounds go on top.
+        s7w.applyLens(c, this.canvas);
+        if (s7Frame && s7w.stuck.some((it) => it.front)) {
+          c.save();
+          c.setTransform(s7Frame);
+          s7w.drawStuck(c, R, true);
+          c.restore();
+        }
+      }
     }
 
     // fragments
@@ -6561,8 +6813,10 @@ export class Game {
         this.drawCarriedRound(c, p, () => this.s1.drawShot(c, p.setOne!, p.x, p.y));
         continue;
       }
-      // …and so are the SET 2..5 rounds.
+      // …and so are the SET 1..7 rounds, drawn where slide 1's carrier is now.
       if (p.setSeven) {
+        p.setSeven.x = p.x;
+        p.setSeven.y = p.y;
         this.drawCarriedRound(c, p, () => p.setSeven!.draw(c));
         continue;
       }
@@ -6935,9 +7189,9 @@ export class Game {
         /* keep drawing slide 1 */
       }
     }
-    // Slide-7 SET 2..5 layer: wheel-space FX, then particles and FX objects.
+    // Slide-3 layer: its particles and FX objects (its wheel was drawn with
+    // the wheel itself).
     if (this.s7State && (this.s7State.busy || this.setSevenLive)) {
-      this.s7State.drawWheel(c, CX, this.targetY + this.bump * 7, this.level.radius, this.rot);
       this.s7State.draw(c);
       this.s7State.drawFront(c);
     }
@@ -7011,6 +7265,9 @@ export class Game {
       c.restore();
     }
     c.restore();
+
+    // Slide 3's own screen flash (`flashScreen()`): a flat fill at its strength.
+    if (this.s7State) this.s7State.drawFlash(c, W, H);
 
     // weapon-colored impact tint
     if (this.tintA > 0) {
@@ -7331,9 +7588,13 @@ export class Game {
     c.textAlign = 'right';
     c.font = font(12);
     c.fillStyle = this.weapon.energy ? this.weapon.color : 'rgba(255,255,255,0.6)';
-    c.fillText(`${this.weapon.name}${this.hasTwinGuns ? ' ×2' : ''} • ${this.weapon.perk}`, W - 14, H - 16);
+    // A slide-3 gun carries no slide-1 perk: the label names its card instead.
+    const s3Card = this.sevenPlainTrigger;
+    c.fillText(`${this.weapon.name}${this.hasTwinGuns ? ' ×2' : ''} • ${s3Card ? 'SLIDE 3' : this.weapon.perk}`, W - 14, H - 16);
     const wq = this.weapon;
     let info = '';
+    if (s3Card) { /* slide 3: no perk counters, no charge meter, no spin-up */ }
+    else
     if (wq.saves) info = `${wq.emoji} NYAWA: ${'●'.repeat(this.savesLeft)}${'○'.repeat(Math.max(0, wq.saves - this.savesLeft))}`;
     else if (wq.chronoEvery) info = `⏱ ${wq.chronoEvery - (this.perkCount % wq.chronoEvery)} lagi`;
     else if (wq.reverseEvery) info = `🌍 ${wq.reverseEvery - (this.perkCount % wq.reverseEvery)} lagi`;
@@ -7357,7 +7618,7 @@ export class Game {
       c.fillStyle = wq.color;
       c.fillText(info, W - 14, H - 36);
     }
-    if (wq.spinup) {
+    if (wq.spinup && !s3Card) {
       c.fillStyle = 'rgba(255,255,255,0.15)';
       c.fillRect(W - 114, H - 46, 100, 7);
       c.fillStyle = this.spin > 0.25 ? '#22c55e' : '#f59e0b';
@@ -7409,7 +7670,7 @@ export class Game {
       }
       const plain = this.plainTrigger;
       const scope = this.weapon.scope && !plain, charge = this.weapon.charge && !plain;
-      if (n <= 2 && (this.weapon.auto || scope || charge)) {
+      if (n <= 2 && !this.sevenPlainTrigger && (this.weapon.auto || scope || charge)) {
         c.font = font(13);
         c.fillStyle = '#ffd23f';
         const hint = charge ? 'TAP = TEMBAK, TAHAN = CHARGE x4!' : scope ? 'TAHAN = BIDIK SLOW-MO, LEPAS = TEMBAK' : this.weapon.spinup ? 'TAHAN LAYAR UNTUK MEMUTAR LARAS!' : 'TAHAN LAYAR / SPASI = AUTO-FIRE';

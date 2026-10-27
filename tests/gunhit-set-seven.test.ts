@@ -121,18 +121,21 @@ test('slide 7’s animation springs and idle ambience drive the equipped gun', (
   assert.ok(fx.fx.length + fx.particles.list.length > 0, 'the storm crackles around its coil');
 });
 
-test('slide 7 designs and shots are available for all 65, and stay optional', () => {
-  const RETIRED = ['plasma', 'laser'];
-  for (const id of RETIRED) {
-    assert.equal(getGunVariant(id), 'original');
-    assert.equal(getGunEffect(id), 'original');
+test('slide 3 designs and shots are available for all 65 SET 2..7 guns, and stay optional', () => {
+  // PLASMA and LASER used to be locked to their classic card; they carry slide
+  // 3's own guns now (user request), with the classic look still pickable.
+  for (const id of ['plasma', 'laser'] as const) {
+    assert.equal(getGunVariant(id), 'set7');
+    assert.equal(getGunEffect(id), 'set7');
+    assert.deepEqual(getGunVariantOptions(id).map((o) => o.id), ['original', 'set7']);
+    assert.deepEqual(getGunEffectOptions(id).map((o) => o.id), ['original', 'set7']);
   }
   for (const [slide1, seven] of Object.entries(SET_SEVEN_BY_SLIDE1_ID)) {
-    if (RETIRED.includes(slide1)) continue;
+    assert.ok(SET_SEVEN_SETS[seven] >= 2, `${seven} is SET 2..7`);
     assert.ok(EDITABLE_WEAPONS.includes(slide1 as never), `${slide1} is selectable`);
-    const label = `Set ${SET_SEVEN_SETS[seven]}`;
-    // The slide-7 card always exists, labelled with the weapon's own set, and
-    // the slide-1 effects stay pickable next to it.
+    const label = 'Slide 3';
+    // The slide-3 card always exists, labelled with the hub slide it comes
+    // from, and the slide-1 effects stay pickable next to it.
     const designs = getGunVariantOptions(slide1 as never);
     const design = designs.find((o) => o.id === 'set7');
     assert.ok(design, `${slide1} keeps its slide-7 design card`);

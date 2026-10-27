@@ -8,6 +8,7 @@
  */
 import { drawWeapon } from '../../../../games/game-4/src/game/weaponArt';
 import { newAnim, type WeaponAnim, type WeaponId } from '../../../../games/game-4/src/game/weapons';
+import { setOneIdFor, type SetOneId } from './setOneArt';
 
 /** Which slide-7 set each ported weapon comes from. */
 export const SET_SEVEN_SETS = {
@@ -113,6 +114,17 @@ export function setSevenIdFor(id: string): SevenId | null {
   return (SET_SEVEN_BY_SLIDE1_ID as Record<string, SevenId>)[id] ?? null;
 }
 
+/**
+ * Every slide-3 weapon slide 1 fires with slide 3's own engine: SET 2..7 above
+ * plus the six SET 1 guns (`setOneArt.ts`), all 71 of `Weapon Hit 71 Senjata`.
+ */
+export type SlideThreeId = SevenId | SetOneId;
+
+/** The slide-3 weapon behind a slide-1 gun (SET 1..7), or null. */
+export function slideThreeIdFor(id: string): SlideThreeId | null {
+  return setSevenIdFor(id) ?? setOneIdFor(id);
+}
+
 /** Is this a slide-7 id of SET 2..5? */
 export function isSevenId(id: string): id is SevenId {
   return id in SET_SEVEN_IDS_SET;
@@ -131,7 +143,7 @@ export function slide1IdFor(id: SevenId): SevenSlide1Id {
  */
 export function drawSetSevenGun(
   c: CanvasRenderingContext2D,
-  id: SevenId,
+  id: SlideThreeId,
   cx: number,
   y0: number,
   time: number,

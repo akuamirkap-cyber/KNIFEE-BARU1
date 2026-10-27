@@ -134,6 +134,13 @@ export function drawGun(
   // same muzzle origin with the same visible animation ranges (slide travel,
   // pump, pouch, charge meter, tank gauge).
   const setOneId = isSetOneDesignWeapon(id) && variant === 'set1' ? setOneIdFor(id) : null;
+  if (setOneId && supportsGunVariants(id) && gunState.s7Anim) {
+    // The live gun: slide 3's own springs (see `gunState.s7Anim`); slide 3's
+    // own recipe already threw its muzzle flash.
+    drawSetSevenGun(c, setOneId, cx, y0, t, gunState.s7Anim);
+    c.restore();
+    return;
+  }
   if (setOneId && supportsGunVariants(id)) {
     drawSetOneGun(c, setOneId, cx, y0, t, {
       sinceShot: gunState.sinceShot,
