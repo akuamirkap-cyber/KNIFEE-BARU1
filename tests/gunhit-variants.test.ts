@@ -126,16 +126,22 @@ test('user loadouts use the requested classic/new combination; only real alterna
   assert.deepEqual(getGunVariantOptions('ak47').map(v => v.id), ['original', 'set9', 'set11']);
   assert.deepEqual(getGunVariantOptions('pistol').map(v => v.id), ['original', 'set9', 'set11']);
   assert.deepEqual(getGunVariantOptions('sniper').map(v => v.id), ['original', 'set7', 'set9', 'set11']);
-  assert.deepEqual(getGunVariantOptions('railgun').map(v => v.id), ['original', 'set7', 'set9', 'set11']);
+  // RAILGUN also has slide 6's beam, filed between its slide-1 shape and slide 7.
+  assert.deepEqual(getGunVariantOptions('railgun').map(v => v.id), ['original', 'set6', 'set7', 'set9', 'set11']);
   assert.deepEqual(getGunVariantOptions('dragon').map(v => v.label),
     ['Sebelumnya', 'Sekarang', 'Terbaru', 'Set 4', 'Slide 9', 'Slide 11']);
   // Slide 11 supersedes slide 9 for the eight slide-9 guns it also adopted;
   // YAUTJA is the one slide-9 gun slide 11 never had, so it keeps one card.
   for (const id of ['longbow', 'mp5', 'tesla_rifle', 'ion_smg', 'phaser',
-    'identity_disc', 'proton_pack', 'heat_ray'] as const) {
+    'identity_disc', 'proton_pack'] as const) {
     assert.deepEqual(getGunVariantOptions(id).map(v => v.id), ['set9', 'set11']);
     assert.deepEqual(getGunEffectOptions(id).map(v => v.id), ['set9', 'set11']);
   }
+  // HEAT RAY existed on slide 6 first (`Tripod Heat-Ray`), so slide 6's card
+  // opens the list: the earliest look of the gun, then slide 9, then slide 11.
+  assert.deepEqual(getGunVariantOptions('heat_ray').map(v => v.id), ['set6', 'set9', 'set11']);
+  assert.deepEqual(getGunEffectOptions('heat_ray').map(v => v.id), ['set6', 'set9', 'set11']);
+  assert.deepEqual(getGunVariantOptions('gauntlet_cannon').map(v => v.id), ['original', 'set6', 'set7', 'set9', 'set11']);
   for (const id of ['yautja'] as const) {
     assert.deepEqual(getGunVariantOptions(id).map(v => v.id), ['set9']);
     assert.deepEqual(getGunEffectOptions(id).map(v => v.id), ['set9']);
@@ -152,7 +158,7 @@ test('user loadouts use the requested classic/new combination; only real alterna
     assert.deepEqual(getGunEffectOptions(id).map(v => v.id), ['set11']);
   }
   assert.deepEqual(getGunEffectOptions('pistol').map(v => v.id), ['original', 'new', 'set9', 'set11']);
-  assert.deepEqual(getGunEffectOptions('railgun').map(v => v.id), ['original', 'new', 'set7', 'set9', 'set11']);
+  assert.deepEqual(getGunEffectOptions('railgun').map(v => v.id), ['original', 'new', 'set6', 'set7', 'set9', 'set11']);
   assert.deepEqual(getGunEffectOptions('pistol').map(v => v.label), ['Sebelumnya', 'Baru', 'Slide 9', 'Slide 11']);
   assert.equal(getGunMetrics('honey', 'latest').span, getGunMetrics('honey', 'current').span);
 });

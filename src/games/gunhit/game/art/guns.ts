@@ -12,6 +12,7 @@ import { drawSetTwoGun, restTwoState, setTwoIdFor } from '../setTwoArt';
 import { drawSetSevenGun, setSevenIdFor } from '../setSevenArt';
 import { restSevenAnim } from '../setSevenArt';
 import { drawSetNineGun, isNineNewWeapon, restNineState, setNineIdFor } from '../setNineArt';
+import { drawSetSixGun, setSixIdFor, sixStateFor } from '../setSixArt';
 import { drawSetElevenGun, elevenScale, isElevenNewSlide1Id, restElevenState, setElevenIdFor } from '../setElevenArt';
 import { isElevenOnlyWeapon } from './gunVariants';
 import type { WeaponAnim } from '../../../../../games/game-4/src/game/weapons';
@@ -91,6 +92,23 @@ export function drawGun(
     );
     c.restore();
     if (flash > 0 && !gunState.elevenLive) drawFlash(c, id, cx, y0, t, flash);
+    return;
+  }
+  // Slide 6 (`games/game-2`): the original Weapon Wheel Hit beam art, drawn at
+  // slide 1's muzzle origin with slide 6's own draw progress (the sniper's
+  // pulse, the heat-ray's glow, the repulsor's palm) and its 14 px recoil.
+  const setSixId = variant === 'set6' ? setSixIdFor(id) : null;
+  if (setSixId) {
+    // Live games hand their own draw state over; menus and cards rebuild the
+    // same draw progress and recoil from the shared shot clock.
+    drawSetSixGun(
+      c, setSixId, cx, y0, t,
+      gunState.sixLive && gunState.sixState
+        ? gunState.sixState
+        : sixStateFor(Math.max(0, gunState.sinceShot), setSixId, t),
+    );
+    c.restore();
+    if (flash > 0 && !gunState.sixLive) drawFlash(c, id, cx, y0, t, flash);
     return;
   }
   const setNineId = variant === 'set9' || isNineNewWeapon(id) ? setNineIdFor(id) : null;

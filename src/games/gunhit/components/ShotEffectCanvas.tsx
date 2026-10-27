@@ -16,6 +16,8 @@ import { drawSetSevenShotShell } from '../game/setSevenFx';
 import { drawSetElevenShotShell } from '../game/setElevenFx';
 import { setNineIdFor } from '../game/setNineArt';
 import { drawSetNineShotShell } from '../game/setNineFx';
+import { setSixIdFor } from '../game/setSixArt';
+import { drawSetSixShotShell } from '../game/setSixFx';
 import { silentPreview } from '../game/previewAudio';
 
 /** Tiny live comparison using the exact same projectile/beam renderers as gameplay. */
@@ -88,6 +90,14 @@ export default function ShotEffectCanvas({ weapon, effect }: { weapon: Weapon; e
             const setElevenId = effect === 'set11' ? setElevenIdFor(weapon.id) : null;
             if (setElevenId) {
               drawSetElevenShotShell(c, setElevenId, 0.06, 26);
+              c.restore();
+              if (active) frame = requestAnimationFrame(paint);
+              return;
+            }
+            // Slide-6 beams are painted by slide 6's own renderer.
+            const setSixId = effect === 'set6' ? setSixIdFor(weapon.id) : null;
+            if (setSixId) {
+              drawSetSixShotShell(c, setSixId, 0.06);
               c.restore();
               if (active) frame = requestAnimationFrame(paint);
               return;

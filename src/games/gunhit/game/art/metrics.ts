@@ -1,6 +1,7 @@
 import type { WeaponId } from '../weapons';
 import { getGunVariant, isFixedClassicGun, supportsGunVariants, type GunVariant, type VariantWeapon } from './gunVariants';
 import { SET_ELEVEN_BY_SLIDE1_ID, SET_ELEVEN_METRICS, SET_ELEVEN_NEW_IDS, SET_ELEVEN_NEW_WEAPONS } from '../setElevenArt';
+import { SET_SIX_BY_SLIDE1_ID, SET_SIX_METRICS } from '../setSixArt';
 
 export interface GunMetrics {
   totalLen: number;
@@ -345,12 +346,25 @@ const SET_NINE_METRICS: Partial<Record<WeaponId, GunMetrics>> = {
   heat_ray: { totalLen: 184, centerOffsetY: 90, centerOffsetX: 2, span: 190 }, // -39,-2..42,182
 };
 
+// ── Slide 6 (games/game-2) ──────────────────────────────────────────────────
+// Measured from slide 6's real renderer (`drawSetSixGun`, rested pose): the same
+// ink-bounds pass slide 9 and slide 11 use, so the picker shows the whole gun.
+const SET_SIX_METRICS_BY_SLIDE1: Partial<Record<WeaponId, GunMetrics>> = Object.fromEntries(
+  Object.entries(SET_SIX_BY_SLIDE1_ID).map(([slide1, six]) => [
+    slide1,
+    SET_SIX_METRICS[six as keyof typeof SET_SIX_METRICS],
+  ]),
+) as Partial<Record<WeaponId, GunMetrics>>;
+
 export function getGunMetrics(id: WeaponId, variant: GunVariant = getGunVariant(id)): GunMetrics {
   const effectiveVariant = isFixedClassicGun(id) ? 'original'
     : id === 'honey' && variant === 'latest' ? 'current' : variant;
   const eleven = effectiveVariant === 'set11' ? SET_ELEVEN_METRICS_BY_SLIDE1[id] : undefined;
+  const six = effectiveVariant === 'set6' ? SET_SIX_METRICS_BY_SLIDE1[id] : undefined;
   const measured = eleven
     ? eleven
+    : six
+    ? six
     : effectiveVariant === 'set9'
     ? SET_NINE_METRICS[id]
     : effectiveVariant === 'set7'

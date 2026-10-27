@@ -80,7 +80,40 @@ const variants = await import('../src/games/gunhit/game/art/gunVariants.ts');
 const { WEAPONS } = await import('../src/games/gunhit/game/weapons.ts');
 
 const only = process.argv[2];
-const EFFECTS = ['set7', 'set2', 'set9', 'set11'] as const;
+const EFFECTS = ['set7', 'set2', 'set9', 'set11', 'set6'] as const;
+/**
+ * One process per layer by default.
+ *
+ * Five layers over every gun and every stage is ~6 000 full games; keeping them
+ * in one process parks enough baked canvases in memory to be killed mid-run
+ * (exit 137, with no result line). Each layer is swept in its own child process
+ * and the totals are added up, so `npx tsx tools/star-ported-sweep.ts` stays the
+ * documented command. `... set9` still sweeps a single layer.
+ */
+if (!only) {
+  const { spawnSync } = await import('node:child_process');
+  const total = { runs: 0, inert: 0, stranded: 0, threw: 0 };
+  let failed = false;
+  for (const effect of EFFECTS) {
+    const res = spawnSync(process.execPath, ['--import', 'tsx', process.argv[1], effect], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'inherit'],
+    });
+    const line = (res.stdout ?? '').trim().split('\n').filter((l) => l.startsWith('runs ')).pop();
+    if (!line) {
+      failed = true;
+      console.log(`${effect}: no result (exit ${res.status ?? res.signal})`);
+      continue;
+    }
+    console.log(`${effect}: ${line}`);
+    for (const key of Object.keys(total) as (keyof typeof total)[]) {
+      const n = Number(new RegExp(`${key} (\\d+)`).exec(line)?.[1] ?? 0);
+      total[key] += n;
+    }
+  }
+  console.log('runs', total.runs, 'inert', total.inert, 'stranded', total.stranded, 'threw', total.threw);
+  process.exit(failed || total.inert || total.stranded || total.threw ? 1 : 0);
+}
 const STAGES = [
   { name: 'boulder', mode: 'boulder' as const, buffs: ['speed', 'ammo', 'power', 'double'] },
   { name: 'treasure', mode: 'treasure' as const, buffs: ['rapid', 'double', 'mini', 'giant'] },

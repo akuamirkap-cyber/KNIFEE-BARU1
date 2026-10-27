@@ -3,6 +3,7 @@ import { SET_SEVEN_BY_SLIDE1_ID, SET_SEVEN_SETS } from '../setSevenArt';
 import { SET_NINE_NEW_WEAPONS, isNineNewWeapon } from '../setNineArt';
 import { SET_ELEVEN_BY_SLIDE1_ID, SET_ELEVEN_NEW_IDS, SET_ELEVEN_NEW_WEAPONS } from '../setElevenArt';
 import { SET_TWO_IDS, SET_TWO_BY_SLIDE1_ID } from '../setTwoArt';
+import { SET_SIX_SLIDE1_IDS, type SixSlide1Id } from '../setSixArt';
 
 /** These two have been retired to their original art AND shot only. */
 export const FIXED_CLASSIC_WEAPONS = ['plasma', 'laser'] as const satisfies readonly WeaponId[];
@@ -37,6 +38,19 @@ export const EDITABLE_WEAPONS = [
   'chrono_rifle', 'orbital_beacon', 'helix_pulsar', 'singularity',
   'prism_lance', 'nano_swarm',
 ] as const satisfies readonly WeaponId[];
+
+/**
+ * Slide-6 (`games/game-2` / Weapon Wheel Hit) weapons. Slide 6 is the original
+ * `Weapon Wheel Hit`, and its three beam weapons share their name with guns
+ * slide 1 already has (through slide 9), so slide 6 adds one more design and
+ * one more shot card to those three — it never adds a new gun.
+ */
+export const SET_SIX_DESIGN_WEAPONS = SET_SIX_SLIDE1_IDS as readonly WeaponId[];
+export type SetSixDesignWeapon = SixSlide1Id;
+
+export function isSetSixDesignWeapon(id: WeaponId | 'old'): id is SetSixDesignWeapon {
+  return (SET_SIX_DESIGN_WEAPONS as readonly string[]).includes(id);
+}
 
 /**
  * Slide-7 SET 1 weapons that exist on slide 1 under the same name. Their
@@ -209,7 +223,7 @@ export type LatestDesignWeapon = Exclude<EditableWeapon, (typeof NO_LATEST_DESIG
 export const VARIANT_WEAPONS = [...EDITABLE_WEAPONS, ...FIXED_CLASSIC_WEAPONS] as const;
 export type VariantWeapon = (typeof VARIANT_WEAPONS)[number];
 
-export type GunVariant = 'original' | 'current' | 'latest' | 'set1' | 'set2' | 'set7' | 'set9' | 'set11';
+export type GunVariant = 'original' | 'current' | 'latest' | 'set1' | 'set2' | 'set6' | 'set7' | 'set9' | 'set11';
 export const GUN_VARIANTS: readonly { id: GunVariant; label: string }[] = [
   { id: 'original', label: 'Sebelumnya' },
   { id: 'current', label: 'Sekarang' },
@@ -227,7 +241,9 @@ export const SET_TWO_VARIANT: { id: GunVariant; label: string } = { id: 'set2', 
 export const SET_NINE_VARIANT: { id: GunVariant; label: string } = { id: 'set9', label: 'Slide 9' };
 /** The slide-11 design card (newest for every ported slide-11 gun). */
 export const SET_ELEVEN_VARIANT: { id: GunVariant; label: string } = { id: 'set11', label: 'Slide 11' };
-export type GunEffect = 'original' | 'new' | 'set2' | 'set7' | 'set9' | 'set11';
+/** The slide-6 design card: slide 6's own artwork for the three guns it shares. */
+export const SET_SIX_VARIANT: { id: GunVariant; label: string } = { id: 'set6', label: 'Slide 6' };
+export type GunEffect = 'original' | 'new' | 'set2' | 'set6' | 'set7' | 'set9' | 'set11';
 export const GUN_EFFECTS: readonly { id: GunEffect; label: string }[] = [
   { id: 'original', label: 'Sebelumnya' },
   { id: 'new', label: 'Baru' },
@@ -242,6 +258,8 @@ export const SET_TWO_EFFECT: { id: GunEffect; label: string } = { id: 'set2', la
 export const SET_NINE_EFFECT: { id: GunEffect; label: string } = { id: 'set9', label: 'Slide 9' };
 /** The slide-11 shot card: slide 11's own round, burst and sounds. */
 export const SET_ELEVEN_EFFECT: { id: GunEffect; label: string } = { id: 'set11', label: 'Slide 11' };
+/** The slide-6 shot card: slide 6's own beam, muzzle burst and scorch mark. */
+export const SET_SIX_EFFECT: { id: GunEffect; label: string } = { id: 'set6', label: 'Slide 6' };
 
 export function isFixedClassicGun(id: WeaponId | 'old'): id is FixedClassicWeapon {
   return (FIXED_CLASSIC_WEAPONS as readonly string[]).includes(id);
@@ -270,6 +288,14 @@ export function slide7UpdateSet(id: WeaponId | 'old'): number | null {
   if (isSetOneDesignWeapon(id)) return 1;
   if (isSetSevenDesignWeapon(id)) return SET_SEVEN_SETS[SET_SEVEN_BY_SLIDE1_ID[id]];
   return null;
+}
+
+/**
+ * True when the gun gained slide 6's own artwork and shot. The arsenal marks
+ * these with the green "NEW" badge too.
+ */
+export function hasSlide6Update(id: WeaponId | 'old'): boolean {
+  return isSetSixDesignWeapon(id);
 }
 
 /**
@@ -329,11 +355,29 @@ function baseGunVariantOptions(id: VariantWeapon) {
  * had and gain slide 9's own artwork as the newest one; the nine guns that only
  * exist because of slide 9 have that single card.
  */
+/**
+ * File slide 6's card where it belongs by age: the hub's slides are exported
+ * out of order, but a gun's cards read oldest → newest, so slide 6 sits before
+ * slide 7/9/11's cards (and before slide 2's, which is appended last because
+ * slide 2 is a full stage export older than every gun on this list).
+ */
+function withSixCard<T extends { id: string }>(cards: readonly T[], card: T): T[] {
+  const later = ['set2', 'set7', 'set9', 'set11'];
+  const at = cards.findIndex((o) => later.includes(o.id));
+  const list = [...cards];
+  list.splice(at < 0 ? list.length : at, 0, card);
+  return list;
+}
+
 export function getGunVariantOptions(id: VariantWeapon): readonly { id: GunVariant; label: string }[] {
-  if (isSetTwoDesignWeapon(id)) {
-    return [...getGunVariantOptionsBeforeSetTwo(id), SET_TWO_VARIANT];
-  }
-  return getGunVariantOptionsBeforeSetTwo(id);
+  const cards = isSetTwoDesignWeapon(id)
+    ? [...getGunVariantOptionsBeforeSetTwo(id), SET_TWO_VARIANT]
+    : getGunVariantOptionsBeforeSetTwo(id);
+  // Slide 6 is the oldest board in the hub, so its artwork is an EXTRA card on
+  // the three guns it shares — exactly what slide 2 got. It is filed where it
+  // belongs by age (before slide 7/9/11's cards), and the card the player
+  // already picked stays the default.
+  return isSetSixDesignWeapon(id) ? withSixCard(cards, SET_SIX_VARIANT) : cards;
 }
 
 /** The design cards a gun had before slide 2 was exported. */
@@ -354,10 +398,10 @@ function getGunVariantOptionsBeforeSetTwo(id: VariantWeapon) {
 }
 
 export function getGunEffectOptions(id: VariantWeapon): readonly { id: GunEffect; label: string }[] {
-  if (isSetTwoEffectWeapon(id) && !isFixedClassicGun(id)) {
-    return [...getGunEffectOptionsBeforeSetTwo(id), SET_TWO_EFFECT];
-  }
-  return getGunEffectOptionsBeforeSetTwo(id);
+  const cards = isSetTwoEffectWeapon(id) && !isFixedClassicGun(id)
+    ? [...getGunEffectOptionsBeforeSetTwo(id), SET_TWO_EFFECT]
+    : getGunEffectOptionsBeforeSetTwo(id);
+  return isSetSixDesignWeapon(id) ? withSixCard(cards, SET_SIX_EFFECT) : cards;
 }
 
 /** The shot cards a gun had before slide 2 was exported. */
