@@ -1161,6 +1161,17 @@ export class Game {
     this.resetSevenLayer();
     this.items = [];
     this.projs = [];
+    // …and with a clean screen. The debris of the stage that just ended — the
+    // shattered wheel's nine wedge fragments, the rounds flung out of it, the
+    // clear explosion's smoke and sparks — used to keep flying over the new
+    // wheel, because only `startRun()` cleared these arrays and a stage
+    // auto-advance comes through here instead. On screen that reads as the new
+    // wheel "pecah padahal baru sekali tembak".
+    this.frags = [];
+    this.flyers = [];
+    this.particles = [];
+    this.lights = [];
+    this.beams = [];
     this.rockFragments = [];
     this.rockBullets = [];
     this.fallenCells = [];
@@ -1300,6 +1311,23 @@ export class Game {
     c.restore();
   }
 
+  /**
+   * Lateral speed for pellet `i` of an `n`-pellet burst, so the pellets fan out
+   * and land on different angles of the wheel (the same 26 px fan slide 1 has
+   * always used: `off * speed / travel`).
+   *
+   * Slides 7, 9 and 11 spawn every pellet in the same lane with `vx = 0`. For a
+   * burst gun that meant pellets two and three flew straight into the round
+   * their own sibling had just stuck into the wheel, `stepProj` reported
+   * `fail`, and the stage ended on the very first trigger pull — the Sapphire
+   * Shotgun did this every time, because its slide-7 look is its default one.
+   */
+  private pelletVx(i: number, n: number, speed: number) {
+    if (n < 2) return 0;
+    const travel = Math.max(1, GUN_Y - (this.targetY + this.level.radius));
+    return (((i - (n - 1) / 2) * 26) * speed) / travel;
+  }
+
   // ---------- actions ----------
   shoot() {
     if (this.state !== 'play' || this.choosingBuff) return;
@@ -1338,7 +1366,8 @@ export class Game {
         const ox = offsets[i] ?? offsets[0] ?? 0;
         const own = made[i];
         const proj: Proj = {
-          x: CX + ox, originX: CX + ox, y: own ? own.y : my, vx, vy, big, tint, ...sizeBuff,
+          x: CX + ox, originX: CX + ox, y: own ? own.y : my,
+          vx: vx + this.pelletVx(i, n, w.speed), vy, big, tint, ...sizeBuff,
         };
         if (own) proj.setNine = own;
         else if (i === 0) proj.setNinePending = true;
@@ -1376,7 +1405,8 @@ export class Game {
         // tail keeps slide 11's spacing instead of stretching.
         const sp = own ? Math.hypot(own.vx, own.vy) : Math.abs(vy);
         const proj: Proj = {
-          x: CX + ox, originX: CX + ox, y: own ? own.y : my, vx, vy: -Math.abs(sp),
+          x: CX + ox, originX: CX + ox, y: own ? own.y : my,
+          vx: vx + this.pelletVx(i, n, Math.abs(sp)), vy: -Math.abs(sp),
           big, tint, ...sizeBuff,
         };
         if (own) proj.setEleven = own;
@@ -1429,7 +1459,8 @@ export class Game {
         const ox = offsets[i] ?? offsets[0] ?? 0;
         const own = made[i];
         const proj: Proj = {
-          x: CX + ox, originX: CX + ox, y: own ? own.y : my, vx, vy, big, tint,
+          x: CX + ox, originX: CX + ox, y: own ? own.y : my,
+          vx: vx + this.pelletVx(i, n, w.speed), vy, big, tint,
           hue: undefined, ...sizeBuff,
         };
         if (own) proj.setSeven = own;
