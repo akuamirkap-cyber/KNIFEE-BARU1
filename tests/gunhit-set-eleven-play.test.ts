@@ -5,7 +5,7 @@ import { installCanvasShim } from './supportCanvas';
 import { installSilentAudio } from '../tools/supportAudioSilent';
 
 /**
- * Whole slide-1 stages with slide 11's guns (the "Slide 9" card in the
+ * Whole slide-1 stages with slide 11's guns (the "Slide 7" card in the
  * picker). A fresh level needs the DOM-ish globals the game touches on boot and
  * a silent AudioContext: `startAtLevel()` unlocks every ported synthesizer.
  */

@@ -5,7 +5,7 @@ import { SetElevenFx, busterCharge, drawSetElevenShotShell, setElevenMuted } fro
 import { installCanvasShim } from './supportCanvas';
 
 /**
- * Slide 11 (the hub's "Slide 9", `games/game-8`) does more than draw its
+ * Slide 11 (the hub's "Slide 7", `games/game-8`) does more than draw its
  * rounds: its engine hums its beams, whines while the buster charges, shakes
  * the screen, stops time, kicks / squashes / shivers / heats / freezes its
  * wheel and lights the scene. These tests pin the bridge that hands all of it

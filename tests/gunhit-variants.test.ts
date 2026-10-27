@@ -122,14 +122,14 @@ test('user loadouts use the requested classic/new combination; only real alterna
   assert.deepEqual(getGunEffectOptions('snowball').map(v => v.label), ['Sebelumnya', 'Baru', 'Set 2']);
   assert.equal(getGunEffectOptions('golden').length, 2);
   // Slide 9: the eight guns it updates keep every card they had and gain
-  // "Slide 9" as the newest; the nine new guns only ever have that one card.
+  // "Slide 7" as the newest; the nine new guns only ever have that one card.
   assert.deepEqual(getGunVariantOptions('ak47').map(v => v.id), ['original', 'set9', 'set11']);
   assert.deepEqual(getGunVariantOptions('pistol').map(v => v.id), ['original', 'set9', 'set11']);
   assert.deepEqual(getGunVariantOptions('sniper').map(v => v.id), ['original', 'set7', 'set9', 'set11']);
   // RAILGUN also has slide 6's beam, filed between its slide-1 shape and slide 7.
   assert.deepEqual(getGunVariantOptions('railgun').map(v => v.id), ['original', 'set6', 'set7', 'set9', 'set11']);
   assert.deepEqual(getGunVariantOptions('dragon').map(v => v.label),
-    ['Sebelumnya', 'Sekarang', 'Terbaru', 'Set 4', 'Slide 7', 'Slide 9']);
+    ['Sebelumnya', 'Sekarang', 'Terbaru', 'Set 4', 'Slide 5', 'Slide 7']);
   // Slide 11 supersedes slide 9 for the eight slide-9 guns it also adopted;
   // YAUTJA is the one slide-9 gun slide 11 never had, so it keeps one card.
   for (const id of ['longbow', 'mp5', 'tesla_rifle', 'ion_smg', 'phaser',
@@ -148,8 +148,8 @@ test('user loadouts use the requested classic/new combination; only real alterna
   }
   // XENOMORPH is slide 11's only shared gun with a slide-1 silhouette to keep:
   // slide 1 only ever drew it one way, so it gets two honest cards.
-  assert.deepEqual(getGunVariantOptions('xeno').map(v => v.label), ['Sebelumnya', 'Slide 9']);
-  assert.deepEqual(getGunEffectOptions('xeno').map(v => v.label), ['Sebelumnya', 'Baru', 'Slide 9']);
+  assert.deepEqual(getGunVariantOptions('xeno').map(v => v.label), ['Sebelumnya', 'Slide 7']);
+  assert.deepEqual(getGunEffectOptions('xeno').map(v => v.label), ['Sebelumnya', 'Baru', 'Slide 7']);
   // The ten guns slide 11 added never existed on slide 1: one card each.
   for (const id of ['mega_buster', 'harmonic_disruptor', 'absolute_zero', 'helios_flare',
     'chrono_rifle', 'orbital_beacon', 'helix_pulsar', 'singularity', 'prism_lance',
@@ -159,7 +159,7 @@ test('user loadouts use the requested classic/new combination; only real alterna
   }
   assert.deepEqual(getGunEffectOptions('pistol').map(v => v.id), ['original', 'new', 'set9', 'set11']);
   assert.deepEqual(getGunEffectOptions('railgun').map(v => v.id), ['original', 'new', 'set6', 'set7', 'set9', 'set11']);
-  assert.deepEqual(getGunEffectOptions('pistol').map(v => v.label), ['Sebelumnya', 'Baru', 'Slide 7', 'Slide 9']);
+  assert.deepEqual(getGunEffectOptions('pistol').map(v => v.label), ['Sebelumnya', 'Baru', 'Slide 5', 'Slide 7']);
   assert.equal(getGunMetrics('honey', 'latest').span, getGunMetrics('honey', 'current').span);
 });
 

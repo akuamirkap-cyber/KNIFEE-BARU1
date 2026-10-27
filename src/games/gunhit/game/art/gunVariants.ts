@@ -238,19 +238,20 @@ export function setSevenVariant(id: SetSevenDesignWeapon): { id: GunVariant; lab
 /*
  * Card labels follow the hub's *current* slide numbers. The ids (`set6`,
  * `set9`, `set11`…) and the module names (`setSixFx`, `setElevenFx`…) keep the
- * number each slide had when its guns were imported. Since slides 02 (Firework
- * 8-Gun) and 03 (Rainbow Gun) left the hub: set6 = Slide 4 (Wheel Hit Ultra FX),
- * set7 = Slide 5, set9 = Slide 7, set11 = Slide 9 (Knife-Hit Arsenal FX), and the
- * old slide-2 card is called "Firework".
+ * number each slide had when its guns were imported. Firework 8-Gun and Rainbow
+ * Gun left the hub first, then Obliterator Hit and Weapon Hit Arena, so now:
+ * set6 = Slide 2 (Wheel Hit Ultra FX), set7 = Slide 3 (Weapon Hit 71 Senjata),
+ * set9 = Slide 5 (Arsenal Wheel Hit Range), set11 = Slide 7 (Knife-Hit Arsenal
+ * FX), and the old slide-2 card is called "Firework".
  */
 /** The slide-2 design card: slide 2's own artwork for the eight guns it shares. */
 export const SET_TWO_VARIANT: { id: GunVariant; label: string } = { id: 'set2', label: 'Firework' };
 /** The slide-9 design card (newest for every ported slide-9 gun). */
-export const SET_NINE_VARIANT: { id: GunVariant; label: string } = { id: 'set9', label: 'Slide 7' };
+export const SET_NINE_VARIANT: { id: GunVariant; label: string } = { id: 'set9', label: 'Slide 5' };
 /** The slide-11 design card (newest for every ported slide-11 gun). */
-export const SET_ELEVEN_VARIANT: { id: GunVariant; label: string } = { id: 'set11', label: 'Slide 9' };
+export const SET_ELEVEN_VARIANT: { id: GunVariant; label: string } = { id: 'set11', label: 'Slide 7' };
 /** The slide-6 design card: slide 6's own artwork for the three guns it shares. */
-export const SET_SIX_VARIANT: { id: GunVariant; label: string } = { id: 'set6', label: 'Slide 4' };
+export const SET_SIX_VARIANT: { id: GunVariant; label: string } = { id: 'set6', label: 'Slide 2' };
 export type GunEffect = 'original' | 'new' | 'set2' | 'set6' | 'set7' | 'set9' | 'set11';
 export const GUN_EFFECTS: readonly { id: GunEffect; label: string }[] = [
   { id: 'original', label: 'Sebelumnya' },
@@ -263,11 +264,11 @@ export function setSevenEffect(id: SetSevenDesignWeapon): { id: GunEffect; label
 /** The slide-2 shot card: slide 2's own round, muzzle, burst and sounds. */
 export const SET_TWO_EFFECT: { id: GunEffect; label: string } = { id: 'set2', label: 'Firework' };
 /** The slide-9 shot card: slide 9's own projectile, burst and sounds. */
-export const SET_NINE_EFFECT: { id: GunEffect; label: string } = { id: 'set9', label: 'Slide 7' };
+export const SET_NINE_EFFECT: { id: GunEffect; label: string } = { id: 'set9', label: 'Slide 5' };
 /** The slide-11 shot card: slide 11's own round, burst and sounds. */
-export const SET_ELEVEN_EFFECT: { id: GunEffect; label: string } = { id: 'set11', label: 'Slide 9' };
+export const SET_ELEVEN_EFFECT: { id: GunEffect; label: string } = { id: 'set11', label: 'Slide 7' };
 /** The slide-6 shot card: slide 6's own beam, muzzle burst and scorch mark. */
-export const SET_SIX_EFFECT: { id: GunEffect; label: string } = { id: 'set6', label: 'Slide 4' };
+export const SET_SIX_EFFECT: { id: GunEffect; label: string } = { id: 'set6', label: 'Slide 2' };
 
 export function isFixedClassicGun(id: WeaponId | 'old'): id is FixedClassicWeapon {
   return (FIXED_CLASSIC_WEAPONS as readonly string[]).includes(id);

@@ -1,11 +1,9 @@
 import React, { useEffect, useState, useRef } from 'react';
 import {
   Flame,
-  Zap,
   Target,
   Sparkles,
   Layers,
-  Crosshair,
   Compass,
   Wand2,
   Gamepad2,
@@ -23,7 +21,7 @@ import ScaledFrame from './components/ScaledFrame';
 import { SlideActivityProvider } from './games/shared/SlideActivity';
 import GunHitGame from './games/gunhit/App';
 
-type SlideId = 'gunhit' | 'obliterator' | 'game1' | 'game2' | 'game4' | 'game5' | 'game6' | 'game7' | 'game8';
+type SlideId = 'gunhit' | 'game2' | 'game4' | 'game5' | 'game6' | 'game7' | 'game8';
 
 export interface GameSlide {
   id: SlideId;
@@ -51,8 +49,6 @@ export default function App() {
 
   const [keys, setKeys] = useState<Record<SlideId, number>>({
     gunhit: 0,
-    obliterator: 0,
-    game1: 0,
     game2: 0,
     game4: 0,
     game5: 0,
@@ -172,60 +168,8 @@ export default function App() {
       ),
     },
     {
-      id: 'obliterator',
-      slideNumber: 2,
-      name: 'Obliterator Hit',
-      fullName: 'Obliterator Hit: DOOM',
-      badge: '💥 Heavy Obliterator',
-      tagline: 'Penghancur Inti Argent Core brutal! Kumpulkan gems & aktifkan Overdrive Charge.',
-      weapons: ['💥 BFG 9000', '⚡ Maykr Laser', '🍌 Banana', '🐝 Beehive', '🔮 Crystal'],
-      icon: Zap,
-      themeColor: 'text-rose-400',
-      borderColor: 'border-rose-500/40 hover:border-rose-400/80 shadow-rose-950/40',
-      accentBg: 'bg-rose-500/20 text-rose-400',
-      path: `${cleanBase}games/obliterator/index.html`,
-      render: (active: boolean) => (
-        <iframe
-          ref={(el) => {
-            iframeRefs.current.obliterator = el;
-          }}
-          key={`obliterator-${keys.obliterator}`}
-          src={`${cleanBase}games/obliterator/index.html?standby=${active ? '0' : '1'}`}
-          title="Obliterator Hit: DOOM"
-          className="w-full h-full border-0 bg-black block"
-          allow="autoplay"
-        />
-      ),
-    },
-    {
-      id: 'game1',
-      slideNumber: 3,
-      name: 'Weapon Hit Arena',
-      fullName: 'Weapon Hit Arena — 2D Ballistics',
-      badge: '🎯 Arena Ballistics',
-      tagline: 'Simulasi tembakan multi-senjata dengan putaran roda dan variasi lintasan peluru 2D.',
-      weapons: ['🏹 Serpent Arrow', '⚡ Plasma Disc', '🎯 Crossbow', '🔫 Handgun'],
-      icon: Crosshair,
-      themeColor: 'text-amber-400',
-      borderColor: 'border-amber-500/40 hover:border-amber-400/80 shadow-amber-950/40',
-      accentBg: 'bg-amber-500/20 text-amber-400',
-      path: `${cleanBase}games/game-1/index.html`,
-      render: (active: boolean) => (
-        <iframe
-          ref={(el) => {
-            iframeRefs.current.game1 = el;
-          }}
-          key={`game1-${keys.game1}`}
-          src={`${cleanBase}games/game-1/index.html?standby=${active ? '0' : '1'}`}
-          title="Weapon Hit Arena"
-          className="w-full h-full border-0 bg-black block"
-          allow="autoplay; gamepad"
-        />
-      ),
-    },
-    {
       id: 'game2',
-      slideNumber: 4,
+      slideNumber: 2,
       name: 'Wheel Hit Ultra FX',
       fullName: 'Weapon Wheel Hit — Ultra FX Edition',
       badge: '🌀 Ultra FX',
@@ -251,7 +195,7 @@ export default function App() {
     },
     {
       id: 'game4',
-      slideNumber: 5,
+      slideNumber: 3,
       name: 'Weapon Hit 71 Senjata',
       fullName: 'Weapon Hit — 71 Senjata (Level 1 FX)',
       badge: '🔮 71 Senjata',
@@ -277,7 +221,7 @@ export default function App() {
     },
     {
       id: 'game5',
-      slideNumber: 6,
+      slideNumber: 4,
       name: 'Neon Ballistics',
       fullName: 'ARSENAL - Neon Ballistics (Level 01)',
       badge: '🔴 Neon Ballistics',
@@ -303,7 +247,7 @@ export default function App() {
     },
     {
       id: 'game6',
-      slideNumber: 7,
+      slideNumber: 5,
       name: 'Arsenal Wheel Hit Range',
       fullName: 'Arsenal Wheel Hit — 2D Weapon FX Range',
       badge: '🎯 Range Edition',
@@ -329,7 +273,7 @@ export default function App() {
     },
     {
       id: 'game7',
-      slideNumber: 8,
+      slideNumber: 6,
       name: 'Ballistics Lab',
       fullName: 'Arsenal FX — 2D Ballistics Lab',
       badge: '🧪 Ballistics Lab',
@@ -355,7 +299,7 @@ export default function App() {
     },
     {
       id: 'game8',
-      slideNumber: 9,
+      slideNumber: 7,
       name: 'Knife-Hit Arsenal FX',
       fullName: 'Arsenal FX – Knife-Hit Weapon Effects',
       badge: '🐉 Knife-Hit FX',
