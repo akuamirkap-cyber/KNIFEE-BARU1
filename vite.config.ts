@@ -3,12 +3,60 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig} from 'vite';
 
+/**
+ * Storage that a cross-origin frame may be refused.
+ *
+ * The hub is embedded by the host page, so every one of its frames is a
+ * third-party context: a browser with third-party storage blocked throws
+ * `SecurityError` the moment `localStorage` is touched. Slide 1 reads its coins,
+ * weapon, collection and quests during the first render, so that throw unmounted
+ * the whole tree and the page came up blank. The games' own engines read a saved
+ * best score in their constructors, which blanked those slides the same way.
+ *
+ * This runs before any module on every page and swaps in an in-memory store when
+ * the real one refuses to be used, so the games keep playing (a save simply does
+ * not survive the reload in that mode).
+ */
+const STORAGE_SHIM = `<script>
+(function () {
+  function memoryStore() {
+    var data = Object.create(null);
+    return {
+      getItem: function (k) { return k in data ? data[k] : null; },
+      setItem: function (k, v) { data[k] = String(v); },
+      removeItem: function (k) { delete data[k]; },
+      clear: function () { data = Object.create(null); },
+      key: function (i) { return Object.keys(data)[i] || null; },
+      get length() { return Object.keys(data).length; }
+    };
+  }
+  function install(name) {
+    try {
+      var store = window[name];
+      // Reading a key is what a blocked frame refuses, not the property itself.
+      if (store) { store.getItem('__storage_probe'); return; }
+    } catch (e) { /* blocked: fall through to the memory store */ }
+    var fallback = memoryStore();
+    try {
+      Object.defineProperty(window, name, { configurable: true, get: function () { return fallback; } });
+    } catch (e) {
+      try { window[name] = fallback; } catch (e2) { /* nothing else to try */ }
+    }
+  }
+  install('localStorage');
+  install('sessionStorage');
+})();
+</script>`;
+
 function standbyControlPlugin() {
   return {
     name: 'standby-control',
     transformIndexHtml(html: string, ctx: { path?: string }) {
-      if (!ctx.path || !ctx.path.includes('/games/')) return html;
-      return html.replace(
+      const withStorage = html.includes('__storage_probe')
+        ? html
+        : html.replace('</head>', `${STORAGE_SHIM}</head>`);
+      if (!ctx.path || !ctx.path.includes('/games/')) return withStorage;
+      return withStorage.replace(
         '</head>',
         `<script>
 (function() {

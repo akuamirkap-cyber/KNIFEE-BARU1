@@ -202,8 +202,10 @@ test('boss defeat shows the defeated boss, persistent player XP, transparent gam
   assert.ok(modal.includes('LANJUT OTOMATIS'));
   assert.ok(!modal.includes('onClick={onContinue}'));
   assert.ok(!modal.includes('bg-gradient-to-b from-[#133038]/95'));
-  assert.ok(app.includes('localStorage.setItem(LS.playerXp, String(totalXp))'));
-  assert.ok(app.includes('localStorage.setItem(LS.playerLevel, String(nextProgress.level))'));
+  // Player XP is saved through the safe store: a browser that refuses storage
+  // must not blank the page (see tests/gunhit-blank-page.test.ts).
+  assert.ok(app.includes('storage.setItem(LS.playerXp, String(totalXp))'));
+  assert.ok(app.includes('storage.setItem(LS.playerLevel, String(nextProgress.level))'));
 });
 
 test('setiap bos punya bentuk dan material jejak serangan yang berbeda', () => {
