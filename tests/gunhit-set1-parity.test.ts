@@ -67,7 +67,10 @@ test('slide 7 SET 1 is exactly the six weapons slide 1 shares, matched by name',
     assert.equal(getGunVariant(id), 'set1', `${id} defaults to the newest design`);
     assert.equal(getGunEffect(id), 'new', `${id} defaults to the SET 1 shot`);
     assert.ok(getGunVariantOptions(id).some(o => o.id === 'set1'));
-    assert.deepEqual(getGunEffectOptions(id).map(o => o.id), ['original', 'new']);
+    // SOAKER is also one of the eight slide-2 weapons, so it carries slide 2's
+    // shot as a third card on top of the two SET 1 ones.
+    assert.deepEqual(getGunEffectOptions(id).map(o => o.id),
+      id === 'soaker' ? ['original', 'new', 'set2'] : ['original', 'new']);
   }
 });
 

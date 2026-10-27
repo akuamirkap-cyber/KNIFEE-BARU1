@@ -8,6 +8,7 @@ import { shotPulse } from './commonGunMotion';
 import { drawSlide3BazookaMuzzleFx } from '../bazookaSlideFx';
 import { drawBlackHoleGun2, type Slide2GunState } from '../slide2Weapons';
 import { drawSetOneGun, setOneIdFor } from '../setOneArt';
+import { drawSetTwoGun, restTwoState, setTwoIdFor } from '../setTwoArt';
 import { drawSetSevenGun, setSevenIdFor } from '../setSevenArt';
 import { restSevenAnim } from '../setSevenArt';
 import { drawSetNineGun, isNineNewWeapon, restNineState, setNineIdFor } from '../setNineArt';
@@ -120,6 +121,23 @@ export function drawGun(
     });
     c.restore();
     if (flash > 0) drawFlash(c, id, cx, y0, t, flash);
+    return;
+  }
+  // Slide 2 (`games/fireworkgun`): its own artwork, drawn at the same muzzle
+  // origin with slide 2's own rest/charge animation (loadP 7/s, recoil 6/s).
+  const setTwoId = variant === 'set2' ? setTwoIdFor(id) : null;
+  if (setTwoId) {
+    // Live games hand over their own state; menus and cards rebuild the same
+    // recoil/charge slide 2 shows right after a shot.
+    const since = Math.max(0, gunState.sinceShot);
+    const hue = setTwoId === 'blackhole' ? 215 + ((gunState.shots * 53) % 105) : 28;
+    drawSetTwoGun(c, setTwoId, cx, y0, gunState.twoState ?? restTwoState(hue, {
+      time: t,
+      recoil: since >= 0.17 ? 0 : 1 - since / 0.17,
+      loadP: Math.min(1, since * 7),
+    }));
+    c.restore();
+    if (flash > 0 && !gunState.twoLive) drawFlash(c, id, cx, y0, t, flash);
     return;
   }
   // Slide-7 SET 2..5: slide 7's own artwork, drawn at the same muzzle origin

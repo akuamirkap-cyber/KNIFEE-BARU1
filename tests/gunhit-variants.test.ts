@@ -102,9 +102,11 @@ test('user loadouts use the requested classic/new combination; only real alterna
   // SET 1 cards: GOLDEN keeps its three slide-1 designs plus "Set 1".
   assert.deepEqual(getGunVariantOptions('golden').map(v => v.id), ['original', 'current', 'latest', 'set1']);
   assert.deepEqual(getGunVariantOptions('blackhole').map(v => v.id), ['original', 'latest', 'set1']);
-  for (const id of ['slingshot', 'blowgun', 'shotgun', 'soaker'] as const) {
+  for (const id of ['slingshot', 'blowgun', 'shotgun'] as const) {
     assert.deepEqual(getGunVariantOptions(id).map(v => v.id), ['original', 'set1']);
   }
+  // SOAKER also got slide 2's own artwork, so it keeps both cards and gains a third.
+  assert.deepEqual(getGunVariantOptions('soaker').map(v => v.id), ['original', 'set1', 'set2']);
   // SET 2..5 cards: the number in the label is the weapon's own slide-7 set.
   for (const id of ['snowball', 'pizza', 'keris', 'wand'] as const) {
     assert.deepEqual(getGunVariantOptions(id).map(v => v.id), ['original', 'set7']);
