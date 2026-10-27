@@ -352,7 +352,7 @@ const PAINT = ['244,63,94', '250,204,21', '34,211,238', '168,85,247', '74,222,12
 type ItemType = 'bullet' | 'old' | 'spike' | 'coin' | 'diamond_chest';
 interface AcidStuck { blobs: AcidStuckBlob[]; dripT: number; drip: number; seed: number }
 interface Item { angle: number; type: ItemType; age: number; w?: WeaponId; scale?: number; vel?: number; harvested?: boolean; tint?: string; big?: number; hits?: number; hue?: number; flash?: number; acid?: AcidStuck; hideArt?: boolean; setTwo?: boolean }
-interface Proj { x: number; y: number; vx: number; vy: number; originX?: number; setSix?: true; setOne?: SetOneShot; setSeven?: SevenShot; setSevenPending?: boolean; s7Ghost?: boolean; hold?: number; setNine?: NineBullet; setNinePending?: boolean; s9Ghost?: boolean; setNineBeam?: number; setEleven?: ElevenProj; setElevenPending?: boolean; s11Ghost?: boolean; setTwo?: TwoRound; pierced?: number; hist?: { x: number; y: number }[]; tint?: string; big?: number; mini?: boolean; giant?: boolean; hue?: number; flash?: number; spawnDelay?: number; wob?: number; lastEcho?: number; t?: number; trail?: { x: number; y: number }[] }
+interface Proj { x: number; y: number; vx: number; vy: number; originX?: number; setSix?: true; setOne?: SetOneShot; setSeven?: SevenShot; setSevenPending?: boolean; s7Ghost?: boolean; hold?: number; setNine?: NineBullet; setNinePending?: boolean; s9Ghost?: boolean; setNineBeam?: number; setEleven?: ElevenProj; setElevenPending?: boolean; s11Wait?: boolean; s11Ghost?: boolean; setTwo?: TwoRound; pierced?: number; hist?: { x: number; y: number }[]; tint?: string; big?: number; mini?: boolean; giant?: boolean; hue?: number; flash?: number; spawnDelay?: number; wob?: number; lastEcho?: number; t?: number; trail?: { x: number; y: number }[] }
 type StepRes = { res: 'none' | 'stick' | 'fail' | 'hit'; spike?: boolean; local?: number };
 interface Light { x: number; y: number; r: number; rgb: string; life: number; max: number }
 interface Fragment { x: number; y: number; vx: number; vy: number; rot: number; vr: number; a0: number; a1: number }
@@ -961,7 +961,10 @@ export class Game {
         this.tintA = Math.max(this.tintA, Math.min(0.36, strength * 0.45));
       },
       hitStop: (seconds) => { this.elevenStop = Math.max(this.elevenStop, Math.min(0.12, seconds)); },
-      wheel: () => ({ x: CX, y: this.targetY, R: this.level.radius, angle: this.rot, dir: this.rotDir }),
+      wheel: () => ({
+        x: CX, y: this.targetY, R: this.level.radius, angle: this.rot, dir: this.rotDir,
+        marks: !isSpecial(this.level.mode),
+      }),
     };
   }
 
@@ -1675,7 +1678,7 @@ export class Game {
     if (p.hold < 1) return true;
     if (p.setSevenPending) p.s7Ghost = (p.setSevenPending = false, true);
     else if (p.setNinePending) p.s9Ghost = (p.setNinePending = false, true);
-    else if (p.setElevenPending) p.s11Ghost = (p.setElevenPending = false, true);
+    else if (p.setElevenPending) p.s11Ghost = (p.setElevenPending = p.s11Wait = false, true);
     return false;
   }
 
@@ -1837,20 +1840,32 @@ export class Game {
       this.fireTwinBarrel(made,
         () => fx.fire(CX + (offsets[1] ?? offsets[0] ?? 0), my, w.charge ? big : 0),
         () => fx.takeShots());
-      // Slide 1 flies the round at slide 11's own projectile speed, so the tail
-      // keeps slide 11's spacing instead of stretching.
-      const sp = made[0] ? Math.hypot(made[0].vx, made[0].vy) : Math.abs(vy);
-      const plan = this.carrierPlan(n, made.length, sp);
-      for (let i = 0; i < plan.length; i++) {
-        const own = made[i];
-        const proj: Proj = {
-          x: CX + plan[i].ox, originX: CX + plan[i].ox, y: own ? own.y : my,
-          vx: vx + plan[i].vx, vy: -sp,
-          big, tint, ...sizeBuff,
-        };
-        if (own) proj.setEleven = own;
-        else if (plan[i].first) proj.setElevenPending = true;
-        else proj.s11Ghost = true;
+      // One carrier per barrel: the round slide 7 scores (`scoringRounds()`:
+      // the nano swarm's centre drone, not just whichever round came first).
+      // It leaves on slide 1's barrel line at slide 7's own speed and from then
+      // on follows slide 7's own flight every frame (`flight()`: the
+      // singularity's acceleration, a drone's brake and homing). Every other
+      // round of a volley (eleven of the twelve nano drones) keeps flying,
+      // homing and biting on slide 7's physics by itself.
+      const barrels = Math.max(1, offsets.length);
+      const lanes = n * barrels;
+      const scoring = fx.scoringRounds(made, lanes);
+      for (let i = 0; i < lanes; i++) {
+        const own = scoring[i];
+        const bx = CX + (offsets[i % barrels] ?? 0);
+        const sx = own ? fx.aimRound(own, bx) : bx;
+        const proj: Proj = own
+          ? { x: sx, originX: bx, y: own.y, vx: own.vx, vy: own.vy, big, tint, ...sizeBuff }
+          : { x: bx, originX: bx, y: my, vx: vx + this.pelletVx(Math.floor(i / barrels), n, Math.abs(vy)), vy, big, tint, ...sizeBuff };
+        if (own) {
+          proj.setEleven = own;
+        } else if (i === 0) {
+          // A beam or the railgun: nothing to carry, the hidden knife flies.
+          // The sword's slash leaves 0.115 s after the swing: its carrier
+          // waits at the muzzle for it instead of landing before it exists.
+          proj.setElevenPending = true;
+          if (fx.roundDue) proj.s11Wait = true;
+        } else proj.s11Ghost = true;
         this.projs.push(proj);
       }
       // Slide 11's gun kicks by itself (`ws.recoil × kick` inside its own
@@ -3230,7 +3245,9 @@ export class Game {
     }
     if (this.combo >= 2) {
       if (this.combo >= 3) pts *= 2;
-      sfx.combo(this.combo);
+      // Slide 7 has no combo voice: its hits sound only like the weapon
+      // (impact accent + thunk). The combo still scores and still pops.
+      if (!elevenHit) sfx.combo(this.combo);
       this.comboPop = 1;
     }
     pts *= this.dmgMult; // POWER also doubles classic points / boss damage, not only rock damage.
@@ -3745,7 +3762,7 @@ export class Game {
       }
       this.chestBullets.push(embedded);
       if (this.chestBullets.length > 18) this.dislodgeChestShot(this.chestBullets.shift()!);
-      this.specialImpact(p.x, p.y, 'gold');
+      if (!this.elevenSpecialImpact(p, p.x, p.y)) this.specialImpact(p.x, p.y, 'gold');
       this.burstSpecial(p.x, p.y, 'gold', 8);
       return { res: 'hit' };
     }
@@ -3766,7 +3783,7 @@ export class Game {
         const y = ty + Math.sin(coin.angle + this.rot) * coin.radius * sc;
         this.coins += 2;
         this.score += 50;
-        this.specialImpact(x, y, 'gold');
+        if (!this.elevenSpecialImpact(p, x, y)) this.specialImpact(x, y, 'gold');
         this.burstSpecial(x, y, 'gold', 8);
         sfx.coin();
         if (this.bonusCoins.every(c => c.taken)) this.finishSpecialStage();
@@ -3787,7 +3804,7 @@ export class Game {
       // The core is collectible only in the designated boulder stage; the
       // bonus-rock round keeps its own ring-coin objective.
       if (mode !== 'boulder' || this.centerDiamondCollected) {
-        this.specialImpact(p.x, p.y, 'diamond');
+        if (!this.elevenSpecialImpact(p, p.x, p.y)) this.specialImpact(p.x, p.y, 'diamond');
         this.burstSpecial(p.x, p.y, 'diamond', 8);
         sfx3.chime();
         return { res: 'hit' };
@@ -3795,7 +3812,7 @@ export class Game {
       this.centerDiamondHits++;
       this.addText(`BERLIAN ${this.centerDiamondHits}/3`, p.x, p.y - 26, '#a5f3fc', 22);
       this.sink.light(p.x, p.y, 90 + this.centerDiamondHits * 20, '103,232,249', 0.35);
-      this.specialImpact(p.x, p.y, 'diamond');
+      if (!this.elevenSpecialImpact(p, p.x, p.y)) this.specialImpact(p.x, p.y, 'diamond');
       this.burstSpecial(p.x, p.y, 'diamond', this.centerDiamondHits === 3 ? 28 : 10);
       sfx3.chime();
       if (this.centerDiamondHits >= 3) {
@@ -3815,9 +3832,13 @@ export class Game {
     }
     this.level.hp = hit.remaining;
     this.score += 1 + hit.broken.length * 10;
-    this.specialImpact(p.x, p.y, 'rock');
-    this.hitStop = Math.max(this.hitStop, 0.018);
-    this.shake = Math.max(this.shake, hit.broken.length ? 5 : 2);
+    // A Slide 7 round brings its own impact, shake and hit-stop.
+    const ownRockHit = this.elevenSpecialImpact(p, p.x, p.y);
+    if (!ownRockHit) {
+      this.specialImpact(p.x, p.y, 'rock');
+      this.hitStop = Math.max(this.hitStop, 0.018);
+      this.shake = Math.max(this.shake, hit.broken.length ? 5 : 2);
+    }
     // Every round belongs to the exact cell it struck, including rounds that
     // break it immediately. Splash damage can knock off previously hit cells.
     const tip = 7 / sc;
@@ -3840,7 +3861,7 @@ export class Game {
         this.burstSpecial(x, y, 'rock', 3);
       }
       if (!isSlide23Weapon(this.weapon.id)) sfx4.shatter();
-    } else if (!isSlide23Weapon(this.weapon.id)) sfx.hit();
+    } else if (!isSlide23Weapon(this.weapon.id) && !ownRockHit) sfx.hit();
     if (hit.remaining === 0 && mode === 'boulder') this.finishSpecialStage();
     return { res: 'hit' };
   }
@@ -3887,6 +3908,24 @@ export class Game {
         rot, vr: rand(-7, 7), life: 1.5, bullets: bullets.get(cell.id) ?? [],
       });
     }
+  }
+
+  /**
+   * A Slide 7 round lands on the rock, the chest or the bonus ring with its
+   * own slide-7 impact — its burst, light, shake, hit-stop and its own impact
+   * accent and thunk — exactly as it lands on the wheel. Slide 1's generic hit
+   * look and hit voice for that gun were never part of the slide-7 weapon.
+   * Returns true when slide 7 took the hit (the stage's own material debris,
+   * coin and chime still play).
+   */
+  private elevenSpecialImpact(p: Proj, x: number, y: number): boolean {
+    if (!this.setElevenLive) return false;
+    if (p.setEleven) {
+      this.s11.impact(x, y, p.setEleven);
+      return true;
+    }
+    // A beam's or the railgun's hidden knife: slide 7's own hit already played.
+    return !!(p.setElevenPending || p.s11Ghost);
   }
 
   /** Keep the normal weapon's signature hit effect, with the correct material palette. */
@@ -4660,12 +4699,21 @@ export class Game {
     for (const p of this.projs) {
       if (p.spawnDelay && p.spawnDelay > 0) continue;
       if (p.setElevenPending) {
-        // Slide 11 releases some rounds a frame later (bursts, drones).
-        const made = this.s11.takeShots();
+        // Only the sword's carrier waits for a round (its slash leaves a
+        // moment after the swing); it takes it over where slide 7 released
+        // it and from then on flies it slide 7's way. A beam's or the
+        // railgun's hidden knife has no round to wait for.
+        const made = p.s11Wait ? this.s11.takeShots() : [];
         if (made.length) {
-          p.setEleven = made[0];
+          const own = made[0];
+          const bx = p.originX ?? CX;
+          p.setEleven = own;
           p.setElevenPending = false;
-          p.y = made[0].y;
+          p.s11Wait = false;
+          p.x = this.s11.aimRound(own, bx);
+          p.y = own.y;
+          p.vx = own.vx;
+          p.vy = own.vy;
         } else if (this.strandCarrier(p)) continue;
       }
       if (p.s11Ghost) continue; // extra pellet of a burst gun: slide 11 fired it
@@ -5209,6 +5257,24 @@ export class Game {
       // before its round existed, the round was never drawn, and the wheel got
       // slide 1's bullet instead of slide 7's stuck art.
       if (p.setSevenPending) continue;
+      // The sword's carrier waits at the muzzle until its slash exists.
+      if (p.s11Wait) continue;
+      if (p.setEleven) {
+        // Slide 7's own update decided this frame's flight of the round
+        // (spread, acceleration, braking, homing, swirl, a jump back under
+        // the wheel, the prism's hand-over to its central ray).
+        let f = this.s11.flight(p.setEleven);
+        if (f?.next) {
+          p.setEleven = f.next;
+          f = this.s11.flight(f.next) ?? f;
+        }
+        if (f) {
+          p.x = f.x;
+          p.y = f.y;
+          p.vx = f.vx;
+          p.vy = f.vy;
+        }
+      }
       const ghostN = FX[this.weapon.id].ghost;
       if (ghostN) {
         p.hist = p.hist ?? [];
@@ -6506,6 +6572,10 @@ export class Game {
       if (p.setNine || p.setNinePending || p.s9Ghost || p.setNineBeam !== undefined) continue;
       // …and so does slide 11.
       if (p.setEleven) {
+        // Painted where its carrier is now (slide 7 paints a round after it
+        // moved, not where it was at the top of the frame).
+        p.setEleven.x = p.x;
+        p.setEleven.y = p.y;
         this.drawCarriedRound(c, p, () => this.s11.drawShot(c, p.setEleven!));
         continue;
       }

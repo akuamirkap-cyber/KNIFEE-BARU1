@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import { SetElevenFx, busterCharge, drawSetElevenShotShell, setElevenMuted } from '../src/games/gunhit/game/setElevenFx';
+import { SET_ELEVEN_IDS } from '../src/games/gunhit/game/setElevenArt';
 import { installCanvasShim } from './supportCanvas';
 
 /**
@@ -131,9 +133,20 @@ test('a released buster shot is voiced by its release blast alone', () => {
   const rel = log.filter((e) => e.name === 'playRelease');
   assert.equal(rel.length, 1);
   assert.deepEqual(rel[0].args, ['mega-buster', 2]);
-  fx.selectWeapon('ak47');
-  fx.fire(210, 571, 0);
-  assert.equal(log.filter((e) => e.name === 'playFire').length, 1, 'a normal gun keeps its fire sound');
+});
+
+test('no slide-7 trigger plays a fire sound: slide 7’s engine never calls playFire', () => {
+  // Slide 7 voices a shot where it lands (the impact accent and the thunk),
+  // while its beam burns and on the buster's release — never on the trigger.
+  const engine = readFileSync('games/game-8/src/game/engine.ts', 'utf8');
+  assert.doesNotMatch(engine, /playFire\(/, 'slide 7 itself never plays a trigger sound');
+  const { fx } = host();
+  for (const id of SET_ELEVEN_IDS) {
+    fx.selectWeapon(id);
+    const log = spySfx(fx);
+    fx.fire(210, 571, 0);
+    assert.equal(log.filter((e) => e.name === 'playFire').length, 0, `${id} played a fire sound`);
+  }
 });
 
 test('a carried slide-11 round is painted once, by slide 1’s pass, and dropped once nobody carries it', () => {

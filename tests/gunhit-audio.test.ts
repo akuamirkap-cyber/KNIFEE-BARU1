@@ -78,6 +78,11 @@ function elevenEngine() {
   return e;
 }
 
+/** The wall clock moves on with the frames a test plays (see `listen()`). */
+let skew = 0;
+const wallClock = performance.now.bind(performance);
+performance.now = () => wallClock() + skew;
+
 /** A game on a mid level, with every counter a shot needs cleared. */
 function newGame() {
   const game = new Game(canvas as unknown as HTMLCanvasElement, {} as never);
@@ -96,6 +101,24 @@ function ready(game: Game & { snowLoaded?: number }) {
 }
 
 /**
+ * Slide 7's guns make no sound on the trigger — its engine never calls
+ * `playFire()`. A slide-7 shot is heard when its round lands (its impact
+ * accent and the thunk), while its beam burns, or on the buster's release, so
+ * a Slide 7 shot is listened to through the second of play after the trigger.
+ */
+function listen(game: Game, effect?: string) {
+  if (effect !== 'set11') return;
+  for (let i = 0; i < 72; i++) {
+    game.update(1 / 60);
+    // Slide 7's engine rate-limits its voices on the wall clock
+    // (`performance.now()`: one impact accent per 60 ms, one thunk per 52 ms).
+    // Played back faster than real time, a second of play would otherwise
+    // fit inside those gates and hide the measured shot behind the primer.
+    skew += 1000 / 60;
+  }
+}
+
+/**
  * Fires one shot of `id` with `effect` selected and returns what it played.
  *
  * The first shot only builds each engine's graph (and its master bus), so it is
@@ -107,9 +130,11 @@ function fire(id: string, effect?: string) {
   game.weapon = getWeapon(id as never);
   ready(game);
   game.shoot();
+  listen(game, effect);
   ready(game);
   audio.reset();
   game.shoot();
+  listen(game, effect);
   return { ...audio.probe };
 }
 
@@ -120,10 +145,12 @@ async function fireAfterGate(id: string, effect: string, ms = 340) {
   game.weapon = getWeapon(id as never);
   ready(game);
   game.shoot();
+  listen(game, effect);
   ready(game);
   await new Promise((r) => setTimeout(r, ms));
   audio.reset();
   game.shoot();
+  listen(game, effect);
   return { ...audio.probe };
 }
 

@@ -17,8 +17,12 @@ export interface ElevenHooks {
   shake(amount: number): void;
   flash(color: string, strength: number): void;
   hitStop(seconds: number): void;
-  /** Slide 1's wheel; `dir` is the way it spins right now (+1 / -1). */
-  wheel(): { x: number; y: number; R: number; angle: number; dir?: number };
+  /**
+   * Slide 1's wheel; `dir` is the way it spins right now (+1 / -1). `marks`
+   * is false on a stage with no wheel face to mark (the rock, the chest, the
+   * bonus ring): slide 7's entry holes have nothing to sit on there.
+   */
+  wheel(): { x: number; y: number; R: number; angle: number; dir?: number; marks?: boolean };
 }
 
 /** Slide 11's own wheel motion this frame, applied to slide 1's wheel. */
@@ -39,6 +43,15 @@ const STILL: ElevenWheelMotion = { dx: 0, dy: 0, sx: 1, sy: 1 };
  * `PERIOD`).
  */
 const CASTER_LOCK = 2.6;
+
+/**
+ * The rounds of a slide-7 volley its own wheel counts (`hit({ count })`), in
+ * the order slide 1's barrels take them: the nano-swarm counts drones 6 and 0.
+ */
+const SCORING: Partial<Record<ElevenId, number[]>> = { 'nano-swarm': [6, 0] };
+
+/** Slide-7 guns whose round leaves a moment after the trigger (the sword's swing: 0.115 s). */
+const DELAYED_ROUND = new Set<ElevenId>(['energy-sword']);
 
 const NO_HOOKS: ElevenHooks = {
   shake: () => {},
@@ -145,6 +158,10 @@ export class SetElevenFx {
    * the screen) is gone on slide 1, so it must leave slide 11's list too.
    */
   private carriedAt = new Map<Proj, number>();
+  /** This frame's `flight()` of every carried round (rebuilt by `step()`). */
+  private flights = new Map<Proj, { x: number; y: number; vx: number; vy: number; next?: Proj }>();
+  /** False while slide 1 plays a stage without a wheel face (see `ElevenHooks.wheel`). */
+  private marks = true;
   private tick = 0;
   shotsFired = 0;
   /**
@@ -204,6 +221,7 @@ export class SetElevenFx {
     this.wy = w.y;
     this.wheelR = w.R;
     this.rotation = w.angle;
+    this.marks = w.marks !== false;
     // Slide 11 pushes its wheel the way it is turning (every hit's spin boost,
     // the chrono rifle's thaw), so it has to know which way slide 1's turns.
     if (this.raw && w.dir) this.raw.wheel.dir = w.dir < 0 ? -1 : 1;
@@ -293,7 +311,8 @@ export class SetElevenFx {
       g.embeds.length = 0;
       this.taken.clear();
       this.carried.clear();
-    this.carriedAt.clear();
+      this.carriedAt.clear();
+      this.flights.clear();
       this.shotsFired = 0;
     }
     this.adopt();
@@ -361,16 +380,11 @@ export class SetElevenFx {
       ws.fireT = 0;
       ws.shots++;
     }
-    // A released charge shot (the Mega Buster) is voiced by `playRelease()`
-    // alone — slide 11's `release()` never plays the fire sound for it, and
-    // layering both stacked two blasts on every buster shot.
-    if (!w.onRelease) {
-      try {
-        g.sfx.playFire(w.id);
-      } catch {
-        /* audio is optional */
-      }
-    }
+    // Slide 7's trigger makes no sound of its own: its engine never calls
+    // `playFire()` (the recipes in its sound file are never heard there). A
+    // shot is heard where slide 7 voices it — the round's impact accent and
+    // the wood thunk when it lands, a beam's hum, the buster's release blast.
+    // Slide 1 used to play `playFire()` on every trigger on top of all that.
     if (w.onRelease) {
       ws.charge = charge;
       w.onRelease(g, ws, charge);
@@ -442,7 +456,12 @@ export class SetElevenFx {
     // (every auto-fire gun at full rate): the new carrier spawned right under
     // the wheel, ran into the bullet that had just stuck and ended the stage
     // with GAGAL! on the first burst.
-    const made = g.projs.filter((p) => p.alive && !this.taken.has(p));
+    //
+    // Only a round that has not flown yet is new (`age` 0: made by this
+    // trigger, or by the sword's swing at the end of the last frame). A round
+    // slide 7 released in flight — the prism's seven rays, the dragon's
+    // fireballs — already flies on slide 7's own physics and is nobody's shot.
+    const made = g.projs.filter((p) => p.alive && !this.taken.has(p) && p.age === 0);
     // Only hand the round over: it becomes slide 1's on `carry()`. A volley
     // slide 1 cannot carry (a twelve-orb burst, a later timer shot) must keep
     // flying on slide 11's own physics instead of freezing at the muzzle.
@@ -467,11 +486,102 @@ export class SetElevenFx {
     for (const p of this.carried) this.taken.delete(p);
     this.carried.clear();
     this.carriedAt.clear();
+    this.flights.clear();
   }
 
   /** True when slide 11 fired a projectile (as opposed to a channel/beam). */
   get hasRound(): boolean {
     return this.raw ? this.raw.projs.length > 0 : false;
+  }
+
+  /**
+   * The rounds of one trigger that slide 1 scores — one per barrel.
+   *
+   * A volley is not one round per lane: slide 7's nano-swarm releases twelve
+   * drones that spread, brake and home in on the wheel, and its own wheel
+   * only counts drones 0 and 6. Slide 1 carries those (one per barrel); the
+   * other drones keep flying, homing and biting on slide 7's own physics.
+   * Fanning all twelve into straight, parallel lanes is what sent half the
+   * swarm past the wheel and stuck a dozen hidden knives with one shot.
+   */
+  scoringRounds(made: Proj[], n: number): Proj[] {
+    if (made.length <= n) return made.slice();
+    const picked: Proj[] = [];
+    for (const i of SCORING[this.weaponId] ?? []) {
+      const r = made.find((p) => (p.data as { i?: number } | undefined)?.i === i);
+      if (r && picked.length < n && !picked.includes(r)) picked.push(r);
+    }
+    for (const r of made) if (picked.length < n && !picked.includes(r)) picked.push(r);
+    return picked;
+  }
+
+  /**
+   * Put the round slide 1 scores on slide 1's barrel line `x`.
+   *
+   * On slide 7 nothing ever fails: a round may land a few degrees off (the
+   * AK's random spread, the helix's alternating prongs, a drone's random spot
+   * under the wheel) and the next one simply lands next to it. On slide 1 the
+   * scored round is a knife — one landing on the last one is GAGAL! — so the
+   * scored round lands where slide 1 aims, like every slide-1 shot does.
+   * A homing drone keeps its whole slide-7 flight (spread, brake, homing,
+   * swirl) and only its target spot is the barrel; a straight round leaves
+   * straight up the barrel at its own slide-7 speed. The rest of a volley
+   * keeps every bit of slide 7's randomness.
+   *
+   * Returns where the round's carrier starts on slide 1.
+   */
+  aimRound(p: Proj, x: number): number {
+    const d = p.data as { tx?: number } | undefined;
+    if (d && typeof d.tx === 'number') {
+      d.tx = x;
+      // The drone leaves its own barrel with its own few pixels of jitter.
+      return x + (p.x - this.cx);
+    }
+    p.x = x;
+    if (p.vy < 0) {
+      p.vy = -Math.hypot(p.vx, p.vy);
+      p.vx = 0;
+    }
+    return x;
+  }
+
+  /** The current gun releases its round a moment after the trigger (the sword's swing). */
+  get roundDue(): boolean {
+    return DELAYED_ROUND.has(this.weaponId);
+  }
+
+  /**
+   * How slide 7's own update moved a carried round this frame: where it is
+   * (after any jump its update made — a drone pulled back under the wheel)
+   * and how fast it goes now (its spread, its acceleration, its homing and
+   * swirl). Slide 1 moves the carrier exactly that way and only adds the hit
+   * test, so every round flies slide 7's own path.
+   *
+   * `next` is set when the round burst in flight into new rounds and slide 1
+   * should carry one of them from now on (the prism lance's central ray).
+   */
+  flight(p: Proj): { x: number; y: number; vx: number; vy: number; next?: Proj } | null {
+    return this.flights.get(p) ?? null;
+  }
+
+  /**
+   * The round of a mid-air burst that keeps the old round's line — the one
+   * slide 1 goes on carrying (the prism's central ray). Slide 7's other rays
+   * keep flying on their own.
+   */
+  private heirOf(p: Proj, kids: Proj[]): Proj | null {
+    const a = Math.atan2(p.vy, p.vx);
+    let best: Proj | null = null;
+    let bestD = Infinity;
+    for (const k of kids) {
+      if (!k.alive || k.noCollide) continue;
+      const d = Math.abs(Math.atan2(Math.sin(Math.atan2(k.vy, k.vx) - a), Math.cos(Math.atan2(k.vy, k.vx) - a)));
+      if (d < bestD) {
+        bestD = d;
+        best = k;
+      }
+    }
+    return best;
   }
 
   /** Slide 1 hands the carried round's real position back to slide 11. */
@@ -510,7 +620,15 @@ export class SetElevenFx {
           /* a weapon's own burst must never break the frame */
         }
       }
-      this.drop(proj);
+      if (proj.alive) {
+        // The round turned round in its own `onHit` (the identity disc slices
+        // the wheel and flies back to the arm, `noCollide`, then docks): slide
+        // 1's carrier ends here, the round keeps flying on slide 7's physics.
+        this.carried.delete(proj);
+        this.carriedAt.delete(proj);
+      } else {
+        this.drop(proj);
+      }
     }
   }
 
@@ -559,6 +677,7 @@ export class SetElevenFx {
     this.taken.clear();
     this.carried.clear();
     this.carriedAt.clear();
+    this.flights.clear();
   }
 
   /**
@@ -659,6 +778,7 @@ export class SetElevenFx {
     this.taken.clear();
     this.carried.clear();
     this.carriedAt.clear();
+    this.flights.clear();
     if (!g) return;
     // A new stage starts with slide 11's own level flow at zero as well.
     this.muteOwnWheelBreak();
@@ -807,6 +927,7 @@ export class SetElevenFx {
     }
 
     const R = this.wheelR;
+    this.flights.clear();
     // Rounds slide 1 is not carrying fly on slide 11's own physics — and they
     // hit slide 11's own wheel, so a burst that slide 1 never carried still
     // bursts into the target instead of sailing through it.
@@ -815,22 +936,37 @@ export class SetElevenFx {
       if (!p.alive) continue;
       p.age += dt;
       if (this.carried.has(p)) {
-        // Slide 1 owns where a carried round is, but the round's own per-frame
-        // FX are still slide 11's: its glowing trail, its drips and sparks —
-        // and the prism lance's split into seven rays, which only happens in
-        // its update. Without this the lance only ever played its impact sound.
+        // A carried round runs slide 7's own update — its trail, drips and
+        // sparks, the prism lance's split, the singularity's acceleration, a
+        // drone's braking, homing and swirl — and slide 1 moves its carrier
+        // by what that update decided (`flight()`). Slide 1 only adds the hit
+        // test; the position stays the carrier's until slide 1 has moved it.
+        const x0 = p.x;
+        const y0 = p.y;
+        const n0 = g.projs.length;
         if (p.update) {
-          const { x, y, vx, vy } = p;
           try {
             p.update(g, dt, p);
           } catch {
             /* ignore */
           }
-          p.x = x;
-          p.y = y;
-          p.vx = vx;
-          p.vy = vy;
         }
+        let f: { x: number; y: number; vx: number; vy: number; next?: Proj } = { x: p.x, y: p.y, vx: p.vx, vy: p.vy };
+        if (!p.alive && g.projs.length > n0) {
+          // It burst in flight into new rounds (the prism's spectrum): slide 1
+          // goes on carrying the one that keeps its line — the central ray,
+          // the one slide 7's wheel counts — and the others fly on their own.
+          const heir = this.heirOf(p, g.projs.slice(n0));
+          if (heir) {
+            this.taken.add(heir);
+            this.carried.add(heir);
+            this.carriedAt.set(heir, this.tick);
+            f = { x: heir.x, y: heir.y, vx: heir.vx, vy: heir.vy, next: heir };
+          }
+        }
+        this.flights.set(p, f);
+        p.x = x0;
+        p.y = y0;
         continue;
       }
       try {
@@ -915,6 +1051,10 @@ export class SetElevenFx {
       this.hooks.hitStop(g.hitstop);
       g.hitstop = 0;
     }
+    // No wheel face on this stage (the rock, the chest, the bonus ring): a
+    // round's entry hole has nothing to sit on, and a burning one would throw
+    // its embers from an empty circle.
+    if (!this.marks) g.embeds.length = 0;
     for (const e of g.embeds) {
       if (e.fade > 0) e.fade -= dt;
       if (e.fire > 0) {
