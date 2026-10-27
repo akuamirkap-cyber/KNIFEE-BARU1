@@ -155,11 +155,18 @@ test('the ambient show only runs while slide 1 is playing', () => {
   for (let i = 0; i < 600; i++) idle.update(1 / 60);
   assert.equal(idle.sky.length, 0, 'no show outside play');
 
+  // The show launches on a random 0.7–1.5 s beat and a rocket is only in `sky`
+  // while it climbs, so sample until one is airborne instead of trusting one
+  // fixed frame (that made this test flaky).
   const playing = new SetTwoFx();
   playing.weapon = 'firework';
   playing.ambient = true;
-  for (let i = 0; i < 120; i++) playing.update(1 / 60);
-  assert.ok(playing.sky.length > 0, 'the sky show runs during play');
+  let airborne = 0;
+  for (let i = 0; i < 600 && airborne === 0; i++) {
+    playing.update(1 / 60);
+    airborne = playing.sky.length;
+  }
+  assert.ok(airborne > 0, 'the sky show runs during play');
 
   const ground = new SetTwoFx();
   ground.weapon = 'bazooka';

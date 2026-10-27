@@ -45,6 +45,11 @@ export function setNineMuted(muted: boolean) {
   nineAudio.muted = muted;
 }
 
+/** Slide 9's current mute state, so a temporary silence can be undone. */
+export function nineMuted(): boolean {
+  return nineAudio.muted;
+}
+
 /** Slide 9's audio graph may only start after a user gesture. */
 export function unlockNineAudio() {
   try {

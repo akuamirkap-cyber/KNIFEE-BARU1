@@ -43,6 +43,11 @@ function useEngine(sfx: Game['sfx']) {
   return sfx;
 }
 
+/** Slide 11's current mute state, so a temporary silence can be undone. */
+export function elevenMuted(): boolean {
+  return muted;
+}
+
 export function setElevenMuted(m: boolean) {
   muted = m;
   for (const sfx of engines) {
