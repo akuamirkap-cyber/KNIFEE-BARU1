@@ -63,7 +63,7 @@ test('slide 1 reads storage only through the safe store', () => {
   const app = readFileSync(fileURLToPath(new URL('../src/games/gunhit/App.tsx', import.meta.url)), 'utf8');
   assert.ok(!/\blocalStorage\b/.test(app),
     'App.tsx must not touch localStorage directly: one SecurityError blanks the hub');
-  assert.match(app, /import \{ storage \} from '\.\/game\/safeStorage'/);
+  assert.match(app, /import \{[^}]*\bstorage\b[^}]*\} from '\.\/game\/safeStorage'/);
 });
 
 test('every page is served with the storage shim before its modules', async () => {

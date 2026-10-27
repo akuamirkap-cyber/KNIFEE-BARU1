@@ -8,8 +8,12 @@
  * single throw there unmounted the whole React tree: the page came up blank with
  * nothing but `SecurityError: Access is denied for this document` in the console.
  *
- * `createSafeStorage()` answers the same three calls and falls back to memory, so
- * the game still plays; progress simply does not survive a reload in that mode.
+ * `createSafeStorage()` answers the same three calls and never throws. On top of
+ * the memory fallback, the page shim in `vite.config.ts` persists the refused
+ * values to IndexedDB and `window.name`, so progress still survives a reload
+ * wherever the browser allows either of those; `savedValues` is how slide 1
+ * waits for that restore before it reads the first value.
+ *
  * The fallback also keeps the session consistent when storage exists but rejects
  * a write (quota, private mode).
  */
@@ -84,3 +88,89 @@ export function createSafeStorage(source: StorageSource = defaultSource): KeyVal
 
 /** The store slide 1 uses for every one of its saved values. */
 export const storage: KeyValueStore = createSafeStorage();
+
+/** What the page shim reports about the values it is still restoring. */
+export interface SavedValuesState {
+  /** `true` while the shim is still reading the fallback store. */
+  pending: boolean;
+  /** Resolves when the shim is done, whatever the outcome. */
+  settled: Promise<unknown> | null;
+}
+
+export interface ReadinessTracker {
+  /** May the game read its saved values yet? */
+  isReady(): boolean;
+  /**
+   * Called once when the values land; returns an unsubscribe function. Always
+   * re-check `isReady()` after subscribing: the restore may have finished in
+   * between, in which case no call is coming.
+   */
+  subscribe(listener: () => void): () => void;
+}
+
+/**
+ * Whether saved values are readable *now*.
+ *
+ * A browser that refuses `localStorage` still has IndexedDB and `window.name`,
+ * but both are restored asynchronously (or, for `indexedDB`, after a round trip),
+ * so slide 1 must not read its coins/weapon/collection before the shim is done:
+ * it would paint the defaults and then never pick the saved values up. When
+ * nothing needs restoring this answers `true` on the first call, so the normal
+ * path never renders a waiting state.
+ */
+export function createReadinessTracker(read: () => SavedValuesState | null): ReadinessTracker {
+  let ready = false;
+  let watching = false;
+  const listeners = new Set<() => void>();
+
+  const settle = () => {
+    if (ready) return;
+    ready = true;
+    const waiting = [...listeners];
+    listeners.clear();
+    waiting.forEach((listener) => listener());
+  };
+
+  const probe = () => {
+    if (ready || watching) return;
+    let state: SavedValuesState | null = null;
+    try {
+      state = read();
+    } catch {
+      state = null;
+    }
+    if (!state || !state.pending || !state.settled) {
+      settle();
+      return;
+    }
+    watching = true;
+    state.settled.then(settle, settle);
+  };
+
+  return {
+    isReady: () => {
+      probe();
+      return ready;
+    },
+    subscribe: (listener) => {
+      probe();
+      if (ready) return () => {};
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+  };
+}
+
+interface SavedValuesGlobal {
+  __gunhitStorageReady?: Promise<unknown> | null;
+  __gunhitStoragePending?: boolean;
+}
+
+/** The state the page shim leaves on `window` (absent when the shim never ran). */
+export const savedValues: ReadinessTracker = createReadinessTracker(() => {
+  const scope = globalThis as SavedValuesGlobal;
+  const settled = scope.__gunhitStorageReady ?? null;
+  return { pending: scope.__gunhitStoragePending === true, settled };
+});

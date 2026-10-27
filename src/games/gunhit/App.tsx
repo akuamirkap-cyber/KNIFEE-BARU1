@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Game } from './game/Game';
-import { storage } from './game/safeStorage';
+import { savedValues, storage } from './game/safeStorage';
 import { setMuted, sfx } from './game/audio';
 import type { BossType } from './game/bossRoster';
 import { bossXpReward, getPlayerProgress } from './game/playerProgress';
@@ -99,7 +99,35 @@ const getInitialQuests = (): QuestState => {
   return defaults;
 };
 
+/**
+ * Slide 1 mounts only once its saved coins/weapon/collection can be read.
+ *
+ * In a frame that refuses storage the page shim restores them from IndexedDB or
+ * `window.name`, which takes a tick; rendering early would freeze the defaults
+ * into state and the restored values would never show up. When storage works
+ * the tracker answers `true` immediately, so there is no waiting state at all.
+ */
+function useSavedValuesReady(): boolean {
+  const [ready, setReady] = useState(() => savedValues.isReady());
+  useEffect(() => {
+    if (ready) return;
+    const unsubscribe = savedValues.subscribe(() => setReady(true));
+    // The restore can land between the render and this effect; without this
+    // second look the slide would sit on the waiting shell for good.
+    if (savedValues.isReady()) setReady(true);
+    return unsubscribe;
+  }, [ready]);
+  return ready;
+}
+
 export default function App({ onExit }: { onExit?: () => void }) {
+  const ready = useSavedValuesReady();
+  // Same shell the game paints, so the wait never flashes white.
+  if (!ready) return <div className="h-full w-full bg-[#0b1418]" aria-busy="true" />;
+  return <GunHitGame onExit={onExit} />;
+}
+
+function GunHitGame({ onExit }: { onExit?: () => void }) {
   const active = useSlideActive();
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
