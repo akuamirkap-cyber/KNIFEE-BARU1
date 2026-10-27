@@ -129,7 +129,7 @@ test('user loadouts use the requested classic/new combination; only real alterna
   // RAILGUN also has slide 6's beam, filed between its slide-1 shape and slide 7.
   assert.deepEqual(getGunVariantOptions('railgun').map(v => v.id), ['original', 'set6', 'set7', 'set9', 'set11']);
   assert.deepEqual(getGunVariantOptions('dragon').map(v => v.label),
-    ['Sebelumnya', 'Sekarang', 'Terbaru', 'Set 4', 'Slide 9', 'Slide 11']);
+    ['Sebelumnya', 'Sekarang', 'Terbaru', 'Set 4', 'Slide 7', 'Slide 9']);
   // Slide 11 supersedes slide 9 for the eight slide-9 guns it also adopted;
   // YAUTJA is the one slide-9 gun slide 11 never had, so it keeps one card.
   for (const id of ['longbow', 'mp5', 'tesla_rifle', 'ion_smg', 'phaser',
@@ -148,8 +148,8 @@ test('user loadouts use the requested classic/new combination; only real alterna
   }
   // XENOMORPH is slide 11's only shared gun with a slide-1 silhouette to keep:
   // slide 1 only ever drew it one way, so it gets two honest cards.
-  assert.deepEqual(getGunVariantOptions('xeno').map(v => v.label), ['Sebelumnya', 'Slide 11']);
-  assert.deepEqual(getGunEffectOptions('xeno').map(v => v.label), ['Sebelumnya', 'Baru', 'Slide 11']);
+  assert.deepEqual(getGunVariantOptions('xeno').map(v => v.label), ['Sebelumnya', 'Slide 9']);
+  assert.deepEqual(getGunEffectOptions('xeno').map(v => v.label), ['Sebelumnya', 'Baru', 'Slide 9']);
   // The ten guns slide 11 added never existed on slide 1: one card each.
   for (const id of ['mega_buster', 'harmonic_disruptor', 'absolute_zero', 'helios_flare',
     'chrono_rifle', 'orbital_beacon', 'helix_pulsar', 'singularity', 'prism_lance',
@@ -159,7 +159,7 @@ test('user loadouts use the requested classic/new combination; only real alterna
   }
   assert.deepEqual(getGunEffectOptions('pistol').map(v => v.id), ['original', 'new', 'set9', 'set11']);
   assert.deepEqual(getGunEffectOptions('railgun').map(v => v.id), ['original', 'new', 'set6', 'set7', 'set9', 'set11']);
-  assert.deepEqual(getGunEffectOptions('pistol').map(v => v.label), ['Sebelumnya', 'Baru', 'Slide 9', 'Slide 11']);
+  assert.deepEqual(getGunEffectOptions('pistol').map(v => v.label), ['Sebelumnya', 'Baru', 'Slide 7', 'Slide 9']);
   assert.equal(getGunMetrics('honey', 'latest').span, getGunMetrics('honey', 'current').span);
 });
 

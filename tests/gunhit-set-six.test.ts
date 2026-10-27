@@ -135,11 +135,11 @@ test('slide 6 is a pickable card and only a card: the newest defaults stay', () 
     const designs = getGunVariantOptions(slide1);
     const card = designs.find((o) => o.id === 'set6');
     assert.ok(card, `${slide1} keeps its slide-6 design card`);
-    assert.equal(card!.label, 'Slide 6');
+    assert.equal(card!.label, 'Slide 4');
     const effects = getGunEffectOptions(slide1);
     const shot = effects.find((o) => o.id === 'set6');
     assert.ok(shot, `${slide1} keeps its slide-6 shot card`);
-    assert.equal(shot!.label, 'Slide 6');
+    assert.equal(shot!.label, 'Slide 4');
     // Every gun it touches has a slide-9 card: that is where the name came from.
     assert.equal(hasSlide9Update(slide1), true);
     // The pickup already selected for this gun does not change.

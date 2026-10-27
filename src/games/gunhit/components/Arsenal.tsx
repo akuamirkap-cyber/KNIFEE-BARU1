@@ -456,12 +456,12 @@ export default function Arsenal({
             <span
               className="shrink-0 rounded-full border border-emerald-200/80 bg-gradient-to-r from-emerald-400 to-green-500 px-1.5 py-0.5 text-[7.5px] font-black tracking-widest text-[#052e16] leading-none shadow-[0_0_10px_rgba(52,211,153,0.8)]"
               title={hasSlide11Update(selectedGun.id)
-                ? 'Senjata ini dapat pembaharuan: desain & efek asli slide 11'
-                : hasSlide6Update(selectedGun.id)
-                ? 'Senjata ini dapat pembaharuan: desain & efek asli slide 6'
-                : hasSlide9Update(selectedGun.id)
                 ? 'Senjata ini dapat pembaharuan: desain & efek asli slide 9'
-                : `Senjata ini dapat pembaharuan: desain & efek asli slide 7 (SET ${slide7UpdateSet(selectedGun.id)})`}
+                : hasSlide6Update(selectedGun.id)
+                ? 'Senjata ini dapat pembaharuan: desain & efek asli slide 4'
+                : hasSlide9Update(selectedGun.id)
+                ? 'Senjata ini dapat pembaharuan: desain & efek asli slide 7'
+                : `Senjata ini dapat pembaharuan: desain & efek asli slide 5 (SET ${slide7UpdateSet(selectedGun.id)})`}
             >
               NEW
             </span>
@@ -602,11 +602,13 @@ export default function Arsenal({
                         {(hasSlide11Update(w.id) || hasSlide9Update(w.id) || hasSlide6Update(w.id) || hasSlide7Update(w.id)) && (
                           <span
                             className="rounded-md border border-emerald-200/80 bg-gradient-to-b from-emerald-400 to-green-500 px-1 py-px text-[7.5px] font-black uppercase leading-none tracking-wider text-[#052e16] shadow-[0_0_8px_rgba(52,211,153,0.75)]"
-                            title={hasSlide6Update(w.id)
-                              ? 'Desain & efek baru · Slide 6'
-                              : hasSlide9Update(w.id)
+                            title={hasSlide11Update(w.id)
                               ? 'Desain & efek baru · Slide 9'
-                              : `Desain & efek baru · Slide 7 SET ${slide7UpdateSet(w.id)}`}
+                              : hasSlide6Update(w.id)
+                              ? 'Desain & efek baru · Slide 4'
+                              : hasSlide9Update(w.id)
+                              ? 'Desain & efek baru · Slide 7'
+                              : `Desain & efek baru · Slide 5 SET ${slide7UpdateSet(w.id)}`}
                           >
                             NEW
                           </span>

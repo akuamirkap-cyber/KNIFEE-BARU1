@@ -197,7 +197,7 @@ export default function WeaponPicker({
               aria-label={x.name}
             >
               {x.emoji}
-              {(hasSlide9Update(x.id) || hasSlide6Update(x.id) || hasSlide7Update(x.id)) && (
+              {(hasSlide11Update(x.id) || hasSlide9Update(x.id) || hasSlide6Update(x.id) || hasSlide7Update(x.id)) && (
                 <span className="pointer-events-none absolute right-0 top-0 h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.95)]" />
               )}
             </button>

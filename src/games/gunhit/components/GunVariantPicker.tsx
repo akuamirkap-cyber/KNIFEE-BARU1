@@ -12,7 +12,7 @@ const DESCRIPTIONS: Description = {
   diamond: ['Permata dan bodi platinum', 'Kristal bersinar modern', 'Pistol berfaset dengan pegangan tegas'],
   rainbow: ['Busur pelangi klasik', 'Spektrum bercahaya', 'Prisma pelangi dalam pistol mutiara'],
   meteor: ['Batuan lava klasik', 'Inti meteor menyala', 'Meriam tempa dengan grip dan ventilasi lava'],
-  golden: ['Pistol emas klasik', 'Emas berukir dan reload', 'Meriam emas, silinder dan slide bergerak', 'GOLDEN GUN slide 7: pistol emas dengan slide mundur dan selongsong terlempar'],
+  golden: ['Pistol emas klasik', 'Emas berukir dan reload', 'Meriam emas, silinder dan slide bergerak', 'GOLDEN GUN slide 5: pistol emas dengan slide mundur dan selongsong terlempar'],
   moonbeam: ['Bulan sabit klasik', 'Tongkat bulan berbintang', 'Tongkat sihir dengan bintang dan aura'],
   honey: ['Stoples madu klasik dengan tutup kain', 'Blaster lebah dengan pompa dan reservoir madu'],
   cricket: ['Cricket mini lama dengan receiver dan grip mungil', 'Profil krom seperti referensi: laras panjang, pelatuk terbuka, grip hitam'],
@@ -20,41 +20,49 @@ const DESCRIPTIONS: Description = {
   electro: ['Electro Gun dengan lilitan dan receiver lama', 'Receiver graphite, kapasitor cyan, dan lilitan tembaga rapi'],
   blackhole: [
     'Meriam singularitas klasik slide 1',
-    'Meriam slide 2: cincin foton ganda, inti singularitas, dan orb mengisi di moncong',
-    'BLACK HOLE slide 7: tongkat singularitas dengan orb mengisi dan cakar energi',
+    'Meriam versi Firework 8-Gun: cincin foton ganda, inti singularitas, dan orb mengisi di moncong',
+    'BLACK HOLE slide 5: tongkat singularitas dengan orb mengisi dan cakar energi',
   ],
   slingshot: [
     'Ketapel kayu sawo slide 1',
-    'KETAPEL slide 7: kayu bercabang, karet ban, kantung kulit dan batu kali berputar',
+    'KETAPEL slide 5: kayu bercabang, karet ban, kantung kulit dan batu kali berputar',
   ],
   blowgun: [
     'Sumpitan Dayak slide 1',
-    'SUMPIT DAYAK slide 7: buluh panjang, mata tombak, dan jumbai yang bergoyang',
+    'SUMPIT DAYAK slide 5: buluh panjang, mata tombak, dan jumbai yang bergoyang',
   ],
   shotgun: [
     'Shotgun slide 1',
-    'SHOTGUN slide 7: pompa kayu, selongsong terlempar dan kepulan asap pekat',
+    'SHOTGUN slide 5: pompa kayu, selongsong terlempar dan kepulan asap pekat',
   ],
   soaker: [
     'Pistol air neon slide 1',
-    'SUPER SOAKER slide 7: tangki berisi air, pengukur tekanan dan pompa yang bergerak',
+    'SUPER SOAKER slide 5: tangki berisi air, pengukur tekanan dan pompa yang bergerak',
   ],
 };
 
 /**
- * Every slide-7 card explains itself even without a hand-written paragraph:
- * the SET 1..5 card always says that the shape, the shot and the sound are
- * slide 7's own, and every other card is the slide-1 design it replaces.
+ * Every imported card explains itself even without a hand-written paragraph:
+ * it names the hub slide its shape, its shot and (where ported) its sound come
+ * from, by the hub's current numbering — set11 = Slide 9, set9 = Slide 7,
+ * set6 = Slide 4 (beam visuals only, no sounds), SET 1..5 = Slide 5, set2 =
+ * Firework 8-Gun (no longer in the hub). Every other card is a slide-1 design.
  */
 function describeFallback(weapon: Weapon, variant: GunVariant, label: string): string {
   if (variant === 'set11') {
-    return `${label}: ${weapon.name} dengan bentuk, efek tembakan dan suara asli dari slide 11`;
-  }
-  if (variant === 'set9') {
     return `${label}: ${weapon.name} dengan bentuk, efek tembakan dan suara asli dari slide 9`;
   }
-  if (variant === 'set1' || variant === 'set7') {
+  if (variant === 'set9') {
     return `${label}: ${weapon.name} dengan bentuk, efek tembakan dan suara asli dari slide 7`;
+  }
+  if (variant === 'set6') {
+    return `${label}: ${weapon.name} dengan bentuk dan efek sinar asli dari slide 4`;
+  }
+  if (variant === 'set1' || variant === 'set7') {
+    return `${label}: ${weapon.name} dengan bentuk, efek tembakan dan suara asli dari slide 5`;
+  }
+  if (variant === 'set2') {
+    return `${label}: ${weapon.name} dengan bentuk, efek tembakan dan suara asli dari Firework 8-Gun`;
   }
   return `${label}: desain ${weapon.name} di slide 1`;
 }

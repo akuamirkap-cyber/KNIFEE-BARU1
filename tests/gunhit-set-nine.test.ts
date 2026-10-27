@@ -145,11 +145,11 @@ test('slide 9 keeps its card on all 17 guns, newest wherever slide 11 has no new
     const designs = getGunVariantOptions(id as never);
     const design = designs.find((o) => o.id === 'set9');
     assert.ok(design, `${id} keeps its slide-9 design card`);
-    assert.equal(design!.label, 'Slide 9');
+    assert.equal(design!.label, 'Slide 7');
     const effects = getGunEffectOptions(id as never);
     const effect = effects.find((o) => o.id === 'set9');
     assert.ok(effect, `${id} keeps its slide-9 effect card`);
-    assert.equal(effect!.label, 'Slide 9');
+    assert.equal(effect!.label, 'Slide 7');
     // Whatever is default must be one of the cards offered.
     assert.ok(designs.some((o) => o.id === getGunVariant(id as never)));
     assert.ok(effects.some((o) => o.id === getGunEffect(id as never)));
