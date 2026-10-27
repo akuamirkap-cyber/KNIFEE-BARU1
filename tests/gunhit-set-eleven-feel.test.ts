@@ -85,7 +85,7 @@ test('a slide-11 beam hums while it is held and stops when it fades, like slide 
   assert.ok(Number(last.args[1]) < 0.04, 'released, the level drops under slide 11’s stop threshold');
 });
 
-test('the Mega Buster whines on slide 1’s charge clock, and the whine stops on release', () => {
+test('the Mega Buster whines on slide 7’s own charge clock, and the whine stops on release', () => {
   const { fx } = host();
   fx.selectWeapon('mega-buster');
   const log = spySfx(fx);
@@ -101,19 +101,18 @@ test('the Mega Buster whines on slide 1’s charge clock, and the whine stops on
   const whine = log.filter((e) => e.name === 'charge');
   assert.ok(whine.length >= 60);
   assert.equal(whine[0].args[0], 'mega-buster');
-  assert.ok(Math.abs(Number(whine.at(-1)!.args[1]) - 1.2) < 1e-9,
-    'slide 1’s full charge (1 s) is the buster’s full charge level');
+  assert.ok(Math.abs(Number(whine.at(-1)!.args[1]) - 1) < 1e-9,
+    'a second held is a second of slide 7’s own charge (its full blast comes at 1.2 s)');
   fx.chargeTime = 0;
   fx.advance(1 / 60, false);
   assert.equal(Number(log.filter((e) => e.name === 'charge').at(-1)!.args[1]), 0, 'let go: the loop is told to stop');
 });
 
-test('slide 1’s charge levels land on the buster’s own glow levels', () => {
+test('the buster charges on slide 7’s own clock: its mid glow at 0.45 s held, its full glow at 1.2 s', () => {
   assert.equal(busterCharge(0), 0);
-  assert.ok(Math.abs(busterCharge(0.35) - 0.45) < 1e-9, 'CHARGE x2 at 0.35 s is the buster’s mid glow');
-  assert.ok(Math.abs(busterCharge(1) - 1.2) < 1e-9, 'FULL CHARGE at 1 s is the buster’s full glow');
-  assert.ok(busterCharge(0.34) < 0.45 && busterCharge(0.99) < 1.2, 'never ahead of slide 1');
-  assert.ok(Math.abs(busterCharge(1.4) - 1.6) < 1e-9);
+  assert.equal(busterCharge(0.45), 0.45, 'mid glow after 0.45 s held');
+  assert.equal(busterCharge(1.2), 1.2, 'full glow after 1.2 s held');
+  assert.equal(busterCharge(1.4), 1.4);
   assert.equal(busterCharge(5), 1.6, 'capped at the buster’s max charge');
   let last = 0;
   for (let t = 0; t <= 2; t += 0.01) {
@@ -302,22 +301,69 @@ test('the prism lance splits into its seven rays while slide 1 carries it', () =
   assert.equal(log.filter((e) => e.name === 'impact').length, before, 'a split tracer lands no second burst');
 });
 
-test('the shoulder caster fires its own plasma bolt on slide 1’s release', () => {
+test('the shoulder caster locks on on slide 7’s own 2.6 s clock, and its burst is slide 1’s shot', () => {
   const { fx } = host();
   fx.selectWeapon('plasmacaster-mk2');
   spySfx(fx);
-  // Holding: the lock follows slide 1's charge meter and never fires alone.
-  fx.chargeHint = 0.5;
-  for (let i = 0; i < 240; i++) fx.advance(1 / 60, true);
-  assert.equal(fx.raw!.projs.length, 0, 'four seconds of holding fire nothing by themselves');
-  assert.ok(Math.abs(fx.state.data.cyc - 1.3) < 0.05, 'the three dots sit half-locked at half charge');
-  // Release: slide 1 fires, the burst leaves at once.
-  fx.chargeHint = 0;
-  fx.fire(210, 571, 2);
+  fx.press();
+  for (let i = 0; i < 150; i++) fx.advance(1 / 60, true);
+  assert.equal(fx.raw!.projs.length, 0, 'the lock never fires by itself');
+  assert.equal(fx.casterLocked, false, '2.5 s held: not locked yet');
+  assert.ok(Math.abs(fx.casterLock - 2.5 / 2.6) < 0.02, `the three dots close with the clock (${fx.casterLock})`);
+  let frames = 0;
+  while (!fx.casterLocked && frames < 30) {
+    fx.advance(1 / 60, true);
+    frames++;
+  }
+  assert.ok(fx.casterLocked, 'locked');
+  assert.ok(frames >= 4 && frames <= 7, `due at 2.6 s (after ${150 + frames} frames)`);
+  for (let i = 0; i < 60; i++) fx.advance(1 / 60, true);
+  assert.equal(fx.raw!.projs.length, 0, 'it waits at the lock for slide 1 to fire');
+  fx.fire(210, 571, 0);
   const made = fx.takeShots();
   assert.equal(made.length, 1, 'one plasma bolt, slide 11’s own');
   assert.ok(made[0].vy < -1000, 'flying up the lane');
   assert.ok(fx.raw!.fx.length > 0, 'with its muzzle burst');
+  assert.equal(fx.casterLocked, false);
+  assert.ok(fx.casterLock < 0.05, 'and the lock starts over while it is still held');
+});
+
+test('let go before the lock closes, the caster fires nothing and its lock resets', () => {
+  const { fx } = host();
+  fx.selectWeapon('plasmacaster-mk2');
+  fx.press();
+  for (let i = 0; i < 60; i++) fx.advance(1 / 60, true);
+  assert.ok(fx.casterLock > 0.3, `locking (${fx.casterLock})`);
+  for (let i = 0; i < 60; i++) fx.advance(1 / 60, false);
+  assert.equal(fx.casterLock, 0, 'released: the cycle resets');
+  assert.equal(fx.casterLocked, false);
+  assert.equal(fx.raw!.projs.length, 0);
+});
+
+test('a channel gun is not kicked, recharged or counted on the press; a fired gun is', () => {
+  const { fx } = host();
+  fx.selectWeapon('tripod');
+  fx.fire(210, 571, 0);
+  assert.equal(fx.state.recoil, 0, 'the heat ray does not jump');
+  assert.equal(fx.state.cd, 0);
+  assert.equal(fx.state.shots, 0);
+  assert.equal(fx.state.minHold, 0.45, 'it burns at least its own 0.45 s');
+  fx.selectWeapon('ak47');
+  fx.fire(210, 571, 0);
+  assert.equal(fx.state.recoil, 1);
+  assert.equal(fx.state.cd, 0.1);
+  assert.equal(fx.state.shots, 1);
+});
+
+test('slide 7’s wheel, light and gun settle before a shot, so a fresh kick shows at full strength', () => {
+  const { fx } = host();
+  fx.selectWeapon('ak47');
+  fx.settle(1 / 60);
+  fx.fire(210, 571, 0);
+  fx.advance(1 / 60, false);
+  assert.equal(fx.state.recoil, 1, 'settled first: the gun is drawn at its full kick on the shot’s frame');
+  fx.advance(1 / 60, false);
+  assert.ok(Math.abs(fx.state.recoil - Math.exp(-15 / 60)) < 1e-9, 'then it eases back at slide 7’s e^-15t');
 });
 
 test('a slide-11 shot that hits an obstacle ricochets with slide 11’s own ping', () => {

@@ -294,18 +294,24 @@ test('slide 11’s sniper and bow fire the moment the trigger goes down, without
       game.press();
       assert.equal(game.aiming, false, `${weapon}: no slide-1 scope (vignette, crosshair, slow-mo)`);
       assert.equal(game.charging, false, `${weapon}: no slide-1 draw-to-charge`);
-      assert.equal(fx.shotsFired, fired + 1, `${weapon}: slide 11’s shot leaves on the press`);
+      game.update(DT);
+      assert.equal(fx.shotsFired, fired + 1, `${weapon}: slide 7’s shot leaves on the very next frame, as its \`pending\` does`);
       game.holding = false;
       game.releaseScope();
+      game.update(DT);
       assert.equal(fx.shotsFired, fired + 1, `${weapon}: letting go fires nothing more`);
     });
   }
-  // The Mega Buster and the caster keep slide 1's hold-and-release charge.
-  for (const weapon of ['mega_buster', 'pred']) {
-    const game = stage(weapon) as Feel;
-    game.press();
-    assert.equal(game.charging, true, `${weapon} still charges while held`);
-  }
+  // The Mega Buster keeps its hold-and-release charge (on slide 7's clock);
+  // the shoulder caster has no trigger of its own: held, it only locks on.
+  const buster = stage('mega_buster') as Feel;
+  buster.press();
+  assert.equal(buster.charging, true, 'the Mega Buster still charges while held');
+  const caster = stage('pred') as Feel;
+  caster.press();
+  assert.equal(caster.charging, false, 'the caster does not charge on slide 1');
+  caster.update(DT);
+  assert.equal(caster.projs.length, 0, 'nor fire on the press');
 });
 
 test('a slide-11 heat ray keeps the burn’s points but none of slide 1’s fire look', () => {

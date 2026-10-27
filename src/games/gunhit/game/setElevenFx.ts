@@ -108,20 +108,15 @@ function spriteCanvas(): HTMLCanvasElement | null {
 }
 
 /**
- * Slide 1's charge clock on the Mega Buster's own scale. Slide 1 reaches its
- * two charge levels at 0.35 s and 1 s (`releaseScope()`: CHARGE x2 / FULL
- * CHARGE x4); the buster shows its mid and full glow — and `playRelease()`
- * picks its mid and full blast — at 0.45 s and 1.2 s. Re-timing the meter
- * piecewise makes the buster's glow, its rising whine and its full-charge
- * wobble change exactly when slide 1's charge level does, so the shot that
- * leaves on release is always the one the gun was showing.
+ * The Mega Buster's charge on slide 7's own clock: the seconds the trigger
+ * has been held (`update()`: `ws.charge += dt`, up to `maxCharge`). Its mid
+ * and full glow, its rising whine and the blast `playRelease()` picks come at
+ * 0.45 s and 1.2 s, and slide 1 releases the same level then (`releaseScope()`
+ * on the "Slide 7" card), so the shot that leaves is the one the gun showed.
  */
 export function busterCharge(seconds: number, max = 1.6): number {
   if (!(seconds > 0)) return 0;
-  const c = seconds <= 0.35 ? seconds * (0.45 / 0.35)
-    : seconds <= 1 ? 0.45 + (seconds - 0.35) * (0.75 / 0.65)
-      : 1.2 + (seconds - 1);
-  return Math.min(max, c);
+  return Math.min(max, seconds);
 }
 
 export class SetElevenFx {
@@ -153,11 +148,10 @@ export class SetElevenFx {
   private tick = 0;
   shotsFired = 0;
   /**
-   * Slide 1's charge meter (0..1) while the trigger is held. The shoulder
-   * caster's three-dot lock follows it, so the lock closes exactly when slide
-   * 1's charge is full instead of on slide 11's own 2.6 s clock.
+   * The shoulder caster's lock has closed (slide 7's 2.6 s of holding): its
+   * burst is due, and slide 1 fires it as its shot (see `fire()`).
    */
-  chargeHint = 0;
+  casterLocked = false;
   /**
    * Seconds slide 1 has been charging the current shot (0 when it is not
    * charging — a press during the cooldown never charges on slide 1). The
@@ -355,12 +349,18 @@ export class SetElevenFx {
     const ws = g.ws;
     this.shotsFired++;
     ws.holding = false;
-    ws.cd = ws.cdMax = w.cooldown;
-    ws.ready = 0;
-    ws.recoil = 1;
-    ws.fireT = 0;
-    ws.shots++;
-    if (w.channel) ws.minHold = w.minHold ?? 0.35;
+    if (w.channel) {
+      // A beam only opens on the press (`press()`: its shortest burn); slide 7
+      // never kicks, recharges or counts a channel gun there. The caster's
+      // burst does all that itself, when its lock closes.
+      if (w.id !== 'plasmacaster-mk2') ws.minHold = w.minHold ?? 0.25;
+    } else {
+      ws.cd = ws.cdMax = w.cooldown;
+      ws.ready = 0;
+      ws.recoil = 1;
+      ws.fireT = 0;
+      ws.shots++;
+    }
     // A released charge shot (the Mega Buster) is voiced by `playRelease()`
     // alone — slide 11's `release()` never plays the fire sound for it, and
     // layering both stacked two blasts on every buster shot.
@@ -388,6 +388,7 @@ export class SetElevenFx {
     // the caster's bolt, its muzzle burst and its plasma dome never appeared.
     // The release closes the lock and the burst leaves now, slide 11's own.
     if (w.id === 'plasmacaster-mk2' && w.channelUpdate) {
+      this.casterLocked = false;
       const D = (ws.data ??= {}) as { cyc?: number; auto?: boolean; fired?: boolean };
       D.cyc = CASTER_LOCK;
       D.auto = true;
@@ -402,6 +403,25 @@ export class SetElevenFx {
     // own `fire()` (and its artwork lights up on `fireT`). A generic star used
     // to be stacked on top of all of them — even the bow and the acid spitter
     // — which slide 11 never shows.
+  }
+
+  /**
+   * Slide 7's `press()` for the gun that does not fire on it (the shoulder
+   * caster): a channel gun burns at least its `minHold` once pressed.
+   */
+  press() {
+    const g = this.raw;
+    if (!g) return;
+    this.adopt();
+    const w = g.weapon;
+    if (w?.channel) this.state.minHold = w.minHold ?? 0.25;
+  }
+
+  /** How far the shoulder caster's three-dot lock has closed (0..1). */
+  get casterLock(): number {
+    if (this.weaponId !== 'plasmacaster-mk2') return 0;
+    const D = this.state.data as { cyc?: number } | undefined;
+    return clamp((D?.cyc ?? 0) / CASTER_LOCK);
   }
 
   /** Slide-11's muzzle in slide-1 screen space (the anchor slide 1 draws at). */
@@ -674,11 +694,50 @@ export class SetElevenFx {
 
   advance(dt: number, holding = false) {
     try {
+      if (!this.settled) this.settle(dt);
+      this.settled = false;
       this.step(dt, holding);
     } catch {
       // Slide 11's own weapon FX may never break slide 1's simulation: a thrown
       // frame is what makes the round look frozen or the wheel glitch.
     }
+  }
+
+  /** Set by `settle()`, cleared by the `advance()` that follows it. */
+  private settled = false;
+
+  /**
+   * The top of slide 7's `update()`: its wheel (spin boost, shiver, freeze,
+   * kick spring, squash, flash, heat), its scene light and its gun (recoil,
+   * cooldown) settle first, and only then do its guns fire and its rounds
+   * land. Slide 1 calls this at the start of its frame, before its trigger and
+   * its rounds, so a fresh kick, muzzle light or wheel flash is seen at full
+   * strength on the frame it happens — exactly as on slide 7, instead of one
+   * frame's decay early. `advance()` settles by itself when nobody did.
+   */
+  settle(dt: number) {
+    this.settled = true;
+    const g = this.raw;
+    if (!g) return;
+    const wl = g.wheel;
+    // Slide 11's own wheel physics: the spin boost every hit adds (and the
+    // chrono rifle's thaw), the kick spring and the squash. Slide 1 applies
+    // them to its own wheel (`wheelMotion()`, its spin).
+    wl.boost *= Math.exp(-dt * 2.5);
+    wl.shiver *= Math.exp(-dt * 6);
+    wl.freezeT = Math.max(0, wl.freezeT - dt);
+    wl.freeze += ((wl.freezeT > 0 ? 1 : 0) - wl.freeze) * (1 - Math.exp(-dt * (wl.freezeT > 0 ? 14 : 5)));
+    wl.kickV += (-300 * wl.kick - 15 * wl.kickV) * dt;
+    wl.kick += wl.kickV * dt;
+    wl.sq *= Math.exp(-dt * 10);
+    wl.flash *= Math.exp(-dt * 9);
+    wl.heat *= Math.exp(-dt * 1.1);
+    // The scene light every muzzle and impact throws (`drawLight()`).
+    g.lightA *= Math.exp(-dt * 6);
+    const ws = this.state;
+    ws.recoil *= Math.exp(-dt * 15);
+    ws.cd = Math.max(0, ws.cd - dt);
+    ws.ready = ws.cdMax > 0 ? 1 - ws.cd / ws.cdMax : 1;
   }
 
   private step(dt: number, holding: boolean) {
@@ -697,9 +756,6 @@ export class SetElevenFx {
     const ws = this.state;
     ws.t += dt;
     ws.fireT += dt;
-    ws.recoil *= Math.exp(-dt * 15);
-    ws.cd = Math.max(0, ws.cd - dt);
-    ws.ready = ws.cdMax > 0 ? 1 - ws.cd / ws.cdMax : 1;
     // Slide 11's guns read the held trigger themselves (the caster's lock
     // dots, the buster's charge glow), exactly as slide 11's `press()` sets it.
     ws.holding = holding;
@@ -708,11 +764,13 @@ export class SetElevenFx {
       const on = holding || ws.minHold > 0;
       ws.chan += ((on ? 1 : 0) - ws.chan) * (1 - Math.exp(-dt * (on ? 16 : 8)));
       if (ws.chan < 0.01 && !on) ws.chan = 0;
-      if (w.id === 'plasmacaster-mk2' && holding) {
-        // The caster's lock follows slide 1's charge meter and never fires on
-        // its own: slide 1's release fires it (see `fire()`).
-        const D = (ws.data ??= {}) as { cyc?: number };
-        D.cyc = Math.max(0, Math.min(CASTER_LOCK - dt - 1e-3, this.chargeHint * CASTER_LOCK));
+      if (w.id === 'plasmacaster-mk2') {
+        // The caster locks on on slide 7's own clock (2.6 s of holding). Its
+        // burst is slide 1's shot, though: the lock stops a hair short and
+        // raises `casterLocked`, slide 1 fires, and `fire()` closes the lock,
+        // so the round slide 1 carries is the caster's own bolt.
+        const D = (ws.data ??= {}) as { cyc?: number; fired?: boolean };
+        if (!D.fired) D.cyc = Math.min(D.cyc ?? 0, CASTER_LOCK - dt - 1e-3);
       }
       if (ws.chan > 0.01) {
         try {
@@ -725,6 +783,10 @@ export class SetElevenFx {
       // fire), started, swelled and faded with the channel like slide 11's
       // `update()` does every frame.
       this.loop(ws.chan, () => g.sfx.channel(w.id, ws.chan));
+      // Due next frame on slide 7's clock: the lock closes then.
+      const D = (ws.data ?? {}) as { cyc?: number; fired?: boolean; auto?: boolean };
+      this.casterLocked = w.id === 'plasmacaster-mk2' && holding && ws.chan > 0.01 && !D.fired
+        && D.auto !== false && (D.cyc ?? 0) + dt >= CASTER_LOCK - 1e-3;
     } else if (w.onRelease) {
       // Slide 1 owns the trigger and the charge: the buster glows and whines
       // only while slide 1 is really charging a shot, on slide 1's clock.
@@ -848,22 +910,6 @@ export class SetElevenFx {
     }
     g.fx = g.fx.filter((f) => f.age < f.max);
 
-    // Wheel mood + slide-11's entry holes (acid keeps eating, burn keeps burning)
-    const wl = g.wheel;
-    wl.heat *= Math.exp(-dt * 1.1);
-    wl.flash *= Math.exp(-dt * 9);
-    wl.freezeT = Math.max(0, wl.freezeT - dt);
-    wl.freeze += ((wl.freezeT > 0 ? 1 : 0) - wl.freeze) * (1 - Math.exp(-dt * (wl.freezeT > 0 ? 14 : 5)));
-    wl.shiver *= Math.exp(-dt * 6);
-    // Slide 11's own wheel physics from its `update()`: the spin boost every
-    // hit adds (and the chrono rifle's thaw), the kick spring and the squash.
-    // Slide 1 applies them to its own wheel (`wheelMotion()`, its spin).
-    wl.boost *= Math.exp(-dt * 2.5);
-    wl.kickV += (-300 * wl.kick - 15 * wl.kickV) * dt;
-    wl.kick += wl.kickV * dt;
-    wl.sq *= Math.exp(-dt * 10);
-    // The scene light every muzzle and impact throws (`drawLight()`).
-    g.lightA *= Math.exp(-dt * 6);
     // Slide 11's hit-stop belongs to slide 1's clock.
     if (g.hitstop > 0) {
       this.hooks.hitStop(g.hitstop);

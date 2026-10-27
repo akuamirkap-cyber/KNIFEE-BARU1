@@ -749,6 +749,7 @@ export class Game {
     this.nineFlashA = 0;
     this.nineStop = 0;
     this.nineQueued = false;
+    this.elevenPending = 0;
     this.s11State?.clear();
     this.s6State?.clear();
     this.s2wState?.clear();
@@ -899,6 +900,20 @@ export class Game {
     return !(w.onRelease || w.channel);
   }
 
+  /**
+   * The Slide 7 shoulder caster has no trigger of its own: held, its three-dot
+   * lock closes on slide 7's 2.6 s clock and the burst leaves by itself, again
+   * and again while it is held; let go early, nothing fires.
+   */
+  private get elevenCasterTrigger(): boolean {
+    return this.setElevenLive && this.setElevenId === 'plasmacaster-mk2';
+  }
+
+  /** The Slide 7 Mega Buster: its blast grows on slide 7's own charge clock. */
+  private get elevenBuster(): boolean {
+    return this.setElevenLive && this.setElevenId === 'mega-buster';
+  }
+
   /** True while slide 9's layer is out (its gun, or its FX still finishing). */
   private get nineActive(): boolean {
     return !!this.s9State && (this.setNineLive || this.s9State.busy);
@@ -1043,6 +1058,12 @@ export class Game {
   private nineFlashRgb = '255,255,255';
   /** Slide 9 remembers a click made up to 0.22 s before the gun is ready. */
   private nineQueued = false;
+  /**
+   * Slide 7's tap buffer (`pending` in its `press()`): every press keeps asking
+   * for a shot for 0.22 s, so a tap that lands just before the gun is ready
+   * still fires the moment it is.
+   */
+  private elevenPending = 0;
   /** How far the slide-9 bow was drawn when it was let go (0..1). */
   private nineDraw = 0;
   private camY = 0;
@@ -1158,6 +1179,11 @@ export class Game {
     if (this.choosingBuff) return;
     this.holding = true;
     const plain = this.plainTrigger;
+    // Slide 7's shoulder caster only starts locking on (`elevenCasterTrigger`).
+    if (this.elevenCasterTrigger) {
+      if (this.state === 'play') this.s11.press();
+      return;
+    }
     if (this.weapon.scope && !plain) {
       if (this.state === 'play' && this.cooldown <= 0 && this.ammoLeft > 0 && !this.aiming) {
         this.aiming = true;
@@ -1180,13 +1206,22 @@ export class Game {
     }
     // Slide 9 remembers a click made just before the gun is ready.
     if (this.ninePlainTrigger && this.state === 'play' && this.cooldown > 0 && this.cooldown <= 0.22) this.nineQueued = true;
+    // Slide 7 fires its plain guns inside its frame, not in the input handler
+    // (its `press()` only sets `pending`): the shot leaves on the next update,
+    // after the frame has settled, and the press keeps asking for 0.22 s.
+    if (this.elevenPlainTrigger) {
+      if (this.state === 'play') this.elevenPending = 0.22;
+      return;
+    }
     this.shoot();
   }
 
   private releaseScope() {
     if (this.charging) {
       this.charging = false;
-      this.chargeLevel = this.chargeT >= 1 ? 2 : this.chargeT >= 0.35 ? 1 : 0;
+      // Slide 7's buster reaches its mid and full blast at 0.45 s and 1.2 s.
+      const [lvMid, lvFull] = this.elevenBuster ? [0.45, 1.2] : [0.35, 1];
+      this.chargeLevel = this.chargeT >= lvFull ? 2 : this.chargeT >= lvMid ? 1 : 0;
       // Slide 9's bow is fully drawn after 1/3.4 s.
       this.nineDraw = Math.min(1, this.chargeT * 3.4);
       this.chargeT = 0;
@@ -1824,7 +1859,14 @@ export class Game {
       // from the muzzle flash slide 11 had just lit at the muzzle.
       this.recoil = 0;
       this.muzzle = 0.07;
-      this.cooldown = (w.spinup ? 0.3 - 0.235 * this.spin : w.cooldown)
+      // Slide 7's own fire rate (`weapon.cooldown`) for every gun it fires shot
+      // by shot: the railgun's 1.15 s recharge, the rifle's 0.15 s bolt, the
+      // bow's 0.62 s draw. A channel beam's 0.1 s there is only its burn tick
+      // while held; every round sticks here, so a beam keeps one round a press
+      // at slide 1's pace.
+      const own11 = elevenWeapon(s11id);
+      this.elevenPending = 0;
+      this.cooldown = (own11.channel ? (w.spinup ? 0.3 - 0.235 * this.spin : w.cooldown) : own11.cooldown)
         * (this.buff === 'speed' || this.treasureBuff === 'rapid' ? 0.5 : this.treasureBuff === 'mini' ? 0.6 : 1);
       if (isSpecial(this.level.mode) && this.ammoLeft === 0) this.reloadT = 0.65;
       else if (w.id === 'snowball' && this.snowLoaded === 0 && this.ammoLeft > 0) this.reloadT = 0.85;
@@ -2902,6 +2944,49 @@ export class Game {
     try {
       if (live && this.state === 'play' && this.level.mode !== 'treasure') fx.drawOverlay(c);
       fx.drawBeam(c);
+    } catch {
+      /* keep drawing slide 1 */
+    }
+  }
+
+  /**
+   * Slide 7's entry holes and scorch marks and slide 5's marks, drawn right
+   * after the wheel, as both slides draw them.
+   */
+  private drawLayerWheels(c: CanvasRenderingContext2D) {
+    if (this.s11State && (this.s11State.busy || this.setElevenLive)) {
+      // A bad frame from slide 7's own art must not blank slide 1.
+      try {
+        this.s11State.drawWheel(c, CX, this.targetY + this.bump * 7, this.level.radius, this.rot,
+          this.elevenMotion() ?? undefined);
+      } catch {
+        /* keep drawing slide 1 */
+      }
+    }
+    if (this.s9State && (this.s9State.busy || this.setNineLive)) {
+      // A bad frame from slide 5's own art must not blank slide 1.
+      try {
+        const nk = this.nineKick();
+        this.s9State.drawWheel(c, CX + nk.x, this.targetY + this.bump * 7 + nk.y, this.level.radius, this.rot);
+      } catch {
+        /* keep drawing slide 1 */
+      }
+    }
+  }
+
+  /**
+   * Slide 5's beams, sparks and free rounds, then the rounds slide 1 carries
+   * (slide 5 paints its rounds over their own sparks), all under its gun.
+   */
+  private drawNineLayer(c: CanvasRenderingContext2D) {
+    if (!this.s9State || !(this.s9State.busy || this.setNineLive)) return;
+    try {
+      this.s9State.draw(c);
+      for (const p of this.projs) {
+        if (p.setNine && this.s9State.isCarried(p.setNine)) {
+          this.drawCarriedRound(c, p, () => this.s9.drawShot(c, p.setNine!));
+        }
+      }
     } catch {
       /* keep drawing slide 1 */
     }
@@ -4164,6 +4249,11 @@ export class Game {
     }
     this.advanceReload(dt);
     this.timeScale += (1 - this.timeScale) * Math.min(1, dt * 2.5);
+    // Slide 7's clock for this frame, read before its hit-stop ticks down, as
+    // its own `update()` reads it: 12 % for every frame of a hit-stop.
+    const stop11 = this.elevenStop > 0;
+    const s11dt = (this.hitStop > 0 || stop11 ? dt * 0.12 : dt) * this.timeScale;
+    const active11 = this.elevenActive;
     let s = dt * this.timeScale;
     if (this.hitStop > 0) {
       this.hitStop -= dt;
@@ -4173,6 +4263,13 @@ export class Game {
     }
     if (this.elevenStop > 0) this.elevenStop -= dt;
     if (this.nineStop > 0) this.nineStop -= dt;
+    // The top of slide 7's frame: its wheel, its light, its gun and its screen
+    // shake settle before any of its guns fire or its rounds land, so whatever
+    // happens in this frame is seen at full strength, as on slide 7.
+    if (active11) {
+      this.s11State!.settle(s11dt);
+      this.shake *= Math.exp(-(stop11 ? dt * 0.12 : dt) * 11);
+    }
     this.camY *= Math.exp(-dt * 11);
     this.rt += dt;
     // ketapel: creak when starting to draw the band
@@ -4184,7 +4281,8 @@ export class Game {
     if (this.charging) {
       if (this.state !== 'play') this.charging = false;
       this.chargeT += dt;
-      const stage = this.chargeT >= 1 ? 2 : this.chargeT >= 0.35 ? 1 : 0;
+      const [stMid, stFull] = this.elevenBuster ? [0.45, 1.2] : [0.35, 1];
+      const stage = this.chargeT >= stFull ? 2 : this.chargeT >= stMid ? 1 : 0;
       // A slide-11 gun charges with its own whine, glow and lock (see
       // `elevenOwnsCharge`): slide 1's generic charge-up stays quiet then.
       const slide1Charge = !this.layerOwnsCharge;
@@ -4535,8 +4633,21 @@ export class Game {
     }
     this.bannerT = Math.max(0, this.bannerT - dt);
 
-    this.cooldown -= dt;
-    if (this.weapon.auto && !this.weapon.spinup && this.holding && this.state === 'play') this.shoot();
+    // During slide 7's hit-stop its gun's cooldown and tap buffer run at 12 %,
+    // like everything else in its `update()`.
+    const cdDt = stop11 && this.setElevenLive ? dt * 0.12 : dt;
+    this.cooldown -= cdDt;
+    if (this.weapon.auto && !this.weapon.spinup && this.holding && this.state === 'play' && !this.elevenPlainTrigger) this.shoot();
+    // Slide 7 fires its plain guns here, in its frame: again and again while
+    // the trigger is held (every one of them, not only slide 1's automatics),
+    // and once for a press that came up to 0.22 s before the gun was ready.
+    if (this.elevenPlainTrigger) {
+      this.elevenPending = Math.max(0, this.elevenPending - cdDt);
+      if (this.state === 'play' && this.cooldown <= 0 && (this.holding || this.elevenPending > 0)) this.shoot();
+    }
+    // Slide 7's shoulder caster: the burst leaves once its own lock has closed.
+    if (this.elevenCasterTrigger && this.holding && this.state === 'play' && this.cooldown <= 0
+      && this.s11State?.casterLocked) this.shoot();
     if (this.nineQueued && this.cooldown <= 0) {
       this.nineQueued = false;
       if (this.ninePlainTrigger && this.state === 'play') this.shoot();
@@ -4775,9 +4886,9 @@ export class Game {
     this.muzzle -= dt;
     this.bump *= Math.exp(-dt * 14);
     this.hitFlash = Math.max(0, this.hitFlash - dt * 7);
-    // Slide 11's screen shake settles at its own rate (`shakeAmt *= e^-11dt`):
-    // at slide 1's slower 9 every forwarded jolt rang on ~20 % longer.
-    this.shake *= Math.exp(-dt * (this.elevenActive ? 11 : 9));
+    // Slide 7's screen shake settles at the top of the frame (above), at its
+    // own e^-11t; slide 1's own shake settles here at e^-9t.
+    if (!active11) this.shake *= Math.exp(-dt * 9);
     this.flashWhite = Math.max(0, this.flashWhite - dt * 2.5);
     this.wheelFlash = Math.max(0, this.wheelFlash - dt * 5);
     this.flashRed = Math.max(0, this.flashRed - dt * 1.8);
@@ -4899,8 +5010,9 @@ export class Game {
       }
       fx.update(dt);
     }
-    // Slide 11: its own clock, particles, rounds, marks and beams.
-    if (this.setElevenLive || (this.s11State && this.s11State.busy)) {
+    // Slide 11: its own clock, particles, rounds, marks and beams. A frame
+    // that settled slide 7 at the top always runs the rest of its frame too.
+    if (active11 || this.setElevenLive || (this.s11State && this.s11State.busy)) {
       const fx = this.s11;
       const id = this.setElevenId;
       if (id) {
@@ -4913,10 +5025,8 @@ export class Game {
       // Holding the trigger keeps a slide-11 channel (flame, beam) flowing,
       // exactly like slide 11's own `press()`; slide 1 still owns every shot.
       // The caster's lock follows slide 1's charge meter.
-      fx.chargeHint = this.charging ? Math.min(1, this.chargeT) : 0;
       fx.chargeTime = this.charging ? this.chargeT : 0;
-      // Slide 11's world slows to 12% during a hit-stop, as in its own update.
-      const s11dt = (this.hitStop > 0 || this.elevenStop > 0 ? dt * 0.12 : dt) * this.timeScale;
+      // Slide 7's world runs on this frame's slide-7 clock (12 % in a hit-stop).
       fx.advance(s11dt, this.state === 'play' && this.holding);
     }
     // Slide 6: its own clock, beams, particles and scorch marks. Its beam is
@@ -6368,6 +6478,12 @@ export class Game {
       c.restore();
     }
 
+    // Slide 7 and slide 5 paint the marks on their wheel with the wheel itself,
+    // under every round, beam and gun (`drawWheel()` opens their `render()`);
+    // then slide 7 lays its sights and its channel beam, still under its rounds.
+    this.drawLayerWheels(c);
+    if (this.state !== 'idle') this.drawElevenAim(c);
+
     // projectiles
     for (const p of this.projs) {
       if (p.spawnDelay && p.spawnDelay > 0) continue;
@@ -6551,8 +6667,11 @@ export class Game {
     // ---------------- Distinct, flat boss attack silhouettes ----------------
     for (const bp of this.bossProjs) drawBossProjectile(c, bp, this.time);
 
+    // Slide 5's beams, sparks and rounds go under its gun: slide 5 paints the
+    // gun last (`render()`: beams, particles, bullets, aim guide, player).
+    this.drawNineLayer(c);
+
     if (this.state !== 'idle') {
-      this.drawElevenAim(c);
       this.drawGunNow(c);
       this.drawTriLaser(c);
     }
@@ -6736,30 +6855,12 @@ export class Game {
         /* keep drawing slide 1 */
       }
     }
-    // Slide 9 layer: entry holes ride the wheel, rounds and bursts on top.
+    // Slide 7's bursts, sparks and smoke go over its gun, as on slide 7
+    // (`render()`: wheel, sights, beam, rounds, gun, then fx and particles).
     if (this.s11State && (this.s11State.busy || this.setElevenLive)) {
-      // A bad frame from slide 11's own art must not blank slide 1.
+      // A bad frame from slide 7's own art must not blank slide 1.
       try {
-        this.s11State.drawWheel(c, CX, this.targetY + this.bump * 7, this.level.radius, this.rot,
-          this.elevenMotion() ?? undefined);
         this.s11State.draw(c);
-      } catch {
-        /* keep drawing slide 1 */
-      }
-    }
-    if (this.s9State && (this.s9State.busy || this.setNineLive)) {
-      // A bad frame from slide 9's own art must not blank slide 1.
-      try {
-        const nk = this.nineKick();
-        this.s9State.drawWheel(c, CX + nk.x, this.targetY + this.bump * 7 + nk.y, this.level.radius, this.rot);
-        // Beams, sparks and free rounds, then the rounds slide 1 carries —
-        // slide 9 paints its rounds over their own sparks.
-        this.s9State.draw(c);
-        for (const p of this.projs) {
-          if (p.setNine && this.s9State.isCarried(p.setNine)) {
-            this.drawCarriedRound(c, p, () => this.s9.drawShot(c, p.setNine!));
-          }
-        }
       } catch {
         /* keep drawing slide 1 */
       }
@@ -7172,7 +7273,13 @@ export class Game {
     else if (wq.meltEvery && wq.meltEvery > 1) info = `✏️ hapus ${wq.meltEvery - (this.perkCount % wq.meltEvery)} lagi`;
     else if (wq.paint && this.lastPaint) info = '🎨 warna terakhir ●';
     // A gun that fires on the press (a Slide 5 / Slide 7 card) has no charge to hold for.
-    else if (wq.charge && !this.plainTrigger) info = this.charging ? `🔋 ${this.chargeT >= 1 ? 'FULL!' : Math.round(Math.min(1, this.chargeT) * 100) + '%'}` : '🔋 tahan untuk charge';
+    // Slide 7's caster locks on by itself while held (its 2.6 s lock).
+    else if (this.elevenCasterTrigger) {
+      info = this.holding && this.state === 'play' ? `🎯 kunci ${Math.round(this.s11.casterLock * 100)}%` : '🎯 tahan = kunci & luncurkan';
+    } else if (wq.charge && !this.plainTrigger) {
+      const full = this.elevenBuster ? 1.2 : 1;
+      info = this.charging ? `🔋 ${this.chargeT >= full ? 'FULL!' : Math.round(Math.min(1, this.chargeT / full) * 100) + '%'}` : '🔋 tahan untuk charge';
+    }
     else if (wq.phaseSpikes) info = '👻 kebal duri';
     else if (wq.notes) info = `🎶 nada ${Math.min(10, Math.max(1, this.combo))}/10`;
     if (info) {
