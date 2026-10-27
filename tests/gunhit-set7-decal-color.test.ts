@@ -3,15 +3,16 @@ import assert from 'node:assert/strict';
 import { installCanvasShim } from './supportCanvas';
 
 /**
- * Slide-7 decals, painted through slide 1's wheel face.
+ * Slide-3 decals (`games/game-4`), on slide 1's wheel.
  *
  * `PaintShot` (Paintball) calls `addDecal({ kind: 'goo', c: ['rgba(120,12,24,0.95)', …] })`
- * — *finished* CSS colours. The port wrapped them again into
- * `rgba(${c[0]},0.45)`, which produces `rgba(rgba(120,12,24,0.95),0.45)`; a real
- * canvas throws a `SyntaxError` from `addColorStop` on that, inside `update()`,
- * so the frame died half-painted and every later effect on that wheel was lost.
- * These tests make the canvas as strict as a browser (invalid colour throws) and
- * drive the real decal path.
+ * — *finished* CSS colours. An old port baked every decal into the wheel face
+ * as a radial stain, re-wrapping those colours into `rgba(rgba(…),0.45)`; a real
+ * canvas throws on that inside `update()`. Slide 1 now keeps the decal and
+ * draws it with slide 3's own `drawDecals()` (the blob, its highlights, its
+ * drips off the turning rim), which uses the colours exactly as handed over.
+ * These tests make the canvas as strict as a browser (an invalid colour throws)
+ * and drive the real decal path.
  */
 
 const restore = installCanvasShim();
@@ -49,50 +50,70 @@ function strictContext() {
   return { ctx: ctx as unknown as CanvasRenderingContext2D, stops };
 }
 
-/** A slide-7 host whose wheel has radius 100 and paints into `ctx`. */
-function host(ctx: CanvasRenderingContext2D) {
+/** A slide-3 host whose wheel has radius 100. */
+function host() {
   const fx = new SetSevenFx({
     shake: () => {},
-    hitStop: () => {},
-    flash: () => {},
-    paintWheel: (draw) => (draw as (c: CanvasRenderingContext2D) => void)(ctx),
-    wheelImpact: () => {},
+    paintWheel: () => {},
     wheel: () => ({ x: 210, y: 300, R: 100, angle: 0 }),
   });
   fx.syncWheel();
   return fx;
 }
 
+/** A strict context that also records every fill colour it was given. */
+function recordingContext() {
+  const strict = strictContext();
+  const fills: string[] = [];
+  const ctx = new Proxy(strict.ctx as unknown as Record<string, unknown>, {
+    set(target, prop, value) {
+      if (prop === 'fillStyle' && typeof value === 'string') {
+        if (!CSS_COLOR.test(value)) throw new SyntaxError(`bad fill ${value}`);
+        fills.push(value);
+      }
+      target[prop as string] = value;
+      return true;
+    },
+  }) as unknown as CanvasRenderingContext2D;
+  return { ctx, fills, stops: strict.stops };
+}
+
 const GOO = {
   kind: 'goo',
-  angle: 1.2, t: 0, seed: 0.3, blob: [0, 0, 4, 2], next: 0.15,
+  angle: 1.2, t: 0, seed: 0.3, blob: [0, 0, 4, 2, 2, 4], next: 0.15,
   c: ['rgba(120,12,24,0.95)', 'rgba(236,52,64,0.97)', 'rgba(255,140,150,0.95)'],
   drip: '236,52,64',
   dripData: '120,12,24',
 };
 
-test('a goo decal with finished CSS colours does not throw', () => {
-  const { ctx, stops } = strictContext();
-  // Exactly what PaintShot.hit() hands over for a red shot.
-  assert.doesNotThrow(() => host(ctx).addDecal(GOO as never));
-  assert.equal(stops.length, 1, 'one stain was painted');
-  assert.deepEqual(stops[0].inner, ['rgba(236,52,64,0.55)'], 'the stain keeps the shot colour');
-  assert.deepEqual(stops[0].outer, ['rgba(236,52,64,0)']);
+test('a goo decal with finished CSS colours lives on the wheel and is drawn by slide 3 itself', () => {
+  const fx = host();
+  assert.doesNotThrow(() => fx.addDecal(GOO as never));
+  assert.equal(fx.decals.length, 1, 'the decal stays on the wheel (slide 3 draws it every frame)');
+  const { ctx, fills } = recordingContext();
+  fx.update(0.25);
+  assert.doesNotThrow(() => fx.drawFace(ctx, 100));
+  // Slide 3's own three-layer blob, in the colours the shot handed over.
+  for (const c of GOO.c) assert.ok(fills.includes(c), `the blob is painted in ${c}`);
+  // …and it drips off the rim in the shot's own colour.
+  for (let i = 0; i < 30; i++) fx.update(1 / 60);
+  assert.ok(fx.particles.list.some((p) => (p as { color?: string }).color === '236,52,64'), 'goo drips in its own colour');
 });
 
-test('bare triplets and hex still work, and a bad colour falls back instead of throwing', () => {
-  const { ctx, stops } = strictContext();
-  const mk = () => host(ctx);
-  const decal = (extra: Record<string, unknown>) => ({ kind: 'goo', angle: 0.5, t: 0, seed: 0, blob: [0, 0, 4, 2], next: 0.15, ...extra });
-
-  mk().addDecal(decal({ c: ['190,130,20', '255,226,110', '255,244,190'] }) as never);
-  mk().addDecal(decal({ c: ['#1f2937', '#22c55e', '#bbf7d0'] }) as never);
-  // Something the canvas would refuse must degrade to the fallback stain.
-  assert.doesNotThrow(() => mk().addDecal(decal({ c: ['not-a-color'] }) as never));
-
-  assert.deepEqual(stops[0].inner, ['rgba(255,226,110,0.55)'], 'bare triplet is wrapped once');
-  assert.deepEqual(stops[1].inner, ['rgba(34,197,94,0.55)'], 'hex is converted, not wrapped');
-  assert.deepEqual(stops[2].inner, ['rgba(190,130,20,0.45)'], 'unparsable colour uses the fallback');
+test('wet and poison stains use slide 3’s own colours, and nothing sticks to the rock', () => {
+  const fx = host();
+  fx.addDecal({ kind: 'wet', angle: 0.5, t: 0, seed: 0, blob: [0, 0, 4, 2, 2, 4], next: 0.15 } as never);
+  fx.addDecal({ kind: 'poison', angle: 2, t: 0, seed: 0 } as never);
+  const { ctx, fills, stops } = recordingContext();
+  fx.update(0.3);
+  assert.doesNotThrow(() => fx.drawFace(ctx, 100));
+  assert.ok(fills.some((f) => f.startsWith('rgba(55,28,10,')), 'the wet stain darkens the wood');
+  assert.ok(stops.some((s) => s.inner.includes('rgba(40,110,25,0.5)')), 'poison is its own green glow');
+  // A slide-3 round that bursts on the rock or the chest leaves no decal.
+  const rock = host();
+  rock.special = true;
+  rock.addDecal(GOO as never);
+  assert.equal(rock.decals.length, 0);
 });
 
 restore();

@@ -1,5 +1,5 @@
 /**
- * Slide-7 weapon animation and idle ambience of SET 2..7, copied verbatim from
+ * Slide-3 weapon animation and idle ambience of SET 1..7, copied verbatim from
  * `games/game-4/src/game/Game.ts` by `scripts/gen-set-seven.py`.
  *
  * `updateSevenAnim` integrates the same springs slide 7 does (recoil, slide,
@@ -14,7 +14,7 @@ import { K, Lightning, flame } from '../../../../games/game-4/src/game/particles
 import { PAINT } from '../../../../games/game-4/src/game/shapes5';
 import * as S from '../../../../games/game-4/src/game/spawn7';
 import type { SevenHost } from './setSevenFx';
-
+const PURPLES = ['200,140,255', '255,180,255', '150,100,255', '230,200,255'];
 
 /** Slide-7 frame update: springs first, then the idle ambience. */
 export function updateSevenAnim(host: SevenHost, dt: number) {
@@ -91,6 +91,25 @@ export function updateSevenAnim(host: SevenHost, dt: number) {
         }
         if (a.fireT < 1 && Math.random() < dt * 16 * (1 - a.fireT))
           ps.add({ k: K.SMOKE, x: mx + rand(-1.5, 1.5), y: my - 2, vx: rand(-6, 6), vy: rand(-45, -25), size: 3, size2: 16, life: rand(0.7, 1.1), color: '230,220,200', alpha: 0.28, rot: rand(0, TAU), vrot: rand(-1, 1) });
+        break;
+
+      case 'blackhole':
+        if (Math.random() < dt * 10) {
+          const an = rand(0, TAU);
+          const d = rand(26, 46);
+          host.orbTarget.x = mx;
+          host.orbTarget.y = my;
+          ps.add({ k: K.SPARK, add: true, x: mx + Math.cos(an) * d, y: my + Math.sin(an) * d, target: host.orbTarget, pull: 900, size: rand(0.8, 1.6), len: 0.03, life: 0.8, color: pick(PURPLES) });
+        }
+        break;
+
+      case 'shotgun':
+        if (a.fireT < 1.8 && Math.random() < dt * 24 * (1 - a.fireT / 1.8))
+          ps.add({ k: K.SMOKE, x: mx + rand(-2, 2), y: my - 4, vx: rand(-8, 8), vy: rand(-55, -25), size: 4, size2: 24, life: rand(0.8, 1.3), color: '175,175,180', alpha: 0.32, rot: rand(0, TAU), vrot: rand(-1, 1) });
+        break;
+
+      case 'soaker':
+        if (Math.random() < dt * 0.9) ps.add({ k: K.DROP, x: mx + rand(-1, 1), y: my + 2, vy: 30, g: 900, size: rand(1.2, 1.8), life: 1, color: '150,210,255' });
         break;
 
       case 'snowball':

@@ -59,3 +59,25 @@ export function adoptSevenRound(
   carrier.vy = -speed * speedMult;
   return speed;
 }
+
+/**
+ * Slide 3's four beams — the LASER GUN, the FREEZE RAY, the RAILGUN and the
+ * EMERALD staff — are built with a placeholder `-100` and resolve on their
+ * very first frame (`update()` calls `collide()` straight away, then paints
+ * the whole line from the muzzle to wherever it landed).
+ */
+export function isSevenBeam(shot: { vy: number }): boolean {
+  return Math.abs(shot.vy) <= 200;
+}
+
+/**
+ * The speed slide 1's carrier crosses the field with for a beam: the whole way
+ * to the wheel (through its collision sweep) inside the beam's first frame, as
+ * slide 3 resolves it.
+ */
+export const SEVEN_BEAM_SWEEP = 60000;
+
+/** The carrier speed for a slide-3 round: its own launch speed, or a beam's sweep. */
+export function sevenCarrierSpeed(shot: { vy: number }, fallback: number): number {
+  return isSevenBeam(shot) ? SEVEN_BEAM_SWEEP : sevenShotSpeed(shot, fallback);
+}

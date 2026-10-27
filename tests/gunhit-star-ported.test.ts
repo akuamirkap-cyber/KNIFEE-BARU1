@@ -110,15 +110,15 @@ test('the double card really fires the second barrel of every imported layer', (
   }
 });
 
-test('a twin shot fans a burst across lanes instead of stacking rounds in one lane', () => {
-  // The Sapphire Shotgun fires three pellets per trigger; doubled that is six
-  // rounds. Two of them sharing a lane flew into each other, the shot was lost
-  // and the stage ended on the first trigger pull.
+test('a twin shot of a slide-3 burst gun flies one round per barrel, each in its own lane', () => {
+  // Slide 3's Sapphire Shotgun fires one blast a trigger (its shards live
+  // inside it); doubled by the star that is one round per barrel. Two rounds
+  // sharing a lane would fly into each other and end the stage at once.
   const game = newGame('sapphire', 'set7', { twin: true });
   game.shoot();
-  assert.equal(game.projs.length, 6);
+  assert.equal(game.projs.length, 2);
   const lanes = new Set(game.projs.map((p: AnyGame) => `${Math.round(p.x)}/${Math.round(p.vx)}`));
-  assert.equal(lanes.size, 6, 'every pellet needs its own lane');
+  assert.equal(lanes.size, 2, 'every barrel keeps its own lane');
   pump(game, 120);
   assert.notEqual(game.state, 'fail', 'no pellet may collide with its sibling');
 });

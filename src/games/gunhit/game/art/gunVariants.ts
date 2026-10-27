@@ -5,8 +5,13 @@ import { SET_ELEVEN_BY_SLIDE1_ID, SET_ELEVEN_NEW_IDS, SET_ELEVEN_NEW_WEAPONS } f
 import { SET_TWO_IDS, SET_TWO_BY_SLIDE1_ID } from '../setTwoArt';
 import { SET_SIX_SLIDE1_IDS, type SixSlide1Id } from '../setSixArt';
 
-/** These two have been retired to their original art AND shot only. */
-export const FIXED_CLASSIC_WEAPONS = ['plasma', 'laser'] as const satisfies readonly WeaponId[];
+/**
+ * Guns locked to their original art AND shot only. PLASMA and LASER used to be
+ * here; they now carry slide 3's own PLASMA GUN and LASER GUN as their newest
+ * card (user request: every one of slide 3's 71 weapons lives on slide 1), and
+ * their classic look stays pickable as "Sebelumnya".
+ */
+export const FIXED_CLASSIC_WEAPONS = [] as const satisfies readonly WeaponId[];
 export type FixedClassicWeapon = (typeof FIXED_CLASSIC_WEAPONS)[number];
 
 /** Only guns with an actual design choice appear in the DESAIN tab. */
@@ -25,6 +30,8 @@ export const EDITABLE_WEAPONS = [
   'coingun', 'photon_saber', 'gauntlet_cannon', 'ruby', 'emerald',
   'sapphire', 'crystal', 'beerifle', 'buster', 'pulse_rifle',
   'cryo_blaster', 'hyperdrive', 'quantum_destabilizer', 'blaster',
+  // Slide 3's PLASMA GUN and LASER GUN (both had only their classic card).
+  'plasma', 'laser',
   // Slide 9 (games/game-6): the eight slide-1 guns it updates and the nine
   // weapons it added that slide 1 never had.
   'pistol', 'ak47', 'pred', 'sniper', 'railgun',
@@ -84,6 +91,7 @@ export const SET_SEVEN_DESIGN_WEAPONS = [
   'photon_saber', 'gauntlet_cannon', 'ruby', 'emerald', 'sapphire',
   'crystal', 'beerifle', 'buster', 'pulse_rifle', 'cryo_blaster',
   'hyperdrive', 'quantum_destabilizer', 'blaster',
+  'plasma', 'laser',
 ] as const satisfies readonly WeaponId[];
 export type SetSevenDesignWeapon = (typeof SET_SEVEN_DESIGN_WEAPONS)[number];
 
@@ -190,6 +198,8 @@ const NO_LATEST_DESIGN = [
   'xeno', 'mega_buster', 'harmonic_disruptor', 'absolute_zero', 'helios_flare',
   'chrono_rifle', 'orbital_beacon', 'helix_pulsar', 'singularity', 'prism_lance',
   'nano_swarm',
+  // PLASMA and LASER: one classic look ("Sebelumnya") plus slide 3's card.
+  'plasma', 'laser',
 ] as const;
 
 /**
@@ -229,37 +239,62 @@ export const GUN_VARIANTS: readonly { id: GunVariant; label: string }[] = [
   { id: 'current', label: 'Sekarang' },
   { id: 'latest', label: 'Terbaru' },
 ];
-/** The slide-7 SET 1 design card (newest for its six weapons). */
-export const SET_ONE_VARIANT: { id: GunVariant; label: string } = { id: 'set1', label: 'Set 1' };
-/** The slide-7 SET 2..5 design card; the number is the weapon's own set. */
-export function setSevenVariant(id: SetSevenDesignWeapon): { id: GunVariant; label: string } {
-  return { id: 'set7', label: `Set ${SET_SEVEN_SETS[SET_SEVEN_BY_SLIDE1_ID[id]]}` };
+/** Every card of a slide-3 (`games/game-4`, Weapon Hit 71 Senjata) weapon. */
+export const SLIDE_THREE_LABEL = 'Slide 3';
+/** The slide-3 SET 1 design card (newest for its six weapons). */
+export const SET_ONE_VARIANT: { id: GunVariant; label: string } = { id: 'set1', label: SLIDE_THREE_LABEL };
+/** The slide-3 SET 2..7 design card (its own SET number is in the arsenal badge). */
+export function setSevenVariant(_id: SetSevenDesignWeapon): { id: GunVariant; label: string } {
+  return { id: 'set7', label: SLIDE_THREE_LABEL };
 }
+/*
+ * Card labels follow the hub's *current* slide numbers. The ids (`set6`,
+ * `set9`, `set11`…) and the module names (`setSixFx`, `setElevenFx`…) keep the
+ * number each slide had when its guns were imported. Firework 8-Gun and Rainbow
+ * Gun left the hub first, then Obliterator Hit and Weapon Hit Arena, then Neon
+ * Ballistics and Ballistics Lab, so now: set6 = Slide 2 (Wheel Hit Ultra FX),
+ * set1/set7 = Slide 3 (Weapon Hit 71 Senjata), set9 = Slide 4 (Arsenal Wheel
+ * Hit Range), set11 = Slide 5 (Knife-Hit Arsenal FX), and the old slide-2 card
+ * is called "Firework".
+ */
 /** The slide-2 design card: slide 2's own artwork for the eight guns it shares. */
-export const SET_TWO_VARIANT: { id: GunVariant; label: string } = { id: 'set2', label: 'Slide 2' };
+export const SET_TWO_VARIANT: { id: GunVariant; label: string } = { id: 'set2', label: 'Firework' };
 /** The slide-9 design card (newest for every ported slide-9 gun). */
-export const SET_NINE_VARIANT: { id: GunVariant; label: string } = { id: 'set9', label: 'Slide 9' };
+export const SET_NINE_VARIANT: { id: GunVariant; label: string } = { id: 'set9', label: 'Slide 4' };
 /** The slide-11 design card (newest for every ported slide-11 gun). */
-export const SET_ELEVEN_VARIANT: { id: GunVariant; label: string } = { id: 'set11', label: 'Slide 11' };
+export const SET_ELEVEN_VARIANT: { id: GunVariant; label: string } = { id: 'set11', label: 'Slide 5' };
 /** The slide-6 design card: slide 6's own artwork for the three guns it shares. */
-export const SET_SIX_VARIANT: { id: GunVariant; label: string } = { id: 'set6', label: 'Slide 6' };
+export const SET_SIX_VARIANT: { id: GunVariant; label: string } = { id: 'set6', label: 'Slide 2' };
 export type GunEffect = 'original' | 'new' | 'set2' | 'set6' | 'set7' | 'set9' | 'set11';
 export const GUN_EFFECTS: readonly { id: GunEffect; label: string }[] = [
   { id: 'original', label: 'Sebelumnya' },
   { id: 'new', label: 'Baru' },
 ];
-/** The slide-7 shot card of SET 2..5, labelled with the weapon's own set. */
-export function setSevenEffect(id: SetSevenDesignWeapon): { id: GunEffect; label: string } {
-  return { id: 'set7', label: `Set ${SET_SEVEN_SETS[SET_SEVEN_BY_SLIDE1_ID[id]]}` };
+/** The slide-3 shot card of SET 2..7. */
+export function setSevenEffect(_id: SetSevenDesignWeapon): { id: GunEffect; label: string } {
+  return { id: 'set7', label: SLIDE_THREE_LABEL };
 }
+/**
+ * The slide-3 shot of the six SET 1 guns. It keeps the `new` id their saved
+ * choices already use (it used to read "Baru"); slide 3's own engine fires it.
+ */
+export const SET_ONE_EFFECT: { id: GunEffect; label: string } = { id: 'new', label: SLIDE_THREE_LABEL };
 /** The slide-2 shot card: slide 2's own round, muzzle, burst and sounds. */
-export const SET_TWO_EFFECT: { id: GunEffect; label: string } = { id: 'set2', label: 'Slide 2' };
+export const SET_TWO_EFFECT: { id: GunEffect; label: string } = { id: 'set2', label: 'Firework' };
 /** The slide-9 shot card: slide 9's own projectile, burst and sounds. */
-export const SET_NINE_EFFECT: { id: GunEffect; label: string } = { id: 'set9', label: 'Slide 9' };
+export const SET_NINE_EFFECT: { id: GunEffect; label: string } = { id: 'set9', label: 'Slide 4' };
 /** The slide-11 shot card: slide 11's own round, burst and sounds. */
-export const SET_ELEVEN_EFFECT: { id: GunEffect; label: string } = { id: 'set11', label: 'Slide 11' };
+export const SET_ELEVEN_EFFECT: { id: GunEffect; label: string } = { id: 'set11', label: 'Slide 5' };
 /** The slide-6 shot card: slide 6's own beam, muzzle burst and scorch mark. */
-export const SET_SIX_EFFECT: { id: GunEffect; label: string } = { id: 'set6', label: 'Slide 6' };
+export const SET_SIX_EFFECT: { id: GunEffect; label: string } = { id: 'set6', label: 'Slide 2' };
+
+/**
+ * PLASMA and LASER never had a "Baru" shot: their cards are their classic shot
+ * and slide 3's. A stale `new` (old save, old caller) draws the classic one.
+ */
+export function hasNoNewShot(id: WeaponId | 'old'): boolean {
+  return id === 'plasma' || id === 'laser';
+}
 
 export function isFixedClassicGun(id: WeaponId | 'old'): id is FixedClassicWeapon {
   return (FIXED_CLASSIC_WEAPONS as readonly string[]).includes(id);
@@ -316,6 +351,8 @@ function baseGunVariantOptions(id: VariantWeapon) {
   // 7's own artwork as the newest card (and the default).
   if (isSetSevenDesignWeapon(id)) {
     const card = setSevenVariant(id);
+    // PLASMA and LASER only ever had their classic look on slide 1.
+    if (id === 'plasma' || id === 'laser') return [GUN_VARIANTS[0], card];
     // HONEY already had a second silhouette ("Sekarang"), keep it.
     if (id === 'honey') return [...GUN_VARIANTS.slice(0, 2), card];
     // Three genuine slide-1 designs: keep all of them, slide 7 last.
@@ -441,6 +478,16 @@ function getGunEffectOptionsBeforeEleven(id: VariantWeapon) {
 
 function getGunEffectOptionsBase(id: VariantWeapon) {
   if (isFixedClassicGun(id)) return GUN_EFFECTS.slice(0, 1);
+  // PLASMA and LASER: their classic shot, and slide 3's own (no "Baru" shot
+  // was ever drawn for them).
+  if (id === 'plasma' || id === 'laser') return [GUN_EFFECTS[0], setSevenEffect(id)];
+  // SET 1: the `new` shot is slide 3's own. BLACK HOLE shares that card with
+  // slide 2's void, which its slide-2 cannon design fires instead — so the card
+  // only reads "Slide 3" while slide 3's staff is the design in use.
+  if (isSetOneDesignWeapon(id)) {
+    if (id === 'blackhole' && getGunVariant('blackhole') !== 'set1') return GUN_EFFECTS;
+    return [GUN_EFFECTS[0], SET_ONE_EFFECT];
+  }
   // Slide 7's own shot is a third card for SET 2..5: the two slide-1 effects
   // stay pickable, and slide 7 is the newest (and the default).
   if (isSetSevenDesignWeapon(id)) return [...GUN_EFFECTS, setSevenEffect(id)];
@@ -464,6 +511,8 @@ const DEFAULT_DESIGNS: Record<EditableWeapon, GunVariant> = {
   coingun: 'set7', photon_saber: 'set11', gauntlet_cannon: 'set11', ruby: 'set7', emerald: 'set7',
   sapphire: 'set7', crystal: 'set7', beerifle: 'set7', buster: 'set7', pulse_rifle: 'set7',
   cryo_blaster: 'set7', hyperdrive: 'set7', quantum_destabilizer: 'set7', blaster: 'set7',
+  // Slide 3's PLASMA GUN and LASER GUN are their newest design (user request).
+  plasma: 'set7', laser: 'set7',
   // Slide 9: its own artwork is the newest design of the eight guns it updates,
   // and the only design of the nine guns it added.
   pistol: 'set11', ak47: 'set11', pred: 'set11',
@@ -500,6 +549,8 @@ const DEFAULT_EFFECTS: Record<EditableWeapon, GunEffect> = {
   coingun: 'set7', photon_saber: 'set11', gauntlet_cannon: 'set11', ruby: 'set7', emerald: 'set7',
   sapphire: 'set7', crystal: 'set7', beerifle: 'set7', buster: 'set7', pulse_rifle: 'set7',
   cryo_blaster: 'set7', hyperdrive: 'set7', quantum_destabilizer: 'set7', blaster: 'set7',
+  // …and slide 3's own shot is theirs too.
+  plasma: 'set7', laser: 'set7',
   // Slide 9: its own artwork is the newest design of the eight guns it updates,
   // and the only design of the nine guns it added.
   pistol: 'set11', ak47: 'set11', pred: 'set11',

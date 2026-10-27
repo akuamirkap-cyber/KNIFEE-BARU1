@@ -7,8 +7,7 @@ import { drawSlide6String } from '../game/yoyoSlideFx';
 import { createCrispBolt, renderCrispBolt } from '../game/kerisSlideFx';
 import { star } from '../game/art/kit';
 import { useSlideActive } from '../../shared/SlideActivity';
-import type { GunEffect } from '../game/art/gunVariants';
-import { drawSetOneShotShell } from '../game/setOneFx';
+import { getGunVariant, type GunEffect } from '../game/art/gunVariants';
 import { setOneIdFor } from '../game/setOneArt';
 import { setSevenIdFor } from '../game/setSevenArt';
 import { setElevenIdFor } from '../game/setElevenArt';
@@ -47,7 +46,8 @@ export default function ShotEffectCanvas({ weapon, effect }: { weapon: Weapon; e
           // Small target rim makes the firing direction and hit point readable.
           c.strokeStyle = 'rgba(255,255,255,0.2)'; c.lineWidth = 2;
           c.beginPath(); c.arc(w / 2, -31, 42, 0, Math.PI * 2); c.stroke();
-          if (weapon.id === 'laser' || weapon.id === 'moonbeam') {
+          // (Their "Slide 3" card is slide 3's own round, drawn further down.)
+          if ((weapon.id === 'laser' || weapon.id === 'moonbeam') && effect !== 'set7') {
             if (effect === 'original') drawClassicBeam(c, w / 2, 8, 84, 0.88, weapon.trail);
             else if (weapon.id === 'laser') drawLaserBeam(c, w / 2, 8, 84, 0.84, t);
             else {
@@ -62,7 +62,10 @@ export default function ShotEffectCanvas({ weapon, effect }: { weapon: Weapon; e
             c.save();
             c.translate(w / 2, 13 + Math.sin(t * 4) * 2);
             c.scale(1.15, 1.1);
-            if (weapon.id === 'blackhole' && effect === 'new') {
+            // BLACK HOLE's `new` card is slide 2's void with its slide-2 cannon,
+            // and slide 3's own orb with slide 3's staff.
+            const slide2Void = weapon.id === 'blackhole' && effect === 'new' && getGunVariant('blackhole') !== 'set1';
+            if (slide2Void) {
               drawVoidTether(c, 0, 7, 0, 83, t);
             }
             if (weapon.id === 'yoyo') {
@@ -71,9 +74,10 @@ export default function ShotEffectCanvas({ weapon, effect }: { weapon: Weapon; e
             if (weapon.id === 'keris') {
               renderCrispBolt(c, createCrispBolt(0, 74, 0, -4, { sway: 5, steps: 5, branchChance: 0.25 }), '#4deeea', 6);
             }
-            const setOneId = effect === 'new' ? setOneIdFor(weapon.id) : null;
+            // SET 1's "Slide 3" card: slide 3's own round, from its own recipe.
+            const setOneId = effect === 'new' && !slide2Void ? setOneIdFor(weapon.id) : null;
             if (setOneId) {
-              drawSetOneShotShell(c, setOneId, 0.06, 24);
+              drawSetSevenShotShell(c, setOneId, 0.06, 22);
               c.restore();
               if (active) frame = requestAnimationFrame(paint);
               return;

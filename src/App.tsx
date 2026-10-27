@@ -1,13 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
 import {
   Flame,
-  Rocket,
-  Disc,
-  Zap,
-  Target,
   Sparkles,
   Layers,
-  Crosshair,
   Compass,
   Wand2,
   Gamepad2,
@@ -25,7 +20,7 @@ import ScaledFrame from './components/ScaledFrame';
 import { SlideActivityProvider } from './games/shared/SlideActivity';
 import GunHitGame from './games/gunhit/App';
 
-type SlideId = 'gunhit' | 'fireworkgun' | 'rainbow' | 'obliterator' | 'game1' | 'game2' | 'game4' | 'game5' | 'game6' | 'game7' | 'game8';
+type SlideId = 'gunhit' | 'game2' | 'game4' | 'game6' | 'game8';
 
 export interface GameSlide {
   id: SlideId;
@@ -53,15 +48,9 @@ export default function App() {
 
   const [keys, setKeys] = useState<Record<SlideId, number>>({
     gunhit: 0,
-    fireworkgun: 0,
-    rainbow: 0,
-    obliterator: 0,
-    game1: 0,
     game2: 0,
     game4: 0,
-    game5: 0,
     game6: 0,
-    game7: 0,
     game8: 0,
   });
 
@@ -176,112 +165,8 @@ export default function App() {
       ),
     },
     {
-      id: 'fireworkgun',
-      slideNumber: 2,
-      name: 'Firework 8-Gun',
-      fullName: 'GUN HIT: 8 Senjata Seru',
-      badge: '💥 8 Senjata Seru',
-      tagline: 'Tembak papan berputar dengan 8 senjata: Meriam Bambu, Bazooka, RPG, Shark, dan lainnya.',
-      weapons: ['🎆 Firework', '🎋 Bambu', '💥 Bazooka', '🚀 RPG', '🦈 Shark', '🔫 Soaker'],
-      icon: Rocket,
-      themeColor: 'text-orange-400',
-      borderColor: 'border-orange-500/40 hover:border-orange-400/80 shadow-orange-950/40',
-      accentBg: 'bg-orange-500/20 text-orange-400',
-      path: `${cleanBase}games/fireworkgun/index.html`,
-      render: (active: boolean) => (
-        <iframe
-          ref={(el) => {
-            iframeRefs.current.fireworkgun = el;
-          }}
-          key={`fireworkgun-${keys.fireworkgun}`}
-          src={`${cleanBase}games/fireworkgun/index.html?standby=${active ? '0' : '1'}`}
-          title="GUN HIT: 8 Senjata Seru"
-          className="w-full h-full border-0 bg-black block"
-          allow="autoplay"
-        />
-      ),
-    },
-    {
-      id: 'rainbow',
-      slideNumber: 3,
-      name: 'Rainbow Gun',
-      fullName: 'Rainbow Gun Arcade',
-      badge: '🌈 Holy Rainbow',
-      tagline: 'PRISM-07 Holy Railgun dengan cincin pelangi dinamis mode Sway, Pulse & Chaos Boss.',
-      weapons: ['🌈 Prism Railgun', '🕳️ Void Black Hole'],
-      icon: Disc,
-      themeColor: 'text-cyan-400',
-      borderColor: 'border-cyan-500/40 hover:border-cyan-400/80 shadow-cyan-950/40',
-      accentBg: 'bg-cyan-500/20 text-cyan-400',
-      path: `${cleanBase}games/rainbow/index.html`,
-      render: (active: boolean) => (
-        <iframe
-          ref={(el) => {
-            iframeRefs.current.rainbow = el;
-          }}
-          key={`rainbow-${keys.rainbow}`}
-          src={`${cleanBase}games/rainbow/index.html?standby=${active ? '0' : '1'}`}
-          title="Rainbow Gun Arcade"
-          className="w-full h-full border-0 bg-black block"
-          allow="autoplay"
-        />
-      ),
-    },
-    {
-      id: 'obliterator',
-      slideNumber: 4,
-      name: 'Obliterator Hit',
-      fullName: 'Obliterator Hit: DOOM',
-      badge: '💥 Heavy Obliterator',
-      tagline: 'Penghancur Inti Argent Core brutal! Kumpulkan gems & aktifkan Overdrive Charge.',
-      weapons: ['💥 BFG 9000', '⚡ Maykr Laser', '🍌 Banana', '🐝 Beehive', '🔮 Crystal'],
-      icon: Zap,
-      themeColor: 'text-rose-400',
-      borderColor: 'border-rose-500/40 hover:border-rose-400/80 shadow-rose-950/40',
-      accentBg: 'bg-rose-500/20 text-rose-400',
-      path: `${cleanBase}games/obliterator/index.html`,
-      render: (active: boolean) => (
-        <iframe
-          ref={(el) => {
-            iframeRefs.current.obliterator = el;
-          }}
-          key={`obliterator-${keys.obliterator}`}
-          src={`${cleanBase}games/obliterator/index.html?standby=${active ? '0' : '1'}`}
-          title="Obliterator Hit: DOOM"
-          className="w-full h-full border-0 bg-black block"
-          allow="autoplay"
-        />
-      ),
-    },
-    {
-      id: 'game1',
-      slideNumber: 5,
-      name: 'Weapon Hit Arena',
-      fullName: 'Weapon Hit Arena — 2D Ballistics',
-      badge: '🎯 Arena Ballistics',
-      tagline: 'Simulasi tembakan multi-senjata dengan putaran roda dan variasi lintasan peluru 2D.',
-      weapons: ['🏹 Serpent Arrow', '⚡ Plasma Disc', '🎯 Crossbow', '🔫 Handgun'],
-      icon: Crosshair,
-      themeColor: 'text-amber-400',
-      borderColor: 'border-amber-500/40 hover:border-amber-400/80 shadow-amber-950/40',
-      accentBg: 'bg-amber-500/20 text-amber-400',
-      path: `${cleanBase}games/game-1/index.html`,
-      render: (active: boolean) => (
-        <iframe
-          ref={(el) => {
-            iframeRefs.current.game1 = el;
-          }}
-          key={`game1-${keys.game1}`}
-          src={`${cleanBase}games/game-1/index.html?standby=${active ? '0' : '1'}`}
-          title="Weapon Hit Arena"
-          className="w-full h-full border-0 bg-black block"
-          allow="autoplay; gamepad"
-        />
-      ),
-    },
-    {
       id: 'game2',
-      slideNumber: 6,
+      slideNumber: 2,
       name: 'Wheel Hit Ultra FX',
       fullName: 'Weapon Wheel Hit — Ultra FX Edition',
       badge: '🌀 Ultra FX',
@@ -307,7 +192,7 @@ export default function App() {
     },
     {
       id: 'game4',
-      slideNumber: 7,
+      slideNumber: 3,
       name: 'Weapon Hit 71 Senjata',
       fullName: 'Weapon Hit — 71 Senjata (Level 1 FX)',
       badge: '🔮 71 Senjata',
@@ -332,34 +217,8 @@ export default function App() {
       ),
     },
     {
-      id: 'game5',
-      slideNumber: 8,
-      name: 'Neon Ballistics',
-      fullName: 'ARSENAL - Neon Ballistics (Level 01)',
-      badge: '🔴 Neon Ballistics',
-      tagline: 'Satu roda, tujuh hit bersih, dan 17 senjata 2D dengan animasi presisi dan suara khas.',
-      weapons: ['🎯 17 Senjata', '✨ 7 Clean Hits', '🔊 Sfx Khusus', '📐 Presisi'],
-      icon: Target,
-      themeColor: 'text-rose-400',
-      borderColor: 'border-rose-500/40 hover:border-rose-400/80 shadow-rose-950/40',
-      accentBg: 'bg-rose-500/20 text-rose-400',
-      path: `${cleanBase}games/game-5/index.html`,
-      render: (active: boolean) => (
-        <iframe
-          ref={(el) => {
-            iframeRefs.current.game5 = el;
-          }}
-          key={`game5-${keys.game5}`}
-          src={`${cleanBase}games/game-5/index.html?standby=${active ? '0' : '1'}`}
-          title="Neon Ballistics"
-          className="w-full h-full border-0 bg-black block"
-          allow="autoplay; gamepad"
-        />
-      ),
-    },
-    {
       id: 'game6',
-      slideNumber: 9,
+      slideNumber: 4,
       name: 'Arsenal Wheel Hit Range',
       fullName: 'Arsenal Wheel Hit — 2D Weapon FX Range',
       badge: '🎯 Range Edition',
@@ -384,34 +243,8 @@ export default function App() {
       ),
     },
     {
-      id: 'game7',
-      slideNumber: 10,
-      name: 'Ballistics Lab',
-      fullName: 'Arsenal FX — 2D Ballistics Lab',
-      badge: '🧪 Ballistics Lab',
-      tagline: 'Galeri efek tembakan 2D: bentuk peluru, muzzle flash, impact, dan roda putar.',
-      weapons: ['💥 Shape FX', '⚡ Flash Engine', '💥 Impact Ring', '🎯 Roda Putar'],
-      icon: Target,
-      themeColor: 'text-indigo-400',
-      borderColor: 'border-indigo-500/40 hover:border-indigo-400/80 shadow-indigo-950/40',
-      accentBg: 'bg-indigo-500/20 text-indigo-400',
-      path: `${cleanBase}games/game-7/index.html`,
-      render: (active: boolean) => (
-        <iframe
-          ref={(el) => {
-            iframeRefs.current.game7 = el;
-          }}
-          key={`game7-${keys.game7}`}
-          src={`${cleanBase}games/game-7/index.html?standby=${active ? '0' : '1'}`}
-          title="Ballistics Lab"
-          className="w-full h-full border-0 bg-black block"
-          allow="autoplay; gamepad"
-        />
-      ),
-    },
-    {
       id: 'game8',
-      slideNumber: 11,
+      slideNumber: 5,
       name: 'Knife-Hit Arsenal FX',
       fullName: 'Arsenal FX – Knife-Hit Weapon Effects',
       badge: '🐉 Knife-Hit FX',

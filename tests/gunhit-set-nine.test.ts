@@ -145,11 +145,11 @@ test('slide 9 keeps its card on all 17 guns, newest wherever slide 11 has no new
     const designs = getGunVariantOptions(id as never);
     const design = designs.find((o) => o.id === 'set9');
     assert.ok(design, `${id} keeps its slide-9 design card`);
-    assert.equal(design!.label, 'Slide 9');
+    assert.equal(design!.label, 'Slide 4');
     const effects = getGunEffectOptions(id as never);
     const effect = effects.find((o) => o.id === 'set9');
     assert.ok(effect, `${id} keeps its slide-9 effect card`);
-    assert.equal(effect!.label, 'Slide 9');
+    assert.equal(effect!.label, 'Slide 4');
     // Whatever is default must be one of the cards offered.
     assert.ok(designs.some((o) => o.id === getGunVariant(id as never)));
     assert.ok(effects.some((o) => o.id === getGunEffect(id as never)));
@@ -311,8 +311,9 @@ test('every slide-9 gun is playable on slide 1 and fires without a slide-1 sound
     const game = probe(slide1);
     game.shoot();
     assert.equal(game.projs.length, 1, `${slide1} fires one carrier`);
-    const carrier = (game.projs as unknown[])[0] as { setNine?: unknown; setNinePending?: boolean };
-    assert.ok(carrier.setNine || carrier.setNinePending, `${slide1} carries slide 9's shot`);
+    const carrier = (game.projs as unknown[])[0] as { setNine?: unknown; setNinePending?: boolean; setNineBeam?: number };
+    // A beam gun's carrier only scores: slide 9's beam is the shot.
+    assert.ok(carrier.setNine || carrier.setNinePending || carrier.setNineBeam !== undefined, `${slide1} carries slide 9's shot`);
     // A rendered frame must not throw with the ported gun equipped.
     (game as unknown as { draw: () => void }).draw?.();
   }

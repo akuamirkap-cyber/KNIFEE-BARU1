@@ -17,6 +17,7 @@ import {
 import { Game, makeLevel } from '../src/games/gunhit/game/Game';
 import { WEAPONS, getWeapon } from '../src/games/gunhit/game/weapons';
 import { installCanvasShim } from './supportCanvas';
+import { installSilentAudio } from '../tools/supportAudioSilent';
 
 // Slide 11 draws its guns, glow sprites and background through real canvases.
 installCanvasShim();
@@ -222,10 +223,10 @@ test('slide 11 is the newest design and shot of its 27 guns, and older cards sta
     assert.equal(hasSlide11Update(slide1), true, `${slide1} carries the green NEW badge`);
     const designs = getGunVariantOptions(slide1 as never);
     assert.equal(designs.at(-1)?.id, 'set11');
-    assert.equal(designs.at(-1)?.label, 'Slide 11');
+    assert.equal(designs.at(-1)?.label, 'Slide 5');
     const effects = getGunEffectOptions(slide1 as never);
     assert.equal(effects.at(-1)?.id, 'set11');
-    assert.equal(effects.at(-1)?.label, 'Slide 11');
+    assert.equal(effects.at(-1)?.label, 'Slide 5');
     if (isElevenNewSlide1Id(slide1)) {
       assert.deepEqual(designs.map((o) => o.id), ['set11'], `${slide1} never existed before slide 11`);
       assert.deepEqual(effects.map((o) => o.id), ['set11']);
@@ -388,4 +389,223 @@ test('slide 11 only runs while its own shot is live', () => {
   const fx = new SetElevenFx();
   assert.ok(fx.raw, 'the layer still builds on demand');
   assert.equal(fx.busy, false, 'and starts idle');
+});
+
+/* ── slide-11 import fixes ─────────────────────────────────────────────── */
+
+type Pt = { x: number; y: number; op: string };
+
+/**
+ * A 2D context that follows `translate` / `rotate` / `scale` / `setTransform`
+ * and records where each path point, arc, rect and image really lands on the
+ * screen — the plain fake above only sees a weapon's local numbers.
+ */
+function trackCtx(points: Pt[]) {
+  let m = [1, 0, 0, 1, 0, 0];
+  const stack: number[][] = [];
+  const mul = (n: number[]) => {
+    const [a, b, c, d, e, f] = m;
+    m = [a * n[0] + c * n[1], b * n[0] + d * n[1], a * n[2] + c * n[3], b * n[2] + d * n[3],
+      a * n[4] + c * n[5] + e, b * n[4] + d * n[5] + f];
+  };
+  const at = (x: number, y: number, op: string) => {
+    const [a, b, c, d, e, f] = m;
+    points.push({ x: a * x + c * y + e, y: b * x + d * y + f, op });
+  };
+  const gradient = { addColorStop: () => undefined };
+  type M = { a: number; b: number; c: number; d: number; e: number; f: number };
+  const api: Record<string, unknown> = {
+    canvas: { width: 420, height: 760 },
+    save: () => { stack.push(m.slice()); },
+    restore: () => { m = stack.pop() ?? [1, 0, 0, 1, 0, 0]; },
+    translate: (x: number, y: number) => mul([1, 0, 0, 1, x, y]),
+    rotate: (r: number) => mul([Math.cos(r), Math.sin(r), -Math.sin(r), Math.cos(r), 0, 0]),
+    scale: (x: number, y: number) => mul([x, 0, 0, y, 0, 0]),
+    transform: (...n: number[]) => mul(n),
+    setTransform: (a?: number | M, ...n: number[]) => {
+      if (a === undefined) m = [1, 0, 0, 1, 0, 0];
+      else if (typeof a === 'object') m = [a.a, a.b, a.c, a.d, a.e, a.f];
+      else m = [a, ...n];
+    },
+    resetTransform: () => { m = [1, 0, 0, 1, 0, 0]; },
+    getTransform: () => ({ a: m[0], b: m[1], c: m[2], d: m[3], e: m[4], f: m[5] }),
+    moveTo: (x: number, y: number) => at(x, y, 'moveTo'),
+    lineTo: (x: number, y: number) => at(x, y, 'lineTo'),
+    quadraticCurveTo: (_cx: number, _cy: number, x: number, y: number) => at(x, y, 'curve'),
+    bezierCurveTo: (_a: number, _b: number, _c: number, _d: number, x: number, y: number) => at(x, y, 'curve'),
+    arc: (x: number, y: number) => at(x, y, 'arc'),
+    ellipse: (x: number, y: number) => at(x, y, 'arc'),
+    rect: (x: number, y: number, w: number, h: number) => at(x + w / 2, y + h / 2, 'rect'),
+    fillRect: (x: number, y: number, w: number, h: number) => at(x + w / 2, y + h / 2, 'rect'),
+    drawImage: (_img: unknown, ...n: number[]) => {
+      const [x, y, w = 0, h = 0] = n.length >= 8 ? n.slice(4) : n;
+      at(x + w / 2, y + h / 2, 'image');
+    },
+    fillText: (_s: string, x: number, y: number) => at(x, y, 'text'),
+    createLinearGradient: () => gradient,
+    createRadialGradient: () => gradient,
+    createConicGradient: () => gradient,
+    createPattern: () => gradient,
+    measureText: () => ({ width: 10 }),
+  };
+  return new Proxy(api, {
+    get: (t, p) => (p in t ? t[p as string] : () => undefined),
+    set: (t, p, v) => { t[p as string] = v; return true; },
+  }) as unknown as CanvasRenderingContext2D;
+}
+
+const lines = (pts: Pt[]) => pts.filter((p) => p.op === 'moveTo' || p.op === 'lineTo');
+
+test('a slide-11 round that lands bursts once and is never handed out again', () => {
+  const { fx } = host();
+  fx.selectWeapon('ak47');
+  fx.fire(210, 571, 0);
+  const [round] = fx.takeShots();
+  assert.ok(round, 'the trigger made a round');
+  let bursts = 0;
+  const own = round.onHit;
+  round.onHit = (...args: Parameters<typeof own>) => {
+    bursts++;
+    own(...args);
+  };
+  fx.carry(round, 210, 425, -Math.PI / 2);
+  fx.impact(210, 420, round);
+  assert.equal(bursts, 1, 'one hit, one burst');
+  assert.equal(fx.raw!.projs.includes(round), false, 'the landed round leaves slide 11 the frame it lands');
+  // An auto-fire gun pulls the trigger again in that same frame. The landed
+  // round used to be handed over a second time: its carrier spawned under the
+  // wheel, ran into the bullet that had just stuck and failed the stage.
+  assert.deepEqual(fx.takeShots(), [], 'a landed round is never a new shot');
+  fx.fire(210, 571, 0);
+  assert.equal(fx.takeShots().includes(round), false);
+  for (let i = 0; i < 30; i++) fx.advance(1 / 60);
+  assert.equal(bursts, 1, 'it never flies — or bursts and leaves a hole — a second time');
+});
+
+test('a slide-11 round blocked by an obstacle sparks and goes away with its carrier', () => {
+  const { fx } = host();
+  fx.selectWeapon('beretta');
+  fx.fire(210, 571, 0);
+  const [round] = fx.takeShots();
+  assert.ok(round);
+  fx.carry(round, 210, 430, -Math.PI / 2);
+  const sparks = fx.raw!.parts.length;
+  fx.block(210, 430, round);
+  assert.ok(fx.raw!.parts.length > sparks, 'the block still sparks, like slide 11’s own');
+  assert.equal(fx.raw!.projs.includes(round), false, 'and the round does not hang frozen over GAGAL!');
+});
+
+test('slide 11’s channel beams run from slide 1’s muzzle to the wheel, in screen space', () => {
+  const beams = SET_ELEVEN_IDS.filter((id) => elevenWeapon(id).channel && elevenWeapon(id).drawBeam);
+  assert.ok(beams.length >= 5, `the beam guns: ${beams.join(', ')}`);
+  // `host()`: slide 1's muzzle line is y = 571 and the wheel's rim faces it at
+  // y = 300 + 120 = 420, both on x = 210.
+  for (const id of beams) {
+    const { fx } = host();
+    fx.selectWeapon(id);
+    fx.fire(210, 571, 0);
+    for (let i = 0; i < 20; i++) fx.advance(1 / 60, true);
+    const pts: Pt[] = [];
+    fx.drawBeam(trackCtx(pts));
+    const beam = lines(pts);
+    assert.ok(beam.length > 0, `${id} paints its beam`);
+    for (const p of beam) {
+      assert.ok(Math.abs(p.x - 210) <= 100 && p.y >= 340 && p.y <= 640,
+        `${id} beam point (${p.x.toFixed(0)}, ${p.y.toFixed(0)}) is off the muzzle-to-wheel line`);
+    }
+    assert.ok(beam.some((p) => p.y >= 550), `${id} beam leaves the muzzle`);
+    assert.ok(beam.some((p) => p.y <= 440), `${id} beam reaches the wheel`);
+  }
+});
+
+test('slide 11’s aiming overlays land on the wheel: laser sight, three-dot lock, designator', () => {
+  const aimed = SET_ELEVEN_IDS.filter((id) => elevenWeapon(id).drawOverlay);
+  assert.deepEqual([...aimed].sort(), ['orbital-beacon', 'plasmacaster-mk2', 'sniper-beam']);
+  for (const id of aimed) {
+    const { fx } = host();
+    fx.follow(id);
+    assert.equal(fx.raw!.weapon.id, id, `${id} is slide 11’s live weapon before any shot`);
+    for (let i = 0; i < 10; i++) fx.advance(1 / 60);
+    const pts: Pt[] = [];
+    fx.drawOverlay(trackCtx(pts));
+    const onTarget = pts.filter((p) => Math.hypot(p.x - 210, p.y - 420) < 30);
+    assert.ok(onTarget.length > 0, `${id} paints its overlay where slide 1's wheel is`);
+  }
+});
+
+test('slide 11’s xenomorph and shoulder caster hit with their own FX only', () => {
+  for (const weapon of ['xeno', 'pred'] as const) {
+    for (const effect of ['set11', 'original'] as const) {
+      setGunEffect(weapon, effect);
+      const game = probe(weapon);
+      const hit = game as unknown as { projs: unknown[]; items: { acid?: unknown }[]; stuck: number };
+      const calls = { plasmaImpact: 0, splash: 0, airBlast: 0 };
+      for (const name of Object.keys(calls) as (keyof typeof calls)[]) {
+        game[name] = () => { calls[name]++; };
+      }
+      const carrier: Record<string, unknown> = { x: 210, y: 420, vx: 0, vy: -1800 };
+      if (effect === 'set11') carrier.setElevenPending = true;
+      hit.projs.push(carrier);
+      (game as unknown as { stickAt(local: number, p: unknown): void }).stickAt(0.2, carrier);
+      const item = hit.items.at(-1)!;
+      const ownFx = weapon === 'xeno' ? calls.splash : calls.plasmaImpact;
+      if (effect === 'set11') {
+        // Slide 11 bursts, marks and voices the hit itself: a game-3 acid
+        // splash, rim glob or plasma blast on top is a second hit effect.
+        assert.equal(ownFx, 0, `${weapon} on slide 11's shot runs no game-3 hit FX`);
+        assert.equal(item.acid, undefined, `${weapon} on slide 11's shot leaves no game-3 acid glob`);
+      } else {
+        assert.equal(ownFx, 1, `${weapon} on slide 1's own shot keeps its game-3 hit FX`);
+        if (weapon === 'xeno') assert.ok(item.acid, 'and its acid glob');
+      }
+      assert.equal(hit.stuck, 1, 'the hit counts either way');
+    }
+    setGunEffect(weapon, 'set11');
+  }
+});
+
+test('the picker card’s slide-11 beam joins the card’s muzzle to the card’s rim', () => {
+  // The card's frame (152 × 88 at 1.15 × 1.1 from its top centre) plus the
+  // wheel it strokes above its top edge.
+  for (const id of SET_ELEVEN_IDS.filter((x) => elevenWeapon(x).channel && elevenWeapon(x).drawBeam)) {
+    const pts: Pt[] = [];
+    drawSetElevenShotShell(trackCtx(pts), id, 0.06, 26);
+    const beam = lines(pts);
+    assert.ok(beam.length > 0, `${id} paints its beam on the card`);
+    for (const p of beam) {
+      assert.ok(Math.abs(p.x) <= 100 && p.y >= -80 && p.y <= 110,
+        `${id} card beam point (${p.x.toFixed(0)}, ${p.y.toFixed(0)}) is outside the card`);
+    }
+    assert.ok(beam.some((p) => p.y >= 40), `${id} card beam starts at the card's muzzle`);
+    assert.ok(beam.some((p) => p.y <= 10), `${id} card beam reaches the card's rim`);
+  }
+});
+
+test('the picker cards repaint with one slide-11 world, not a new audio graph per frame', () => {
+  installSilentAudio();
+  const g = globalThis as unknown as { AudioContext: new () => unknown; window: Record<string, unknown> };
+  const Base = g.AudioContext;
+  let made = 0;
+  class Counting extends (Base as new () => object) {
+    constructor() {
+      super();
+      made++;
+    }
+  }
+  g.AudioContext = Counting;
+  g.window.AudioContext = Counting;
+  g.window.webkitAudioContext = Counting;
+  try {
+    // About two seconds of three cards repainting (the picker runs ~18 fps).
+    for (let frame = 0; frame < 12; frame++) {
+      for (const id of ['tripod', 'beretta', 'orbital-beacon'] as const) {
+        drawSetElevenShotShell(fakeCtx(), id, 0.06, 26);
+      }
+    }
+    assert.ok(made <= 1, `${made} AudioContexts for 36 card frames`);
+  } finally {
+    delete g.window.AudioContext;
+    delete g.window.webkitAudioContext;
+    delete (g as Partial<typeof g>).AudioContext;
+  }
 });

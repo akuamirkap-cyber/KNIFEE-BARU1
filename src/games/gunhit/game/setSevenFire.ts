@@ -1,5 +1,5 @@
 /**
- * SET 2..7 fire recipes of slide 7 (`Weapon Hit 71 Senjata`), copied verbatim
+ * SET 1..7 fire recipes of slide 3 (`Weapon Hit 71 Senjata`), copied verbatim
  * from the real `games/game-4/src/game/Game.ts` by `scripts/gen-set-seven.py`
  * (run it again after slide 7 changes; never edit this file by hand).
  *
@@ -11,6 +11,7 @@
  * paint to slide 1.
  */
 
+import { drawCasing, drawShell, drawWad } from '../../../../games/game-4/src/game/art';
 import { sfx } from '../../../../games/game-4/src/game/audio';
 import { TAU, pick, rand } from '../../../../games/game-4/src/game/core';
 import { BambooBlast, BananaPop, FrostFlash, SniperFlash } from '../../../../games/game-4/src/game/fx2';
@@ -19,7 +20,8 @@ import { DragonBreathFlash, GravityPulse, HexBurst, Mandala, RadialFlash, Spiral
 import { MoonSlash, RainbowBurst, RainbowRings, RuneCircle } from '../../../../games/game-4/src/game/fx5';
 import { ConvergeRings, FieldLines, FrostBloom } from '../../../../games/game-4/src/game/fx6';
 import { GlitchBurst, HaloRing, RadiationPulse, SaberSlash, WarpLines } from '../../../../games/game-4/src/game/fx7';
-import { K, Light, Lightning, SplashSheet } from '../../../../games/game-4/src/game/particles';
+import { K, Light, Lightning, MuzzleFlash, SplashSheet } from '../../../../games/game-4/src/game/particles';
+import { BlackHoleShot, DartShot, GoldenBullet, ShotgunBlast, StoneShot, WaterJet } from '../../../../games/game-4/src/game/projectiles';
 import { BambooShot, BananaShot, BubbleShot, FlameJet, SniperShot, SnowballShot } from '../../../../games/game-4/src/game/projectiles2';
 import { ChickenShot, ConfettiShot, CrossbowShot, HarpoonShot, LaserBeam, MinigunBurst, PizzaShot, PlasmaShot, SeedShot } from '../../../../games/game-4/src/game/projectiles3';
 import { BeeSwarm, CoconutShot, DragonFire, FireworkShot, GravityShot, HoneyShot, KerisShot, NoteShot, SakuraShot } from '../../../../games/game-4/src/game/projectiles4';
@@ -30,12 +32,205 @@ import { drawRifleCasing } from '../../../../games/game-4/src/game/shapes2';
 import { ROCKET_COLS } from '../../../../games/game-4/src/game/shapes4';
 import { PAINT, RAINBOW } from '../../../../games/game-4/src/game/shapes5';
 import { AMETHYST, EMERALD, SAPPHIRE } from '../../../../games/game-4/src/game/shapes7';
+import { GOLDEN_SCALE, SHOTGUN_SCALE } from '../../../../games/game-4/src/game/weaponArt';
 import * as S from '../../../../games/game-4/src/game/spawn7';
 import type { SevenHost } from './setSevenFx';
-import type { SevenId } from './setSevenArt';
+import type { SlideThreeId } from './setSevenArt';
+const PURPLES = ['200,140,255', '255,180,255', '150,100,255', '230,200,255'];
 const GREENS = ['120,255,170', '190,255,215', '60,255,140', '230,255,240'];
 const MOON_COLS = ['225,215,255', '200,185,255', '255,255,255'];
 const ICE_COLS = ['190,235,255', '140,210,255', '230,248,255', '170,225,255'];
+
+export function fire_golden(host: SevenHost, mx: number, my: number) {
+    const a = host.anim;
+    const ps = host.particles;
+    a.fireT = 0;
+    a.recoilV += 15;
+    host.addFX(new MuzzleFlash(mx, my - 4, 'gold', 0.085));
+    host.addFX(new Light(mx, my - 10, 220, '255,190,80', 0.75, 0.2));
+    S.stars(ps, mx, my - 8, 14, '255,220,130', [80, 300], [7, 14], -Math.PI / 2, 0.9);
+    S.smoke(ps, mx, my - 10, 6, '235,215,175', [10, 44], { vy: [-90, -40], vx: [-30, 30], alpha: 0.35, life: [0.8, 1.3] });
+    S.ring(ps, mx, my - 6, 3, 30, '255,230,160', 2, 0.2, true);
+    S.sparks(ps, mx, my - 6, 10, -Math.PI / 2, 0.5, [300, 600], '255,220,140', 1.3, 300);
+    host.shots.push(new GoldenBullet(host.g, mx, my - 6));
+    host.after(0.035, () => {
+      const ex = mx - 5.5 * GOLDEN_SCALE;
+      const ey = my + 87 * GOLDEN_SCALE;
+      ps.add({
+        k: K.CUSTOM,
+        x: ex,
+        y: ey,
+        vx: rand(-280, -180),
+        vy: rand(-300, -190),
+        g: 1300,
+        rot: 0,
+        vrot: rand(-30, -18),
+        life: 1.5,
+        draw: (c, q) => {
+          c.save();
+          c.translate(q.x, q.y);
+          c.rotate(q.rot);
+          drawCasing(c);
+          c.restore();
+        },
+      });
+      S.smoke(ps, ex, ey, 2, '220,210,190', [5, 18], { vy: [-40, -15], alpha: 0.3 });
+      S.stars(ps, ex, ey, 3, '255,220,130', [30, 90], [6, 10]);
+    });
+    host.shake(4);
+    sfx.play('golden_fire');
+  }
+
+export function fire_blackhole(host: SevenHost, mx: number, my: number) {
+    const a = host.anim;
+    const ps = host.particles;
+    a.charging = true;
+    a.charge = 0;
+    sfx.play('bh_charge');
+    host.orbTarget.x = mx;
+    host.orbTarget.y = my;
+    for (let i = 0; i < 28; i++) {
+      const an = rand(0, TAU);
+      const d = rand(40, 95);
+      ps.add({ k: K.SPARK, add: true, x: mx + Math.cos(an) * d, y: my + Math.sin(an) * d, target: host.orbTarget, pull: 1700, size: rand(1, 2.2), len: 0.03, life: 0.5, color: pick(PURPLES) });
+    }
+    for (let i = 0; i < 3; i++) {
+      const an = rand(0, TAU);
+      host.addFX(new Lightning(mx + Math.cos(an) * 52, my + Math.sin(an) * 52, mx, my, 0.28, '190,120,255', 1.1, 1, 0.05));
+    }
+    host.after(0.28, () => {
+      a.charging = false;
+      a.charge = 0;
+      a.orb = 0.12;
+      a.fireT = 0;
+      a.recoilV += 8;
+      host.shots.push(new BlackHoleShot(host.g, mx, my - 4));
+      S.ring(ps, mx, my, 6, 84, '190,120,255', 7, 0.42, true);
+      S.ring(ps, mx, my, 3, 42, '255,255,255', 3, 0.22, true);
+      host.addFX(new Light(mx, my, 210, '160,80,255', 0.85, 0.32));
+      S.sparks(ps, mx, my, 18, -Math.PI / 2, 1.2, [150, 450], '215,165,255', 1.5, 200);
+      for (let i = 0; i < 5; i++) {
+        const an = -Math.PI / 2 + rand(-1.6, 1.6);
+        const L = rand(40, 80);
+        host.addFX(new Lightning(mx, my, mx + Math.cos(an) * L, my + Math.sin(an) * L, 0.16, '200,140,255', 1.3, 1));
+      }
+      host.shake(5);
+      sfx.play('bh_fire');
+    });
+  }
+
+export function fire_ketapel(host: SevenHost, mx: number, my: number) {
+    const a = host.anim;
+    const ps = host.particles;
+    a.loaded = false;
+    a.pouchTarget = 0;
+    a.pouchV = -1700;
+    a.bandWob = 7;
+    a.fireT = 0;
+    a.recoilV += 2.5;
+    host.shots.push(new StoneShot(host.g, mx, my + 40));
+    S.smoke(ps, mx, my, 5, '240,240,250', [6, 26], { vy: [-120, -50], alpha: 0.22, life: [0.4, 0.7] });
+    S.ring(ps, mx, my - 2, 4, 32, '255,255,255', 2, 0.25, false, 0.5);
+    S.smoke(ps, mx, my + 46, 3, '200,175,140', [5, 18], { vy: [-20, 10], alpha: 0.3 });
+    sfx.play('sling_fire');
+    host.after(0.34, () => {
+      a.loaded = true;
+      a.pouchTarget = 46;
+    });
+  }
+
+export function fire_sumpit(host: SevenHost, mx: number, my: number) {
+    const a = host.anim;
+    const ps = host.particles;
+    a.pulse = 0;
+    a.fireT = 0;
+    sfx.play('sumpit_fire');
+    host.after(0.075, () => {
+      a.recoilV += 4;
+      a.tasselV += 7;
+      host.shots.push(new DartShot(host.g, mx, my - 38));
+      S.smoke(ps, mx, my - 4, 8, '235,242,255', [5, 28], { vy: [-140, -40], vx: [-50, 50], alpha: 0.32, life: [0.5, 0.9], drag: 3 });
+      S.ring(ps, mx, my - 4, 2, 24, '255,255,255', 2, 0.26, false, 0.6);
+    });
+  }
+
+export function fire_shotgun(host: SevenHost, mx: number, my: number) {
+    const a = host.anim;
+    const ps = host.particles;
+    a.fireT = 0;
+    a.recoilV += 22;
+    host.addFX(new MuzzleFlash(mx, my - 6, 'shotgun', 0.1));
+    host.addFX(new Light(mx, my - 30, 330, '255,150,60', 0.9, 0.22));
+    host.flashScreen('255,190,120', 0.16);
+    host.shots.push(new ShotgunBlast(host.g, mx, my - 8));
+    S.smoke(ps, mx, my - 14, 13, '165,165,170', [14, 74], { vy: [-150, -50], vx: [-45, 45], alpha: 0.5, life: [1.1, 1.8], drag: 1.7 });
+    S.embers(ps, mx, my - 8, 16, -Math.PI / 2, 0.38, [300, 760]);
+    ps.add({
+      k: K.CUSTOM,
+      x: mx,
+      y: my - 10,
+      vx: rand(-40, 40),
+      vy: -780,
+      g: 700,
+      drag: 4.2,
+      rot: 0,
+      vrot: rand(-22, 22),
+      life: 1.3,
+      draw: (c, q) => {
+        c.save();
+        c.translate(q.x, q.y);
+        c.rotate(q.rot);
+        drawWad(c);
+        c.restore();
+      },
+    });
+    host.shake(10);
+    sfx.play('shotgun_fire');
+    host.after(0.17, () => {
+      a.pumpStart = host.time;
+      sfx.play('pump');
+    });
+    host.after(0.28, () => {
+      const ex = mx - 2.5 * SHOTGUN_SCALE;
+      const ey = my + 146 * SHOTGUN_SCALE;
+      ps.add({
+        k: K.CUSTOM,
+        x: ex,
+        y: ey,
+        vx: rand(-330, -230),
+        vy: rand(-340, -240),
+        g: 1400,
+        rot: 0,
+        vrot: rand(-26, -14),
+        life: 1.6,
+        draw: (c, q) => {
+          c.save();
+          c.translate(q.x, q.y);
+          c.rotate(q.rot);
+          drawShell(c);
+          c.restore();
+        },
+      });
+      S.smoke(ps, ex, ey, 3, '170,170,175', [5, 22], { vy: [-60, -20], alpha: 0.35 });
+    });
+  }
+
+export function fire_soaker(host: SevenHost, mx: number, my: number) {
+    const a = host.anim;
+    const ps = host.particles;
+    a.fireT = 0;
+    a.recoilV += 5;
+    a.slosh = Math.min(1.8, a.slosh + 1.1);
+    a.gauge = 0.22;
+    a.water = host.ammoLeft / host.ammoTotal;
+    host.shots.push(new WaterJet(host.g, mx, my - 2));
+    S.droplets(ps, mx, my - 4, 16, -Math.PI / 2, 0.26, [300, 650], [0.7, 1.5], '170,220,255', 500);
+    S.smoke(ps, mx, my - 8, 5, '220,240,255', [6, 28], { vy: [-120, -40], alpha: 0.26, life: [0.4, 0.8] });
+    sfx.play('soaker_fire');
+    host.after(0.1, () => {
+      a.pumpStart = host.time;
+    });
+  }
 
 export function fire_snowball(host: SevenHost, mx: number, my: number) {
     const a = host.anim;
@@ -1320,8 +1515,14 @@ export function fire_wars(host: SevenHost, mx: number, my: number) {
     sfx.play('wars_fire');
   }
 
-/** Slide-7 fire recipe per weapon (all 65 of SET 2..7). */
+/** Slide-3 fire recipe per weapon (all 71 of SET 1..7). */
 export const FIRE_RECIPES = {
+  golden: fire_golden,
+  blackhole: fire_blackhole,
+  ketapel: fire_ketapel,
+  sumpit: fire_sumpit,
+  shotgun: fire_shotgun,
+  soaker: fire_soaker,
   snowball: fire_snowball,
   sniper: fire_sniper,
   flame: fire_flame,
@@ -1387,4 +1588,4 @@ export const FIRE_RECIPES = {
   hyperdrive: fire_hyperdrive,
   quantum: fire_quantum,
   wars: fire_wars,
-} as const satisfies Record<SevenId, (host: SevenHost, mx: number, my: number) => void>;
+} as const satisfies Record<SlideThreeId, (host: SevenHost, mx: number, my: number) => void>;

@@ -32,7 +32,8 @@ drawGun(contextWithCalls(electroCalls), 'electro', 0, 0, 0.5, 0, true, undefined
 
 test('Plasma Gun renders its own angled, themed grip instead of the generic straight grip', () => {
   const calls: string[] = [];
-  drawGun(contextWithCalls(calls), 'plasma', 0, 0, 0.5, 0);
+  // The classic PLASMA GUN is its "Sebelumnya" design (slide 3's is the default).
+  drawGun(contextWithCalls(calls), 'plasma', 0, 0, 0.5, 0, true, undefined, 'original');
   assert.ok(calls.includes('rotate:-0.32'), 'plasma grip should lean back from its receiver');
   assert.ok(calls.includes('quadraticCurveTo'), 'plasma grip should have a shaped ergonomic silhouette');
 });

@@ -8,11 +8,10 @@ import { GUN_SUNBURST_RGB, gunSunburstColor } from '../src/games/gunhit/game/sun
 import { getWeapon, type Rarity } from '../src/games/gunhit/game/weapons';
 
 test('Every iframe slide game has its own index.html, main.tsx, and App.tsx so it never falls back to root index.html', () => {
-  const iframeSlides = [
-    'fireworkgun',
-    'rainbow',
-    'obliterator',
-  ];
+  // Every game page the hub embeds, read from the hub itself.
+  const app = fs.readFileSync(path.resolve(process.cwd(), 'src/App.tsx'), 'utf8');
+  const iframeSlides = [...new Set([...app.matchAll(/games\/([a-z0-9-]+)\/index\.html/g)].map(m => m[1]))];
+  assert.deepEqual(iframeSlides, ['game-2', 'game-4', 'game-6', 'game-8']);
   for (const id of iframeSlides) {
     const dir = path.resolve(process.cwd(), 'games', id);
     const htmlPath = path.join(dir, 'index.html');
@@ -22,8 +21,40 @@ test('Every iframe slide game has its own index.html, main.tsx, and App.tsx so i
     assert.ok(fs.existsSync(mainPath), `Missing ${mainPath}`);
     assert.ok(fs.existsSync(appPath), `Missing ${appPath}`);
     const html = fs.readFileSync(htmlPath, 'utf8');
-    assert.match(html, /src=["']\.\/src\/main\.tsx["']/);
+    assert.ok(new RegExp(`src=["'](\\./|/games/${id}/)src/main\\.tsx["']`).test(html), `${id} loads its own main.tsx`);
   }
+});
+
+test('Firework 8-Gun, Rainbow Gun, Obliterator Hit, Weapon Hit Arena, Neon Ballistics and Ballistics Lab are gone from the hub and the rest is renumbered 01-05', () => {
+  const root = process.cwd();
+  const app = fs.readFileSync(path.join(root, 'src/App.tsx'), 'utf8');
+  const vite = fs.readFileSync(path.join(root, 'vite.config.ts'), 'utf8');
+  for (const id of ['obliterator', 'game1', 'game5', 'game7']) {
+    assert.ok(!app.includes(`id: '${id}'`), `${id} must not be a hub slide`);
+  }
+  // Nothing imports Obliterator Hit, Weapon Hit Arena, Neon Ballistics or
+  // Ballistics Lab: all four folders are gone.
+  for (const dir of ['obliterator', 'game-1', 'game-5', 'game-7']) {
+    assert.ok(!app.includes(`games/${dir}/`), `${dir} must not be loaded by the hub`);
+    assert.ok(!vite.includes(`games/${dir}/`), `${dir} must not be a build input`);
+    assert.ok(!fs.existsSync(path.join(root, 'games', dir)), `games/${dir} is deleted`);
+  }
+  for (const id of ['fireworkgun', 'rainbow']) {
+    assert.ok(!app.includes(`id: '${id}'`), `${id} must not be a hub slide`);
+    assert.ok(!app.includes(`games/${id}/`), `${id} must not be loaded by the hub`);
+    assert.ok(!vite.includes(`games/${id}/`), `${id} must not be a build input`);
+    assert.ok(!fs.existsSync(path.join(root, 'games', id, 'index.html')), `${id} must not ship a page`);
+  }
+  assert.ok(!fs.existsSync(path.join(root, 'games/rainbow')));
+  // SGA's "Firework" card still plays slide 2's own sound engine, and its
+  // parity test still drives slide 2's own engine: those two files stay.
+  for (const file of ['engine.ts', 'sfx.ts']) {
+    assert.ok(fs.existsSync(path.join(root, 'games/fireworkgun/src/game', file)), `keep games/fireworkgun/src/game/${file}`);
+  }
+  const numbers = [...app.matchAll(/slideNumber: (\d+),/g)].map(m => Number(m[1]));
+  assert.deepEqual(numbers, [1, 2, 3, 4, 5]);
+  const ids = [...app.matchAll(/\n      id: '([a-z0-9]+)',\n      slideNumber:/g)].map(m => m[1]);
+  assert.deepEqual(ids, ['gunhit', 'game2', 'game4', 'game6', 'game8']);
 });
 
 test('Gun Hit tiers have their own FX Lab rays, including every equipped weapon', () => {

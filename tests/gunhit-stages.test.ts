@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { allowsStarPowerups, diamondCoreProjectileRadius, Game, makeLevel, projectileSizeMultiplier } from '../src/games/gunhit/game/Game';
 import { DiamondRock, LARGE_DIAMOND_CORE_RADIUS } from '../src/games/gunhit/game/art/diamondRock';
 import { getWeapon, WEAPONS } from '../src/games/gunhit/game/weapons';
+import { getGunEffect, setGunEffect } from '../src/games/gunhit/game/art/gunVariants';
 import { throwTreasureCoins, advanceTreasureCoins, type TreasureCoin } from '../src/games/gunhit/game/treasureShower';
 
 test('boss cycles contain three normal stages, one random special, then the boss', () => {
@@ -221,7 +222,10 @@ test('bonus rings and stage banking award coins only once', () => {
 });
 
 test('every dual-gun stage fires, flashes and charges at both real muzzles', () => {
-  for (const levelNumber of [3, 6, 13]) {
+  // Slide 1's classic twin muzzle: PLASMA's own default is slide 3's shot now.
+  const plasmaEffect = getGunEffect('plasma');
+  setGunEffect('plasma', 'original');
+  try { for (const levelNumber of [3, 6, 13]) {
     const lights: number[] = [];
     const game = Object.create(Game.prototype) as Game & {
       projs: { x: number; originX: number }[];
@@ -241,6 +245,8 @@ test('every dual-gun stage fires, flashes and charges at both real muzzles', () 
     assert.deepEqual(lights.slice(0, 2), [180, 240], `muzzle flashes on level ${levelNumber}`);
     assert.deepEqual(game.particles.filter(p => p.kind === 'ring').map(p => p.x), [180, 240]);
     assert.ok(!game.particles.some(p => p.x === 210 && p.kind === 'ring'), 'no phantom middle muzzle');
+  } } finally {
+    setGunEffect('plasma', plasmaEffect);
   }
 });
 

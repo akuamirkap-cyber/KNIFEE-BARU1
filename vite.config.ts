@@ -318,15 +318,9 @@ export default defineConfig(() => {
       rollupOptions: {
         input: {
           main: path.resolve(process.cwd(), 'index.html'),
-          fireworkgun: path.resolve(process.cwd(), 'games/fireworkgun/index.html'),
-          rainbow: path.resolve(process.cwd(), 'games/rainbow/index.html'),
-          obliterator: path.resolve(process.cwd(), 'games/obliterator/index.html'),
-          game1: path.resolve(process.cwd(), 'games/game-1/index.html'),
           game2: path.resolve(process.cwd(), 'games/game-2/index.html'),
           game4: path.resolve(process.cwd(), 'games/game-4/index.html'),
-          game5: path.resolve(process.cwd(), 'games/game-5/index.html'),
           game6: path.resolve(process.cwd(), 'games/game-6/index.html'),
-          game7: path.resolve(process.cwd(), 'games/game-7/index.html'),
           game8: path.resolve(process.cwd(), 'games/game-8/index.html'),
         },
       },
