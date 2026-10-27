@@ -147,7 +147,10 @@ export function drawGun(
   if (setSevenId && supportsGunVariants(id)) {
     drawSetSevenGun(c, setSevenId, cx, y0, t, gunState.s7Anim ?? restSevenAnim());
     c.restore();
-    if (flash > 0) drawFlash(c, id, cx, y0, t, flash);
+    // In play, slide 7's own fire recipe already throws its muzzle flash (and
+    // its smoke, sparks and light); slide 1's generic flash would stack a
+    // second burst of sparks on the barrel. Menus and cards still get one.
+    if (flash > 0 && !gunState.s7Anim) drawFlash(c, id, cx, y0, t, flash);
     return;
   }
   // Slide-2 guns: the newest design is slide 2's own art, drawn at the same

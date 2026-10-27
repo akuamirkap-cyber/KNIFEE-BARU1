@@ -178,6 +178,16 @@ export class SetSevenFx implements SevenHost {
   shots: Projectile[] = [];
   /** Rounds stuck in the wheel — slide 7's own `drawStuckItem()` art. */
   stuck: StuckItem[] = [];
+  /**
+   * Rounds slide 1 has already resolved and stopped carrying.
+   *
+   * Slide 7 never stops updating a round when it lands: the shotgun's pellet
+   * shower, the minigun drum, the water jet and every `trail()` keep running
+   * until the round leaves the screen. Slide 1 removes its carrier the frame
+   * the round sticks, so those rounds are handed back here and live out their
+   * own short life on slide 7's clock.
+   */
+  released: Projectile[] = [];
   /** The moving point slide-7's `pull` particles chase. */
   orbTarget = { x: 0, y: 0 };
   time = 0;
@@ -310,7 +320,13 @@ export class SetSevenFx implements SevenHost {
   /** True while slide 7 still has something to draw or animate. */
   get busy(): boolean {
     return this.particles.list.length > 0 || this.fx.length > 0 || this.timers.length > 0
-      || this.wheelFx.length > 0 || this.shots.some((p) => p.alive) || this.stuck.length > 0;
+      || this.wheelFx.length > 0 || this.shots.some((p) => p.alive) || this.stuck.length > 0
+      || this.released.length > 0;
+  }
+
+  /** Hand a round slide 1 just resolved back to slide 7's own clock. */
+  release(shot: Projectile) {
+    this.released.push(shot);
   }
 
   clear() {
@@ -320,6 +336,7 @@ export class SetSevenFx implements SevenHost {
     this.wheelFx.length = 0;
     this.shots.length = 0;
     this.stuck.length = 0;
+    this.released.length = 0;
   }
 
   /** One frame of slide-7 time: its timers, particles and FX objects. */
@@ -339,6 +356,10 @@ export class SetSevenFx implements SevenHost {
     for (const f of this.wheelFx) f.update(dt);
     this.wheelFx = this.wheelFx.filter((f) => !f.done);
     this.shots = this.shots.filter((p) => p.alive);
+    // Rounds that outlived slide 1's carrier keep their own flight (and their
+    // sub-projectiles) until they die, exactly like slide 7.
+    for (const p of this.released) p.update(dt);
+    this.released = this.released.filter((p) => p.alive);
     // Stuck rounds ride the wheel exactly like slide 7: their world position and
     // their "up" frame follow the rim as it turns and bounces.
     for (const it of this.stuck) {
@@ -359,6 +380,7 @@ export class SetSevenFx implements SevenHost {
   drawFront(ctx: CanvasRenderingContext2D) {
     this.particles.draw(ctx, true);
     for (const f of this.fx) f.draw(ctx);
+    for (const p of this.released) p.draw(ctx);
   }
 
   /** Wheel-space FX, drawn from the wheel centre like slide 7 does. */

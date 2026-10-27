@@ -22,6 +22,12 @@ export type BurstType =
 
 const IMPACT_TYPES: BurstType[] = ['peony', 'ring', 'star', 'heart', 'spiral', 'crackle', 'rainbow'];
 
+/** Slide 2's sky-show burst wardrobe. */
+const SKY_TYPES: BurstType[] = ['peony', 'ring', 'star', 'heart', 'spiral', 'crackle', 'rainbow', 'willow'];
+
+/** Slide 2 canvas width (the sky show is laid out in slide-2 pixels). */
+const W = 420;
+
 /** Slide 2 round length, used by its trail offsets. */
 const PL = 46;
 /** Slide 2 wheel radius; only the ported `drawDebris` wedge branch reads it. */
@@ -39,6 +45,12 @@ export interface TwoDebris {
 
 /** Slide 2 `BiteMark`, anchored to the point that actually got hit. */
 export interface TwoBite { x: number; y: number; kind: TwoWeapon; life: number; max: number }
+
+/** Slide 2 `SkyRocket` — the ambient firework show above the wheel. */
+export interface TwoSkyRocket {
+  x: number; y: number; vx: number; vy: number;
+  hue: number; type: BurstType; scale: number;
+}
 
 /** One slide-2 round in flight. */
 export interface TwoRound { hue: number; seed: number; age: number; open: number }
@@ -83,6 +95,11 @@ export class SetTwoFx extends Slide2Fx {
   bubbles: TwoBubble[] = [];
   debris: TwoDebris[] = [];
   biteMarks: TwoBite[] = [];
+  /** Slide 2's sky show. */
+  sky: TwoSkyRocket[] = [];
+  /** True while slide 1 is actually playing, so the sky keeps launching. */
+  ambient = false;
+  private ambientT = 0.6;
   host: TwoHost = NO_HOST;
   private hitX = 0;
   private hitY = 0;
@@ -90,6 +107,8 @@ export class SetTwoFx extends Slide2Fx {
 
   clear() {
     super.clear();
+    this.sky.length = 0;
+    this.ambientT = 0.6;
     this.bubbles.length = 0;
     this.debris.length = 0;
     this.biteMarks.length = 0;
@@ -104,7 +123,8 @@ export class SetTwoFx extends Slide2Fx {
       || this.voids.length > 0 || this.jets.length > 0 || this.beams.length > 0
       || this.smokes.length > 0 || this.fireballs.length > 0 || this.flashes.length > 0
       || this.texts.length > 0 || this.timers.length > 0
-      || this.bubbles.length > 0 || this.debris.length > 0 || this.biteMarks.length > 0;
+      || this.bubbles.length > 0 || this.debris.length > 0 || this.biteMarks.length > 0
+      || this.sky.length > 0;
   }
 
   private bite(life: number) {
@@ -1697,9 +1717,84 @@ export class SetTwoFx extends Slide2Fx {
     }
   }
 
+  /**
+   * Slide 2 `launchSky()`: a rocket climbs from the bottom of the screen on a
+   * gravity arc and bursts overhead. Same launch window, same 700 px/s² pull.
+   */
+  launchSky(scale = 1.1) {
+    const x0 = rnd(50, W - 50);
+    const y0 = this.h - 110;
+    const ty = rnd(70, 330);
+    const tx = rnd(50, W - 50);
+    const accel = 700;
+    const vy = -Math.sqrt(2 * accel * (y0 - ty));
+    const tt = -vy / accel;
+    this.sky.push({
+      x: x0,
+      y: y0,
+      vx: (tx - x0) / tt,
+      vy,
+      hue: rnd(0, 360),
+      type: SKY_TYPES[Math.floor(Math.random() * SKY_TYPES.length)],
+      scale,
+    });
+    slide2Sfx.skyLaunch();
+  }
+
+  /** Slide 2's ambient show, per weapon (bazooka and RPG never use the sky). */
+  private ambientSky(dt: number) {
+    const w = this.weapon;
+    if (w === 'bazooka' || w === 'rpg' || w === 'blackhole') return;
+    if (!this.ambient) {
+      this.ambientT = 0.6;
+      return;
+    }
+    this.ambientT -= dt;
+    if (this.ambientT > 0) return;
+    this.launchSky(rnd(0.9, 1.2));
+    this.ambientT = w === 'firework' ? rnd(0.7, 1.5) : rnd(1.4, 2.4);
+  }
+
+  private stepSky(dt: number) {
+    for (let i = this.sky.length - 1; i >= 0; i--) {
+      const s = this.sky[i];
+      s.vy += 700 * dt;
+      s.x += s.vx * dt;
+      s.y += s.vy * dt;
+      for (let k = 0; k < 2; k++) {
+        this.spawn(s.x, s.y, rnd(-0.5, 0.5), rnd(0.5, 2), {
+          life: rnd(0.3, 0.7),
+          size: 1.8,
+          h: 38 + rnd(-10, 10),
+          l: 70,
+          g: 0.02,
+          d: 0.94,
+        });
+      }
+      if (s.vy > -40) {
+        this.sky.splice(i, 1);
+        this.burst(s.x, s.y, s.hue, s.type, s.scale, 30);
+        slide2Sfx.boom(s.scale);
+        this.host.shake(2);
+      }
+    }
+  }
+
+  /** The rocket heads (slide 2 draws them with the particles, on top). */
+  drawSky(c: CanvasRenderingContext2D) {
+    for (const s of this.sky) {
+      c.fillStyle = 'rgba(255,230,160,0.95)';
+      c.beginPath();
+      c.arc(s.x, s.y, 2.6, 0, TAU);
+      c.fill();
+    }
+  }
+
   update(dt: number) {
     this.time += dt;
     super.update(dt);
+    this.ambientSky(dt);
+    this.stepSky(dt);
 
     for (let i = this.bubbles.length - 1; i >= 0; i--) {
       const b = this.bubbles[i];
