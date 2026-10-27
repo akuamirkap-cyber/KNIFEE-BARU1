@@ -16,6 +16,8 @@ const { K, Particles } = await import('../games/game-4/src/game/particles.ts');
 
 interface Recorded {
   counts: Record<string, number>;
+  /** Operation sequence, so path continuity can be checked. */
+  ops: string[];
   ellipses: { x: number; y: number; rx: number; ry: number; rot: number }[];
   arcs: { x: number; y: number; r: number }[];
   lines: { x1: number; y1: number; x2: number; y2: number }[];
@@ -24,7 +26,7 @@ interface Recorded {
 }
 
 function recorder() {
-  const rec: Recorded = { counts: {}, ellipses: [], arcs: [], lines: [], fills: [], strokes: [] };
+  const rec: Recorded = { counts: {}, ops: [], ellipses: [], arcs: [], lines: [], fills: [], strokes: [] };
   let fillStyle = '';
   let strokeStyle = '';
   let lineWidth = 1;
@@ -50,11 +52,12 @@ function recorder() {
     rotate: () => bump('rotate'),
     scale: () => bump('scale'),
     clip: () => bump('clip'),
-    moveTo: (x: number, y: number) => { bump('moveTo'); last = { x, y }; },
+    moveTo: (x: number, y: number) => { bump('moveTo'); rec.ops.push(`moveTo ${x.toFixed(2)} ${y.toFixed(2)}`); last = { x, y }; },
     lineTo: (x: number, y: number) => { bump('lineTo'); rec.lines.push({ x1: last.x, y1: last.y, x2: x, y2: y }); last = { x, y }; },
-    arc: (x: number, y: number, r: number) => { bump('arc'); rec.arcs.push({ x, y, r }); },
+    arc: (x: number, y: number, r: number) => { bump('arc'); rec.ops.push('arc'); rec.arcs.push({ x, y, r }); },
     ellipse: (x: number, y: number, rx: number, ry: number, rot: number) => {
       bump('ellipse');
+      rec.ops.push('ellipse');
       rec.ellipses.push({ x, y, rx, ry, rot });
     },
     quadraticCurveTo: () => bump('quadraticCurveTo'),
@@ -130,6 +133,24 @@ test('sub-pixel gloss is skipped, faded droplets are not drawn', () => {
 
   assert.equal(rec.ellipses.length, 1, 'only the visible droplet is painted');
   assert.equal(rec.arcs.length, 0, 'no invisible gloss');
+});
+
+test('every batched droplet starts its own sub-path (no paint web)', () => {
+  // A canvas joins the current point to an arc's start when a subpath is open,
+  // so chaining ellipses filled the lines between droplets: that web of
+  // triangles was the "paintball effect glitch". Each shape must be preceded by
+  // its own moveTo.
+  const ps = new Particles();
+  for (let i = 0; i < 60; i++) ps.add(droplet(i, '244,63,94', 1, 4));
+  const { ctx, rec } = recorder();
+  ps.draw(ctx, false);
+
+  const shapes = rec.ops.filter((o) => o === 'ellipse' || o === 'arc');
+  assert.equal(shapes.length, 120, '60 droplet bodies + 60 gloss dots');
+  for (let i = 0; i < rec.ops.length; i++) {
+    if (rec.ops[i] !== 'ellipse' && rec.ops[i] !== 'arc') continue;
+    assert.ok(rec.ops[i - 1]?.startsWith('moveTo'), `shape ${i} must be a fresh sub-path, got ${rec.ops[i - 1]}`);
+  }
 });
 
 test('sparks batch into one stroke per colour + alpha + width', () => {

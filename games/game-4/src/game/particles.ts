@@ -184,6 +184,26 @@ interface DropBatch {
   frame: number;
 }
 
+/**
+ * Restart the path at an ellipse's own start point.
+ *
+ * `ellipse()`/`arc()` follow the canvas spec: if a subpath is already open they
+ * add a straight line from the current point to the arc start. Chaining a
+ * hundred droplets into one batched path therefore drew a web of lines joining
+ * every droplet — filled, that web is big triangular wedges of paint smeared
+ * across the wheel (the "efek paintball glitch" report). A `moveTo` at the arc
+ * start makes each droplet its own subpath and the lines disappear.
+ */
+function moveToArcStart(ctx: Ctx, x: number, y: number, r: number) {
+  ctx.moveTo(x + r, y);
+}
+
+/** Same, for a rotated ellipse. */
+function moveToEllipseStart(ctx: Ctx, x: number, y: number, rx: number, ry: number, rot: number) {
+  void ry;
+  ctx.moveTo(x + Math.cos(rot) * rx, y + Math.sin(rot) * rx);
+}
+
 const dropBatches = new Map<string, DropBatch>();
 const dropActive: DropBatch[] = [];
 let dropFrame = 0;
@@ -232,6 +252,7 @@ function drawBatchedDrops(ctx: Ctx, L: Particle[]) {
     if (!body.length) continue;
     ctx.beginPath();
     for (let k = 0; k < body.length; k += 5) {
+      moveToEllipseStart(ctx, body[k], body[k + 1], body[k + 2], body[k + 3], body[k + 4]);
       ctx.ellipse(body[k], body[k + 1], body[k + 2], body[k + 3], body[k + 4], 0, TAU);
     }
     ctx.fillStyle = `rgba(${b.color},${b.alpha * 0.72})`;
@@ -243,6 +264,7 @@ function drawBatchedDrops(ctx: Ctx, L: Particle[]) {
     if (gloss.length) {
       ctx.beginPath();
       for (let k = 0; k < gloss.length; k += 3) {
+        moveToArcStart(ctx, gloss[k], gloss[k + 1], gloss[k + 2]);
         ctx.arc(gloss[k], gloss[k + 1], gloss[k + 2], 0, TAU);
       }
       ctx.fillStyle = `rgba(255,255,255,${b.alpha * 0.9})`;

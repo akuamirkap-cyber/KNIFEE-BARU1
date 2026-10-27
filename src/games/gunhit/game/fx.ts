@@ -86,6 +86,22 @@ export function cssColor(color: string, alpha = 1): string {
  * built a `Map` and an array per colour per frame, and that allocation showed up
  * as GC time in the profile — the very thing this batching exists to avoid.
  */
+/**
+ * Restart the path at a shape's own start point before drawing it.
+ *
+ * `ellipse()`/`arc()` add a straight line from the current point to the arc
+ * start when a subpath is already open, so chaining droplets into one batched
+ * path joined them with lines — filled, that showed up as triangular wedges of
+ * paint smeared over the wheel instead of separate droplets.
+ */
+function moveToArcStart(c: CanvasRenderingContext2D, x: number, y: number, r: number) {
+  c.moveTo(x + r, y);
+}
+
+function moveToEllipseStart(c: CanvasRenderingContext2D, x: number, y: number, rx: number, rot: number) {
+  c.moveTo(x + Math.cos(rot) * rx, y + Math.sin(rot) * rx);
+}
+
 const dropBuckets = new Map<string, Particle[][]>();
 const dropActive: string[] = [];
 
@@ -124,7 +140,9 @@ export function drawDropParticles(c: CanvasRenderingContext2D, particles: readon
       c.fillStyle = cssColor(color);
       c.beginPath();
       for (const p of list) {
-        c.ellipse(p.x, p.y, p.size * dropStretch(p), p.size * 0.7, Math.atan2(p.vy, p.vx), 0, TAU);
+        const rot = Math.atan2(p.vy, p.vx);
+        moveToEllipseStart(c, p.x, p.y, p.size * dropStretch(p), rot);
+        c.ellipse(p.x, p.y, p.size * dropStretch(p), p.size * 0.7, rot, 0, TAU);
       }
       c.fill();
       // Gloss: sub-pixel below ~3.4px, so it is batched only where it shows.
@@ -139,7 +157,10 @@ export function drawDropParticles(c: CanvasRenderingContext2D, particles: readon
         const ang = Math.atan2(p.vy, p.vx);
         const hx = 0.3 * p.size;
         const hy = -0.2 * p.size;
-        c.arc(p.x + hx * Math.cos(ang) - hy * Math.sin(ang), p.y + hx * Math.sin(ang) + hy * Math.cos(ang), p.size * 0.22, 0, TAU);
+        const gx = p.x + hx * Math.cos(ang) - hy * Math.sin(ang);
+        const gy = p.y + hx * Math.sin(ang) + hy * Math.cos(ang);
+        moveToArcStart(c, gx, gy, p.size * 0.22);
+        c.arc(gx, gy, p.size * 0.22, 0, TAU);
       }
       if (gloss) c.fill();
     }
