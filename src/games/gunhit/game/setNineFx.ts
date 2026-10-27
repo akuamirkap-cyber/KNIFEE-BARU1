@@ -45,6 +45,11 @@ export function setNineMuted(muted: boolean) {
   nineAudio.muted = muted;
 }
 
+/** Slide 9's current mute state, so a temporary silence can be undone. */
+export function nineMuted(): boolean {
+  return nineAudio.muted;
+}
+
 /** Slide 9's audio graph may only start after a user gesture. */
 export function unlockNineAudio() {
   try {
@@ -207,6 +212,23 @@ export class SetNineFx implements GameAPI {
   }
 
   /**
+   * The star pickup wipes the screen.
+   *
+   * A carried round is never advanced by slide 9 (slide 1 owns its position),
+   * so once slide 1 drops its carriers the round would keep sitting in
+   * `bullets` — painted where it froze — until its own life ran out.
+   */
+  sweepCarried() {
+    if (!this.carried.size) return;
+    // Mutated in place: slide 9's own `update`/`draw` walk this same array.
+    const keep = this.bullets.filter((b) => !this.carried.has(b));
+    this.bullets.length = 0;
+    this.bullets.push(...keep);
+    for (const b of this.carried) this.taken.delete(b);
+    this.carried.clear();
+  }
+
+  /**
    * Slide-9's impact: the weapon's own burst at the hit point plus the entry
    * hole it paints into the wheel (`drawMark`).
    */
@@ -326,6 +348,17 @@ export class SetNineFx implements GameAPI {
   }
 
   /** Entry holes, drawn from the wheel centre with the wheel's own spin. */
+  /** One round of slide 9's own art (slide 1 paints carried rounds itself). */
+  drawShot(ctx: CanvasRenderingContext2D, b: Bullet) {
+    ctx.save();
+    try {
+      b.draw(ctx, b, this.time);
+    } catch {
+      /* a single round's art must not break the frame */
+    }
+    ctx.restore();
+  }
+
   drawWheel(ctx: CanvasRenderingContext2D, cx: number, cy: number, radius: number, rot: number) {
     if (!this.marks.length) return;
     ctx.save();

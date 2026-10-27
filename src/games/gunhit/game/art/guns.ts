@@ -8,9 +8,11 @@ import { shotPulse } from './commonGunMotion';
 import { drawSlide3BazookaMuzzleFx } from '../bazookaSlideFx';
 import { drawBlackHoleGun2, type Slide2GunState } from '../slide2Weapons';
 import { drawSetOneGun, setOneIdFor } from '../setOneArt';
+import { drawSetTwoGun, restTwoState, setTwoIdFor } from '../setTwoArt';
 import { drawSetSevenGun, setSevenIdFor } from '../setSevenArt';
 import { restSevenAnim } from '../setSevenArt';
 import { drawSetNineGun, isNineNewWeapon, restNineState, setNineIdFor } from '../setNineArt';
+import { drawSetSixGun, setSixIdFor, sixStateFor } from '../setSixArt';
 import { drawSetElevenGun, elevenScale, isElevenNewSlide1Id, restElevenState, setElevenIdFor } from '../setElevenArt';
 import { isElevenOnlyWeapon } from './gunVariants';
 import type { WeaponAnim } from '../../../../../games/game-4/src/game/weapons';
@@ -92,6 +94,23 @@ export function drawGun(
     if (flash > 0 && !gunState.elevenLive) drawFlash(c, id, cx, y0, t, flash);
     return;
   }
+  // Slide 6 (`games/game-2`): the original Weapon Wheel Hit beam art, drawn at
+  // slide 1's muzzle origin with slide 6's own draw progress (the sniper's
+  // pulse, the heat-ray's glow, the repulsor's palm) and its 14 px recoil.
+  const setSixId = variant === 'set6' ? setSixIdFor(id) : null;
+  if (setSixId) {
+    // Live games hand their own draw state over; menus and cards rebuild the
+    // same draw progress and recoil from the shared shot clock.
+    drawSetSixGun(
+      c, setSixId, cx, y0, t,
+      gunState.sixLive && gunState.sixState
+        ? gunState.sixState
+        : sixStateFor(Math.max(0, gunState.sinceShot), setSixId, t),
+    );
+    c.restore();
+    if (flash > 0 && !gunState.sixLive) drawFlash(c, id, cx, y0, t, flash);
+    return;
+  }
   const setNineId = variant === 'set9' || isNineNewWeapon(id) ? setNineIdFor(id) : null;
   if (setNineId) {
     // Live games hand over their own state; menus and cards rebuild the same
@@ -122,6 +141,23 @@ export function drawGun(
     if (flash > 0) drawFlash(c, id, cx, y0, t, flash);
     return;
   }
+  // Slide 2 (`games/fireworkgun`): its own artwork, drawn at the same muzzle
+  // origin with slide 2's own rest/charge animation (loadP 7/s, recoil 6/s).
+  const setTwoId = variant === 'set2' ? setTwoIdFor(id) : null;
+  if (setTwoId) {
+    // Live games hand over their own state; menus and cards rebuild the same
+    // recoil/charge slide 2 shows right after a shot.
+    const since = Math.max(0, gunState.sinceShot);
+    const hue = setTwoId === 'blackhole' ? 215 + ((gunState.shots * 53) % 105) : 28;
+    drawSetTwoGun(c, setTwoId, cx, y0, gunState.twoState ?? restTwoState(hue, {
+      time: t,
+      recoil: since >= 0.17 ? 0 : 1 - since / 0.17,
+      loadP: Math.min(1, since * 7),
+    }));
+    c.restore();
+    if (flash > 0 && !gunState.twoLive) drawFlash(c, id, cx, y0, t, flash);
+    return;
+  }
   // Slide-7 SET 2..5: slide 7's own artwork, drawn at the same muzzle origin
   // with slide 7's own animation state (the live game hands its springs over
   // through `gunState.s7Anim`; menus and cards get the rested pose).
@@ -129,7 +165,10 @@ export function drawGun(
   if (setSevenId && supportsGunVariants(id)) {
     drawSetSevenGun(c, setSevenId, cx, y0, t, gunState.s7Anim ?? restSevenAnim());
     c.restore();
-    if (flash > 0) drawFlash(c, id, cx, y0, t, flash);
+    // In play, slide 7's own fire recipe already throws its muzzle flash (and
+    // its smoke, sparks and light); slide 1's generic flash would stack a
+    // second burst of sparks on the barrel. Menus and cards still get one.
+    if (flash > 0 && !gunState.s7Anim) drawFlash(c, id, cx, y0, t, flash);
     return;
   }
   // Slide-2 guns: the newest design is slide 2's own art, drawn at the same

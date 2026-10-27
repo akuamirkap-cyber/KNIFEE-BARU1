@@ -18,11 +18,14 @@ function drop(x: number, size: number, color: string, alpha: number): Particle {
 /** A recording 2D context: counts the calls a real canvas would receive. */
 function recorder() {
   const count: Record<string, number> = {};
-  const ellipses: { x: number; y: number; rx: number; ry: number; rot: number }[] = [];
-  const arcs: { x: number; y: number; r: number }[] = [];
+  const ellipses: { x: number; y: number; rx: number; ry: number; rot: number; afterMoveTo: boolean }[] = [];
+  const arcs: { x: number; y: number; r: number; afterMoveTo: boolean }[] = [];
   const fills: { style: string; alpha: number }[] = [];
   const seen: string[] = [];
   const bump = (op: string) => { count[op] = (count[op] ?? 0) + 1; seen.push(op); };
+  // A canvas joins the current point to an arc's start when a subpath is open,
+  // so a batched path has to restart before every shape.
+  let movedSinceShape = false;
   const ctx = {
     _fillStyle: '',
     _alpha: 1,
@@ -34,11 +37,17 @@ function recorder() {
     restore: () => bump('restore'),
     beginPath: () => bump('beginPath'),
     fill: () => { bump('fill'); fills.push({ style: ctx._fillStyle, alpha: ctx._alpha }); },
+    moveTo: () => { bump('moveTo'); movedSinceShape = true; },
     ellipse: (x: number, y: number, rx: number, ry: number, rot: number) => {
       bump('ellipse');
-      ellipses.push({ x, y, rx, ry, rot });
+      ellipses.push({ x, y, rx, ry, rot, afterMoveTo: movedSinceShape });
+      movedSinceShape = false;
     },
-    arc: (x: number, y: number, r: number) => { bump('arc'); arcs.push({ x, y, r }); },
+    arc: (x: number, y: number, r: number) => {
+      bump('arc');
+      arcs.push({ x, y, r, afterMoveTo: movedSinceShape });
+      movedSinceShape = false;
+    },
   };
   return { ctx: ctx as unknown as CanvasRenderingContext2D, count, ellipses, arcs, fills, seen };
 }
@@ -53,6 +62,15 @@ test('droplet layer batches one fill per colour + alpha step', () => {
   assert.equal(count.beginPath, 16);
   assert.equal(count.save, 1);
   assert.equal(count.restore, 1);
+});
+
+test('every batched droplet is its own sub-path, so no paint links them', () => {
+  const drops = Array.from({ length: 30 }, (_, i) => drop(i * 7, 4, 'rgb(244,63,94)', 1));
+  const { ctx, ellipses, arcs } = recorder();
+  drawDropParticles(ctx, drops);
+  assert.equal(ellipses.length, 30);
+  for (const e of ellipses) assert.ok(e.afterMoveTo, 'each droplet body starts with a moveTo');
+  for (const a of arcs) assert.ok(a.afterMoveTo, 'each gloss dot starts with a moveTo');
 });
 
 test('droplets of different colours never share a fill', () => {

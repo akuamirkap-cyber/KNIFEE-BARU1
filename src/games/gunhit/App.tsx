@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Game } from './game/Game';
+import { savedValues, storage } from './game/safeStorage';
 import { setMuted, sfx } from './game/audio';
 import type { BossType } from './game/bossRoster';
 import { bossXpReward, getPlayerProgress } from './game/playerProgress';
@@ -40,26 +41,26 @@ const LS = {
   menuTheme: 'gunhit_menu_theme',
 };
 
-const num = (k: string) => Number(localStorage.getItem(k) || 0);
+const num = (k: string) => Number(storage.getItem(k) || 0);
 const coinsInBank = () => {
-  const saved = localStorage.getItem(LS.coins);
+  const saved = storage.getItem(LS.coins);
   return saved === null ? 120 : Number(saved) || 0;
 };
-const diamondsInBank = () => Number(localStorage.getItem(LS.diamonds) || 0) || 0;
+const diamondsInBank = () => Number(storage.getItem(LS.diamonds) || 0) || 0;
 const ownedWeaponIds = (): string[] => {
   const normalOwned: string[] = [];
   try {
-    const saved = JSON.parse(localStorage.getItem(LS.owned) || '[]');
+    const saved = JSON.parse(storage.getItem(LS.owned) || '[]');
     if (Array.isArray(saved)) normalOwned.push(...saved.filter((id): id is string => typeof id === 'string' && getWeapon(id).rarity !== 'LANGKA'));
   } catch { /* collection save is optional */ }
   try {
-    const boughtRare = JSON.parse(localStorage.getItem(LS.rareOwned) || '[]');
+    const boughtRare = JSON.parse(storage.getItem(LS.rareOwned) || '[]');
     if (Array.isArray(boughtRare)) normalOwned.push(...boughtRare.filter((id): id is string => typeof id === 'string'));
   } catch { /* collection save is optional */ }
   return [...new Set(normalOwned)];
 };
 const initialWeapon = (): WeaponId => {
-  const saved = getWeapon(localStorage.getItem(LS.weapon) || 'pistol');
+  const saved = getWeapon(storage.getItem(LS.weapon) || 'pistol');
   return isWeaponUnlocked(saved, ownedWeaponIds()) ? saved.id : 'pistol';
 };
 
@@ -68,10 +69,10 @@ const getInitialQuests = (): QuestState => {
     claimed: [], milestonesClaimed: [], maxCombo: 0,
     totalCoinsCollected: num(LS.coins), highestScore: num(LS.best), highestLevel: num(LS.bestLevel) || 1,
     stagesWon: 0, bossesDefeated: 0, boxesOpened: 0, weaponEquips: 0, shotsFired: 0,
-    highestPlayerLevel: Math.max(Number(localStorage.getItem(LS.playerLevel) || 1) || 1, getPlayerProgress(num(LS.playerXp)).level),
+    highestPlayerLevel: Math.max(Number(storage.getItem(LS.playerLevel) || 1) || 1, getPlayerProgress(num(LS.playerXp)).level),
   };
   try {
-    const saved = JSON.parse(localStorage.getItem(LS.quests) || 'null');
+    const saved = JSON.parse(storage.getItem(LS.quests) || 'null');
     if (saved && typeof saved === 'object') {
       const count = (value: unknown, fallback = 0) => {
         const parsed = Number(value);
@@ -98,7 +99,35 @@ const getInitialQuests = (): QuestState => {
   return defaults;
 };
 
+/**
+ * Slide 1 mounts only once its saved coins/weapon/collection can be read.
+ *
+ * In a frame that refuses storage the page shim restores them from IndexedDB or
+ * `window.name`, which takes a tick; rendering early would freeze the defaults
+ * into state and the restored values would never show up. When storage works
+ * the tracker answers `true` immediately, so there is no waiting state at all.
+ */
+function useSavedValuesReady(): boolean {
+  const [ready, setReady] = useState(() => savedValues.isReady());
+  useEffect(() => {
+    if (ready) return;
+    const unsubscribe = savedValues.subscribe(() => setReady(true));
+    // The restore can land between the render and this effect; without this
+    // second look the slide would sit on the waiting shell for good.
+    if (savedValues.isReady()) setReady(true);
+    return unsubscribe;
+  }, [ready]);
+  return ready;
+}
+
 export default function App({ onExit }: { onExit?: () => void }) {
+  const ready = useSavedValuesReady();
+  // Same shell the game paints, so the wait never flashes white.
+  if (!ready) return <div className="h-full w-full bg-[#0b1418]" aria-busy="true" />;
+  return <GunHitGame onExit={onExit} />;
+}
+
+function GunHitGame({ onExit }: { onExit?: () => void }) {
   const active = useSlideActive();
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -134,7 +163,7 @@ export default function App({ onExit }: { onExit?: () => void }) {
    * Shots are counted in a ref and flushed at most once a second.
    *
    * `onShotFired` used to call `saveQuests` on *every* shot — a React state
-   * update plus a synchronous `localStorage.setItem` per bullet. Rapid-fire guns
+   * update plus a synchronous `storage.setItem` per bullet. Rapid-fire guns
    * made that brutal: the paintball gun fires 8.3 shots a second, so holding it
    * meant eight full re-renders and eight disk writes per second, which is what
    * "ngelag pas nembak" was. The quest panel only needs a total, so the count is
@@ -145,7 +174,7 @@ export default function App({ onExit }: { onExit?: () => void }) {
 
   const [muted, setMutedState] = useState(false);
   const [menuTheme, setMenuTheme] = useState<MenuEnvironmentTheme>(() => {
-    const saved = localStorage.getItem(LS.menuTheme);
+    const saved = storage.getItem(LS.menuTheme);
     return saved === 'morning' || saved === 'town' || saved === 'snow' ? saved : 'forest';
   });
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -174,8 +203,8 @@ export default function App({ onExit }: { onExit?: () => void }) {
 
   useEffect(() => {
     const progress = getPlayerProgress(num(LS.playerXp));
-    localStorage.setItem(LS.playerXp, String(Math.max(0, num(LS.playerXp))));
-    localStorage.setItem(LS.playerLevel, String(progress.level));
+    storage.setItem(LS.playerXp, String(Math.max(0, num(LS.playerXp))));
+    storage.setItem(LS.playerLevel, String(progress.level));
   }, []);
 
   // ---------- cheat key: C = semua gembok otomatis terbuka ----------
@@ -187,9 +216,9 @@ export default function App({ onExit }: { onExit?: () => void }) {
       if (e.key.toLowerCase() !== 'c') return;
       const normal = WEAPONS.filter((w) => w.rarity !== 'LANGKA').map((w) => w.id);
       const rare = WEAPONS.filter((w) => w.rarity === 'LANGKA').map((w) => w.id);
-      localStorage.setItem(LS.owned, JSON.stringify(normal));
-      localStorage.setItem(LS.rareOwned, JSON.stringify(rare));
-      localStorage.setItem(LS.bestLevel, String(GUN_HIT_MAP_MAX_LEVEL));
+      storage.setItem(LS.owned, JSON.stringify(normal));
+      storage.setItem(LS.rareOwned, JSON.stringify(rare));
+      storage.setItem(LS.bestLevel, String(GUN_HIT_MAP_MAX_LEVEL));
       setBestLevel(GUN_HIT_MAP_MAX_LEVEL);
       saveQuests({
         ...questStateRef.current,
@@ -209,12 +238,12 @@ export default function App({ onExit }: { onExit?: () => void }) {
   const saveQuests = (qs: QuestState) => {
     questStateRef.current = qs;
     setQuestState(qs);
-    localStorage.setItem(LS.quests, JSON.stringify(qs));
+    storage.setItem(LS.quests, JSON.stringify(qs));
   };
 
   const depositCoins = (amount: number) => {
     const total = coinsInBank() + amount;
-    localStorage.setItem(LS.coins, String(total));
+    storage.setItem(LS.coins, String(total));
     setTotalCoins(total);
     return total;
   };
@@ -223,7 +252,7 @@ export default function App({ onExit }: { onExit?: () => void }) {
     if (!isWeaponUnlocked(getWeapon(id), ownedWeaponIds())) return;
     const changed = id !== weapon;
     setWeaponState(id);
-    localStorage.setItem(LS.weapon, id);
+    storage.setItem(LS.weapon, id);
     gameRef.current?.setWeapon(id);
     if (changed) {
       const current = questStateRef.current;
@@ -249,13 +278,13 @@ export default function App({ onExit }: { onExit?: () => void }) {
     const balance = diamondsInBank();
     if (balance < 500) return false;
     const next = balance - 500;
-    localStorage.setItem(LS.diamonds, String(next));
+    storage.setItem(LS.diamonds, String(next));
     let bought: string[] = [];
     try {
-      const stored = JSON.parse(localStorage.getItem(LS.rareOwned) || '[]');
+      const stored = JSON.parse(storage.getItem(LS.rareOwned) || '[]');
       if (Array.isArray(stored)) bought = stored.filter((weaponId): weaponId is string => typeof weaponId === 'string');
     } catch { /* start a fresh bought-rare list */ }
-    localStorage.setItem(LS.rareOwned, JSON.stringify([...new Set([...bought, id])]));
+    storage.setItem(LS.rareOwned, JSON.stringify([...new Set([...bought, id])]));
     setDiamonds(next);
     chooseWeapon(id);
     celebrateNewWeapon(id);
@@ -275,8 +304,8 @@ export default function App({ onExit }: { onExit?: () => void }) {
 
     const newBalance = balance - purchases.length * 500;
     const newOwned = [...new Set([...owned.filter(id => getWeapon(id).rarity === 'LANGKA'), ...purchases])];
-    localStorage.setItem(LS.rareOwned, JSON.stringify(newOwned));
-    localStorage.setItem(LS.diamonds, String(newBalance));
+    storage.setItem(LS.rareOwned, JSON.stringify(newOwned));
+    storage.setItem(LS.diamonds, String(newBalance));
     setDiamonds(newBalance);
     sfx.unlock();
     return purchases;
@@ -294,9 +323,9 @@ export default function App({ onExit }: { onExit?: () => void }) {
         const owned = ownedWeaponIds();
         if (!owned.includes(rewardId)) {
           try {
-            const stored: string[] = JSON.parse(localStorage.getItem(LS.owned) || '[]');
-            localStorage.setItem(LS.owned, JSON.stringify([...new Set([...stored, rewardId])]));
-          } catch { localStorage.setItem(LS.owned, JSON.stringify([rewardId])); }
+            const stored: string[] = JSON.parse(storage.getItem(LS.owned) || '[]');
+            storage.setItem(LS.owned, JSON.stringify([...new Set([...stored, rewardId])]));
+          } catch { storage.setItem(LS.owned, JSON.stringify([rewardId])); }
           celebrateNewWeapon(rewardId);
         }
         chooseWeapon(rewardId);
@@ -324,9 +353,9 @@ export default function App({ onExit }: { onExit?: () => void }) {
     sfx4.match();
     if (reward) {
       try {
-        const stored: string[] = JSON.parse(localStorage.getItem(LS.owned) || '[]');
-        localStorage.setItem(LS.owned, JSON.stringify([...new Set([...stored, reward.id])]));
-      } catch { localStorage.setItem(LS.owned, JSON.stringify([reward.id])); }
+        const stored: string[] = JSON.parse(storage.getItem(LS.owned) || '[]');
+        storage.setItem(LS.owned, JSON.stringify([...new Set([...stored, reward.id])]));
+      } catch { storage.setItem(LS.owned, JSON.stringify([reward.id])); }
       celebrateNewWeapon(reward.id);
     } else {
       depositCoins(1000);
@@ -340,8 +369,8 @@ export default function App({ onExit }: { onExit?: () => void }) {
       onGameOver: (score, level, coins, runCoins) => {
         const prevBest = num(LS.best);
         const newBest = score > prevBest;
-        if (newBest) localStorage.setItem(LS.best, String(score));
-        if (level > num(LS.bestLevel)) localStorage.setItem(LS.bestLevel, String(level));
+        if (newBest) storage.setItem(LS.best, String(score));
+        if (level > num(LS.bestLevel)) storage.setItem(LS.bestLevel, String(level));
         depositCoins(coins); // special-stage and boss rewards were banked already
         setBest(num(LS.best));
         setBestLevel(Math.max(1, num(LS.bestLevel)));
@@ -364,7 +393,7 @@ export default function App({ onExit }: { onExit?: () => void }) {
         if (!boss) showStageClearBurst(origin.x, origin.y);
         const unlocked = Math.max(1, num(LS.bestLevel), level + 1);
         if (unlocked > num(LS.bestLevel)) {
-          localStorage.setItem(LS.bestLevel, String(unlocked));
+          storage.setItem(LS.bestLevel, String(unlocked));
           setBestLevel(unlocked);
         }
         const current = questStateRef.current;
@@ -392,8 +421,8 @@ export default function App({ onExit }: { onExit?: () => void }) {
         const xpGained = bossXpReward(level);
         const totalXp = totalXpBefore + xpGained;
         const nextProgress = getPlayerProgress(totalXp);
-        localStorage.setItem(LS.playerXp, String(totalXp));
-        localStorage.setItem(LS.playerLevel, String(nextProgress.level));
+        storage.setItem(LS.playerXp, String(totalXp));
+        storage.setItem(LS.playerLevel, String(nextProgress.level));
         setBossDefeatedData({
           name: bossName, bossType, level, coins: coinsEarned,
           playerLevel: nextProgress.level,
@@ -421,7 +450,7 @@ export default function App({ onExit }: { onExit?: () => void }) {
           setDiamondFlight({ amount, x: origin.x, y: origin.y, id });
         } else {
           const next = diamondsInBank() + amount;
-          localStorage.setItem(LS.diamonds, String(next));
+          storage.setItem(LS.diamonds, String(next));
           setDiamonds(next);
           setDiamondToast({ amount, large: false, id });
         }
@@ -444,13 +473,13 @@ export default function App({ onExit }: { onExit?: () => void }) {
         else showStageClearBurst(210, 282);
         if (diamondReward > 0) {
           const next = diamondsInBank() + diamondReward;
-          localStorage.setItem(LS.diamonds, String(next));
+          storage.setItem(LS.diamonds, String(next));
           setDiamonds(next);
         }
         if (unbankedCoins) depositCoins(unbankedCoins);
         const unlocked = Math.max(1, num(LS.bestLevel), level + 1);
         if (unlocked > num(LS.bestLevel)) {
-          localStorage.setItem(LS.bestLevel, String(unlocked));
+          storage.setItem(LS.bestLevel, String(unlocked));
           setBestLevel(unlocked);
         }
         const current = questStateRef.current;
@@ -462,7 +491,7 @@ export default function App({ onExit }: { onExit?: () => void }) {
         });
       },
     });
-    g.setWeapon(getWeapon(localStorage.getItem(LS.weapon) || 'pistol').id);
+    g.setWeapon(getWeapon(storage.getItem(LS.weapon) || 'pistol').id);
     gameRef.current = g;
     return () => {
       g.destroy();
@@ -479,7 +508,7 @@ export default function App({ onExit }: { onExit?: () => void }) {
         };
         pendingShotsRef.current = 0;
         questStateRef.current = merged;
-        localStorage.setItem(LS.quests, JSON.stringify(merged));
+        storage.setItem(LS.quests, JSON.stringify(merged));
       }
     };
   }, []);
@@ -657,9 +686,9 @@ export default function App({ onExit }: { onExit?: () => void }) {
     // Catat senjata hasil kotak hadiah ke koleksi dan selebrasi hanya saat benar-benar baru.
     let isNewWeapon = false;
     try {
-      const owned: string[] = JSON.parse(localStorage.getItem(LS.owned) || '[]');
+      const owned: string[] = JSON.parse(storage.getItem(LS.owned) || '[]');
       if (getWeapon(weaponId).rarity !== 'LANGKA' && !owned.includes(weaponId)) {
-        localStorage.setItem(LS.owned, JSON.stringify([...owned, weaponId]));
+        storage.setItem(LS.owned, JSON.stringify([...owned, weaponId]));
         isNewWeapon = true;
       }
     } catch { /* simpan koleksi bersifat opsional */ }
@@ -684,7 +713,7 @@ export default function App({ onExit }: { onExit?: () => void }) {
 
   const chooseMenuTheme = (theme: MenuEnvironmentTheme) => {
     setMenuTheme(theme);
-    localStorage.setItem(LS.menuTheme, theme);
+    storage.setItem(LS.menuTheme, theme);
   };
 
   return (

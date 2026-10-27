@@ -110,7 +110,44 @@ const NO_HOOKS: SevenHooks = {
   wheel: () => ({ x: 0, y: 0, R: 0, angle: 0 }),
 };
 
-/** Slide-7 decal colours, kept where slide 7 paints them. */
+/**
+ * The bare `r,g,b` triple of a slide-7 colour, or `null` if it is not one.
+ *
+ * Slide-7 colour strings arrive in three shapes: a hex string, a finished CSS
+ * colour (`'rgba(120,12,24,0.95)'`, which is what `PaintShot` hands over) and
+ * the bare triplet the particle system uses (`'190,130,20'`). Anything that
+ * needs to *wrap* a colour has to know which shape it got.
+ */
+function rgbOf(color: string | undefined): string | null {
+  if (!color) return null;
+  const c = color.trim();
+  if (c[0] === '#') {
+    let hex = c.slice(1);
+    if (hex.length === 3) hex = hex.split('').map((ch) => ch + ch).join('');
+    if (hex.length < 6 || !/^[0-9a-f]{6}/i.test(hex)) return null;
+    const n = parseInt(hex.slice(0, 6), 16);
+    return `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`;
+  }
+  const fn = c.match(/^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*(?:,\s*[\d.]+\s*)?\)$/i);
+  if (fn) return `${+fn[1]},${+fn[2]},${+fn[3]}`;
+  const triplet = c.match(/^(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})$/);
+  if (triplet) return `${+triplet[1]},${+triplet[2]},${+triplet[3]}`;
+  return null;
+}
+
+const FALLBACK_STAIN: readonly [string, string] = ['rgba(190,130,20,0.45)', 'rgba(120,70,10,0)'];
+
+/**
+ * Slide-7 decal colours, kept where slide 7 paints them.
+ *
+ * The `goo` stain (Paintball, and every SET‑7 liquid gun) used to be built by
+ * wrapping `d.c[0]` in `rgba(…,0.45)` — but slide 7 hands `goo` *finished*
+ * colours, so the stop became `rgba(rgba(120,12,24,0.95),0.45)`. `addColorStop`
+ * throws a `SyntaxError` on that, inside `update()`, on the frame the paintball
+ * lands: the update/render loop died mid-frame and the canvas was left with
+ * half-drawn paint on it — the "efek paintball glitch" that also froze every
+ * later effect on the same wheel.
+ */
 function decalPaint(d: Decal): [string, string] {
   switch (d.kind) {
     case 'poison':
@@ -119,11 +156,12 @@ function decalPaint(d: Decal): [string, string] {
       return ['rgba(40,26,18,0.5)', 'rgba(20,12,8,0)'];
     case 'wet':
       return ['rgba(150,200,235,0.4)', 'rgba(90,140,190,0)'];
-    default:
-      return [
-        `rgba(${d.c?.[0] ?? '190,130,20'},0.45)`,
-        `rgba(${d.c?.[2] ?? '120,70,10'},0)`,
-      ];
+    default: {
+      // `d.c` is [shadow, body, highlight]: the body shade becomes the stain.
+      const rgb = rgbOf(d.c?.[1]) ?? rgbOf(d.c?.[0]) ?? rgbOf(d.c?.[2]);
+      if (!rgb) return [...FALLBACK_STAIN] as [string, string];
+      return [`rgba(${rgb},0.55)`, `rgba(${rgb},0)`];
+    }
   }
 }
 
@@ -140,6 +178,16 @@ export class SetSevenFx implements SevenHost {
   shots: Projectile[] = [];
   /** Rounds stuck in the wheel — slide 7's own `drawStuckItem()` art. */
   stuck: StuckItem[] = [];
+  /**
+   * Rounds slide 1 has already resolved and stopped carrying.
+   *
+   * Slide 7 never stops updating a round when it lands: the shotgun's pellet
+   * shower, the minigun drum, the water jet and every `trail()` keep running
+   * until the round leaves the screen. Slide 1 removes its carrier the frame
+   * the round sticks, so those rounds are handed back here and live out their
+   * own short life on slide 7's clock.
+   */
+  released: Projectile[] = [];
   /** The moving point slide-7's `pull` particles chase. */
   orbTarget = { x: 0, y: 0 };
   time = 0;
@@ -244,8 +292,15 @@ export class SetSevenFx implements SevenHost {
       const lx = Math.cos(d.angle) * (R - 3);
       const ly = Math.sin(d.angle) * (R - 3);
       const g = c.createRadialGradient(lx, ly, 1, lx, ly, 16);
-      g.addColorStop(0, inner);
-      g.addColorStop(1, outer);
+      try {
+        g.addColorStop(0, inner);
+        g.addColorStop(1, outer);
+      } catch {
+        // A colour a canvas refuses must never abort the frame: an unparsable
+        // `addColorStop` throws, and this runs from inside `update()`.
+        g.addColorStop(0, FALLBACK_STAIN[0]);
+        g.addColorStop(1, FALLBACK_STAIN[1]);
+      }
       c.fillStyle = g;
       c.beginPath();
       c.arc(lx, ly, 16, 0, Math.PI * 2);
@@ -265,7 +320,13 @@ export class SetSevenFx implements SevenHost {
   /** True while slide 7 still has something to draw or animate. */
   get busy(): boolean {
     return this.particles.list.length > 0 || this.fx.length > 0 || this.timers.length > 0
-      || this.wheelFx.length > 0 || this.shots.some((p) => p.alive) || this.stuck.length > 0;
+      || this.wheelFx.length > 0 || this.shots.some((p) => p.alive) || this.stuck.length > 0
+      || this.released.length > 0;
+  }
+
+  /** Hand a round slide 1 just resolved back to slide 7's own clock. */
+  release(shot: Projectile) {
+    this.released.push(shot);
   }
 
   clear() {
@@ -275,6 +336,7 @@ export class SetSevenFx implements SevenHost {
     this.wheelFx.length = 0;
     this.shots.length = 0;
     this.stuck.length = 0;
+    this.released.length = 0;
   }
 
   /** One frame of slide-7 time: its timers, particles and FX objects. */
@@ -294,6 +356,10 @@ export class SetSevenFx implements SevenHost {
     for (const f of this.wheelFx) f.update(dt);
     this.wheelFx = this.wheelFx.filter((f) => !f.done);
     this.shots = this.shots.filter((p) => p.alive);
+    // Rounds that outlived slide 1's carrier keep their own flight (and their
+    // sub-projectiles) until they die, exactly like slide 7.
+    for (const p of this.released) p.update(dt);
+    this.released = this.released.filter((p) => p.alive);
     // Stuck rounds ride the wheel exactly like slide 7: their world position and
     // their "up" frame follow the rim as it turns and bounces.
     for (const it of this.stuck) {
@@ -314,6 +380,7 @@ export class SetSevenFx implements SevenHost {
   drawFront(ctx: CanvasRenderingContext2D) {
     this.particles.draw(ctx, true);
     for (const f of this.fx) f.draw(ctx);
+    for (const p of this.released) p.draw(ctx);
   }
 
   /** Wheel-space FX, drawn from the wheel centre like slide 7 does. */
@@ -337,6 +404,18 @@ export class SetSevenFx implements SevenHost {
    * position slide 7 gave them (`my - 6`, `my + 40` for the slingshot pouch,
    * `my - 38` for the blowpipe…), so nothing has to be re-derived here.
    */
+  /**
+   * The star pickup wipes the screen.
+   *
+   * Slide 1 drops every carrier it was flying, but a round it had already
+   * resolved keeps flying on slide 7's own layer (`released`), so it has to go
+   * too — otherwise the screen the star just cleared stays full of slide-7
+   * rounds.
+   */
+  sweepCarried() {
+    this.released.length = 0;
+  }
+
   takeShots(): Projectile[] {
     const made = this.shots;
     this.shots = [];

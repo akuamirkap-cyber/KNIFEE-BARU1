@@ -36,6 +36,27 @@ export function installCanvasShim(): () => void {
     getContext: () => ctx,
   });
 
+  // Diamond Breaker bakes its rock texture into a `Path2D` per chunk. Node has
+  // no Path2D, so a shattering boulder used to throw on the first hit that dug
+  // into the stone (the gem-only hits never reached `bake()`).
+  const gPath = globalThis as { Path2D?: unknown };
+  const previousPath = gPath.Path2D;
+  if (!previousPath) {
+    gPath.Path2D = class {
+      moveTo() {}
+      lineTo() {}
+      closePath() {}
+      arc() {}
+      arcTo() {}
+      ellipse() {}
+      rect() {}
+      roundRect() {}
+      quadraticCurveTo() {}
+      bezierCurveTo() {}
+      addPath() {}
+    };
+  }
+
   // Boss art is decoded with `new Image()`; nothing here inspects pixels.
   const gAny = globalThis as { Image?: unknown };
   const previousImage = gAny.Image;
@@ -65,5 +86,6 @@ export function installCanvasShim(): () => void {
     if (previousWindow) w.window = previousWindow;
     else Reflect.deleteProperty(w, 'window');
     if (!previousImage) Reflect.deleteProperty(gAny, 'Image');
+    if (!previousPath) Reflect.deleteProperty(gPath, 'Path2D');
   };
 }

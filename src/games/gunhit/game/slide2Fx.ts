@@ -214,7 +214,8 @@ export class Slide2Fx {
 
   /** Slide 2 `spawnSmoke()`. */
   spawnSmoke(x: number, y: number, vx: number, vy: number, r: number, life: number, dark: number) {
-    this.smokes.push({ x, y, vx, vy, life, max: life, r, grow: rnd(14, 26), dark, seed: rnd(0, 10) });
+    // Slide 2 sizes the puff, then grows it relative to its own radius.
+    this.smokes.push({ x, y, vx, vy, life, max: life, r, grow: r * rnd(1.6, 2.4), dark, seed: rnd(0, 10) });
   }
 
   /** Slide 2 `spawnFireball()`. */
@@ -224,7 +225,9 @@ export class Slide2Fx {
 
   /** Slide 2 `spawnMuzzle()` — the star-shaped star flash of bazooka / rpg. */
   spawnMuzzle(x: number, y: number, r: number, style: 'bazooka' | 'rpg') {
-    this.flashes.push({ x, y, life: 0.22, max: 0.22, r, seed: rnd(0, TAU), style });
+    if (this.flashes.length > 16) return;
+    // Slide 2 `spawnMuzzle()`: 0.16s star flash, seeded 0..10.
+    this.flashes.push({ x, y, life: 0.16, max: 0.16, r, seed: rnd(0, 10), style });
   }
 
   text(x: number, y: number, text: string, hue: number, life = 0.9) {
