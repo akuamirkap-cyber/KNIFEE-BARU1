@@ -120,6 +120,7 @@ export class SetElevenFx {
       raw.swapT = 1;
       (g.wheel as { scale: number }).scale = 1;
       this.raw = g;
+      this.muteOwnWheelBreak();
       this.adopt();
       this.selectWeapon('ak47');
     } catch {
@@ -348,11 +349,35 @@ export class SetElevenFx {
       || g.embeds.length > 0 || this.state.chan > 0.01 || this.state.minHold > 0;
   }
 
+  /**
+   * Slide 11's own wheel must never break.
+   *
+   * `Game.hit()` counts the hits that land on slide 11's own wheel and, at
+   * `goal` (15), calls its own `breakWheel()`: eleven wedges clipped out of
+   * slide 11's *wooden* face plus seventy wood chips, drawn from slide 11's
+   * wheel centre — and slide 1 draws that whole layer on top of its own wheel.
+   * The player saw a second, extra wheel shattering around the real one, while
+   * the actual SGA wheel stayed intact ("ada 2 roda, roda asli SGA aman").
+   *
+   * It came back level after level because `adopt()` pins slide 11's `state`
+   * back to `'play'` every frame and nothing ever reset its hit counter, so the
+   * hidden wheel broke again every 15 hits. Slide 1 owns the stages, the hits
+   * and the score; slide 11 only lends its guns, rounds and impact FX.
+   */
+  private muteOwnWheelBreak() {
+    const g = this.raw as unknown as { breakWheel?: () => void; hits: number } | null;
+    if (!g) return;
+    g.breakWheel = () => {};
+    g.hits = 0;
+  }
+
   clear() {
     const g = this.raw;
     this.taken.clear();
     this.carried.clear();
     if (!g) return;
+    // A new stage starts with slide 11's own level flow at zero as well.
+    this.muteOwnWheelBreak();
     g.parts.length = 0;
     g.fx.length = 0;
     g.projs.length = 0;

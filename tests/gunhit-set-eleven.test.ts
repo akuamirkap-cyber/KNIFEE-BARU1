@@ -260,6 +260,22 @@ test('a stuck slide-11 round never survives a gun or level change', () => {
   assert.ok(!s11 || !s11.busy, 'the slide-11 layer is empty after a reset');
 });
 
+test('slide 11’s own wheel never breaks behind a slide-1 stage', () => {
+  const { fx } = host();
+  const raw = fx.raw as unknown as {
+    hit(x: number, y: number, o?: { count?: number }): void;
+    goal: number;
+    fx: { max: number }[];
+  };
+  assert.ok(raw, 'slide 11 runs its own world');
+  // One slide-1 stage fires far more hits than slide 11’s own goal.
+  for (let i = 0; i < 60; i++) raw.hit(210, 400, { count: 1 });
+  // `breakWheel()` is the only thing that spawns those eleven long-lived wedge
+  // pieces (`max: 2.4`), and slide 1 draws them on top of its own wheel.
+  assert.equal(raw.fx.filter((f) => f.max === 2.4).length, 0,
+    'slide 11 must never shatter its own wheel over slide 1’s');
+});
+
 test('slide 11 spawns its muzzle FX at the barrel slide 1 draws, not above it', () => {
   const { fx } = host();
   for (const id of SET_ELEVEN_IDS) {
