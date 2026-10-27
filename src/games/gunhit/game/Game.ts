@@ -877,6 +877,19 @@ export class Game {
     return !!(w.onRelease || w.channel);
   }
 
+  /**
+   * A plain slide-11 gun (no charged release, no channel) fires the moment
+   * the trigger goes down, as on slide 11 — the sniper rifle and the bow too.
+   * Slide 1's own scope (black vignette, red crosshair, slow-mo, fire on
+   * release) and its draw-to-charge never existed for them on slide 11.
+   */
+  private get elevenPlainTrigger(): boolean {
+    const id = this.setElevenId;
+    if (!id || !this.setElevenLive) return false;
+    const w = elevenWeapon(id);
+    return !(w.onRelease || w.channel);
+  }
+
   private elevenHooks(): ElevenHooks {
     return {
       // Slide 11's shake is in its own pixels around a wheel the size of slide
@@ -886,7 +899,7 @@ export class Game {
         this.tintRgb = hexToRgbTriplet(color);
         this.tintA = Math.max(this.tintA, Math.min(0.36, strength * 0.45));
       },
-      hitStop: (seconds) => { this.hitStop = Math.max(this.hitStop, Math.min(0.12, seconds)); },
+      hitStop: (seconds) => { this.elevenStop = Math.max(this.elevenStop, Math.min(0.12, seconds)); },
       wheel: () => ({ x: CX, y: this.targetY, R: this.level.radius, angle: this.rot, dir: this.rotDir }),
     };
   }
@@ -969,6 +982,12 @@ export class Game {
     return this.bazookaState;
   }
   private hitStop = 0;
+  /**
+   * Slide 11's own hit-stop. Slide 11 slows its whole world to 12 % for it
+   * (`update()`: `dt *= 0.12`), not to slide 1's 6 %: the wheel keeps
+   * creeping on through the freeze the way it does on slide 11.
+   */
+  private elevenStop = 0;
   private camY = 0;
   private tintA = 0;
   private tintRgb = '255,255,255';
@@ -1081,7 +1100,8 @@ export class Game {
   private press() {
     if (this.choosingBuff) return;
     this.holding = true;
-    if (this.weapon.scope) {
+    const plain = this.elevenPlainTrigger;
+    if (this.weapon.scope && !plain) {
       if (this.state === 'play' && this.cooldown <= 0 && this.ammoLeft > 0 && !this.aiming) {
         this.aiming = true;
         this.aimT = 0;
@@ -1093,7 +1113,7 @@ export class Game {
       if (this.state === 'play' && this.spin < 0.1) sfx2.spinUp();
       return;
     }
-    if (this.weapon.charge) {
+    if (this.weapon.charge && !plain) {
       if (this.state === 'play' && this.cooldown <= 0 && this.ammoLeft > 0 && !this.charging) {
         this.charging = true;
         this.chargeT = 0;
@@ -1719,9 +1739,12 @@ export class Game {
         else proj.s11Ghost = true;
         this.projs.push(proj);
       }
-      this.recoil = w.recoil;
+      // Slide 11's gun kicks by itself (`ws.recoil × kick` inside its own
+      // artwork) and slide 11 never moves the camera on a shot. Slide 1's
+      // 22 px gun jump on top doubled every kick and dropped the barrel away
+      // from the muzzle flash slide 11 had just lit at the muzzle.
+      this.recoil = 0;
       this.muzzle = 0.07;
-      this.camY += FX[w.id].kick * 0.5;
       this.cooldown = (w.spinup ? 0.3 - 0.235 * this.spin : w.cooldown)
         * (this.buff === 'speed' || this.treasureBuff === 'rapid' ? 0.5 : this.treasureBuff === 'mini' ? 0.6 : 1);
       if (isSpecial(this.level.mode) && this.ammoLeft === 0) this.reloadT = 0.65;
@@ -2208,13 +2231,18 @@ export class Game {
     return false;
   }
 
-  private applyPerks(w: Weapon, hx: number, hy: number, R: number, ownVoice = true) {
+  /**
+   * `ownVoice` / `ownFx`: false for a slide-11 shot, which already sounded
+   * and painted its hit itself. Perks still score, but their slide-1 look
+   * (lightning arcs, fire sparks, pop-up captions) never appears on slide 11.
+   */
+  private applyPerks(w: Weapon, hx: number, hy: number, R: number, ownVoice = true, ownFx = ownVoice) {
     if (w.explode) this.explodeAt(hx, hy, w.id === 'bazooka' ? 1.3 : w.id === 'bamboo' ? 1.2 : 1, w.explodeFx ?? 'fire');
     if (w.id === 'cricket') {
       this.particles.push({ x: hx, y: hy, vx: 0, vy: 0, life: 0.5, max: 0.5, size: 180, color: '#7cc8ff', kind: 'ring', rot: 0, vr: 0, g: 0 });
       this.shake = Math.max(this.shake, 12);
     }
-    if (w.chain) {
+    if (w.chain && ownFx) {
       const others = this.items.filter((it) => it.type === 'bullet' || it.type === 'old').slice(0, -1);
       for (let i = others.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
@@ -2255,7 +2283,7 @@ export class Game {
       sfx.coin();
       this.addText(w.luckyText ?? '+1 💰 HOKI!', hx + rand(-40, 40), hy + 50, '#ffd23f', 20);
     }
-    this.applyNewPerks(w, hx, hy, R, ownVoice);
+    this.applyNewPerks(w, hx, hy, R, ownVoice, ownFx);
     if (w.id === 'fish') sfx.splash();
     if (w.pullCoins) {
       if (!isSlide23Weapon(w.id)) sfx.suck();
@@ -2341,7 +2369,7 @@ export class Game {
     this.particles.push({ x: CX, y: this.targetY, vx: 0, vy: 0, life: 0.5, max: 0.5, size: this.level.radius * 2.6, color: '#fde047', kind: 'ring', rot: 0, vr: 0, g: 0 });
   }
 
-  private applyNewPerks(w: Weapon, hx: number, hy: number, R: number, ownVoice = true) {
+  private applyNewPerks(w: Weapon, hx: number, hy: number, R: number, ownVoice = true, ownFx = ownVoice) {
     if (ownVoice && !isSlide23Weapon(w.id) && HIT_SFX[w.id]) HIT_SFX[w.id]!();
     const isPerk = (k: number) => this.perkCount > 0 && this.perkCount % k === 0;
     this.perkCount++;
@@ -2349,7 +2377,7 @@ export class Game {
       this.particles.push({ x: hx, y: hy, vx: 0, vy: 0, life: 0.45, max: 0.45, size, color, kind: 'ring', rot: 0, vr: 0, g: 0 });
 
     if (w.burn) {
-      if (this.burnT <= 0) this.addText(w.burnText ?? '🔥 TERBAKAR!', hx + rand(-40, 40), hy + 60, '#ff9f1c', 22);
+      if (this.burnT <= 0 && ownFx) this.addText(w.burnText ?? '🔥 TERBAKAR!', hx + rand(-40, 40), hy + 60, '#ff9f1c', 22);
       this.burnT = 2.6;
     }
     if (w.reverseChance && Math.random() < w.reverseChance) this.reverseSpin('🍌 TERPELESET!', hx + rand(-40, 40), hy + 70);
@@ -2456,7 +2484,7 @@ export class Game {
       this.score += w.points * (w.bossMult - 1);
       this.addText(`🐉 BOSS x${w.bossMult}!`, hx + rand(-30, 30), hy + 90, '#f87171', 22);
     }
-    if (w.burn || w.id === 'dragon') {
+    if ((w.burn || w.id === 'dragon') && ownFx) {
       for (let i = 0; i < 14; i++) {
         this.particles.push({ x: hx + rand(-10, 10), y: hy, vx: rand(-120, 120), vy: rand(-200, 40), life: rand(0.3, 0.6), max: 0.6, size: rand(5, 10), color: pick(['255,200,80', '255,120,30', '255,60,20']), kind: 'glow', rot: 0, vr: 0, g: -200 });
       }
@@ -2902,10 +2930,22 @@ export class Game {
     // the impact, exactly like it owns the shot.
     const s9Pending = this.setNineLive && p?.setNinePending ? true : false;
     const s11Pending = this.setElevenLive && p?.setElevenPending ? true : false;
+    // An extra pellet slide 11 never fired (or a carrier whose round never
+    // came) still scores, but it is invisible on slide 11: no slide-1 bullet,
+    // crack, burst or voice may appear where it lands either.
+    const s11GhostHit = this.setElevenLive && p?.s11Ghost ? true : false;
     // Slide 7's own `hit()` calls `landed()`, which draws the stuck round with
     // `drawStuckItem()`; slide 1 keeps its collision entry (spikes, coins, the
     // clear counter) but must not paint a second round on top of it.
-    const layerHit = !!(s6Hit || s7Hit || s7GhostHit || s9Hit || s11Hit || s9Pending || s11Pending || s2Hit);
+    const layerHit = !!(s6Hit || s7Hit || s7GhostHit || s9Hit || s11Hit || s9Pending || s11Pending || s11GhostHit
+      || s2Hit);
+    // A slide-11 shot moves the wheel and the screen with slide 11's own
+    // reaction only — the kick and squash, the warm flash, the jolt and the
+    // hit-stop its `g.hit()` gives, sized by the weapon (a pistol round barely
+    // nudges it, the plasma dome slams it). Every one of slide 1's own
+    // reactions on top (bump, white flash, shake, camera kick, screen tint,
+    // hit-stop) doubled or replaced it.
+    const elevenHit = !!(s11Hit || s11Pending || s11GhostHit);
     const hue = s2Hit ? s2Hit.hue : p?.hue ?? (w.id === 'firework' ? gunState.rocketHue : w.id === 'yoyo' ? gunState.yoyoHue : undefined);
     if (w.id === 'firework' && hue !== undefined) gunState.rocketHue = hue;
     if (w.id === 'yoyo' && hue !== undefined) gunState.yoyoHue = hue;
@@ -2932,7 +2972,7 @@ export class Game {
     // running both sprayed a second, game-3 acid splash (and acid globs stuck
     // on the rim) or a second plasma blast, plus a second hit voice, over
     // every hit.
-    const ownHitFx = !(s11Hit || s11Pending);
+    const ownHitFx = !elevenHit;
     // Dora airBlast hit FX (game-3)
     if (ownHitFx && w.id === 'dora') {
       const hp = this.worldPos(local, R);
@@ -2986,8 +3026,11 @@ export class Game {
     let pts = w.points * (big === 2 ? 4 : big === 1 ? 2 : 1);
     if (big) {
       this.addText(big === 2 ? '⚡ FULL CHARGE x4!' : 'CHARGE x2', CX + rand(-40, 40), this.targetY + R + 60, big === 2 ? '#fde047' : '#7dd3fc', big === 2 ? 28 : 20);
-      this.hitStop = Math.max(this.hitStop, big === 2 ? 0.12 : 0.04);
-      if (big === 2) {
+      // A slide-11 charge shot (the Mega Buster's plasma, the caster's burst)
+      // lands with slide 11's own hit-stop, light and blast; slide 1's freeze,
+      // shock ring and white screen flash are not part of it.
+      if (!elevenHit) this.hitStop = Math.max(this.hitStop, big === 2 ? 0.12 : 0.04);
+      if (big === 2 && !elevenHit) {
         const hp0 = this.worldPos(local, R);
         this.sink.light(hp0.x, hp0.y, 360, '254,240,138', 0.5);
         this.sink.push({ x: hp0.x, y: hp0.y, vx: 0, vy: 0, life: 0.6, max: 0.6, size: 220, color: '125,211,252', kind: 'shock', rot: 0, vr: 0, g: 0 });
@@ -3020,11 +3063,8 @@ export class Game {
     }
     pts *= this.dmgMult; // POWER also doubles classic points / boss damage, not only rock damage.
     this.score += pts;
-    // A slide-11 shot moves the wheel with slide 11's own reaction — the kick
-    // and squash, the warm flash and the jolt its `g.hit()` gives, sized by
-    // the weapon (a pistol round barely nudges it, the plasma dome slams it).
-    // Slide 1's one-size bump, white flash and shake on top doubled every hit.
-    const elevenHit = !!(s11Hit || s11Pending);
+    // Slide 1's one-size bump, white flash and shake belong to its own shots
+    // (`elevenHit`: slide 11 already moved the wheel its own way).
     if (!elevenHit) {
       this.bump = 1;
       this.hitFlash = 1;
@@ -3074,7 +3114,7 @@ export class Game {
     }
     this.slide2Impact(hx, hy);
     // Slide 11 already voiced the hit (its impact accent + its wood thunk).
-    this.applyPerks(w, hx, hy, R, !elevenHit);
+    this.applyPerks(w, hx, hy, R, !elevenHit, !elevenHit);
     if (w.id === 'yoyo') {
       spawnYoyoStickBurst(
         this.getYoyoState(),
@@ -3108,12 +3148,18 @@ export class Game {
       && !s1Hit && !layerHit) {
       spawnImpact(this.sink, fxp, w, hx, hy, (hx - CX) / R, (hy - this.targetY) / R, cols);
     }
-    this.hitStop = Math.max(this.hitStop, fxp.hitstop);
-    this.camY -= fxp.kick;
-    this.shake = Math.max(this.shake, 3 + fxp.kick * 0.8);
-    if (fxp.tint) {
-      this.tintA = Math.max(this.tintA, fxp.tint);
-      this.tintRgb = fxp.light;
+    // Slide 1's own hit reaction (its freeze, camera kick, shake and screen
+    // tint from the FX table). A slide-11 shot already got slide 11's own
+    // from its `g.hit()`: a pistol round barely moves the screen there, while
+    // these added a camera jolt, a 3 px+ shake and a colour wash to every hit.
+    if (!elevenHit) {
+      this.hitStop = Math.max(this.hitStop, fxp.hitstop);
+      this.camY -= fxp.kick;
+      this.shake = Math.max(this.shake, 3 + fxp.kick * 0.8);
+      if (fxp.tint) {
+        this.tintA = Math.max(this.tintA, fxp.tint);
+        this.tintRgb = fxp.light;
+      }
     }
     if (this.level.boss) {
       const dmg = pts * 10;
@@ -4032,7 +4078,10 @@ export class Game {
     if (this.hitStop > 0) {
       this.hitStop -= dt;
       s *= 0.06;
+    } else if (this.elevenStop > 0) {
+      s *= 0.12;
     }
+    if (this.elevenStop > 0) this.elevenStop -= dt;
     this.camY *= Math.exp(-dt * 11);
     this.rt += dt;
     // ketapel: creak when starting to draw the band
@@ -4151,16 +4200,22 @@ export class Game {
     if (this.burnT > 0 && this.state === 'play') {
       this.burnT -= s;
       this.burnTick -= s;
+      // A slide-11 heat-ray / dragon keeps the burn's points, but the wheel
+      // burns the slide-11 way (its own heat glow and burning marks): slide
+      // 1's crackle, embers and +1 captions are not part of that look.
+      const burnLook = !this.setElevenLive;
       if (this.burnTick <= 0) {
         this.burnTick = 0.5;
         this.score += 1;
-        sfx2.burn();
-        const a = rand(0, TAU);
-        const p = this.worldPos(a, this.level.radius * rand(0.3, 0.95));
-        this.addText(`+1${this.weapon.burnIcon ?? '🔥'}`, p.x, p.y, '#ffb347', 16);
+        if (burnLook) {
+          sfx2.burn();
+          const a = rand(0, TAU);
+          const p = this.worldPos(a, this.level.radius * rand(0.3, 0.95));
+          this.addText(`+1${this.weapon.burnIcon ?? '🔥'}`, p.x, p.y, '#ffb347', 16);
+        }
       }
       const isBee = this.weapon.burnIcon === '🐝';
-      for (let i = 0; i < (isBee ? 1 : 2); i++) {
+      if (burnLook) for (let i = 0; i < (isBee ? 1 : 2); i++) {
         const a = rand(0, TAU);
         const p = { x: CX + Math.cos(a) * this.level.radius * rand(0.2, 1), y: CY + Math.sin(a) * this.level.radius * rand(0.2, 1) };
         if (isBee) this.particles.push({ x: p.x, y: p.y, vx: rand(-120, 120), vy: rand(-120, 120), life: 0.4, max: 0.4, size: 3, color: pick(['#facc15', '#111111']), kind: 'chip', rot: 0, vr: 30, g: 0 });
@@ -4621,7 +4676,9 @@ export class Game {
     this.muzzle -= dt;
     this.bump *= Math.exp(-dt * 14);
     this.hitFlash = Math.max(0, this.hitFlash - dt * 7);
-    this.shake *= Math.exp(-dt * 9);
+    // Slide 11's screen shake settles at its own rate (`shakeAmt *= e^-11dt`):
+    // at slide 1's slower 9 every forwarded jolt rang on ~20 % longer.
+    this.shake *= Math.exp(-dt * (this.elevenActive ? 11 : 9));
     this.flashWhite = Math.max(0, this.flashWhite - dt * 2.5);
     this.wheelFlash = Math.max(0, this.wheelFlash - dt * 5);
     this.flashRed = Math.max(0, this.flashRed - dt * 1.8);
@@ -4758,8 +4815,9 @@ export class Game {
       // exactly like slide 11's own `press()`; slide 1 still owns every shot.
       // The caster's lock follows slide 1's charge meter.
       fx.chargeHint = this.charging ? Math.min(1, this.chargeT) : 0;
+      fx.chargeTime = this.charging ? this.chargeT : 0;
       // Slide 11's world slows to 12% during a hit-stop, as in its own update.
-      const s11dt = (this.hitStop > 0 ? dt * 0.12 : dt) * this.timeScale;
+      const s11dt = (this.hitStop > 0 || this.elevenStop > 0 ? dt * 0.12 : dt) * this.timeScale;
       fx.advance(s11dt, this.state === 'play' && this.holding);
     }
     // Slide 6: its own clock, beams, particles and scorch marks. Its beam is
@@ -5247,7 +5305,10 @@ export class Game {
         for (const ox of this.gunOffsets) {
           drawKerisAimGuide(c, CX + ox, y0, this.targetY + R, this.time);
         }
-      } else {
+      } else if (!this.setElevenLive) {
+        // Slide 11 shows no generic aim line: its own sights (the rifle's
+        // laser, the caster's three dots, the beacon's designator) come from
+        // `drawElevenAim()`.
         const lg = c.createLinearGradient(0, y0, 0, this.targetY);
         lg.addColorStop(0, this.weapon.color + '66');
         lg.addColorStop(1, this.weapon.color + '00');
@@ -5413,21 +5474,28 @@ export class Game {
     if (this.s2wState && this.s2wState.voids.length > 0) {
       this.s2wState.drawBehind(c, this.time);
     }
-    if (this.hasTwinGuns) {
-      // Left gun mirrored and right gun normal: their grips/magazines face OUT,
-      // matching the side-by-side AK-47 silhouette rather than overlapping.
-      for (const ox of this.gunOffsets) {
+    // The slide-11 gun stands still on its contact shadow here (slide 11's
+    // own stance); menu cards keep their idle sway and no shadow.
+    gunState.elevenStage = this.setElevenLive;
+    try {
+      if (this.hasTwinGuns) {
+        // Left gun mirrored and right gun normal: their grips/magazines face OUT,
+        // matching the side-by-side AK-47 silhouette rather than overlapping.
+        for (const ox of this.gunOffsets) {
+          c.save();
+          c.translate(CX + ox, y0);
+          if (ox < 0) c.scale(-1, 1);
+          drawGun(c, this.weapon.id, 0, 0, this.time, flash, ready, this.snowLoaded);
+          c.restore();
+        }
+      } else {
         c.save();
-        c.translate(CX + ox, y0);
-        if (ox < 0) c.scale(-1, 1);
+        c.translate(CX, y0);
         drawGun(c, this.weapon.id, 0, 0, this.time, flash, ready, this.snowLoaded);
         c.restore();
       }
-    } else {
-      c.save();
-      c.translate(CX, y0);
-      drawGun(c, this.weapon.id, 0, 0, this.time, flash, ready, this.snowLoaded);
-      c.restore();
+    } finally {
+      gunState.elevenStage = false;
     }
 
   }
@@ -5983,7 +6051,7 @@ export class Game {
           }
         }
       }
-      if (this.burnT > 0) {
+      if (this.burnT > 0 && !this.setElevenLive) {
         const fa = Math.min(1, this.burnT / 0.4);
         c.beginPath();
         c.arc(0, 0, R, 0, TAU);
@@ -6937,10 +7005,12 @@ export class Game {
         c.fillStyle = '#ffffff';
         c.fillText(`LEVEL ${n}`, 0, 0);
       }
-      if (n <= 2 && (this.weapon.auto || this.weapon.scope || this.weapon.charge)) {
+      const plain = this.elevenPlainTrigger;
+      const scope = this.weapon.scope && !plain, charge = this.weapon.charge && !plain;
+      if (n <= 2 && (this.weapon.auto || scope || charge)) {
         c.font = font(13);
         c.fillStyle = '#ffd23f';
-        const hint = this.weapon.charge ? 'TAP = TEMBAK, TAHAN = CHARGE x4!' : this.weapon.scope ? 'TAHAN = BIDIK SLOW-MO, LEPAS = TEMBAK' : this.weapon.spinup ? 'TAHAN LAYAR UNTUK MEMUTAR LARAS!' : 'TAHAN LAYAR / SPASI = AUTO-FIRE';
+        const hint = charge ? 'TAP = TEMBAK, TAHAN = CHARGE x4!' : scope ? 'TAHAN = BIDIK SLOW-MO, LEPAS = TEMBAK' : this.weapon.spinup ? 'TAHAN LAYAR UNTUK MEMUTAR LARAS!' : 'TAHAN LAYAR / SPASI = AUTO-FIRE';
         c.fillText(hint, 0, 40);
       }
       c.restore();

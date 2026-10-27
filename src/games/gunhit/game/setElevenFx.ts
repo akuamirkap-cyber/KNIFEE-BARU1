@@ -107,6 +107,23 @@ function spriteCanvas(): HTMLCanvasElement | null {
   }
 }
 
+/**
+ * Slide 1's charge clock on the Mega Buster's own scale. Slide 1 reaches its
+ * two charge levels at 0.35 s and 1 s (`releaseScope()`: CHARGE x2 / FULL
+ * CHARGE x4); the buster shows its mid and full glow — and `playRelease()`
+ * picks its mid and full blast — at 0.45 s and 1.2 s. Re-timing the meter
+ * piecewise makes the buster's glow, its rising whine and its full-charge
+ * wobble change exactly when slide 1's charge level does, so the shot that
+ * leaves on release is always the one the gun was showing.
+ */
+export function busterCharge(seconds: number, max = 1.6): number {
+  if (!(seconds > 0)) return 0;
+  const c = seconds <= 0.35 ? seconds * (0.45 / 0.35)
+    : seconds <= 1 ? 0.45 + (seconds - 0.35) * (0.75 / 0.65)
+      : 1.2 + (seconds - 1);
+  return Math.min(max, c);
+}
+
 export class SetElevenFx {
   /* ── slide-1 geometry, mirrored every frame ──────────────────────────── */
   cx = 210;
@@ -126,6 +143,14 @@ export class SetElevenFx {
   /** Rounds slide 1 already took from slide 11. */
   private taken = new Set<Proj>();
   private carried = new Set<Proj>();
+  /**
+   * The step each carried round was last carried in. Slide 1 hands every
+   * carried round's position over once per frame (`carry()`); a round it no
+   * longer carries (its carrier broke on the rock, opened the chest or left
+   * the screen) is gone on slide 1, so it must leave slide 11's list too.
+   */
+  private carriedAt = new Map<Proj, number>();
+  private tick = 0;
   shotsFired = 0;
   /**
    * Slide 1's charge meter (0..1) while the trigger is held. The shoulder
@@ -133,6 +158,12 @@ export class SetElevenFx {
    * 1's charge is full instead of on slide 11's own 2.6 s clock.
    */
   chargeHint = 0;
+  /**
+   * Seconds slide 1 has been charging the current shot (0 when it is not
+   * charging — a press during the cooldown never charges on slide 1). The
+   * Mega Buster's glow and whine follow it (`busterCharge()`).
+   */
+  chargeTime = 0;
   /** A channel / charge loop of slide 11's may be sounding right now. */
   private loopsLive = false;
   /** The shiver jitter rolled for the current frame (one roll per frame). */
@@ -268,6 +299,7 @@ export class SetElevenFx {
       g.embeds.length = 0;
       this.taken.clear();
       this.carried.clear();
+    this.carriedAt.clear();
       this.shotsFired = 0;
     }
     this.adopt();
@@ -329,10 +361,15 @@ export class SetElevenFx {
     ws.fireT = 0;
     ws.shots++;
     if (w.channel) ws.minHold = w.minHold ?? 0.35;
-    try {
-      g.sfx.playFire(w.id);
-    } catch {
-      /* audio is optional */
+    // A released charge shot (the Mega Buster) is voiced by `playRelease()`
+    // alone — slide 11's `release()` never plays the fire sound for it, and
+    // layering both stacked two blasts on every buster shot.
+    if (!w.onRelease) {
+      try {
+        g.sfx.playFire(w.id);
+      } catch {
+        /* audio is optional */
+      }
     }
     if (w.onRelease) {
       ws.charge = charge;
@@ -409,6 +446,7 @@ export class SetElevenFx {
     g.projs.push(...keep);
     for (const p of this.carried) this.taken.delete(p);
     this.carried.clear();
+    this.carriedAt.clear();
   }
 
   /** True when slide 11 fired a projectile (as opposed to a channel/beam). */
@@ -423,6 +461,7 @@ export class SetElevenFx {
     if (!p.noCollide) p.data = { ...(p.data ?? {}), aim: angle };
     this.taken.add(p);
     this.carried.add(p);
+    this.carriedAt.set(p, this.tick);
   }
 
   /**
@@ -464,6 +503,7 @@ export class SetElevenFx {
       if (i >= 0) g.projs.splice(i, 1);
     }
     this.carried.delete(p);
+    this.carriedAt.delete(p);
     this.taken.delete(p);
   }
 
@@ -498,6 +538,7 @@ export class SetElevenFx {
     g.projs.length = 0;
     this.taken.clear();
     this.carried.clear();
+    this.carriedAt.clear();
   }
 
   /**
@@ -597,6 +638,7 @@ export class SetElevenFx {
     const g = this.raw;
     this.taken.clear();
     this.carried.clear();
+    this.carriedAt.clear();
     if (!g) return;
     // A new stage starts with slide 11's own level flow at zero as well.
     this.muteOwnWheelBreak();
@@ -643,6 +685,13 @@ export class SetElevenFx {
     const g = this.raw;
     if (!g) return;
     this.adopt();
+    // A round slide 1 stopped carrying this frame has no carrier any more:
+    // it would otherwise sit in the list for good — invisible (slide 1 paints
+    // carried rounds) but still running its own per-frame update in place.
+    for (const p of [...this.carried]) {
+      if ((this.carriedAt.get(p) ?? -1) < this.tick) this.drop(p);
+    }
+    this.tick++;
     g.time += dt;
     const w = g.weapon;
     const ws = this.state;
@@ -677,12 +726,14 @@ export class SetElevenFx {
       // `update()` does every frame.
       this.loop(ws.chan, () => g.sfx.channel(w.id, ws.chan));
     } else if (w.onRelease) {
-      if (holding) {
-        // Slide 1 owns the trigger; the charge meter and its whine grow here.
-        ws.charge = Math.min(w.maxCharge ?? 1.6, ws.charge + dt);
-        this.loop(ws.charge, () => g.sfx.charge(w.id, ws.charge));
+      // Slide 1 owns the trigger and the charge: the buster glows and whines
+      // only while slide 1 is really charging a shot, on slide 1's clock.
+      const c = holding && this.chargeTime > 0 ? busterCharge(this.chargeTime, w.maxCharge ?? 1.6) : 0;
+      if (c > 0) {
+        ws.charge = c;
+        this.loop(c, () => g.sfx.charge(w.id, c));
       } else if (ws.charge > 0) {
-        // Let go without a shot (slide 1's cooldown): the whine stops.
+        // Let go (or a press slide 1 did not charge): the whine stops.
         ws.charge = 0;
         this.loop(0, () => g.sfx.charge(w.id, 0));
       }
@@ -873,6 +924,11 @@ export class SetElevenFx {
     const g = this.raw;
     if (!g) return;
     for (const p of g.projs) {
+      // A carried round is painted once, by slide 1's projectile pass
+      // (`drawShot()`), under the gun — where slide 11's `render()` paints its
+      // rounds. Painting it here as well drew every round twice: double glow
+      // (most rounds add their light) and a second copy over the barrel.
+      if (this.carried.has(p)) continue;
       ctx.save();
       try {
         p.draw(ctx, g, p);
@@ -1180,10 +1236,11 @@ export function drawSetElevenShotShell(
   // The card's wheel is tiny, so a real round would reach it — and burst —
   // before the card ever painted it. The first round is held where the card
   // freezes it; any other round of a volley flies on slide 11's own physics.
+  // Like slide 1's carrier, the card hands the held round over every frame,
+  // or slide 11 would let go of it as a round nobody carries any more.
   let shown: Proj | undefined;
   const claim = () => {
-    if (shown) return;
-    shown = fx.takeShots()[0];
+    shown ??= fx.takeShots()[0];
     if (shown) fx.carry(shown, 0, -travel, -Math.PI / 2);
   };
   claim();
@@ -1209,6 +1266,9 @@ export function drawSetElevenShotShell(
     fx.state.chan = 1;
     fx.drawBeam(c);
   }
-  // The round, then the muzzle burst / flame body slide 11 spawned for it.
+  // The round (carried, so painted the way slide 1's carrier paints it), then
+  // the rest of the volley, the muzzle burst and the flame body slide 11
+  // spawned for it.
+  if (shown) fx.drawShot(c, shown);
   fx.draw(c);
 }

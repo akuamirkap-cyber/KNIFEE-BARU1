@@ -243,3 +243,85 @@ test('pausing the slide silences slide 11’s beam hum', () => {
   }
   assert.equal(silenced, 1, 'a paused slide leaves no loop running');
 });
+
+type Feel = Live & {
+  recoil: number;
+  camY: number;
+  shake: number;
+  tintA: number;
+  hitStop: number;
+  aiming: boolean;
+  charging: boolean;
+  burnT: number;
+  score: number;
+  press(): void;
+  releaseScope(): void;
+  addText(text: string, x: number, y: number, color: string, size: number): void;
+  s11State?: Live['s11State'] & { shotsFired: number };
+};
+
+test('a slide-11 shot neither jumps slide 1’s gun nor jolts its camera, and its hit shakes like slide 11', () => {
+  seeded(3, () => {
+    const game = stage('ak47') as Feel;
+    const cam = game.camY;
+    game.shoot();
+    assert.equal(game.recoil, 0, 'slide 11’s gun kicks inside its own artwork');
+    assert.equal(game.camY, cam, 'no camera kick on the shot');
+    const before = game.stuck;
+    for (let i = 0; i < 90 && game.stuck === before; i++) game.update(DT);
+    assert.ok(game.stuck > before, 'the round lands');
+    let shake = 0, tint = 0, freeze = 0;
+    for (let i = 0; i < 20; i++) {
+      shake = Math.max(shake, game.shake);
+      tint = Math.max(tint, game.tintA);
+      freeze = Math.max(freeze, game.hitStop);
+      game.update(DT);
+    }
+    assert.ok(shake > 0, 'slide 11’s own jolt reaches the screen');
+    assert.ok(shake < 2.5, `only slide 11’s AK jolt (${shake.toFixed(2)} px) — slide 1 used to add 3 px and more`);
+    assert.equal(tint, 0, 'no slide-1 colour wash');
+    assert.equal(freeze, 0, 'no slide-1 freeze');
+  });
+});
+
+test('slide 11’s sniper and bow fire the moment the trigger goes down, without slide 1’s scope or draw', () => {
+  for (const weapon of ['sniper', 'longbow']) {
+    seeded(4, () => {
+      const game = stage(weapon) as Feel;
+      game.update(DT);
+      const fx = game.s11State!;
+      const fired = fx.shotsFired;
+      game.press();
+      assert.equal(game.aiming, false, `${weapon}: no slide-1 scope (vignette, crosshair, slow-mo)`);
+      assert.equal(game.charging, false, `${weapon}: no slide-1 draw-to-charge`);
+      assert.equal(fx.shotsFired, fired + 1, `${weapon}: slide 11’s shot leaves on the press`);
+      game.holding = false;
+      game.releaseScope();
+      assert.equal(fx.shotsFired, fired + 1, `${weapon}: letting go fires nothing more`);
+    });
+  }
+  // The Mega Buster and the caster keep slide 1's hold-and-release charge.
+  for (const weapon of ['mega_buster', 'pred']) {
+    const game = stage(weapon) as Feel;
+    game.press();
+    assert.equal(game.charging, true, `${weapon} still charges while held`);
+  }
+});
+
+test('a slide-11 heat ray keeps the burn’s points but none of slide 1’s fire look', () => {
+  seeded(6, () => {
+    const game = stage('heat_ray') as Feel;
+    const texts: string[] = [];
+    const own = game.addText.bind(game);
+    game.addText = (text, x, y, color, size) => {
+      texts.push(text);
+      own(text, x, y, color, size);
+    };
+    assert.ok(landOne(game), 'the heat ray lands');
+    assert.ok(game.burnT > 0, 'the wheel still burns for points');
+    const score = game.score;
+    for (let i = 0; i < 70 && game.state === 'play'; i++) game.update(DT);
+    assert.ok(game.score > score, 'and the burn keeps scoring');
+    assert.equal(texts.filter((t) => /TERBAKAR|🔥/.test(t)).length, 0, 'without slide 1’s fire captions');
+  });
+});

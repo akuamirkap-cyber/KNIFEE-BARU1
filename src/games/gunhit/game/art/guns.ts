@@ -89,6 +89,8 @@ export function drawGun(
         charge: gunState.charge,
       },
       elevenScale(setElevenId),
+      // Only the gun standing in a live game (`drawGunNow`), never a card.
+      gunState.elevenStage,
     );
     c.restore();
     if (flash > 0 && !gunState.elevenLive) drawFlash(c, id, cx, y0, t, flash);

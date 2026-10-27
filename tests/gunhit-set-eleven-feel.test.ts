@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { SetElevenFx, drawSetElevenShotShell, setElevenMuted } from '../src/games/gunhit/game/setElevenFx';
+import { SetElevenFx, busterCharge, drawSetElevenShotShell, setElevenMuted } from '../src/games/gunhit/game/setElevenFx';
 import { installCanvasShim } from './supportCanvas';
 
 /**
@@ -85,17 +85,81 @@ test('a slide-11 beam hums while it is held and stops when it fades, like slide 
   assert.ok(Number(last.args[1]) < 0.04, 'released, the level drops under slide 11’s stop threshold');
 });
 
-test('the Mega Buster whines while it charges, and the whine stops on release', () => {
+test('the Mega Buster whines on slide 1’s charge clock, and the whine stops on release', () => {
   const { fx } = host();
   fx.selectWeapon('mega-buster');
   const log = spySfx(fx);
-  for (let i = 0; i < 60; i++) fx.advance(1 / 60, true);
+  // A held trigger slide 1 is not charging (a press during its cooldown) will
+  // not shoot on release, so the buster must neither glow nor whine for it.
+  for (let i = 0; i < 20; i++) fx.advance(1 / 60, true);
+  assert.equal(log.filter((e) => e.name === 'charge' && Number(e.args[1]) > 0).length, 0);
+  assert.equal(fx.state.charge, 0);
+  for (let i = 1; i <= 60; i++) {
+    fx.chargeTime = i / 60;
+    fx.advance(1 / 60, true);
+  }
   const whine = log.filter((e) => e.name === 'charge');
   assert.ok(whine.length >= 60);
   assert.equal(whine[0].args[0], 'mega-buster');
-  assert.ok(Number(whine.at(-1)!.args[1]) > 0.9, 'the charge level grows with the hold');
+  assert.ok(Math.abs(Number(whine.at(-1)!.args[1]) - 1.2) < 1e-9,
+    'slide 1’s full charge (1 s) is the buster’s full charge level');
+  fx.chargeTime = 0;
   fx.advance(1 / 60, false);
   assert.equal(Number(log.filter((e) => e.name === 'charge').at(-1)!.args[1]), 0, 'let go: the loop is told to stop');
+});
+
+test('slide 1’s charge levels land on the buster’s own glow levels', () => {
+  assert.equal(busterCharge(0), 0);
+  assert.ok(Math.abs(busterCharge(0.35) - 0.45) < 1e-9, 'CHARGE x2 at 0.35 s is the buster’s mid glow');
+  assert.ok(Math.abs(busterCharge(1) - 1.2) < 1e-9, 'FULL CHARGE at 1 s is the buster’s full glow');
+  assert.ok(busterCharge(0.34) < 0.45 && busterCharge(0.99) < 1.2, 'never ahead of slide 1');
+  assert.ok(Math.abs(busterCharge(1.4) - 1.6) < 1e-9);
+  assert.equal(busterCharge(5), 1.6, 'capped at the buster’s max charge');
+  let last = 0;
+  for (let t = 0; t <= 2; t += 0.01) {
+    const c = busterCharge(t);
+    assert.ok(c >= last, 'and it only ever grows');
+    last = c;
+  }
+});
+
+test('a released buster shot is voiced by its release blast alone', () => {
+  const { fx } = host();
+  fx.selectWeapon('mega-buster');
+  const log = spySfx(fx);
+  fx.fire(210, 571, 2);
+  assert.equal(log.filter((e) => e.name === 'playFire').length, 0, 'no fire sound stacked on the release');
+  const rel = log.filter((e) => e.name === 'playRelease');
+  assert.equal(rel.length, 1);
+  assert.deepEqual(rel[0].args, ['mega-buster', 2]);
+  fx.selectWeapon('ak47');
+  fx.fire(210, 571, 0);
+  assert.equal(log.filter((e) => e.name === 'playFire').length, 1, 'a normal gun keeps its fire sound');
+});
+
+test('a carried slide-11 round is painted once, by slide 1’s pass, and dropped once nobody carries it', () => {
+  const { fx } = host();
+  fx.selectWeapon('ak47');
+  fx.fire(210, 571, 0);
+  const [round] = fx.takeShots();
+  assert.ok(round, 'the AK round');
+  let painted = 0;
+  const own = round.draw;
+  round.draw = (...args: Parameters<typeof own>) => { painted++; own(...args); };
+  const { ctx } = paintCtx();
+  fx.carry(round, 210, 420, -Math.PI / 2);
+  fx.draw(ctx);
+  assert.equal(painted, 0, 'the layer pass leaves carried rounds to slide 1');
+  fx.drawShot(ctx, round);
+  assert.equal(painted, 1, 'slide 1’s pass paints it');
+  for (let i = 0; i < 5; i++) {
+    fx.carry(round, 210, 420 - i * 10, -Math.PI / 2);
+    fx.advance(1 / 60, false);
+  }
+  assert.ok(fx.raw!.projs.includes(round), 'carried every frame, it stays');
+  fx.advance(1 / 60, false);
+  fx.advance(1 / 60, false);
+  assert.equal(fx.raw!.projs.includes(round), false, 'its carrier gone, slide 11 lets go of it as well');
 });
 
 test('a muted slide 1 cuts slide 11’s loops instead of leaving them sounding', () => {
