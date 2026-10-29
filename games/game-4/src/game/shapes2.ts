@@ -15,23 +15,26 @@ export const BRASS: [number, string][] = [
 /** six-armed snowflake, caller sets strokeStyle / lineWidth */
 export function drawSnowflake(ctx: Ctx, s: number) {
   ctx.lineCap = 'round';
+  // The six arms share one style. Transform their coordinates instead of
+  // saving/rotating/stroking each arm: snow and freeze bursts can contain
+  // hundreds of these little flakes at once.
+  ctx.beginPath();
   for (let i = 0; i < 6; i++) {
-    ctx.save();
-    ctx.rotate((i * TAU) / 6);
-    ctx.beginPath();
+    const angle = (i * TAU) / 6;
+    const x = Math.cos(angle) * s;
+    const y = Math.sin(angle) * s;
     ctx.moveTo(0, 0);
-    ctx.lineTo(s, 0);
-    ctx.moveTo(s * 0.58, 0);
-    ctx.lineTo(s * 0.84, s * 0.3);
-    ctx.moveTo(s * 0.58, 0);
-    ctx.lineTo(s * 0.84, -s * 0.3);
-    ctx.moveTo(s * 0.3, 0);
-    ctx.lineTo(s * 0.46, s * 0.18);
-    ctx.moveTo(s * 0.3, 0);
-    ctx.lineTo(s * 0.46, -s * 0.18);
-    ctx.stroke();
-    ctx.restore();
+    ctx.lineTo(x, y);
+    ctx.moveTo(x * 0.58, y * 0.58);
+    ctx.lineTo(x * 0.84 - y * 0.3, y * 0.84 + x * 0.3);
+    ctx.moveTo(x * 0.58, y * 0.58);
+    ctx.lineTo(x * 0.84 + y * 0.3, y * 0.84 - x * 0.3);
+    ctx.moveTo(x * 0.3, y * 0.3);
+    ctx.lineTo(x * 0.46 - y * 0.18, y * 0.46 + x * 0.18);
+    ctx.moveTo(x * 0.3, y * 0.3);
+    ctx.lineTo(x * 0.46 + y * 0.18, y * 0.46 - x * 0.18);
   }
+  ctx.stroke();
 }
 
 export function drawSnowball(ctx: Ctx, shape: number[], r: number) {
@@ -50,17 +53,21 @@ export function drawSnowball(ctx: Ctx, shape: number[], r: number) {
   polyPath(ctx, shape, true);
   ctx.clip();
   ctx.fillStyle = 'rgba(140,175,225,0.32)';
+  ctx.beginPath();
   for (let i = 0; i < shape.length; i += 4) {
-    ctx.beginPath();
-    ctx.arc(shape[i] * 0.62, shape[i + 1] * 0.62, r * 0.2, 0, TAU);
-    ctx.fill();
+    const x = shape[i] * 0.62, y = shape[i + 1] * 0.62, radius = r * 0.2;
+    ctx.moveTo(x + radius, y);
+    ctx.arc(x, y, radius, 0, TAU);
   }
+  ctx.fill();
   ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.beginPath();
   for (let i = 2; i < shape.length; i += 4) {
-    ctx.beginPath();
-    ctx.arc(shape[i] * 0.45 - r * 0.1, shape[i + 1] * 0.45 - r * 0.1, r * 0.1, 0, TAU);
-    ctx.fill();
+    const x = shape[i] * 0.45 - r * 0.1, y = shape[i + 1] * 0.45 - r * 0.1, radius = r * 0.1;
+    ctx.moveTo(x + radius, y);
+    ctx.arc(x, y, radius, 0, TAU);
   }
+  ctx.fill();
   ctx.restore();
   ctx.fillStyle = 'rgba(255,255,255,0.92)';
   ctx.beginPath();

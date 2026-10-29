@@ -16,7 +16,13 @@ import { Sfx } from '../../../../games/fireworkgun/src/game/sfx';
 
 class Slide2Audio {
   private engine: Sfx | null = null;
+  private volume = 1;
   muted = false;
+
+  private syncVolume() {
+    const m = (this.engine as unknown as { master?: GainNode | null } | null)?.master;
+    if (m) m.gain.value = this.muted ? 0 : 0.8 * this.volume;
+  }
 
   /** Lazily created so a page that never fires one of these guns stays silent. */
   private get e(): Sfx {
@@ -24,17 +30,25 @@ class Slide2Audio {
       this.engine = new Sfx();
       this.engine.muted = this.muted;
       this.engine.init();
+      this.syncVolume();
     }
     return this.engine;
   }
 
   unlock() {
     this.e.init();
+    this.syncVolume();
   }
 
   setMuted(m: boolean) {
     this.muted = m;
     this.engine?.setMuted(m);
+    this.syncVolume();
+  }
+
+  setVolume(v: number) {
+    this.volume = Math.max(0, Math.min(1, v));
+    this.syncVolume();
   }
 
   private play(run: (s: Sfx) => void) {

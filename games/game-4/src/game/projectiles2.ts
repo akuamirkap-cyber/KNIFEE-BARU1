@@ -46,11 +46,13 @@ export class SnowballShot extends Projectile {
   trail(dt: number) {
     this.rot += dt * 13;
     const ps = this.g.particles;
-    if (Math.random() < 0.8)
-      ps.add({ k: K.SMOKE, x: this.x + rand(-4, 4), y: this.y + rand(8, 16), vx: rand(-18, 18), vy: rand(10, 40), size: 8, size2: 26, life: 0.5, color: '225,242,255', alpha: 0.4, rot: rand(0, TAU), vrot: rand(-1, 1) });
-    if (Math.random() < 0.55) S.snowflakes(ps, this.x + rand(-6, 6), this.y + rand(6, 22), 1, Math.PI / 2, 2.6, [10, 60]);
-    if (Math.random() < 0.4)
-      ps.add({ k: K.STAR, add: true, x: this.x + rand(-8, 8), y: this.y + rand(4, 28), vx: rand(-20, 20), vy: rand(0, 50), size: rand(6, 12), life: rand(0.3, 0.55), color: '190,230,255', drag: 2 });
+    for (let i = 0, n = this.cosmeticTicks(dt); i < n; i++) {
+      if (Math.random() < 0.8)
+        ps.add({ k: K.SMOKE, x: this.x + rand(-4, 4), y: this.y + rand(8, 16), vx: rand(-18, 18), vy: rand(10, 40), size: 8, size2: 26, life: 0.5, color: '225,242,255', alpha: 0.4, rot: rand(0, TAU), vrot: rand(-1, 1) });
+      if (Math.random() < 0.55) S.snowflakes(ps, this.x + rand(-6, 6), this.y + rand(6, 22), 1, Math.PI / 2, 2.6, [10, 60]);
+      if (Math.random() < 0.4)
+        ps.add({ k: K.STAR, add: true, x: this.x + rand(-8, 8), y: this.y + rand(4, 28), vx: rand(-20, 20), vy: rand(0, 50), size: rand(6, 12), life: rand(0.3, 0.55), color: '190,230,255', drag: 2 });
+    }
   }
   draw(ctx: Ctx) {
     ctx.save();

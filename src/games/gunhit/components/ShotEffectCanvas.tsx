@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
 import type { Weapon } from '../game/weapons';
 import { drawProjectile } from '../game/art/projectiles';
+import { drawCrystalEffectTwo, drawIronmanCombo } from '../game/art/combinedShots';
+import { drawXenoHybridFlight } from '../game/art/xenoHybrid';
 import { drawMaterialTrail } from '../game/art/projectileTrails';
 import { drawClassicBeam, drawLaserBeam, drawVoidTether } from '../game/art/beamEffects';
 import { drawSlide6String } from '../game/yoyoSlideFx';
@@ -18,6 +20,7 @@ import { drawSetNineShotShell } from '../game/setNineFx';
 import { setSixIdFor } from '../game/setSixArt';
 import { drawSetSixShotShell } from '../game/setSixFx';
 import { silentPreview } from '../game/previewAudio';
+import { getSavedSgaSpeed } from '../game/gameSpeed';
 
 /** Tiny live comparison using the exact same projectile/beam renderers as gameplay. */
 export default function ShotEffectCanvas({ weapon, effect }: { weapon: Weapon; effect: GunEffect }) {
@@ -40,7 +43,7 @@ export default function ShotEffectCanvas({ weapon, effect }: { weapon: Weapon; e
         // (the EMERALD/RAILGUN/MOONBEAM charge-up especially). Keep the picker
         // silent — the sound belongs to the shot you actually fire.
         silentPreview(() => {
-          const t = now / 1000;
+          const t = (now / 1000) * getSavedSgaSpeed();
           c.setTransform(dpr, 0, 0, dpr, 0, 0);
           c.clearRect(0, 0, w, h);
           // Small target rim makes the firing direction and hit point readable.
@@ -106,6 +109,20 @@ export default function ShotEffectCanvas({ weapon, effect }: { weapon: Weapon; e
               if (active) frame = requestAnimationFrame(paint);
               return;
             }
+            // Hybrid cards preview the same visual layers as the live carrier.
+            if (weapon.id === 'ironman_hand' && effect === 'ironman_combo') {
+              drawIronmanCombo(c, 0, -22, t, () => drawSetSevenShotShell(c, 'gauntlet', 0.06, 22));
+              c.restore();
+              if (active) frame = requestAnimationFrame(paint);
+              return;
+            }
+            // Crystal's third effect keeps its growth, but flies as effect 2.
+            if (weapon.id === 'crystal' && effect === 'set7') {
+              drawCrystalEffectTwo(c, 0, -8, t);
+              c.restore();
+              if (active) frame = requestAnimationFrame(paint);
+              return;
+            }
             // Slide-7 SET 2..5 rounds are painted by slide 7's own renderer.
             const setSevenId = effect === 'set7' ? setSevenIdFor(weapon.id) : null;
             if (setSevenId) {
@@ -123,6 +140,7 @@ export default function ShotEffectCanvas({ weapon, effect }: { weapon: Weapon; e
               c.lineTo(0, 82); c.closePath(); c.fill();
             }
             drawProjectile(c, weapon.id, Math.min(weapon.stick + 21, 44), t, 0, false, effect);
+            if (weapon.id === 'xeno' && effect === 'xeno_hybrid') drawXenoHybridFlight(c, 0, 18, t);
             c.restore();
           }
         });

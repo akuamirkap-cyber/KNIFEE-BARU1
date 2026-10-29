@@ -201,6 +201,21 @@ function drawSword(ctx: C, g: Game, s: WeaponState) {
     ctx.closePath();
   };
   add(ctx);
+  // A continuous blue/cyan halo follows the *whole* blade, like the older
+  // saber skin; the original center glow alone left its tip looking unlit.
+  ctx.save();
+  ctx.lineCap = 'round';
+  const aura = ctx.createLinearGradient(bx0, 0, bx1, 0);
+  aura.addColorStop(0, 'rgba(45,125,255,0.45)');
+  aura.addColorStop(0.55, 'rgba(70,210,255,0.8)');
+  aura.addColorStop(1, 'rgba(150,245,255,0.35)');
+  for (const [width, alpha] of [[76, 0.13], [48, 0.24], [29, 0.42]] as const) {
+    ctx.globalAlpha = alpha * flick;
+    ctx.strokeStyle = aura;
+    ctx.lineWidth = width;
+    ctx.beginPath(); ctx.moveTo(bx0 + 8, 0); ctx.lineTo(bx1 - 7, 0); ctx.stroke();
+  }
+  ctx.restore();
   drawGlow(ctx, bx0 + L * 0.5, 0, 190, '#2a7bff', 0.28 * flick);
   drawGlow(ctx, bx0 + L * 0.5, 0, 120, '#43e8ff', 0.3 * flick);
   ctx.save();

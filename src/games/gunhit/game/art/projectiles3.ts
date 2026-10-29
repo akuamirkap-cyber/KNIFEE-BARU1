@@ -137,9 +137,8 @@ export function drawProjectileExtra2(c: C, kind: ProjKind, len: number, t: numbe
       c.strokeStyle = '#322115'; c.lineWidth = 1.4; c.lineCap = 'round';
       for (const side of [-1, 1]) {
         c.beginPath(); c.moveTo(side * 3.6, tip + 26);
-        c.lineTo(side * 8, tip + 30); c.lineTo(side * 9, tip + 33); c.stroke();
-        c.beginPath(); c.moveTo(side * 3.5, tip + 30);
-        c.lineTo(side * 7, tip + 35); c.stroke();
+        c.lineTo(side * 8, tip + 30); c.lineTo(side * 9, tip + 33);
+        c.moveTo(side * 3.5, tip + 30); c.lineTo(side * 7, tip + 35); c.stroke();
         c.fillStyle = 'rgba(222,248,255,0.78)';
         c.beginPath(); c.moveTo(side * 2, tip + 26);
         c.bezierCurveTo(side * 6, tip + 11, side * 16, tip + 14, side * 12, tip + 29);
@@ -155,30 +154,40 @@ export function drawProjectileExtra2(c: C, kind: ProjKind, len: number, t: numbe
       c.fillStyle = lin(c, -7, 7, ['#412616', '#ffd340', '#f5ae19', '#40251a']);
       c.fill(); c.strokeStyle = '#261c19'; c.lineWidth = 1.1; c.stroke();
       c.save(); c.clip(); c.strokeStyle = '#251f1d'; c.lineWidth = 3;
+      c.beginPath();
       for (const yy of [tip + 12, tip + 18, tip + 24]) {
-        c.beginPath(); c.moveTo(-8, yy); c.quadraticCurveTo(0, yy + 3, 8, yy); c.stroke();
+        c.moveTo(-8, yy); c.quadraticCurveTo(0, yy + 3, 8, yy);
       }
+      c.stroke();
       c.restore();
       c.fillStyle = '#40312a'; c.beginPath(); c.ellipse(0, tip + 28, 4.5, 5, 0, 0, TAU); c.fill();
       c.fillStyle = '#ffc53b'; c.beginPath(); c.arc(0, tip + 35, 5, 0, TAU); c.fill();
       c.strokeStyle = '#34251b'; c.lineWidth = 1; c.stroke();
       c.fillStyle = '#231c20';
+      c.beginPath();
       for (const side of [-1, 1]) {
-        c.beginPath(); c.arc(side * 3, tip + 35, 1.35, 0, TAU); c.fill();
-        c.strokeStyle = '#3b241c'; c.lineWidth = 1;
-        c.beginPath(); c.moveTo(side * 3, tip + 32);
-        c.quadraticCurveTo(side * 7, tip + 27, side * 8, tip + 29); c.stroke();
+        c.moveTo(side * 3 + 1.35, tip + 35); c.arc(side * 3, tip + 35, 1.35, 0, TAU);
       }
+      c.fill();
+      c.strokeStyle = '#3b241c'; c.lineWidth = 1;
+      c.beginPath();
+      for (const side of [-1, 1]) {
+        c.moveTo(side * 3, tip + 32);
+        c.quadraticCurveTo(side * 7, tip + 27, side * 8, tip + 29);
+      }
+      c.stroke();
       c.beginPath(); c.moveTo(-2.8, tip + 16);
       c.lineTo(0, tip - 12); c.lineTo(2.8, tip + 16); c.closePath();
       c.fillStyle = '#231920'; c.fill();
       // Two tiny backward-facing barbs make the tail read as a piercing
       // hornet stinger, rather than a dark stripe behind its abdomen.
       c.strokeStyle = '#34201b'; c.lineWidth = 1.5;
+      c.beginPath();
       for (const side of [-1, 1]) {
-        c.beginPath(); c.moveTo(0, tip + 2); c.lineTo(side * 4.3, tip + 6);
-        c.lineTo(side * 1.2, tip + 5); c.stroke();
+        c.moveTo(0, tip + 2); c.lineTo(side * 4.3, tip + 6);
+        c.lineTo(side * 1.2, tip + 5);
       }
+      c.stroke();
       c.strokeStyle = '#fff0b0'; c.lineWidth = 0.8;
       c.beginPath(); c.moveTo(-0.4, tip + 12); c.lineTo(0, tip - 10); c.stroke();
       c.restore();

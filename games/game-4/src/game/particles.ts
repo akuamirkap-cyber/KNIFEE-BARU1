@@ -1,4 +1,4 @@
-import { type Ctx, TAU, dotSprite, drawSprite, glowSprite, lerp, makeBolt, polyPath, rand, smokeSprite, starSprite } from './core';
+import { type Ctx, TAU, dotSprite, drawSprite, glowSprite, lerp, makeBolt, makeCanvas, polyPath, rand, smokeSprite, starSprite } from './core';
 
 // particle kinds
 export const K = {
@@ -136,22 +136,119 @@ export class Particles {
     // remaining kinds are drawn in their original order.
     if (!back) {
       drawBatchedDrops(ctx, L);
-      drawBatchedSparks(ctx, L);
+      drawBatchedSparks(ctx, L, false, false);
     }
     for (let i = 0; i < L.length; i++) {
       const p = L[i];
       if (p.back !== back || p.add) continue;
       if (!back && (p.k === K.DROP || p.k === K.SPARK)) continue; // already batched
+      if (isConfetti(p)) {
+        // Only combine adjacent paper pieces; unrelated custom drawing stays in
+        // its original order and still executes its own callback.
+        let end = i + 1;
+        while (end < L.length && L[end].back === back && !L[end].add && isConfetti(L[end])) end++;
+        drawConfettiRun(ctx, L, i, end);
+        i = end - 1;
+        continue;
+      }
       drawParticle(ctx, p);
     }
     ctx.globalCompositeOperation = 'lighter';
+    // Golden Gun's sparks are additive. Keep them in the additive pass, but
+    // batch their separate paths just like the non-additive sparks above.
+    drawBatchedSparks(ctx, L, true, back);
     for (let i = 0; i < L.length; i++) {
       const p = L[i];
-      if (p.back === back && p.add) drawParticle(ctx, p);
+      if (p.back === back && p.add && p.k !== K.SPARK) drawParticle(ctx, p);
     }
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
   }
+}
+
+interface ConfettiData { kind: 'confetti'; color: string; w: number; h: number; dot: boolean; paint: Particle['draw'] }
+
+function isConfetti(p: Particle): boolean {
+  return p.k === K.CUSTOM && !!p.draw && !!p.data
+    && (p.data as { kind?: unknown }).kind === 'confetti'
+    && (p.data as ConfettiData).paint === p.draw;
+}
+
+interface ConfettiBatch { color: string; alpha: number; pieces: Particle[]; frame: number }
+const confettiBatches = new Map<string, ConfettiBatch>();
+const activeConfettiBatches: ConfettiBatch[] = [];
+let confettiFrame = 0;
+const CONFETTI_ALPHA_STEPS = 16;
+
+function confettiBackColor(hex: string): string {
+  const rgb = Number.parseInt(hex.slice(1), 16);
+  const r = Math.round(((rgb >> 16) & 255) * 0.78);
+  const g = Math.round(((rgb >> 8) & 255) * 0.78);
+  const b = Math.round((rgb & 255) * 0.78);
+  return `rgb(${r},${g},${b})`;
+}
+
+/** Draw every fluttering dot/rectangle, retaining its color, rotation and flip. */
+function drawConfettiRun(ctx: Ctx, list: Particle[], start: number, end: number) {
+  if (end - start < 3 || typeof ctx.ellipse !== 'function') {
+    for (let i = start; i < end; i++) drawParticle(ctx, list[i]);
+    return;
+  }
+  const frame = ++confettiFrame;
+  let used = 0;
+  for (let i = start; i < end; i++) {
+    const p = list[i];
+    const data = p.data as ConfettiData;
+    const t = p.life / p.max;
+    const age = p.max - p.life;
+    const flip = Math.cos(p.seed + age * 14);
+    const alpha = Math.round(Math.min(1, t * 3) * CONFETTI_ALPHA_STEPS) / CONFETTI_ALPHA_STEPS;
+    const key = `${data.color}:${alpha}:${flip < 0 ? 1 : 0}`;
+    let batch = confettiBatches.get(key);
+    if (!batch) {
+      batch = { color: flip < 0 ? confettiBackColor(data.color) : data.color, alpha, pieces: [], frame: 0 };
+      confettiBatches.set(key, batch);
+    }
+    if (batch.frame !== frame) {
+      batch.frame = frame;
+      batch.pieces.length = 0;
+      activeConfettiBatches[used++] = batch;
+    }
+    batch.pieces.push(p);
+  }
+  ctx.save();
+  for (let i = 0; i < used; i++) {
+    const batch = activeConfettiBatches[i];
+    ctx.globalAlpha = batch.alpha;
+    ctx.fillStyle = batch.color;
+    ctx.beginPath();
+    for (const p of batch.pieces) {
+      const data = p.data as ConfettiData;
+      const t = p.life / p.max;
+      const age = p.max - p.life;
+      const x = p.x + Math.sin(p.seed + age * 5) * 2.4 * (1 - t);
+      const y = p.y;
+      const scale = 0.14 + 0.86 * Math.abs(Math.cos(p.seed + age * 14));
+      const cos = Math.cos(p.rot), sin = Math.sin(p.rot);
+      if (data.dot) {
+        const rx = data.w * 0.5, ry = rx * scale;
+        moveToEllipseStart(ctx, x, y, rx, ry, p.rot);
+        ctx.ellipse(x, y, rx, ry, p.rot, 0, TAU);
+      } else {
+        const hw = data.w / 2, hh = data.h * scale / 2;
+        const ax = hw * cos, ay = hw * sin, bx = -hh * sin, by = hh * cos;
+        ctx.moveTo(x - ax - bx, y - ay - by);
+        ctx.lineTo(x + ax - bx, y + ay - by);
+        ctx.lineTo(x + ax + bx, y + ay + by);
+        ctx.lineTo(x - ax + bx, y - ay + by);
+        ctx.closePath();
+      }
+    }
+    ctx.fill();
+    batch.pieces.length = 0; // do not retain dead particles in the reusable cache
+  }
+  ctx.restore();
+  activeConfettiBatches.length = 0;
 }
 
 /**
@@ -294,12 +391,12 @@ const sparkBatches = new Map<string, SparkBatch>();
 const sparkActive: SparkBatch[] = [];
 let sparkFrame = 0;
 
-function drawBatchedSparks(ctx: Ctx, L: Particle[]) {
+function drawBatchedSparks(ctx: Ctx, L: Particle[], additive: boolean, back: boolean) {
   sparkFrame++;
   let used = 0;
   for (let i = 0; i < L.length; i++) {
     const p = L[i];
-    if (p.k !== K.SPARK || p.add || p.back === true) continue;
+    if (p.k !== K.SPARK || p.add !== additive || p.back !== back) continue;
     const t = p.life / p.max;
     const a = p.alpha * Math.min(1, t * 1.8);
     if (a <= 0.02) continue;
@@ -320,7 +417,7 @@ function drawBatchedSparks(ctx: Ctx, L: Particle[]) {
     b.seg.push(p.x, p.y, p.x - p.vx * p.len, p.y - p.vy * p.len);
   }
 
-  ctx.lineCap = 'round';
+  if (used) ctx.lineCap = 'round';
   for (let i = 0; i < used; i++) {
     const b = sparkActive[i];
     const seg = b.seg;
@@ -540,6 +637,13 @@ export class Lightning implements FX {
   }
 }
 
+/**
+ * Identical to Lightning when drawn on its own. The host can recognize these
+ * yellow wheel bolts and batch overlapping rapid-fire impacts, without
+ * changing Plasma Gun's original green renderer or lifetime.
+ */
+export class BatchableWheelLightning extends Lightning {}
+
 export function flame(ctx: Ctx, ang: number, len: number, wid: number, c0: string, c1: string, c2: string, alpha = 1) {
   if (len < 1 || wid < 0.3) return;
   ctx.save();
@@ -644,6 +748,42 @@ export class Light implements FX {
   }
 }
 
+/** A reusable tapered gradient ray, tinted per palette instead of rebuilt per ray per frame. */
+const raySprites = new Map<string, HTMLCanvasElement>();
+function getRaySprite(ctx: Ctx, color: string): HTMLCanvasElement | null {
+  if (typeof document === 'undefined' || typeof HTMLCanvasElement === 'undefined'
+    || !(ctx.canvas instanceof HTMLCanvasElement)) return null;
+  const cached = raySprites.get(color);
+  if (cached) return cached;
+  try {
+    const w = 128;
+    const h = 32;
+    const sprite = makeCanvas(w, h);
+    const c = sprite.getContext('2d');
+    if (!c) return null;
+    const g = c.createLinearGradient(0, 0, w, 0);
+    g.addColorStop(0, 'rgba(255,255,240,0.9)');
+    g.addColorStop(0.4, `rgba(${color},0.5)`);
+    g.addColorStop(1, `rgba(${color},0)`);
+    c.fillStyle = g;
+    c.beginPath();
+    c.moveTo(0, h * 0.3);
+    c.lineTo(w, 0);
+    c.lineTo(w, h);
+    c.lineTo(0, h * 0.7);
+    c.closePath();
+    c.fill();
+    if (raySprites.size >= 64) {
+      const oldest = raySprites.keys().next().value;
+      if (oldest !== undefined) raySprites.delete(oldest);
+    }
+    raySprites.set(color, sprite);
+    return sprite;
+  } catch {
+    return null;
+  }
+}
+
 export class Rays implements FX {
   done = false;
   age = 0;
@@ -659,25 +799,34 @@ export class Rays implements FX {
     const t = this.age / this.life;
     const grow = 1 - Math.pow(1 - Math.min(1, t * 2.2), 3);
     const a = 1 - t;
+    const sprite = getRaySprite(ctx, this.color);
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     ctx.translate(this.x, this.y);
+    if (sprite) ctx.globalAlpha *= Math.max(0, a);
     for (const r of this.rays) {
+      const len = r.len * grow;
+      if (len <= 0.01 || r.w <= 0) continue;
       ctx.save();
       ctx.rotate(r.a + t * 0.25);
-      const len = r.len * grow;
-      const g = ctx.createLinearGradient(0, 0, len, 0);
-      g.addColorStop(0, `rgba(255,255,240,${0.9 * a})`);
-      g.addColorStop(0.4, `rgba(${this.color},${0.5 * a})`);
-      g.addColorStop(1, `rgba(${this.color},0)`);
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.moveTo(0, -r.w * 0.2);
-      ctx.lineTo(len, -r.w * 0.5);
-      ctx.lineTo(len, r.w * 0.5);
-      ctx.lineTo(0, r.w * 0.2);
-      ctx.closePath();
-      ctx.fill();
+      if (sprite) {
+        // Preserve each ray's original width, angle and animated length; the
+        // bitmap contains only its static gradient and tapered silhouette.
+        ctx.drawImage(sprite, 0, -r.w * 0.5, len, r.w);
+      } else {
+        const g = ctx.createLinearGradient(0, 0, len, 0);
+        g.addColorStop(0, `rgba(255,255,240,${0.9 * a})`);
+        g.addColorStop(0.4, `rgba(${this.color},${0.5 * a})`);
+        g.addColorStop(1, `rgba(${this.color},0)`);
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.moveTo(0, -r.w * 0.2);
+        ctx.lineTo(len, -r.w * 0.5);
+        ctx.lineTo(len, r.w * 0.5);
+        ctx.lineTo(0, r.w * 0.2);
+        ctx.closePath();
+        ctx.fill();
+      }
       ctx.restore();
     }
     ctx.restore();
@@ -769,11 +918,23 @@ export class GlowLines implements FX {
     ctx.globalCompositeOperation = 'lighter';
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
+    // Every crack has the same three glow layers. Build one disconnected path
+    // and stroke it three times instead of doing three strokes per crack.
+    ctx.beginPath();
     for (const l of this.lines) {
-      strokePoly(ctx, l, `rgba(${this.color},${0.25 * t})`, this.width * 4);
-      strokePoly(ctx, l, `rgba(${this.color},${0.8 * t})`, this.width * 1.4);
-      strokePoly(ctx, l, `rgba(255,255,230,${0.9 * t * t})`, this.width * 0.5);
+      if (l.length < 4) continue;
+      ctx.moveTo(l[0], l[1]);
+      for (let i = 2; i < l.length; i += 2) ctx.lineTo(l[i], l[i + 1]);
     }
+    ctx.strokeStyle = `rgba(${this.color},${0.25 * t})`;
+    ctx.lineWidth = this.width * 4;
+    ctx.stroke();
+    ctx.strokeStyle = `rgba(${this.color},${0.8 * t})`;
+    ctx.lineWidth = this.width * 1.4;
+    ctx.stroke();
+    ctx.strokeStyle = `rgba(255,255,230,${0.9 * t * t})`;
+    ctx.lineWidth = this.width * 0.5;
+    ctx.stroke();
     ctx.restore();
   }
 }

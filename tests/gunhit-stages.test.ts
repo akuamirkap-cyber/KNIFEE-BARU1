@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { allowsStarPowerups, diamondCoreProjectileRadius, Game, makeLevel, projectileSizeMultiplier } from '../src/games/gunhit/game/Game';
+import { allowsStarPowerups, diamondCoreProjectileRadius, Game, makeLevel, projectileSizeMultiplier, SPECIAL_CY } from '../src/games/gunhit/game/Game';
 import { DiamondRock, LARGE_DIAMOND_CORE_RADIUS } from '../src/games/gunhit/game/art/diamondRock';
 import { getWeapon, WEAPONS } from '../src/games/gunhit/game/weapons';
 import { getGunEffect, setGunEffect } from '../src/games/gunhit/game/art/gunVariants';
@@ -170,7 +170,7 @@ test('floating star traverses the gap instead of steering the weapon', () => {
   game.spawnFloatingStar();
   assert.ok(game.star);
   assert.ok(game.star.x < 0 || game.star.x > 420);
-  assert.ok(game.star.baseY > 282 + game.level.radius + game.star.r);
+  assert.ok(game.star.baseY > SPECIAL_CY + game.level.radius + game.star.r);
   assert.ok(game.star.baseY + game.star.r < 575);
   assert.equal(Math.sign(game.star.vx), game.star.x < 0 ? 1 : -1);
   assert.equal(game.tryTapStar(game.star.x, game.star.y), true);

@@ -62,11 +62,13 @@ function pathsFor(id: VariantWeapon, variant: GunVariant) {
 test('user loadouts use the requested classic/new combination; only real alternatives can be selected', () => {
   assert.deepEqual(GUN_VARIANTS.map(v => v.label), ['Sebelumnya', 'Sekarang', 'Terbaru']);
   assert.deepEqual(GUN_EFFECTS.map(v => v.label), ['Sebelumnya', 'Baru']);
-  assert.equal(VARIANT_WEAPONS.length, 99);
-  assert.equal(EDITABLE_WEAPONS.length, 99);
-  // PISTOL's newest design and shot are slide 11's Beretta 92FS.
-  assert.equal(getGunVariant('pistol'), 'set11');
-  assert.equal(getGunEffect('pistol'), 'set11');
+  assert.equal(VARIANT_WEAPONS.length, 92);
+  assert.equal(EDITABLE_WEAPONS.length, 92);
+  // PISTOL removes the Slide 5 ('set11') weapon design, uses Slide 01's classic
+  // pistol ('original') as its default design, uses Slide 4 ('set9') as its
+  // default shot effect, and keeps Slide 5 ('set11') in its shot effects.
+  assert.equal(getGunVariant('pistol'), 'original');
+  assert.equal(getGunEffect('pistol'), 'set9');
   for (const id of FIXED_CLASSIC_WEAPONS) {
     assert.equal(supportsGunVariants(id), true);
     assert.equal(canChooseGunDesign(id), false);
@@ -85,7 +87,7 @@ test('user loadouts use the requested classic/new combination; only real alterna
   for (const id of ['plasma', 'laser'] as const) {
     assert.deepEqual(getGunVariantOptions(id).map(v => v.label), ['Sebelumnya', 'Slide 3']);
     assert.deepEqual(getGunEffectOptions(id).map(v => v.label), ['Sebelumnya', 'Slide 3']);
-    assert.deepEqual([getGunVariant(id), getGunEffect(id)], ['set7', 'set7']);
+    assert.deepEqual([getGunVariant(id), getGunEffect(id)], ['set7', id === 'laser' ? 'original' : 'set7']);
     assert.notEqual(pathsFor(id, 'original'), pathsFor(id, 'set7'), `${id}'s classic design is its own drawing`);
     assert.equal(drawMaterialTrail(artContext([]), id, 'new'), false,
       `${id} never had a "Baru" trail, even with a stale caller`);
@@ -95,14 +97,27 @@ test('user loadouts use the requested classic/new combination; only real alterna
   const SET_ONE = ['golden', 'blackhole', 'slingshot', 'blowgun', 'shotgun', 'soaker'];
   const SET_NINE: readonly string[] = SET_NINE_DESIGN_WEAPONS;
   const ELEVEN: readonly string[] = SET_ELEVEN_DESIGN_WEAPONS;
+  const requested: Partial<Record<(typeof EDITABLE_WEAPONS)[number], [GunVariant, GunEffect]>> = {
+    ak47: ['original', 'set11'], crossbow: ['original', 'set7'], laser: ['set7', 'original'],
+    fish: ['current', 'set7'], rpg: ['original', 'set7'], cricket: ['current', 'new'],
+    bazooka: ['set7', 'set7'], freeze: ['original', 'set7'], blackhole: ['set1', 'new'],
+    slingshot: ['original', 'new'], blowgun: ['set1', 'new'], shotgun: ['original', 'original'],
+    soaker: ['set1', 'set2'], snowball: ['set7', 'set7'], sniper: ['original', 'set9'],
+    flamethrower: ['original', 'set7'], bubble: ['original', 'set7'], bamboo: ['original', 'set7'],
+    banana: ['original', 'new'], harpoon: ['set7', 'set7'], chicken: ['set7', 'set7'], confetti: ['set7', 'set7'],
+    seed: ['original', 'set7'], pizza: ['original', 'set7'], minigun: ['set7', 'new'], railgun: ['set11', 'set7'],
+    magnet: ['original', 'set7'], shrink: ['set7', 'set7'], pirate: ['original', 'set7'], card: ['set7', 'set7'],
+    gauntlet_cannon: ['original', 'set7'], photon_saber: ['set11', 'set9'], ironman_hand: ['set11', 'ironman_combo'],
+  };
   for (const id of EDITABLE_WEAPONS) {
     assert.equal(canChooseGunDesign(id), true);
     assert.deepEqual([getGunVariant(id), getGunEffect(id)],
-      ELEVEN.includes(id as never) ? ['set11', 'set11']
+      requested[id] ?? (id === 'pistol' ? ['original', 'set9']
+        : ELEVEN.includes(id as never) ? ['set11', 'set11']
         : SET_NINE.includes(id) ? ['set9', 'set9']
         : SET_ONE.includes(id) ? ['set1', 'new']
         // FIREWORK LAUNCHER keeps slide 2's fireworks as its default effect.
-          : id === 'firework' ? ['set7', 'new'] : ['set7', 'set7'], `${id} default`);
+          : id === 'firework' ? ['set7', 'new'] : ['set7', 'set7']), `${id} default`);
   }
   // The two-silhouette guns gain slide 7 as their third card.
   assert.deepEqual(getGunVariantOptions('honey').map(v => v.id), ['original', 'current', 'set7']);
@@ -138,7 +153,8 @@ test('user loadouts use the requested classic/new combination; only real alterna
   // Slide 9: the eight guns it updates keep every card they had and gain
   // "Slide 7" as the newest; the nine new guns only ever have that one card.
   assert.deepEqual(getGunVariantOptions('ak47').map(v => v.id), ['original', 'set9', 'set11']);
-  assert.deepEqual(getGunVariantOptions('pistol').map(v => v.id), ['original', 'set9', 'set11']);
+  assert.deepEqual(getGunVariantOptions('pistol').map(v => v.id), ['original', 'set9']);
+  assert.deepEqual(getGunVariantOptions('pistol').map(v => v.label), ['Sebelumnya', 'Slide 4']);
   assert.deepEqual(getGunVariantOptions('sniper').map(v => v.id), ['original', 'set7', 'set9', 'set11']);
   // RAILGUN also has slide 6's beam, filed between its slide-1 shape and slide 7.
   assert.deepEqual(getGunVariantOptions('railgun').map(v => v.id), ['original', 'set6', 'set7', 'set9', 'set11']);
@@ -155,19 +171,16 @@ test('user loadouts use the requested classic/new combination; only real alterna
   // opens the list: the earliest look of the gun, then slide 9, then slide 11.
   assert.deepEqual(getGunVariantOptions('heat_ray').map(v => v.id), ['set6', 'set9', 'set11']);
   assert.deepEqual(getGunEffectOptions('heat_ray').map(v => v.id), ['set6', 'set9', 'set11']);
-  assert.deepEqual(getGunVariantOptions('gauntlet_cannon').map(v => v.id), ['original', 'set6', 'set7', 'set9', 'set11']);
-  for (const id of ['yautja'] as const) {
-    assert.deepEqual(getGunVariantOptions(id).map(v => v.id), ['set9']);
-    assert.deepEqual(getGunEffectOptions(id).map(v => v.id), ['set9']);
-  }
+  assert.deepEqual(getGunVariantOptions('gauntlet_cannon').map(v => v.id), ['original', 'set6', 'set7', 'set9']);
+  assert.deepEqual(getGunVariantOptions('yautja'), []);
+  assert.deepEqual(getGunEffectOptions('yautja'), []);
   // XENOMORPH is slide 11's only shared gun with a slide-1 silhouette to keep:
   // slide 1 only ever drew it one way, so it gets two honest cards.
   assert.deepEqual(getGunVariantOptions('xeno').map(v => v.label), ['Sebelumnya', 'Slide 5']);
-  assert.deepEqual(getGunEffectOptions('xeno').map(v => v.label), ['Sebelumnya', 'Baru', 'Slide 5']);
+  assert.deepEqual(getGunEffectOptions('xeno').map(v => v.label), ['Sebelumnya', 'Baru', 'Slide 5', 'Efek 4']);
   // The ten guns slide 11 added never existed on slide 1: one card each.
   for (const id of ['mega_buster', 'harmonic_disruptor', 'absolute_zero', 'helios_flare',
-    'chrono_rifle', 'orbital_beacon', 'helix_pulsar', 'singularity', 'prism_lance',
-    'nano_swarm'] as const) {
+    'orbital_beacon', 'singularity', 'nano_swarm'] as const) {
     assert.deepEqual(getGunVariantOptions(id).map(v => v.id), ['set11']);
     assert.deepEqual(getGunEffectOptions(id).map(v => v.id), ['set11']);
   }
@@ -301,9 +314,9 @@ test('every updated gun carries the green NEW badge, and only those guns', () =>
   }
   // Slide 9's own badge list.
   for (const id of SET_NINE_DESIGN_WEAPONS) assert.equal(hasSlide9Update(id), true, `${id} is slide 9`);
-  // Slide 11's own badge list, 27 guns (17 updated + 10 brand new).
+  // Slide 11's own badge list, 26 guns (16 updated designs + 10 brand new; PISTOL's Slide 5 design was removed).
   for (const id of SET_ELEVEN_DESIGN_WEAPONS) assert.equal(hasSlide11Update(id), true, `${id} is slide 11`);
-  assert.equal(SET_ELEVEN_DESIGN_WEAPONS.length, 27);
+  assert.equal(SET_ELEVEN_DESIGN_WEAPONS.length, 26);
   // UNCHANGED guns: no badge, no set.
   for (const id of ['nail', 'yoyo', 'acid', 'anchor', 'dora'] as const) {
     assert.equal(hasSlide7Update(id), false, `${id} is unchanged`);
@@ -338,7 +351,7 @@ test('honey old/new effects persist independently of design and leave gameplay r
     assert.equal(getGunVariant('honey'), 'current');
     assert.equal(getGunEffect('honey'), 'original');
     assert.equal(getGunEffect('chicken'), 'new');
-    assert.equal(getGunEffect('laser'), 'set7', 'laser keeps its own (slide-3) default');
+    assert.equal(getGunEffect('laser'), 'original', 'laser keeps its requested classic shot');
     assert.equal(JSON.parse(written['gunhit:shot-effects:v3']).honey, 'original');
     assert.equal(JSON.parse(written['gunhit:shot-effects:v3']).chicken, 'new');
     assert.deepEqual({ speed: honey.speed, stick: honey.stick, half: honey.half,

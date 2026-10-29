@@ -438,22 +438,28 @@ export function drawProjectileExtra4(c: C, kind: ProjKind, len: number, t: numbe
       c.beginPath(); c.ellipse(0, len / 2, 20, 9, 0, 0, TAU); c.stroke();
       c.strokeStyle = 'rgba(255,255,255,0.5)'; c.lineWidth = 1.5;
       c.beginPath(); c.ellipse(0, len / 2, 3, 1.5, 0, 0, TAU); c.stroke();
-      // vortex curls (game-3: 6 curls)
+      // Vortex curls and speed lines animate exactly as before, but each set
+      // shares one disconnected path. The HUD repeats this glyph for every
+      // round, so drawing each curl/line separately was particularly costly.
+      c.strokeStyle = 'rgba(255,255,255,0.7)'; c.lineWidth = 2;
+      c.beginPath();
       for (let i = 0; i < 6; i++) {
         const a = t * 18 + (i / 6) * TAU;
         const px = Math.cos(a) * 12, py = len / 2 + Math.sin(a) * 5;
-        c.strokeStyle = 'rgba(255,255,255,0.7)'; c.lineWidth = 2;
-        c.beginPath(); c.arc(px, py, 6, a, a + 3.5); c.stroke();
+        c.moveTo(px + Math.cos(a) * 6, py + Math.sin(a) * 6);
+        c.arc(px, py, 6, a, a + 3.5);
       }
-      // speed lines trailing (game-3: 7 lines)
+      c.stroke();
       c.save();
       c.globalCompositeOperation = 'lighter';
       c.strokeStyle = 'rgba(255,255,255,0.35)'; c.lineWidth = 2;
+      c.beginPath();
       for (let i = 0; i < 7; i++) {
         const lx = (i - 3) * 13 + Math.sin(t * 50 + i) * 2;
         const ll = 30 + (3 - Math.abs(i - 3)) * 18;
-        c.beginPath(); c.moveTo(lx, len / 2 + 14); c.lineTo(lx, len / 2 + 14 + ll); c.stroke();
+        c.moveTo(lx, len / 2 + 14); c.lineTo(lx, len / 2 + 14 + ll);
       }
+      c.stroke();
       c.restore();
       break;
     }

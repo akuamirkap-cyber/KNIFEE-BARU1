@@ -12,9 +12,11 @@
  * Slide 1 keeps the rules: it moves the carrier round, decides when the wheel
  * is hit, and scores it. Slide 3 owns everything you see and hear — including
  * the way its wheel reacts (`feel`: the bounce spring, the rim flash, the size
- * pulse, the screen flash and the 22 % hit-stop of its own `Game`).
+ * pulse and the screen flash of its own `Game`). Impact hit-stop is deliberately
+ * skipped so the wheel and controls stay responsive even on rapid hits.
  */
-import { Particles, type FX } from '../../../../games/game-4/src/game/particles';
+import { BatchableWheelLightning, K, Particles, type FX } from '../../../../games/game-4/src/game/particles';
+import { WheelLightningCache } from './batchedWheelLightning';
 import { newAnim, type StuckItem, type WeaponAnim, type WeaponId } from '../../../../games/game-4/src/game/weapons';
 import type { Decal, Game } from '../../../../games/game-4/src/game/Game';
 import { drawStuckItem } from '../../../../games/game-4/src/game/art';
@@ -25,6 +27,10 @@ import type { SlideThreeId } from './setSevenArt';
 import type { Projectile } from '../../../../games/game-4/src/game/projectiles';
 
 const TAU = Math.PI * 2;
+
+/** Best-effort cosmetic limits; protected/gameplay particles can exceed them. */
+export const GOLDEN_PARTICLE_BUDGET = 300;
+export const SLIDE_THREE_PARTICLE_BUDGET = 400;
 
 /** What slide 1 does for slide 3 (the parts slide 1's own canvas owns). */
 export interface SevenHooks {
@@ -59,8 +65,8 @@ export interface SevenWheel {
  * Slide 3's own reaction to a hit — what its `Game` moves, with its numbers:
  * the wheel bounce spring (`wheelImpact`: −26·power px/s into k 420 / c 22),
  * the rim flash (fades at 7/s, drawn at 0.6×), the shrink/grow size pulse
- * (k 130 / c 9), the full-screen flash (fades at 2.2/s) and the hit-stop
- * (everything runs at 22 % for that many real seconds).
+ * (k 130 / c 9) and the full-screen flash (fades at 2.2/s). Projectile
+ * impact stops are ignored so consecutive hits don't appear to freeze play.
  */
 export interface SevenFeel {
   bumpY: number;
@@ -157,6 +163,9 @@ export class SetSevenFx implements SevenHost, SevenWheelHost {
   fx: FX[] = [];
   /** Wheel-space FX (cracks glowing, rim spots): drawn from the wheel centre. */
   wheelFx: FX[] = [];
+  /** Reused scratch for overlapping yellow Plasma lightning. */
+  private wheelBoltScratch: BatchableWheelLightning[] = [];
+  private wheelLightningCache = new WheelLightningCache();
   /** Rounds slide 3's recipes created since the last `takeShots()`. */
   shots: Projectile[] = [];
   /** Rounds stuck in the wheel — slide 3's own `drawStuckItem()` art. */
@@ -284,9 +293,11 @@ export class SetSevenFx implements SevenHost, SevenWheelHost {
     this.feel.pulseV = 0;
   }
 
-  /** Slide 3's `hitStop()`: its whole world runs at 22 % for `t` real seconds. */
-  hitStop(t: number) {
-    this.feel.stop = Math.max(this.feel.stop, t);
+  /** Do not slow the whole world on every successful shot. */
+  hitStop(_t: number) {
+    // The original 30–150ms stop ran everything at 22%, making a hit look like
+    // a dropped frame even at a stable FPS. Wheel bounce, flash, shake, sound
+    // and the full particle burst are independent and continue unchanged.
   }
 
   /** Slide 3's `lens()`: a refraction applied over the frame (see `applyLens`). */
@@ -349,6 +360,8 @@ export class SetSevenFx implements SevenHost, SevenWheelHost {
     this.fx.length = 0;
     this.timers.length = 0;
     this.wheelFx.length = 0;
+    this.wheelBoltScratch.length = 0;
+    this.wheelLightningCache.clear();
     this.shots.length = 0;
     this.stuck.length = 0;
     this.decals.length = 0;
@@ -357,6 +370,37 @@ export class SetSevenFx implements SevenHost, SevenWheelHost {
     this.feel = restFeel();
     this.wheel.bumpY = 0;
     this.lastAngle = null;
+  }
+
+  /**
+   * Overlapping rapid-fire impacts can otherwise accumulate hundreds of old
+   * particles. Only under pressure, retire faded cosmetic debris first and
+   * then the oldest debris; keep the fresh impact. Never trim custom art,
+   * rings/glows, targets, payloads or particles with callbacks. The budget is
+   * best-effort when protected effects alone exceed it.
+   */
+  private trimCosmeticParticles() {
+    const budget = this.weaponId === 'golden' ? GOLDEN_PARTICLE_BUDGET : SLIDE_THREE_PARTICLE_BUDGET;
+    const list = this.particles.list;
+    let excess = list.length - budget;
+    if (excess <= 0) return;
+    for (let pass = 0; pass < 2; pass++) {
+      const fadedOnly = pass === 0;
+      let write = 0;
+      for (let i = 0; i < list.length; i++) {
+        const p = list[i];
+        const cosmetic = p.k === K.SPARK || p.k === K.STAR || p.k === K.SMOKE
+          || p.k === K.CHIP || p.k === K.FLAKE || p.k === K.EMBER;
+        if (excess > 0 && cosmetic && !p.die && !p.draw && !p.target && p.data == null
+          && (!fadedOnly || p.life <= p.max * 0.55)) {
+          excess--;
+          continue;
+        }
+        list[write++] = p;
+      }
+      list.length = write;
+      if (excess <= 0) break;
+    }
   }
 
   /**
@@ -399,6 +443,7 @@ export class SetSevenFx implements SevenHost, SevenWheelHost {
     updateSevenStuck(this, dt);
     if (animate) updateSevenAnim(this, dt);
     this.particles.update(dt);
+    this.trimCosmeticParticles();
     for (const fx of this.fx) fx.update(dt);
     this.fx = this.fx.filter((fx) => !fx.done);
     for (const fx of this.wheelFx) fx.update(dt);
@@ -414,6 +459,9 @@ export class SetSevenFx implements SevenHost, SevenWheelHost {
 
   /** Slide 3 draws its non-additive particles first… */
   draw(ctx: CanvasRenderingContext2D) {
+    // A shot can add its impact after update(), so enforce the same limit
+    // before rendering that very frame rather than waiting for the next tick.
+    this.trimCosmeticParticles();
     this.particles.draw(ctx, false);
   }
 
@@ -449,8 +497,20 @@ export class SetSevenFx implements SevenHost, SevenWheelHost {
       ctx.beginPath();
       ctx.arc(0, 0, radius, 0, TAU);
       ctx.clip();
-      for (const f of this.wheelFx) f.draw(ctx);
-      ctx.restore();
+      const bolts = this.wheelBoltScratch;
+      bolts.length = 0;
+      for (const f of this.wheelFx) if (f instanceof BatchableWheelLightning) bolts.push(f);
+      if (bolts.length <= 7) {
+        // The first hit is precisely the original Plasma Gun rendering.
+        this.wheelLightningCache.clear();
+        for (const f of this.wheelFx) f.draw(ctx);
+        ctx.restore();
+      } else {
+        for (const f of this.wheelFx) if (!(f instanceof BatchableWheelLightning)) f.draw(ctx);
+        ctx.restore();
+        this.wheelLightningCache.draw(ctx, bolts, radius, this.time);
+      }
+      bolts.length = 0;
     }
   }
 
@@ -507,9 +567,14 @@ export class SetSevenFx implements SevenHost, SevenWheelHost {
       if (sy + sh > source.height) sh = source.height - sy;
       if (sw <= 2 || sh <= 2) continue;
       const lensCanvas = (this.lensCanvas ??= document.createElement('canvas'));
-      if (lensCanvas.width !== size || lensCanvas.height !== size) {
-        lensCanvas.width = size;
-        lensCanvas.height = size;
+      // The animated lens radius changes almost every frame. Resizing a
+      // canvas reallocates/clears its backing surface and synchronizes the
+      // renderer; grow a reusable surface instead and sample only this lens's
+      // active square. This keeps all nine refraction rings at full resolution.
+      if (lensCanvas.width < size || lensCanvas.height < size) {
+        const capacity = 2 ** Math.ceil(Math.log2(size));
+        lensCanvas.width = capacity;
+        lensCanvas.height = capacity;
       }
       const lc = lensCanvas.getContext('2d');
       if (!lc) continue;
@@ -527,7 +592,7 @@ export class SetSevenFx implements SevenHost, SevenWheelHost {
         ctx.rotate(l.s * 1.2 * f * f + this.time * l.s * 0.9 * f);
         const z = 1 + l.s * 0.45 * f;
         ctx.scale(z, z);
-        ctx.drawImage(lensCanvas, -l.r, -l.r, l.r * 2, l.r * 2);
+        ctx.drawImage(lensCanvas, 0, 0, size, size, -l.r, -l.r, l.r * 2, l.r * 2);
         ctx.restore();
       }
       ctx.save();

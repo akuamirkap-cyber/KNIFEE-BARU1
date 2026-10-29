@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Game } from './game/Game';
 import { savedValues, storage } from './game/safeStorage';
-import { setMuted, sfx } from './game/audio';
+import { setMasterVolume, setMuted, sfx } from './game/audio';
 import type { BossType } from './game/bossRoster';
 import { bossXpReward, getPlayerProgress } from './game/playerProgress';
 import { sfx4 } from './game/sfx4';
@@ -12,6 +12,7 @@ import { Burst, Dust, Flare, Shockwave, SparkleField, SunburstFX } from '../knif
 import { gunSunburstColor } from './game/sunburstPalette';
 import { drawGunCentered } from './game/art/drawCentered';
 import { getGunMetrics } from './game/art/metrics';
+import { juicyAudio } from '../../utils/juicyAudio';
 import DiamondSprite from '../shared/DiamondSprite';
 import CoinSprite from '../shared/CoinSprite';
 import { MILESTONES, QUESTS, type Quest, type QuestState } from './game/quests';
@@ -24,6 +25,11 @@ import { BossGiftBoxModal } from './components/BossGiftBoxModal';
 import StarBuffModal from './components/StarBuffModal';
 import LevelMap from './components/LevelMap';
 import MenuEnvironment, { type MenuEnvironmentTheme } from './components/MenuEnvironment';
+import { SGA_SPEED_OPTIONS, formatSgaSpeed, getSavedSgaSpeed } from './game/gameSpeed';
+import { useSgaGameSpeed } from './utils/useSgaGameSpeed';
+import { SGA_BG_THEMES, getSavedSgaBgTheme } from './game/backgroundThemes';
+import { useSgaBgTheme } from './utils/useSgaBgTheme';
+import { getFast2DContext, getOptimalCanvasDpr } from './utils/mobilePerf';
 
 type Screen = 'menu' | 'playing' | 'over';
 
@@ -39,6 +45,14 @@ const LS = {
   playerXp: 'gunhit_player_xp',
   playerLevel: 'gunhit_player_level',
   menuTheme: 'gunhit_menu_theme',
+  volume: 'gunhit_volume',
+};
+
+const initialSoundVolume = (): number => {
+  const saved = storage.getItem(LS.volume);
+  if (saved === null) return 1;
+  const parsed = Number(saved);
+  return Number.isFinite(parsed) ? Math.max(0, Math.min(1, parsed)) : 1;
 };
 
 const num = (k: string) => Number(storage.getItem(k) || 0);
@@ -51,11 +65,11 @@ const ownedWeaponIds = (): string[] => {
   const normalOwned: string[] = [];
   try {
     const saved = JSON.parse(storage.getItem(LS.owned) || '[]');
-    if (Array.isArray(saved)) normalOwned.push(...saved.filter((id): id is string => typeof id === 'string' && getWeapon(id).rarity !== 'LANGKA'));
+    if (Array.isArray(saved)) normalOwned.push(...saved.filter((id): id is string => typeof id === 'string' && WEAPONS.some(w => w.id === id && w.rarity !== 'LANGKA')));
   } catch { /* collection save is optional */ }
   try {
     const boughtRare = JSON.parse(storage.getItem(LS.rareOwned) || '[]');
-    if (Array.isArray(boughtRare)) normalOwned.push(...boughtRare.filter((id): id is string => typeof id === 'string'));
+    if (Array.isArray(boughtRare)) normalOwned.push(...boughtRare.filter((id): id is string => typeof id === 'string' && WEAPONS.some(w => w.id === id && w.rarity === 'LANGKA')));
   } catch { /* collection save is optional */ }
   return [...new Set(normalOwned)];
 };
@@ -135,6 +149,8 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
   const gameRef = useRef<Game | null>(null);
 
   const [screen, setScreen] = useState<Screen>('menu');
+  const screenRef = useRef<Screen>(screen);
+  screenRef.current = screen;
   const [mapOpen, setMapOpen] = useState(false);
   const startingLevelRef = useRef(1);
   const [transitioning, setTransitioning] = useState(false);
@@ -153,31 +169,26 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
   const diamondFlightRef = useRef<HTMLDivElement>(null);
   const [diamondReveal, setDiamondReveal] = useState<{ id: number; amount: number } | null>(null);
   const [diamondHudMode, setDiamondHudMode] = useState(false);
-  const [stageClearBurst, setStageClearBurst] = useState<{ x: number; y: number; id: number } | null>(null);
   const [weaponCelebration, setWeaponCelebration] = useState<{ weaponId: WeaponId; id: number } | null>(null);
 
   const [questState, setQuestState] = useState<QuestState>(getInitialQuests);
   const questStateRef = useRef(questState);
-  questStateRef.current = questState;
   /**
-   * Shots are counted in a ref and flushed at most once a second.
-   *
-   * `onShotFired` used to call `saveQuests` on *every* shot — a React state
-   * update plus a synchronous `storage.setItem` per bullet. Rapid-fire guns
-   * made that brutal: the paintball gun fires 8.3 shots a second, so holding it
-   * meant eight full re-renders and eight disk writes per second, which is what
-   * "ngelag pas nembak" was. The quest panel only needs a total, so the count is
-   * batched and written when the burst pauses.
+   * Shots are accumulated purely in memory (`pendingShotsRef`) during active
+   * shooting so firing NEVER triggers a React tree re-render or a synchronous
+   * `JSON.stringify` / `storage.setItem` write mid-frame. Pending shots merge
+   * and persist automatically at stage boundaries, when leaving gameplay, on
+   * tab hide, or on unmount.
    */
   const pendingShotsRef = useRef(0);
-  const shotFlushRef = useRef<number | undefined>(undefined);
+  const questWriteTimerRef = useRef<number | undefined>(undefined);
 
   const [muted, setMutedState] = useState(false);
-  const [menuTheme, setMenuTheme] = useState<MenuEnvironmentTheme>(() => {
-    const saved = storage.getItem(LS.menuTheme);
-    return saved === 'morning' || saved === 'town' || saved === 'snow' ? saved : 'forest';
-  });
+  const [soundVolume, setSoundVolumeState] = useState<number>(initialSoundVolume);
+  const [gameSpeed, setGameSpeed] = useSgaGameSpeed();
+  const [menuTheme, setMenuTheme] = useSgaBgTheme();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [inGameSettingsOpen, setInGameSettingsOpen] = useState(false);
   const [arsenalOpen, setArsenalOpen] = useState(false);
   const [questOpen, setQuestOpen] = useState(false);
   const [leaderboardOpen, setLeaderboardOpen] = useState(false);
@@ -232,24 +243,45 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  });
+  }, []);
 
-  // Sync quests to LS
-  const saveQuests = (qs: QuestState) => {
-    questStateRef.current = qs;
-    setQuestState(qs);
-    storage.setItem(LS.quests, JSON.stringify(qs));
+  const mergePendingShots = (qs: QuestState): QuestState => {
+    const pending = pendingShotsRef.current;
+    if (pending <= 0) return qs;
+    pendingShotsRef.current = 0;
+    return { ...qs, shotsFired: qs.shotsFired + pending };
   };
 
-  const depositCoins = (amount: number) => {
+  // Sync quests to LS without forcing mid-gameplay React re-renders
+  const saveQuests = (qs: QuestState, syncReact = screenRef.current !== 'playing') => {
+    const merged = mergePendingShots(qs);
+    questStateRef.current = merged;
+    if (syncReact) {
+      if (questWriteTimerRef.current !== undefined) {
+        window.clearTimeout(questWriteTimerRef.current);
+        questWriteTimerRef.current = undefined;
+      }
+      setQuestState(merged);
+      storage.setItem(LS.quests, JSON.stringify(merged));
+      return;
+    }
+    if (questWriteTimerRef.current === undefined) {
+      questWriteTimerRef.current = window.setTimeout(() => {
+        questWriteTimerRef.current = undefined;
+        storage.setItem(LS.quests, JSON.stringify(questStateRef.current));
+      }, 120);
+    }
+  };
+
+  const depositCoins = (amount: number, syncReact = screenRef.current !== 'playing') => {
     const total = coinsInBank() + amount;
     storage.setItem(LS.coins, String(total));
-    setTotalCoins(total);
+    if (syncReact) setTotalCoins(total);
     return total;
   };
 
   const chooseWeapon = (id: WeaponId) => {
-    if (!isWeaponUnlocked(getWeapon(id), ownedWeaponIds())) return;
+    if (getWeapon(id).id !== id || !isWeaponUnlocked(getWeapon(id), ownedWeaponIds())) return;
     const changed = id !== weapon;
     setWeaponState(id);
     storage.setItem(LS.weapon, id);
@@ -264,10 +296,6 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
 
   const celebrateNewWeapon = (weaponId: WeaponId) => {
     setWeaponCelebration({ weaponId, id: Date.now() + Math.random() });
-  };
-
-  const showStageClearBurst = (x: number, y: number) => {
-    setStageClearBurst({ x, y, id: Date.now() + Math.random() });
   };
 
   const buyRareWeapon = (id: WeaponId) => {
@@ -371,7 +399,7 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
         const newBest = score > prevBest;
         if (newBest) storage.setItem(LS.best, String(score));
         if (level > num(LS.bestLevel)) storage.setItem(LS.bestLevel, String(level));
-        depositCoins(coins); // special-stage and boss rewards were banked already
+        depositCoins(coins, true); // special-stage and boss rewards were banked already
         setBest(num(LS.best));
         setBestLevel(Math.max(1, num(LS.bestLevel)));
         const current = questStateRef.current;
@@ -380,7 +408,7 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
           highestScore: Math.max(current.highestScore, score),
           highestLevel: Math.max(current.highestLevel, level),
           totalCoinsCollected: current.totalCoinsCollected + coins,
-        });
+        }, true);
         setResult({ score, level, coins: runCoins, newBest });
         setDisplayScore(0);
         setScreen('over');
@@ -389,8 +417,7 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
         setStarBuffTreasure(treasure);
         setStarBuffOpen(true);
       },
-      onStageCleared: (level, boss, origin) => {
-        if (!boss) showStageClearBurst(origin.x, origin.y);
+      onStageCleared: (level) => {
         const unlocked = Math.max(1, num(LS.bestLevel), level + 1);
         if (unlocked > num(LS.bestLevel)) {
           storage.setItem(LS.bestLevel, String(unlocked));
@@ -405,15 +432,6 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
       },
       onShotFired: (count) => {
         pendingShotsRef.current += count;
-        if (shotFlushRef.current !== undefined) return;
-        shotFlushRef.current = window.setTimeout(() => {
-          shotFlushRef.current = undefined;
-          const shots = pendingShotsRef.current;
-          if (shots <= 0) return;
-          pendingShotsRef.current = 0;
-          const current = questStateRef.current;
-          saveQuests({ ...current, shotsFired: current.shotsFired + shots });
-        }, 1000);
       },
       onBossDefeated: (bossName, level, coinsEarned, bossType) => {
         const totalXpBefore = num(LS.playerXp);
@@ -461,16 +479,13 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
         setDiamondFlight(null);
         setDiamondReveal(null);
         setDiamondToast(null);
-        setStageClearBurst(null);
       },
       onTreasureCoin: (amount) => {
         depositCoins(amount); // Saved as each bouncing coin reaches the HUD.
         const current = questStateRef.current;
         saveQuests({ ...current, totalCoinsCollected: current.totalCoinsCollected + amount });
       },
-      onStageReward: (mode, level, unbankedCoins, diamondReward) => {
-        if (mode === 'boulder' && diamondReward > 0) setStageClearBurst(null);
-        else showStageClearBurst(210, 282);
+      onStageReward: (_mode, level, unbankedCoins, diamondReward) => {
         if (diamondReward > 0) {
           const next = diamondsInBank() + diamondReward;
           storage.setItem(LS.diamonds, String(next));
@@ -491,33 +506,60 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
         });
       },
     });
+    const flushShotsToStorage = () => {
+      if (questWriteTimerRef.current !== undefined) {
+        window.clearTimeout(questWriteTimerRef.current);
+        questWriteTimerRef.current = undefined;
+      }
+      const merged = mergePendingShots(questStateRef.current);
+      questStateRef.current = merged;
+      storage.setItem(LS.quests, JSON.stringify(merged));
+    };
+    const onVisChange = () => {
+      if (document.hidden) flushShotsToStorage();
+    };
+    document.addEventListener('visibilitychange', onVisChange);
+    window.addEventListener('pagehide', flushShotsToStorage);
     g.setWeapon(getWeapon(storage.getItem(LS.weapon) || 'pistol').id);
+    g.setGameSpeed(getSavedSgaSpeed());
+    g.setBackgroundTheme(getSavedSgaBgTheme());
     gameRef.current = g;
     return () => {
+      document.removeEventListener('visibilitychange', onVisChange);
+      window.removeEventListener('pagehide', flushShotsToStorage);
       g.destroy();
       gameRef.current = null;
-      // Bank whatever shots are still pending in the batch, without setState.
-      if (shotFlushRef.current !== undefined) {
-        window.clearTimeout(shotFlushRef.current);
-        shotFlushRef.current = undefined;
-      }
-      if (pendingShotsRef.current > 0) {
-        const merged = {
-          ...questStateRef.current,
-          shotsFired: questStateRef.current.shotsFired + pendingShotsRef.current,
-        };
-        pendingShotsRef.current = 0;
-        questStateRef.current = merged;
-        storage.setItem(LS.quests, JSON.stringify(merged));
-      }
+      flushShotsToStorage();
     };
   }, []);
 
   useEffect(() => {
+    if (screen !== 'playing' || questOpen) {
+      if (questWriteTimerRef.current !== undefined) {
+        window.clearTimeout(questWriteTimerRef.current);
+        questWriteTimerRef.current = undefined;
+      }
+      const merged = mergePendingShots(questStateRef.current);
+      questStateRef.current = merged;
+      storage.setItem(LS.quests, JSON.stringify(merged));
+      setQuestState(merged);
+      setTotalCoins(coinsInBank());
+    }
+  }, [screen, questOpen]);
+
+  useEffect(() => {
+    gameRef.current?.setGameSpeed(gameSpeed);
+  }, [gameSpeed]);
+
+  useEffect(() => {
+    gameRef.current?.setBackgroundTheme(menuTheme);
+  }, [menuTheme]);
+
+  useEffect(() => {
     if (!diamondToast) return;
-    const timer = window.setTimeout(() => setDiamondToast(null), 1800);
+    const timer = window.setTimeout(() => setDiamondToast(null), Math.round(1800 / gameSpeed));
     return () => window.clearTimeout(timer);
-  }, [diamondToast?.id]);
+  }, [diamondToast?.id, gameSpeed]);
 
   useEffect(() => {
     if (!diamondFlight) return;
@@ -529,83 +571,89 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
       { left: `${startX}px`, top: `${startY}px`, transform: 'translate(-50%, -50%) scale(1.25) rotate(0deg)', opacity: 1 },
       { left: '392px', top: '34px', transform: 'translate(-50%, -50%) scale(.18) rotate(540deg)', opacity: .25, offset: .82 },
       { left: '392px', top: '34px', transform: 'translate(-50%, -50%) scale(.12) rotate(720deg)', opacity: 0 },
-    ], { duration: 900, easing: 'cubic-bezier(.2,.7,.18,1)', fill: 'forwards' });
+    ], { duration: Math.round(900 / gameSpeed), easing: 'cubic-bezier(.2,.7,.18,1)', fill: 'forwards' });
     flight.onfinish = () => {
       setDiamondFlight((current) => current?.id === diamondFlight.id ? null : current);
       setDiamondReveal({ id: diamondFlight.id, amount: diamondFlight.amount });
     };
     return () => flight.cancel();
-  }, [diamondFlight?.id]);
+  }, [diamondFlight?.id, gameSpeed]);
 
   useEffect(() => {
     if (diamondReveal === null) return;
-    const timer = window.setTimeout(() => setDiamondReveal(null), 2100);
+    const timer = window.setTimeout(() => setDiamondReveal(null), Math.round(2100 / gameSpeed));
     return () => window.clearTimeout(timer);
-  }, [diamondReveal?.id]);
-
-  useEffect(() => {
-    if (!stageClearBurst) return;
-    const id = stageClearBurst.id;
-    const timer = window.setTimeout(() => {
-      setStageClearBurst(current => current?.id === id ? null : current);
-    }, 2100);
-    return () => window.clearTimeout(timer);
-  }, [stageClearBurst?.id]);
+  }, [diamondReveal?.id, gameSpeed]);
 
   useEffect(() => {
     if (!weaponCelebration) return;
-    const timer = window.setTimeout(() => setWeaponCelebration(null), 2200);
+    const timer = window.setTimeout(() => setWeaponCelebration(null), Math.round(2200 / gameSpeed));
     return () => window.clearTimeout(timer);
-  }, [weaponCelebration?.id]);
+  }, [weaponCelebration?.id, gameSpeed]);
+
+  useEffect(() => {
+    setMasterVolume(soundVolume);
+    juicyAudio.volume = 0.7 * soundVolume;
+  }, [soundVolume]);
+
+  // Escape opens/closes in-game settings pause menu while playing.
+  useEffect(() => {
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (screenRef.current !== 'playing') return;
+      if (starBuffOpen || bonusStageOpen || Boolean(bossDefeatedData)) return;
+      e.preventDefault();
+      setInGameSettingsOpen((open) => !open);
+    };
+    window.addEventListener('keydown', onEsc);
+    return () => window.removeEventListener('keydown', onEsc);
+  }, [starBuffOpen, bonusStageOpen, bossDefeatedData]);
 
   // The menu, results and modal screens use their own lightweight effects;
   // the heavy level canvas has nothing to simulate behind those overlays.
+  const gameplayModalOpen = inGameSettingsOpen || arsenalOpen || questOpen || leaderboardOpen || starBuffOpen || bonusStageOpen || Boolean(bossDefeatedData);
   useEffect(() => {
+    if (screen !== 'playing' && inGameSettingsOpen) setInGameSettingsOpen(false);
     if (screen === 'menu') gameRef.current?.toIdle();
-    gameRef.current?.setActive(active && screen === 'playing');
-  }, [active, screen]);
+    gameRef.current?.setActive(active && screen === 'playing' && !gameplayModalOpen);
+  }, [active, screen, gameplayModalOpen, inGameSettingsOpen]);
 
-  // Floating upright weapon preview on main menu (matching Screenshot 1)
+  // Upright weapon preview on the main menu (-10% from 374x328 -> 337x295, native VSync FPS)
   useEffect(() => {
-    if (screen !== 'menu' || arsenalOpen || questOpen || leaderboardOpen) return;
+    if (screen !== 'menu' || arsenalOpen || questOpen || leaderboardOpen || mapOpen || settingsOpen) return;
     const cv = previewCanvasRef.current;
     if (!cv) return;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const pw = 312;
-    const ph = 273;
-    cv.width = pw * dpr;
-    cv.height = ph * dpr;
-    const ctx = cv.getContext('2d');
+    const dpr = getOptimalCanvasDpr(2);
+    const pw = 337;
+    const ph = 295;
+    cv.width = Math.round(pw * dpr);
+    cv.height = Math.round(ph * dpr);
+    const ctx = getFast2DContext(cv);
     if (!ctx) return;
 
     let raf = 0;
     const start = performance.now();
-    let lastDraw = -Infinity;
     const curW = getWeapon(weapon);
+    const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
 
     const loop = (now: number) => {
-      if (now - lastDraw < 1000 / 30 - 1) {
-        raf = requestAnimationFrame(loop);
-        return;
-      }
-      lastDraw = now;
-      const t = (now - start) / 1000;
+      // Let the entrance finish before any optional weapon-fire demonstration.
+      const t = reducedMotion?.matches ? 0 : Math.max(0, (now - start) / 1000 - 1) * getSavedSgaSpeed();
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, pw, ph);
 
-      // Gentle floating animation
-      const floatY = Math.sin(t * 2.5) * 8;
+      // The entrance moves the canvas into place; keep its base centered and
+      // still afterwards while the weapon's own light/preview details animate.
       ctx.save();
-      // Exact canvas center
-      ctx.translate(pw / 2, ph / 2 + floatY);
+      ctx.translate(pw / 2, ph / 2);
 
-      // Weapon shadow
+      // Weapon shadow (scaled proportionally with the weapon)
       ctx.beginPath();
-      ctx.ellipse(0, 85, 52, 14, 0, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(0,0,0,0.4)';
+      ctx.ellipse(0, 92, 59, 16, 0, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(0,0,0,0.44)';
       ctx.fill();
 
-      // 30% larger than before while preserving the true measured weapon proportions.
+      // Scaled -10% from 374x328 while preserving true weapon proportions.
       const m = getGunMetrics(curW.id);
       const span = Math.max(m.span, 130);
       const sc = (ph * 0.78) / span;
@@ -615,12 +663,21 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
       drawGunCentered(ctx, curW.id, t, 0, true, undefined, true);
       ctx.restore();
 
-      if (active) raf = requestAnimationFrame(loop);
+      if (active && !reducedMotion?.matches) raf = requestAnimationFrame(loop);
     };
 
+    // Redraw once on a preference change, then resume frames only if needed.
+    const onMotionChange = () => {
+      cancelAnimationFrame(raf);
+      loop(performance.now());
+    };
+    reducedMotion?.addEventListener?.('change', onMotionChange);
     loop(start); // a still preview even before this slide has focus
-    return () => cancelAnimationFrame(raf);
-  }, [screen, weapon, active, arsenalOpen, questOpen, leaderboardOpen]);
+    return () => {
+      cancelAnimationFrame(raf);
+      reducedMotion?.removeEventListener?.('change', onMotionChange);
+    };
+  }, [screen, weapon, active, arsenalOpen, questOpen, leaderboardOpen, mapOpen, settingsOpen]);
 
   // Roll up score only while the slide is active; pause at the current number.
   useEffect(() => {
@@ -629,7 +686,7 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
     const target = result.score;
     const start = performance.now();
     const timer = setInterval(() => {
-      const p = Math.min(1, (performance.now() - start) / 800);
+      const p = Math.min(1, ((performance.now() - start) * getSavedSgaSpeed()) / 800);
       setDisplayScore(Math.round(from + (target - from) * Math.pow(p, 0.7)));
       if (p >= 1) clearInterval(timer);
     }, 25);
@@ -653,9 +710,9 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
         setScreen('playing');
         setTransitionStep(0);
       }
-    }, transitionStep === 1 ? 380 : 320);
+    }, Math.round((transitionStep === 1 ? 380 : 320) / gameSpeed));
     return () => clearTimeout(timer);
-  }, [transitionStep, active]);
+  }, [transitionStep, active, gameSpeed]);
 
   const beginStage = (level: number) => {
     startingLevelRef.current = level;
@@ -700,20 +757,56 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
 
   const startSpecial = (stage: 'boulder' | 'bonus' | 'treasure') => {
     setSettingsOpen(false);
+    setInGameSettingsOpen(false);
     gameRef.current?.startSpecialStage(stage);
     setScreen('playing');
   };
 
   const toggleMute = () => {
     const m = !muted;
+    if (!m && soundVolume <= 0) {
+      setSoundVolumeState(1);
+      storage.setItem(LS.volume, '1');
+      setMasterVolume(1);
+      juicyAudio.volume = 0.7;
+    }
     setMuted(m);
     setMutedState(m);
+    juicyAudio.enabled = !m;
     if (!m) sfx.click();
+  };
+
+  const changeSoundVolume = (nextVol: number, playTick = false) => {
+    const clamped = Math.max(0, Math.min(1, Math.round(nextVol * 100) / 100));
+    setSoundVolumeState(clamped);
+    storage.setItem(LS.volume, String(clamped));
+    setMasterVolume(clamped);
+    juicyAudio.volume = 0.7 * clamped;
+    if (clamped <= 0) {
+      if (!muted) {
+        setMuted(true);
+        setMutedState(true);
+        juicyAudio.enabled = false;
+      }
+    } else {
+      if (muted) {
+        setMuted(false);
+        setMutedState(false);
+        juicyAudio.enabled = true;
+      }
+      if (playTick) sfx.click();
+    }
+  };
+
+  const goToMainMenuFromPlay = () => {
+    saveQuests(questStateRef.current, true);
+    setInGameSettingsOpen(false);
+    gameRef.current?.toIdle();
+    setScreen('menu');
   };
 
   const chooseMenuTheme = (theme: MenuEnvironmentTheme) => {
     setMenuTheme(theme);
-    storage.setItem(LS.menuTheme, theme);
   };
 
   return (
@@ -738,20 +831,12 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
         </button>
       )}
       <div className="relative overflow-hidden shadow-[0_0_80px_rgba(0,0,0,0.9)] w-[420px] h-[760px] flex-shrink-0">
-        {/* Canvas Engine */}
+        {/* Canvas Engine (zero permanent translucent DOM overlays during gameplay so desynchronized:true scans out directly) */}
         <canvas ref={canvasRef} className="block touch-none w-[420px] h-[760px]" />
-
-        {/* A low-cost, soft rarity aura around the gun, never over the target.
-            This is the same FX Lab / Knife Boss ray treatment as the arsenal. */}
-        {screen === 'playing' && (
-          <div className="pointer-events-none absolute left-0 top-[510px] h-[180px] w-full opacity-40" aria-hidden="true">
-            <SunburstFX size={420} color={gunSunburstColor(getWeapon(weapon).rarity)} intensity={0.55} speed={36} core={false} stars={false} />
-          </div>
-        )}
         {diamondToast && (
           <div key={diamondToast.id} className="pointer-events-none absolute inset-x-0 top-[34%] z-40 flex flex-col items-center diamond-reward-pop" aria-live="polite">
             <div className="relative flex h-36 w-64 items-center justify-center">
-              <SunburstFX size={280} color="125,230,255" intensity={1} speed={14} stars />
+              <SunburstFX size={280} color="255,255,255" intensity={1} speed={14} stars />
               <DiamondSprite size={96} className="relative z-10 drop-shadow-[0_0_22px_rgba(103,232,249,0.95)]" />
             </div>
             <div className="-mt-4 rounded-full border border-cyan-200/70 bg-slate-950/90 px-5 py-2 text-lg font-black text-cyan-100 shadow-[0_0_30px_rgba(34,211,238,0.75)]">
@@ -766,25 +851,7 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
             </div>
           </div>
         )}
-        {stageClearBurst && (
-          <div
-            className="pointer-events-none absolute z-35"
-            style={{ left: stageClearBurst.x, top: stageClearBurst.y, transform: 'translate(-50%, -50%)' }}
-            aria-hidden="true"
-          >
-            <div className="stage-clear-burst">
-              <div className="relative flex h-[420px] w-[420px] items-center justify-center">
-                <SunburstFX size={470} color="125,230,255" intensity={1} speed={11} stars />
-                <div className="absolute left-1/2 top-1/2 h-0 w-0">
-                  <Shockwave size={360} color="rgba(186,230,253,.9)" />
-                  <Shockwave size={250} color="rgba(255,255,255,.75)" delay={0.12} />
-                  <Flare width={430} color="125,230,255" />
-                  <Burst count={20} distance={205} size={12} colors={['#ffffff', '#bae6fd', '#67e8f9', '#fde68a']} />
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Stage-clear & special-stage Sunburst renders inside Canvas2D strictly BEHIND the wheel/rock/chest (never in a front DOM layer) */}
         {weaponCelebration && (() => {
           const unlocked = getWeapon(weaponCelebration.weaponId);
           const color = gunSunburstColor(unlocked.rarity);
@@ -819,16 +886,32 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
             <DiamondSprite size={28} className="-mr-1" /><span className="font-mono">{diamonds}</span>
           </div>
         )}
+        {screen === 'playing' && !gameplayModalOpen && (
+          <button
+            type="button"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              sfx.click();
+              setInGameSettingsOpen(true);
+            }}
+            aria-label="Pengaturan permainan"
+            title="Pengaturan (Menu, Suara & Kecepatan)"
+            className="absolute right-2.5 top-[62px] z-30 flex h-10 w-10 items-center justify-center rounded-2xl border border-white/25 bg-[#0a1d28]/85 text-lg text-white shadow-[0_6px_18px_rgba(0,0,0,0.58)] backdrop-blur-sm transition hover:scale-105 hover:border-cyan-200/70 hover:bg-[#133244] active:scale-95"
+          >
+            ⚙️
+          </button>
+        )}
         {diamondReveal !== null && (
           <div
             key={diamondReveal.id}
             className="pointer-events-none absolute z-45"
-            style={{ left: 210, top: 282, transform: 'translate(-50%, -50%)' }}
+            style={{ left: 210, top: 184, transform: 'translate(-50%, -50%)' }}
             aria-live="polite"
           >
             <div className="diamond-reveal">
               <div className="relative flex h-[420px] w-[420px] flex-col items-center justify-center">
-                <SunburstFX size={510} color="196,231,255" intensity={1.15} speed={12} stars />
+                <SunburstFX size={510} color="255,255,255" intensity={1.15} speed={12} stars />
                 <div className="relative z-10 flex h-44 w-44 items-center justify-center rounded-full border border-white/50 bg-gradient-to-br from-white/30 to-cyan-300/10 drop-shadow-[0_0_34px_rgba(205,241,255,1)]">
                   <DiamondSprite size={156} />
                 </div>
@@ -856,17 +939,17 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
             MAIN MENU: EXACT MATCHING SCREENSHOT 1 KNIFE HIT LAYOUT!
            ------------------------------------------------------------- */}
         {screen === 'menu' && !mapOpen && (
-          <div className="absolute inset-0 z-20 flex flex-col justify-between py-4 px-4 text-white isolate" data-menu-theme={menuTheme}>
+          <div className={`gunhit-menu ${active ? 'menu-ready' : 'slide-paused'} absolute inset-0 z-20 flex flex-col justify-between py-4 px-4 text-white isolate`} data-menu-theme={menuTheme}>
             <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden" aria-hidden="true">
               <MenuEnvironment theme={menuTheme} />
               <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_46%,rgba(125,211,252,.08),transparent_68%)]" />
               <div className="absolute inset-0 opacity-60">
-                <Dust count={26} />
-                <SparkleField count={16} spread={1.45} />
+                <Dust count={14} />
+                <SparkleField count={10} spread={1.45} />
               </div>
             </div>
             {/* Currency counters */}
-            <div className="flex items-center justify-end">
+            <div className="menu-currency-entrance flex items-center justify-end">
               <div className="flex items-center gap-1.5 text-lg font-bold font-game text-amber-300 drop-shadow">
                 <span className="font-mono text-xl font-black tracking-tight">{totalCoins}</span>
                 <CoinSprite size={25} className="drop-shadow-[0_0_5px_rgba(255,210,80,.7)]" />
@@ -875,7 +958,7 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
             </div>
 
             {/* Title Section */}
-            <div className="flex flex-col items-center text-center -mt-1">
+            <div className="menu-title-entrance flex flex-col items-center text-center -mt-1">
               <div className="relative flex flex-col items-center">
                 {/* PERFECT word */}
                 <div className="text-5xl sm:text-7xl font-black tracking-[0.12em] text-[#4ade80] drop-shadow-[0_6px_0_#15803d] font-game transform -rotate-1 leading-none">
@@ -902,141 +985,259 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
               </div>
             </div>
 
-            {/* Upright gun with a layered, rarity-aware Sunburst FX Lab halo. */}
+            {/* Upright gun with a layered, rarity-aware Sunburst FX Lab halo (-10% size: 337x295). */}
             <div className="flex flex-col items-center justify-center my-auto">
-              <div className="relative" style={{ width: 'min(312px, 86vw)', height: 'min(273px, 75vw)' }}>
+              <div className="relative" style={{ width: 'min(337px, 90vw)', height: 'min(295px, 78vw)' }}>
                 <div className="pointer-events-none absolute inset-0" aria-hidden="true">
-                  <SunburstFX size={430} color={gunSunburstColor(getWeapon(weapon).rarity)} intensity={0.34} speed={32} core={false} stars={false} />
+                  <SunburstFX size={430} color={gunSunburstColor(getWeapon(weapon).rarity)} intensity={0.34} speed={32 / gameSpeed} core={false} stars={false} />
                 </div>
-                <canvas
-                  ref={previewCanvasRef}
-                  style={{ width: '100%', height: '100%' }}
-                  className="relative z-10 block translate-x-[1%] filter drop-shadow-[0_16px_30px_rgba(0,0,0,0.85)] cursor-pointer hover:scale-105 transition-transform"
-                  onClick={() => {
-                    sfx.click();
-                    setArsenalOpen(true);
-                  }}
-                />
+                <div className="menu-weapon-entrance relative z-10 h-full w-full">
+                  <canvas
+                    ref={previewCanvasRef}
+                    style={{ width: '100%', height: '100%' }}
+                    className="relative z-10 block translate-x-[1%] cursor-pointer hover:scale-105 transition-transform"
+                    role="button"
+                    tabIndex={0}
+                    aria-label="Buka koleksi senjata"
+                    onClick={() => setArsenalOpen(true)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        sfx.click();
+                        setArsenalOpen(true);
+                      }
+                    }}
+                  />
+                </div>
               </div>
             </div>
 
             {/* Two Main Action Buttons */}
-            <div className="flex w-full items-center justify-center gap-3 mb-2">
+            <div className="menu-actions relative z-10 flex w-full items-center justify-center gap-3 mb-2">
               {/* CHALLENGES Button */}
-              <button
-                onClick={() => setMapOpen(true)}
-                data-gloss="off"
-                className="relative flex-1 flex items-center justify-center gap-2 overflow-hidden rounded-2xl border border-white/30 border-b-[6px] border-b-[#68121d] bg-gradient-to-b from-[#ff9a38] via-[#f04422] to-[#a91435] py-3 px-2 text-sm sm:text-base font-black font-game text-white drop-shadow-[0_2px_2px_rgba(40,0,0,.7)] shadow-[0_14px_32px_rgba(240,55,34,0.58)] transition active:translate-y-1 active:border-b-2 hover:brightness-110 hover:saturate-125"
-              >
-                <span className="pointer-events-none absolute inset-x-3 top-1 h-[34%] rounded-xl bg-white/18" />
-                <span className="shine-sweep pointer-events-none absolute inset-y-0 left-0 w-1/4 bg-gradient-to-r from-transparent via-white/70 to-transparent" />
-                <span className="relative z-10 text-xl">🗺️</span>
-                <span className="relative z-10">QUEST</span>
-              </button>
+              <div className="menu-action-entrance flex flex-1">
+                <button
+                  onClick={() => setMapOpen(true)}
+                  data-gloss="off"
+                  className="relative flex-1 flex items-center justify-center gap-2 overflow-hidden rounded-2xl border border-white/30 border-b-[6px] border-b-[#68121d] bg-gradient-to-b from-[#ff9a38] via-[#f04422] to-[#a91435] py-3 px-2 text-sm sm:text-base font-black font-game text-white drop-shadow-[0_2px_2px_rgba(40,0,0,.7)] shadow-[0_14px_32px_rgba(240,55,34,0.58)] transition active:translate-y-1 active:border-b-2 hover:brightness-110 hover:saturate-125"
+                >
+                  <span className="pointer-events-none absolute inset-x-3 top-1 h-[34%] rounded-xl bg-white/18" />
+                  <span className="shine-sweep pointer-events-none absolute inset-y-0 left-0 w-1/4 bg-gradient-to-r from-transparent via-white/70 to-transparent" />
+                  <span className="relative z-10 text-xl">🗺️</span>
+                  <span className="relative z-10">QUEST</span>
+                </button>
+              </div>
 
               {/* PLAY Button */}
-              <button
-                onClick={play}
-                data-gloss="off"
-                className="pulse-btn relative flex-1 flex items-center justify-center gap-2 overflow-hidden rounded-2xl border border-white/35 border-b-[6px] border-b-[#064324] bg-gradient-to-b from-[#b7ff73] via-[#15cf62] to-[#006b39] py-3 px-2 text-xl font-black font-game text-white drop-shadow-[0_2px_2px_rgba(0,35,18,.75)] shadow-[0_14px_32px_rgba(0,215,95,.55)] transition active:translate-y-1 active:border-b-2 hover:brightness-110 hover:saturate-125"
-              >
-                <span className="pointer-events-none absolute inset-x-3 top-1 h-[34%] rounded-xl bg-white/18" />
-                <span className="shine-sweep pointer-events-none absolute inset-y-0 left-0 w-1/4 bg-gradient-to-r from-transparent via-white/70 to-transparent" />
-                <span className="relative z-10">PLAY</span>
-                <span className="relative z-10 text-xl font-black">▶</span>
-              </button>
+              <div className="menu-action-entrance flex flex-1">
+                <button
+                  onClick={play}
+                  data-gloss="off"
+                  className="pulse-btn relative flex-1 flex items-center justify-center gap-2 overflow-hidden rounded-2xl border border-white/35 border-b-[6px] border-b-[#064324] bg-gradient-to-b from-[#b7ff73] via-[#15cf62] to-[#006b39] py-3 px-2 text-xl font-black font-game text-white drop-shadow-[0_2px_2px_rgba(0,35,18,.75)] shadow-[0_14px_32px_rgba(0,215,95,.55)] transition active:translate-y-1 active:border-b-2 hover:brightness-110 hover:saturate-125"
+                >
+                  <span className="pointer-events-none absolute inset-x-3 top-1 h-[34%] rounded-xl bg-white/18" />
+                  <span className="shine-sweep pointer-events-none absolute inset-y-0 left-0 w-1/4 bg-gradient-to-r from-transparent via-white/70 to-transparent" />
+                  <span className="relative z-10">PLAY</span>
+                  <span className="relative z-10 text-xl font-black">▶</span>
+                </button>
+              </div>
             </div>
 
             {/* Bottom Icon Bar */}
-            <div className="flex items-center justify-around border-t-2 border-white/15 pt-2 pb-1 text-white/95">
+            <div className="menu-icon-bar relative z-10 flex items-center justify-around border-t-2 border-white/15 pt-2 pb-1 text-white/95">
               {/* GUN button */}
-              <button
-                onClick={() => setArsenalOpen(true)}
-                className="flex flex-col items-center gap-1 rounded-2xl transition hover:-translate-y-1 hover:text-white active:scale-95"
-              >
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/20 bg-gradient-to-br from-white/20 to-white/[0.04] text-2xl shadow-xl transition-colors">
-                  🔫
-                </div>
-                <span className="text-xs font-black tracking-widest font-game drop-shadow">GUN</span>
-              </button>
+              <div className="menu-icon-entrance">
+                <button
+                  onClick={() => setArsenalOpen(true)}
+                  className="flex flex-col items-center gap-1 rounded-2xl transition hover:-translate-y-1 hover:text-white active:scale-95"
+                >
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/20 bg-gradient-to-br from-white/20 to-white/[0.04] text-2xl shadow-xl transition-colors">
+                    🔫
+                  </div>
+                  <span className="text-xs font-black tracking-widest font-game drop-shadow">GUN</span>
+                </button>
+              </div>
 
               {/* LEADERBOARD button */}
-              <button
-                onClick={() => setLeaderboardOpen(true)}
-                className="flex flex-col items-center gap-1 rounded-2xl transition hover:-translate-y-1 hover:text-white active:scale-95"
-              >
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/20 bg-gradient-to-br from-white/20 to-white/[0.04] text-2xl shadow-xl transition-colors">
-                  🏆
-                </div>
-                <span className="text-xs font-black tracking-widest font-game drop-shadow">RANKS</span>
-              </button>
+              <div className="menu-icon-entrance">
+                <button
+                  onClick={() => setLeaderboardOpen(true)}
+                  className="flex flex-col items-center gap-1 rounded-2xl transition hover:-translate-y-1 hover:text-white active:scale-95"
+                >
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/20 bg-gradient-to-br from-white/20 to-white/[0.04] text-2xl shadow-xl transition-colors">
+                    🏆
+                  </div>
+                  <span className="text-xs font-black tracking-widest font-game drop-shadow">RANKS</span>
+                </button>
+              </div>
 
               {/* REWARD / MISI button */}
-              <button
-                onClick={() => setQuestOpen(true)}
-                className="flex flex-col items-center gap-1 rounded-2xl transition hover:-translate-y-1 hover:text-white active:scale-95"
-              >
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/20 bg-gradient-to-br from-white/20 to-white/[0.04] text-2xl shadow-xl transition-colors">
-                  🎁
-                </div>
-                <span className="text-xs font-black tracking-widest font-game text-yellow-300 drop-shadow">READY!</span>
-              </button>
+              <div className="menu-icon-entrance">
+                <button
+                  onClick={() => setQuestOpen(true)}
+                  className="flex flex-col items-center gap-1 rounded-2xl transition hover:-translate-y-1 hover:text-white active:scale-95"
+                >
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/20 bg-gradient-to-br from-white/20 to-white/[0.04] text-2xl shadow-xl transition-colors">
+                    🎁
+                  </div>
+                  <span className="text-xs font-black tracking-widest font-game text-yellow-300 drop-shadow">READY!</span>
+                </button>
+              </div>
 
               {/* SETTINGS sits immediately to the right of READY! */}
-              <button
-                onClick={() => setSettingsOpen(true)}
-                className="flex flex-col items-center gap-1 rounded-2xl transition hover:-translate-y-1 hover:text-white active:scale-95"
-                aria-label="Buka pengaturan"
-              >
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/20 bg-gradient-to-br from-white/20 to-white/[0.04] text-2xl shadow-xl transition-colors">
-                  ⚙️
-                </div>
-                <span className="text-[10px] font-black tracking-widest font-game drop-shadow">SETTING</span>
-              </button>
+              <div className="menu-icon-entrance">
+                <button
+                  onClick={() => setSettingsOpen(true)}
+                  className="flex flex-col items-center gap-1 rounded-2xl transition hover:-translate-y-1 hover:text-white active:scale-95"
+                  aria-label="Buka pengaturan"
+                >
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/20 bg-gradient-to-br from-white/20 to-white/[0.04] text-2xl shadow-xl transition-colors">
+                    ⚙️
+                  </div>
+                  <span className="text-[10px] font-black tracking-widest font-game drop-shadow">SETTING</span>
+                </button>
+              </div>
             </div>
           </div>
         )}
 
         {screen === 'menu' && settingsOpen && (
           <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
-            <section role="dialog" aria-modal="true" aria-labelledby="gunhit-settings-title" className="w-full max-w-sm rounded-3xl border border-cyan-200/25 bg-gradient-to-b from-[#132c34] to-[#08151d] p-4 text-white shadow-[0_24px_70px_rgba(0,0,0,.7)]">
-              <div className="mb-4 flex items-start justify-between gap-3">
+            <section role="dialog" aria-modal="true" aria-labelledby="gunhit-settings-title" className="w-full max-w-sm max-h-[720px] overflow-y-auto thin-scroll rounded-3xl border border-cyan-200/25 bg-gradient-to-b from-[#132c34] to-[#08151d] p-4 text-white shadow-[0_24px_70px_rgba(0,0,0,.7)]">
+              <div className="mb-3 flex items-start justify-between gap-3">
                 <div>
                   <h2 id="gunhit-settings-title" className="text-xl font-black tracking-widest text-cyan-100">PENGATURAN</h2>
-                  <p className="mt-1 text-[10px] font-bold tracking-wider text-white/55">AUDIO & PILIHAN STAGE SPESIAL</p>
+                  <p className="mt-1 text-[10px] font-bold tracking-wider text-white/55">AUDIO, KECEPATAN & STAGE SPESIAL</p>
                 </div>
                 <button onClick={() => setSettingsOpen(false)} aria-label="Tutup pengaturan" className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/15 bg-white/10 text-xl text-white/80 hover:bg-white/20">×</button>
               </div>
 
-              <button onClick={toggleMute} className="mb-5 flex w-full items-center justify-between rounded-2xl border border-white/15 bg-white/[0.06] px-4 py-3 text-left transition hover:bg-white/10 active:scale-[0.99]">
+              <div className="mb-2.5 rounded-2xl border border-white/15 bg-white/[0.06] p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={toggleMute}
+                    className="flex flex-1 items-center gap-3 text-left transition active:scale-[0.99]"
+                  >
+                    <span className="text-xl">{muted || soundVolume <= 0 ? '🔇' : '🔊'}</span>
+                    <span>
+                      <span className="block text-sm font-black">SUARA</span>
+                      <span className="block text-[10px] text-white/55">Efek dan musik permainan</span>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={toggleMute}
+                    className={`rounded-full px-2.5 py-1 text-[10px] font-black ${muted || soundVolume <= 0 ? 'bg-white/10 text-white/65' : 'bg-emerald-400/20 text-emerald-200'}`}
+                  >
+                    {muted || soundVolume <= 0 ? 'MATI' : `${Math.round(soundVolume * 100)}%`}
+                  </button>
+                </div>
+                <div className="mt-2.5 flex items-center gap-2">
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={5}
+                    aria-label="Volume suara"
+                    value={muted ? 0 : Math.round(soundVolume * 100)}
+                    onChange={(e) => changeSoundVolume(Number(e.target.value) / 100)}
+                    onPointerUp={() => {
+                      if (!muted && soundVolume > 0) sfx.click();
+                    }}
+                    className="h-2 flex-1 cursor-pointer accent-emerald-400"
+                  />
+                </div>
+                <div className="mt-2 grid grid-cols-5 gap-1">
+                  {[0, 0.25, 0.5, 0.75, 1].map((preset) => {
+                    const activePreset = (muted ? 0 : Math.round(soundVolume * 100)) === Math.round(preset * 100);
+                    return (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => changeSoundVolume(preset, preset > 0)}
+                        className={`rounded-lg border py-1 text-[9.5px] font-black transition active:scale-95 ${
+                          activePreset
+                            ? 'border-emerald-300 bg-emerald-400/25 text-emerald-100'
+                            : 'border-white/10 bg-white/[0.04] text-white/70 hover:bg-white/10'
+                        }`}
+                      >
+                        {preset === 0 ? 'MATI' : `${Math.round(preset * 100)}%`}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (!muted) {
+                    juicyAudio.enabled = true;
+                    if (juicyAudio.volume === 0) juicyAudio.volume = 0.7;
+                    void juicyAudio.unlock();
+                  }
+                  setSettingsOpen(false);
+                  window.dispatchEvent(new CustomEvent('sans-replay-intro'));
+                }}
+                className="mb-3 flex w-full items-center justify-between rounded-2xl border border-red-400/40 bg-[#F11E1E]/20 px-4 py-2.5 text-left transition hover:bg-[#F11E1E]/30 active:scale-[0.99]"
+              >
                 <span className="flex items-center gap-3">
-                  <span className="text-xl">{muted ? '🔇' : '🔊'}</span>
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#F11E1E] font-studio text-sm font-bold text-white shadow">
+                    S
+                  </span>
                   <span>
-                    <span className="block text-sm font-black">SUARA</span>
-                    <span className="block text-[10px] text-white/55">Efek dan musik permainan</span>
+                    <span className="block text-sm font-black text-white">INTRO SANS STUDIO</span>
+                    <span className="block text-[10px] text-red-100/75">Putar ulang animasi pembuka SGA</span>
                   </span>
                 </span>
-                <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${muted ? 'bg-white/10 text-white/65' : 'bg-emerald-400/20 text-emerald-200'}`}>{muted ? 'MATI' : 'AKTIF'}</span>
+                <span className="rounded-full bg-[#F11E1E] px-2.5 py-1 text-[10px] font-black text-white shadow">
+                  PUTAR
+                </span>
               </button>
 
-              <div className="mb-4">
-                <div className="text-center text-[11px] font-black tracking-[0.18em] text-cyan-100">TEMA LATAR MENU</div>
+              <div className="mb-3.5">
+                <div className="text-center text-[11px] font-black tracking-[0.18em] text-amber-200">⚡ KECEPATAN GAME (SGA)</div>
+                <div className="mt-1.5 grid grid-cols-4 gap-1.5">
+                  {SGA_SPEED_OPTIONS.map((spd) => (
+                    <button
+                      key={spd}
+                      type="button"
+                      aria-pressed={gameSpeed === spd}
+                      onClick={() => setGameSpeed(spd)}
+                      className={`rounded-xl border px-1 py-2 text-center transition active:scale-95 ${
+                        gameSpeed === spd
+                          ? 'border-amber-300/90 bg-amber-400/25 text-amber-200 shadow-[0_0_14px_rgba(251,191,36,.3)]'
+                          : 'border-white/10 bg-white/[.04] text-white/80 hover:bg-white/10'
+                      }`}
+                    >
+                      <span className="block text-xs font-black tracking-wide">{formatSgaSpeed(spd)}</span>
+                      <span className="mt-0.5 block text-[8px] font-bold tracking-wider text-white/60">
+                        {spd === 1 ? 'NORMAL' : 'TURBO'}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mb-3.5">
+                <div className="text-center text-[11px] font-black tracking-[0.18em] text-cyan-100">TEMA LATAR MENU & GAME</div>
+                <p className="mt-0.5 text-center text-[9px] font-semibold text-white/55">
+                  {SGA_BG_THEMES.find((t) => t.id === menuTheme)?.desc ?? 'Berlaku di menu utama & di dalam game SGA'}
+                </p>
                 <div className="mt-2 grid grid-cols-4 gap-1.5">
-                  {([
-                    { id: 'forest', icon: '🌲', label: 'HUTAN' },
-                    { id: 'morning', icon: '🌅', label: 'PAGI' },
-                    { id: 'town', icon: '🏘️', label: 'TOWN' },
-                    { id: 'snow', icon: '❄️', label: 'SALJU' },
-                  ] as { id: MenuEnvironmentTheme; icon: string; label: string }[]).map((theme) => (
+                  {SGA_BG_THEMES.map((theme) => (
                     <button
                       key={theme.id}
                       type="button"
                       aria-pressed={menuTheme === theme.id}
                       onClick={() => chooseMenuTheme(theme.id)}
-                      className={`rounded-xl border px-1 py-2 text-center transition active:scale-95 ${menuTheme === theme.id ? 'border-cyan-200/80 bg-cyan-300/20 shadow-[0_0_14px_rgba(103,232,249,.2)]' : 'border-white/10 bg-white/[.04] hover:bg-white/10'}`}
+                      className={`relative overflow-hidden rounded-xl border px-1 py-2 text-center transition active:scale-95 ${menuTheme === theme.id ? 'border-cyan-200/90 ring-1 ring-cyan-300/60 shadow-[0_0_16px_rgba(103,232,249,.35)]' : 'border-white/15 hover:border-white/35'}`}
+                      style={{ background: theme.swatch }}
                     >
-                      <span className="block text-lg leading-none">{theme.icon}</span>
-                      <span className="mt-1 block text-[8px] font-black tracking-wider text-white/80">{theme.label}</span>
+                      <span className="pointer-events-none absolute inset-0 bg-black/25" />
+                      <span className="relative z-10 block text-base leading-none drop-shadow">{theme.icon}</span>
+                      <span className="relative z-10 mt-1 block text-[8px] font-black tracking-wider text-white drop-shadow">{theme.label}</span>
                     </button>
                   ))}
                 </div>
@@ -1074,6 +1275,155 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
         )}
 
         {/* Modals */}
+        {screen === 'playing' && inGameSettingsOpen && (
+          <div
+            onPointerDown={(e) => e.stopPropagation()}
+            className="absolute inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
+          >
+            <section
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="gunhit-ingame-settings-title"
+              className="pop-in w-full max-w-sm rounded-3xl border border-cyan-200/30 bg-gradient-to-b from-[#132c34] to-[#08151d] p-4 text-white shadow-[0_24px_70px_rgba(0,0,0,.78)]"
+            >
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-[10px] font-black tracking-[0.22em] text-amber-300">⏸ PERMAINAN DIJEDA</div>
+                  <h2 id="gunhit-ingame-settings-title" className="mt-0.5 text-xl font-black tracking-widest text-cyan-100">
+                    PENGATURAN
+                  </h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    sfx.click();
+                    setInGameSettingsOpen(false);
+                  }}
+                  aria-label="Tutup pengaturan permainan"
+                  className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/15 bg-white/10 text-xl text-white/85 hover:bg-white/20"
+                >
+                  ×
+                </button>
+              </div>
+
+              {/* Sound & Volume Adjustment */}
+              <div className="mb-3 rounded-2xl border border-white/15 bg-white/[0.06] p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={toggleMute}
+                    className="flex flex-1 items-center gap-3 text-left transition active:scale-[0.99]"
+                  >
+                    <span className="text-xl">{muted || soundVolume <= 0 ? '🔇' : '🔊'}</span>
+                    <span>
+                      <span className="block text-sm font-black">SUARA GAME</span>
+                      <span className="block text-[10px] text-white/55">Geser untuk atur volume efek</span>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={toggleMute}
+                    className={`rounded-full px-2.5 py-1 text-[10px] font-black ${
+                      muted || soundVolume <= 0 ? 'bg-white/10 text-white/65' : 'bg-emerald-400/25 text-emerald-200'
+                    }`}
+                  >
+                    {muted || soundVolume <= 0 ? 'MATI' : `${Math.round(soundVolume * 100)}%`}
+                  </button>
+                </div>
+
+                <div className="mt-2.5 flex items-center gap-2">
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={5}
+                    aria-label="Volume suara saat bermain"
+                    value={muted ? 0 : Math.round(soundVolume * 100)}
+                    onChange={(e) => changeSoundVolume(Number(e.target.value) / 100)}
+                    onPointerUp={() => {
+                      if (!muted && soundVolume > 0) sfx.click();
+                    }}
+                    className="h-2 flex-1 cursor-pointer accent-emerald-400"
+                  />
+                </div>
+
+                <div className="mt-2 grid grid-cols-5 gap-1">
+                  {[0, 0.25, 0.5, 0.75, 1].map((preset) => {
+                    const activePreset = (muted ? 0 : Math.round(soundVolume * 100)) === Math.round(preset * 100);
+                    return (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => changeSoundVolume(preset, preset > 0)}
+                        className={`rounded-lg border py-1 text-[9.5px] font-black transition active:scale-95 ${
+                          activePreset
+                            ? 'border-emerald-300 bg-emerald-400/25 text-emerald-100'
+                            : 'border-white/10 bg-white/[0.04] text-white/70 hover:bg-white/10'
+                        }`}
+                      >
+                        {preset === 0 ? 'MATI' : `${Math.round(preset * 100)}%`}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Game Speed Selector */}
+              <div className="mb-4 rounded-2xl border border-white/15 bg-white/[0.04] p-3">
+                <div className="text-center text-[11px] font-black tracking-[0.18em] text-amber-200">
+                  ⚡ KECEPATAN GAME
+                </div>
+                <div className="mt-2 grid grid-cols-4 gap-1.5">
+                  {SGA_SPEED_OPTIONS.map((spd) => (
+                    <button
+                      key={spd}
+                      type="button"
+                      aria-pressed={gameSpeed === spd}
+                      onClick={() => {
+                        setGameSpeed(spd);
+                        sfx.click();
+                      }}
+                      className={`rounded-xl border px-1 py-2 text-center transition active:scale-95 ${
+                        gameSpeed === spd
+                          ? 'border-amber-300/90 bg-amber-400/25 text-amber-200 shadow-[0_0_14px_rgba(251,191,36,.3)]'
+                          : 'border-white/10 bg-white/[.04] text-white/80 hover:bg-white/10'
+                      }`}
+                    >
+                      <span className="block text-xs font-black tracking-wide">{formatSgaSpeed(spd)}</span>
+                      <span className="mt-0.5 block text-[8px] font-bold tracking-wider text-white/60">
+                        {spd === 1 ? 'NORMAL' : 'TURBO'}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Resume & Back to Menu Actions */}
+              <div className="flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    sfx.click();
+                    setInGameSettingsOpen(false);
+                  }}
+                  className="w-full rounded-2xl border border-emerald-200/40 border-b-4 border-b-emerald-800 bg-gradient-to-b from-[#22c55e] via-[#16a34a] to-[#15803d] py-3 text-base font-black tracking-wider text-white shadow-[0_10px_24px_rgba(34,197,94,0.45)] transition hover:brightness-110 active:translate-y-0.5"
+                >
+                  ▶ LANJUTKAN MAIN
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    sfx.click();
+                    goToMainMenuFromPlay();
+                  }}
+                  className="w-full rounded-2xl border border-white/20 bg-white/10 py-2.5 text-sm font-black tracking-wider text-white/95 transition hover:bg-white/20 active:scale-[0.98]"
+                >
+                  🏠 KE MENU UTAMA
+                </button>
+              </div>
+            </section>
+          </div>
+        )}
         {screen === 'menu' && arsenalOpen && (
           <Arsenal
             current={weapon}

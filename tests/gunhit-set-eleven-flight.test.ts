@@ -192,22 +192,7 @@ test('a carried Slide 7 round flies slide 7’s own flight: the singularity spee
   });
 });
 
-test('the Slide 7 sword’s knife waits for its slash: it sticks when the slash lands, not before the slash exists', () => {
-  seeded(7, () => {
-    const game = stage('photon_saber');
-    clearBoard(game);
-    const log = watch(game);
-    tap(game);
-    play(game, log, DT);
-    const p = game.projs[0];
-    assert.ok(p.setElevenPending && p.s11Wait, 'its carrier waits at the muzzle for the slash');
-    play(game, log, 0.6);
-    assert.equal(log.hits.length, 1);
-    assert.equal(log.sticks.length, 1);
-    assert.ok(log.sticks[0] > 0.115, `the slash leaves 0.115 s after the swing (stuck at ${log.sticks[0].toFixed(3)} s)`);
-    assert.ok(Math.abs(log.sticks[0] - log.hits[0].t) < 1e-9, 'the knife sticks on the slash’s own hit');
-  });
-});
+
 
 test('the Slide 7 identity disc flies back to the gun after it bites, as on slide 7', () => {
   seeded(7, () => {
@@ -232,7 +217,7 @@ test('the Slide 7 identity disc flies back to the gun after it bites, as on slid
 });
 
 test('slide 1 scores a Slide 7 round on its barrel line: held rapid fire never lands on its own last knife', () => {
-  for (const sga of ['ak47', 'helix_pulsar', 'mp5', 'ion_smg']) {
+  for (const sga of ['ak47', 'mp5', 'ion_smg']) {
     seeded(13, () => {
       const game = stage(sga);
       clearBoard(game);
@@ -254,14 +239,6 @@ test('slide 1 scores a Slide 7 round on its barrel line: held rapid fire never l
 
 test('a round slide 7 released in flight is never handed over as a new shot', () => {
   seeded(3, () => {
-    const game = stage('prism_lance');
-    clearBoard(game);
-    const log = watch(game);
-    tap(game);
-    while (alive(game).length < 2 && log.t < 0.5) play(game, log, DT);
-    assert.ok(alive(game).length >= 6, 'the tracer split into its rays');
-    assert.deepEqual(game.s11.takeShots(), [], 'none of the rays is a new shot');
-
     const ak = stage('ak47');
     const fx = ak.s11;
     fx.fire(210, 571, 0);

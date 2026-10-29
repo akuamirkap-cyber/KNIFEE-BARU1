@@ -51,12 +51,12 @@ test('bos punya pola putaran khas yang terkontrol dan tembakan 1.9x lebih cepat'
     'boss harus mulai pada sudut 0 (tegak)'
   );
   assert.ok(src.includes('bossRotationSpeed(this.level.style as BossType, this.levelTime)'), 'rotation profiles drive each boss');
-  assert.ok(Math.abs(bossRotationSpeed('knight', 1) - 1.98) < 1e-9, 'Knight berputar 20% lebih cepat ke kanan');
-  assert.ok(Math.abs(bossRotationSpeed('knight', 7) + 1.98) < 1e-9, 'Knight tetap membalik teratur tiap 7 detik');
-  assert.ok(Math.abs(bossRotationSpeed('oni', 1) + 2.46) < 1e-9, 'Oni berputar 20% lebih cepat ke arah sebaliknya');
-  assert.ok(Math.abs(bossRotationSpeed('oni', 5) - 2.46) < 1e-9, 'Oni tetap membalik teratur tiap 5 detik');
-  assert.ok(bossRotationSpeed('cyborg', 0) > 2.1 && bossRotationSpeed('cyborg', 4) < -2.1, 'Cyborg membalik dengan ritme halus dan lebih cepat');
-  assert.ok(bossRotationSpeed('pirate', 0) > 2.2 && bossRotationSpeed('pirate', 4) < 0, 'Pirate menyapu cepat lalu membalik dengan mulus');
+  assert.ok(bossRotationSpeed('knight', 1.1) > 3.5, 'Knight lunges faster clockwise (>3.5 rad/s)');
+  assert.ok(bossRotationSpeed('knight', 3.3) < -3.5, 'Knight counter-parries sharply in reverse (<-3.5 rad/s)');
+  assert.ok(bossRotationSpeed('oni', 0.8) < -4.0, 'Oni blitzes aggressively counterclockwise (<-4.0 rad/s)');
+  assert.ok(bossRotationSpeed('oni', 1.9) > 3.0 && bossRotationSpeed('oni', 2.5) < -3.5, 'Oni executes a unique fake-out snap and double-whip');
+  assert.ok(bossRotationSpeed('cyborg', 0.25) > 3.5 && bossRotationSpeed('cyborg', 2.1) < -2.8, 'Cyborg sweeps faster with servo harmonic bursts');
+  assert.ok(bossRotationSpeed('pirate', 0.35) > 3.5 && bossRotationSpeed('pirate', 2.15) < -3.2, 'Pirate swings faster with asymmetric storm-wave momentum');
   assert.ok(src.includes('const spd = (160 + this.level.n * 3) * 1.9;'), 'peluru boss bergerak 1.9x lebih cepat');
   assert.ok(
     src.includes("if (this.level.mode !== 'treasure') c.rotate(this.rot);"),
@@ -125,6 +125,7 @@ function renderProbe(events: string[], ctx: CanvasRenderingContext2D, levelN: nu
     slowKind: 'ice',
     slowRgb: '0,0,0',
     bossProjs: [],
+    bossMuzzleFlashes: [],
     projs: [],
     beams: [],
     particles: [],
@@ -232,7 +233,7 @@ test('halaman Gun SGA menampilkan demo animasi senjata dan efek serangan bos ter
 test('api & jejak peluru bos mengekor di ekor (partikel spawn di belakang)', () => {
   const src = read('src/games/gunhit/game/Game.ts');
   assert.ok(
-    /tailX = bp\.x - dirx \* 44/.test(src) && /tailY = bp\.y - diry \* 44/.test(src),
+    /advanceCosmeticTrail\(bp, s, \(x, y\) =>/.test(src) && /tailX = x - dirx \* 44/.test(src) && /tailY = y - diry \* 44/.test(src),
     'partikel api harus spawn di posisi ekor (44px di belakang pusat peluru)'
   );
   assert.ok(

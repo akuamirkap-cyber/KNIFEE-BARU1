@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { BOARD_OBSTACLE_SCALE, embeddedProjectileScale, Game, makeLevel, projectileSizeMultiplier, type LevelMode } from '../src/games/gunhit/game/Game';
+import { BOARD_OBSTACLE_SCALE, embeddedProjectileScale, Game, makeLevel, projectileSizeMultiplier, SPECIAL_CY, type LevelMode } from '../src/games/gunhit/game/Game';
 import { DiamondRock } from '../src/games/gunhit/game/art/diamondRock';
 import { TreasureChest } from '../src/games/gunhit/game/art/bonusArt';
 import { SNOWBALL_RADIUS } from '../src/games/gunhit/game/art/projectiles2';
@@ -233,7 +233,7 @@ test('Honey Blaster keeps its slowdown but leaves sticky amber beads and a splas
   assert.ok(cell);
   Object.assign(rock, { rock: stone, dmgMult: 0.25 });
   assert.equal(rock.stepSpecialProjectile({ x: 210 + cell.center.x * rock.level.radius / 196,
-    y: 282 + cell.center.y * rock.level.radius / 196, vx: 0, vy: -1900 }).res, 'hit');
+    y: SPECIAL_CY + cell.center.y * rock.level.radius / 196, vx: 0, vy: -1900 }).res, 'hit');
   assert.ok([...rock.rockBullets, ...rock.fallenCells.flatMap(f => f.bullets)].some(b => b.w === 'honey'),
     'the liquid bead must remain attached to the actual stone cell');
   assert.equal(rock.slowKind, 'honey');
@@ -242,7 +242,7 @@ test('Honey Blaster keeps its slowdown but leaves sticky amber beads and a splas
 
   const chest = probe(6, 'honey', 'treasure');
   Object.assign(chest, { chest: { hit: () => {} } });
-  assert.equal(chest.stepSpecialProjectile({ x: 210, y: 362, vx: 0, vy: -1900 }).res, 'hit');
+  assert.equal(chest.stepSpecialProjectile({ x: 210, y: SPECIAL_CY + 80, vx: 0, vy: -1900 }).res, 'hit');
   assert.equal(chest.chestBullets[0].w, 'honey', 'the liquid sticks to the shaking treasure chest too');
   assert.ok(chest.particles.some(p => p.kind === 'honeySplash'));
 });
@@ -400,7 +400,7 @@ test('rounds stay on their exact rotating cell and tumble with that cell when it
     const rotation = i * 0.11;
     Object.assign(game, { rot: rotation });
     const x = 210 + (target.center.x * Math.cos(rotation) - target.center.y * Math.sin(rotation)) * sc;
-    const y = 282 + (target.center.x * Math.sin(rotation) + target.center.y * Math.cos(rotation)) * sc;
+    const y = SPECIAL_CY + (target.center.x * Math.sin(rotation) + target.center.y * Math.cos(rotation)) * sc;
     assert.equal(game.stepSpecialProjectile({ x, y, vx: 0, vy: -2700 }).res, 'hit');
     if (i === 0) {
       assert.equal(game.rockBullets.length, 1);
@@ -437,7 +437,7 @@ test('splash damage carries bullets away with neighboring chunks too', () => {
   Object.assign(game, { rock, dmgMult: 0.25 });
   const sc = game.level.radius / 196;
   const hit = (cell: typeof target) => game.stepSpecialProjectile({
-    x: 210 + cell.center.x * sc, y: 282 + cell.center.y * sc, vx: 0, vy: -2700,
+    x: 210 + cell.center.x * sc, y: SPECIAL_CY + cell.center.y * sc, vx: 0, vy: -2700,
   });
   assert.equal(hit(target).res, 'hit');
   assert.equal(game.rockBullets[0].cellId, target.id);
@@ -452,7 +452,7 @@ test('treasure hits use normal weapon impacts at each lane and embed rounds in t
   const game = probe(6, 'plasma', 'treasure');
   let hits = 0;
   Object.assign(game, { chest: { hit: () => { hits++; } }, treasureBuff: 'double', twinGuns: true });
-  for (const x of [180, 240]) assert.equal(game.stepSpecialProjectile({ x, y: 362, vx: 0, vy: -1700 }).res, 'hit');
+  for (const x of [180, 240]) assert.equal(game.stepSpecialProjectile({ x, y: SPECIAL_CY + 80, vx: 0, vy: -1700 }).res, 'hit');
   assert.equal(hits, 2);
   assert.deepEqual(game.chestBullets.map(b => b.x), [-30, 30]);
   assert.equal(game.coins, 0, 'coins must wait for the shower to land before being credited');
@@ -462,7 +462,7 @@ test('treasure hits use normal weapon impacts at each lane and embed rounds in t
   assert.ok(game.particles.some(p => p.x === 180 && p.kind === 'shock'));
   assert.ok(game.particles.some(p => p.x === 240 && p.kind === 'shock'));
 
-  game.stepSpecialProjectile({ x: 180, y: 362, vx: 0, vy: -1700 });
+  game.stepSpecialProjectile({ x: 180, y: SPECIAL_CY + 80, vx: 0, vy: -1700 });
   assert.equal(hits, 3);
   assert.deepEqual(game.chestBullets.map(b => b.x), [30, -30]);
   assert.equal(game.flyers.filter(f => f.kind === 'bullet').length, 1, 'a repeat hit dislodges only the previous round');
@@ -504,7 +504,7 @@ test('Banana flesh enters the target halfway, splashes juice, and never gains re
   assert.equal(classic.ammoLeft, classic.level.ammo - 1, 'closing peel does not refill ammo');
   const chest = probe(6, 'banana', 'treasure');
   Object.assign(chest, { chest: { hit: () => {} } });
-  assert.equal(chest.stepSpecialProjectile({ x: 210, y: 362, vx: 0, vy: -1700 }).res, 'hit');
+  assert.equal(chest.stepSpecialProjectile({ x: 210, y: SPECIAL_CY + 80, vx: 0, vy: -1700 }).res, 'hit');
   assert.equal(chest.chestBullets[0].w, 'banana');
   assert.ok(chest.particles.some(p => p.kind === 'bananaSplash'));
   assert.ok(chest.particles.filter(p => p.kind === 'bananaDrop').length >= 10);
@@ -547,9 +547,8 @@ test('Golden Gun cycles its slide after a shot and while reloading without refil
 });
 
 test('Laser keeps its instant hit with the former beam; the BLACK HOLE classic round stays selectable', () => {
-  // Slide 3's LASER GUN and PLASMA GUN are the defaults now; the classic laser
-  // beam is still the "Sebelumnya" card, pinned here for the probe.
-  assert.equal(getGunEffect('laser'), 'set7');
+  // The requested LASER loadout uses its classic beam; slide 3 remains available.
+  assert.equal(getGunEffect('laser'), 'original');
   assert.deepEqual(getGunEffectOptions('laser').map(o => o.id), ['original', 'set7']);
   const laserEffect = getGunEffect('laser');
   setGunEffect('laser', 'original');
@@ -1169,7 +1168,7 @@ test('Laser Beam, Freeze Ray, Ghost Gun, UFO Ray, and Rainbow Gun use upgraded r
 
   stops.length = 0;
   drawGun(ctx, 'ghost', 210, 575, 0.5, 0, true, undefined, 'original');
-  assert.ok(stops.includes('#88f4ff') && stops.includes('rgba(140,248,255,0.92)'), 'Ghost Gun renders pearlescent bottle body and glowing cyan ghosts');
+  assert.ok(stops.includes('#eef7ff') && stops.includes('#9ec8ec'), 'Ghost Gun renders its new muzzle-free pearlescent spirit body');
 
   stops.length = 0;
   drawGun(ctx, 'ufo', 210, 575, 0.5, 0, true, undefined, 'original');

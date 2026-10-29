@@ -61,6 +61,12 @@ function loneStar(c: C, cx: number, y0: number, t: number, ready: boolean) {
 // ------------------------------------------------------------- 2. PHOTON SABER
 function photonSaber(c: C, cx: number, y0: number, t: number) {
   const pulse = 0.75 + 0.25 * Math.sin(t * 12);
+  const age = gunState.sinceShot;
+  const swing = age >= 0 && age < 0.3 ? gunState.saberSide * 0.65 * Math.sin(Math.PI * age / 0.3) : 0;
+  c.save();
+  c.translate(cx, y0 + 215);
+  c.rotate(swing);
+  c.translate(-cx, -y0 - 215);
   // Handle
   rr(c, cx - 5, y0 + 190, 10, 50, 3, steel(c, cx - 5, cx + 5), '#000', 1);
   for (let i = 0; i < 5; i++) rr(c, cx - 5, y0 + 200 + i * 7, 10, 3, 1, '#1f2937');
@@ -87,6 +93,7 @@ function photonSaber(c: C, cx: number, y0: number, t: number) {
   c.fill();
   c.restore();
   glow(c, cx, y0 + 2, 4, '#ffffff', 16);
+  c.restore();
 }
 
 // ------------------------------------------------------------- 3. PLASMA REPEATER

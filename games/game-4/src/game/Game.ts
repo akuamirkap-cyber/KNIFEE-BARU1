@@ -1694,8 +1694,9 @@ export class Game {
     a.idx = idx;
     a.fireT = 0;
     a.recoilV += 6;
-    const tx = mx + (idx - 1) * 17.5;
-    const ty = my + (idx === 1 ? -4 : 2) * 0.92;
+    // Match the tighter, slightly lower side tubes in drawFireworkLauncher.
+    const tx = mx + (idx - 1) * 15 * 0.92;
+    const ty = my + (idx === 1 ? -4 : 8) * 0.92;
     const cols = ROCKET_COLS[idx].burst;
     this.addFX(new RadialFlash(tx, ty - 4, cols, 0.12, 44, 12));
     this.addFX(new Light(tx, ty - 10, 200, cols[0], 0.7, 0.24));
@@ -1877,7 +1878,7 @@ export class Game {
     a.fireT = 0;
     a.recoilV += 5;
     this.addFX(new Light(mx, my - 6, 190, '100,255,238', 0.6, 0.26));
-    S.ghostWisps(ps, mx, my - 4, 10, -Math.PI / 2, 1.0, [120, 340]);
+    S.ghostWisps(ps, mx, my - 4, 6, -Math.PI / 2, 1.0, [120, 340]);
     S.smoke(ps, mx, my - 4, 8, '190,250,244', [10, 42], { vx: [-60, 60], vy: [-140, -40], alpha: 0.35, life: [0.6, 1.1] });
     S.stars(ps, mx, my - 4, 6, '170,255,248', [60, 220], [7, 12], -Math.PI / 2, 1);
     S.ring(ps, mx, my - 2, 4, 56, '110,255,240', 3, 0.3, true);

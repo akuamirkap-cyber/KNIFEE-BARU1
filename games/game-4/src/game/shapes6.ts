@@ -1,4 +1,4 @@
-import { type Ctx, TAU, clamp, drawSprite, easeOutBack, easeOutCubic, glowSprite, lin, mulberry32, polyPath, roundRect, starSprite } from './core';
+import { type Ctx, TAU, clamp, drawSprite, easeOutBack, easeOutCubic, glowSprite, lin, makeCanvas, mulberry32, polyPath, roundRect, starSprite } from './core';
 import { drawSnowflake } from './shapes2';
 import { drawFlame4 } from './shapes4';
 import { drawElectricOrb, strokeBolt } from './shapes5';
@@ -384,7 +384,46 @@ export function fillSuit(ctx: Ctx, suit: number, r: number, fill: string) {
   }
 }
 
+interface CardSprite { canvas: HTMLCanvasElement; x: number; y: number; w: number; h: number }
+const cardSprites = new Map<string, CardSprite>();
+
+/** Static card faces are reused by the card gun, projectile and its confetti. */
+function getCardSprite(ctx: Ctx, suit: number, s: number): CardSprite | null {
+  if (typeof document === 'undefined' || typeof HTMLCanvasElement === 'undefined'
+    || !(ctx.canvas instanceof HTMLCanvasElement) || !Number.isFinite(s) || s <= 0 || s > 4) return null;
+  const key = `${suit}:${s}`;
+  const cached = cardSprites.get(key);
+  if (cached) return cached;
+  try {
+    const x = Math.floor(-17 * s / 2 - 2);
+    const y = Math.floor(-25 * s / 2 - 2);
+    const w = Math.ceil(17 * s / 2 + 2) - x;
+    const h = Math.ceil(25 * s / 2 + 2) - y;
+    const density = 3;
+    const canvas = makeCanvas(w * density, h * density);
+    const c = canvas.getContext('2d');
+    if (!c) return null;
+    c.setTransform(density, 0, 0, density, -x * density, -y * density);
+    drawPlayingCardVector(c, suit, s);
+    const sprite = { canvas, x, y, w, h };
+    if (cardSprites.size >= 48) {
+      const oldest = cardSprites.keys().next().value;
+      if (oldest !== undefined) cardSprites.delete(oldest);
+    }
+    cardSprites.set(key, sprite);
+    return sprite;
+  } catch {
+    return null;
+  }
+}
+
 export function drawPlayingCard(ctx: Ctx, suit: number, s = 1) {
+  const sprite = getCardSprite(ctx, suit, s);
+  if (sprite) ctx.drawImage(sprite.canvas, sprite.x, sprite.y, sprite.w, sprite.h);
+  else drawPlayingCardVector(ctx, suit, s);
+}
+
+function drawPlayingCardVector(ctx: Ctx, suit: number, s: number) {
   const w = 17 * s;
   const h = 25 * s;
   const red = suit < 2;

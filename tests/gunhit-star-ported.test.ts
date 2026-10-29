@@ -97,7 +97,7 @@ test('the double card really fires the second barrel of every imported layer', (
     assert.equal(twin.projs.length, oneBarrel * 2, `${weapon}:${effect} must fire from both barrels`);
     assert.deepEqual(
       twin.projs.map((p: AnyGame) => Math.round(p.x)).sort((a: number, b: number) => a - b),
-      [180, 240],
+      weapon === 'firework' ? [195, 225] : [180, 240],
       `${weapon}:${effect} keeps one round per barrel`,
     );
 

@@ -12,6 +12,136 @@ export function drawBonusCoin(
   drawBreakerCoin(ctx, x, y, r, time, phase, flat, glowing);
 }
 
+interface SharedChestSprites {
+  glow: HTMLCanvasElement;
+  lid: HTMLCanvasElement;
+  front: HTMLCanvasElement;
+}
+
+let sharedChestSprites: SharedChestSprites | null | undefined;
+
+function getSharedChestSprites(): SharedChestSprites | null {
+  if (sharedChestSprites !== undefined) return sharedChestSprites;
+  if (typeof document === 'undefined' || typeof HTMLCanvasElement === 'undefined') {
+    sharedChestSprites = null;
+    return null;
+  }
+
+  const glow = document.createElement('canvas');
+  const lid = document.createElement('canvas');
+  const front = document.createElement('canvas');
+  if (
+    !(glow instanceof HTMLCanvasElement) ||
+    !(lid instanceof HTMLCanvasElement) ||
+    !(front instanceof HTMLCanvasElement)
+  ) {
+    sharedChestSprites = null;
+    return null;
+  }
+
+  // 1. Pre-baked golden chest aura (192x192, scaled to 380x380)
+  glow.width = glow.height = 192;
+  const gc = glow.getContext('2d')!;
+  const gl = gc.createRadialGradient(96, 96, 5, 96, 96, 96);
+  gl.addColorStop(0, 'rgba(255,215,110,0.58)');
+  gl.addColorStop(0.55, 'rgba(255,190,60,0.2)');
+  gl.addColorStop(1, 'rgba(255,170,0,0)');
+  gc.fillStyle = gl;
+  gc.beginPath();
+  gc.arc(96, 96, 96, 0, TAU);
+  gc.fill();
+
+  // 2. Pre-baked wooden curved lid (204x72, origin at (102, 58))
+  lid.width = 204;
+  lid.height = 72;
+  const lc = lid.getContext('2d')!;
+  lc.translate(102, 58);
+  const lg = lc.createLinearGradient(0, -46, 0, 6);
+  lg.addColorStop(0, '#8a5a2c');
+  lg.addColorStop(0.5, '#6b4420');
+  lg.addColorStop(1, '#4a2d14');
+  lc.fillStyle = lg;
+  lc.beginPath();
+  lc.moveTo(-92, 4);
+  lc.quadraticCurveTo(-92, -48, 0, -48);
+  lc.quadraticCurveTo(92, -48, 92, 4);
+  lc.closePath();
+  lc.fill();
+  lc.strokeStyle = '#c9972f';
+  lc.lineWidth = 6;
+  lc.beginPath();
+  lc.moveTo(-34, -42);
+  lc.lineTo(-34, 4);
+  lc.moveTo(34, -42);
+  lc.lineTo(34, 4);
+  lc.stroke();
+  lc.strokeStyle = '#8b6a1e';
+  lc.lineWidth = 4;
+  lc.beginPath();
+  lc.moveTo(-92, 2);
+  lc.quadraticCurveTo(0, -46, 92, 2);
+  lc.stroke();
+  lc.fillStyle = 'rgba(255,220,150,0.18)';
+  lc.beginPath();
+  lc.moveTo(-84, 2);
+  lc.quadraticCurveTo(-84, -40, 0, -40);
+  lc.quadraticCurveTo(84, -40, 84, 2);
+  lc.closePath();
+  lc.fill();
+
+  // 3. Pre-baked wooden front wall + brass bands + keyhole + rivets (200x76, origin at (100, 4))
+  front.width = 200;
+  front.height = 76;
+  const fc = front.getContext('2d')!;
+  fc.translate(100, -2);
+  const body = fc.createLinearGradient(0, 7, 0, 70);
+  body.addColorStop(0, '#825326');
+  body.addColorStop(0.45, '#60401e');
+  body.addColorStop(1, '#3a2310');
+  fc.fillStyle = body;
+  fc.beginPath();
+  fc.roundRect(-92, 10, 184, 58, 7);
+  fc.fill();
+  fc.strokeStyle = 'rgba(0,0,0,0.35)';
+  fc.lineWidth = 2;
+  for (let i = 1; i < 3; i++) {
+    fc.beginPath();
+    fc.moveTo(-92, 10 + i * 19);
+    fc.lineTo(92, 10 + i * 19);
+    fc.stroke();
+  }
+  fc.fillStyle = '#c9972f';
+  fc.fillRect(-40, 10, 11, 58);
+  fc.fillRect(29, 10, 11, 58);
+  fc.fillStyle = 'rgba(255,240,180,0.45)';
+  fc.fillRect(-40, 10, 3, 58);
+  fc.fillRect(29, 10, 3, 58);
+  fc.fillStyle = '#a87b1d';
+  fc.beginPath();
+  fc.roundRect(-92, 6, 184, 10, 3);
+  fc.fill();
+  fc.fillStyle = 'rgba(255,225,150,0.35)';
+  fc.fillRect(-92, 6, 184, 2.5);
+  fc.fillStyle = '#d4a62c';
+  fc.beginPath();
+  fc.roundRect(-13, 17, 26, 24, 5);
+  fc.fill();
+  fc.fillStyle = '#5a3f0a';
+  fc.beginPath();
+  fc.arc(0, 27, 4.6, 0, TAU);
+  fc.fill();
+  fc.fillRect(-1.8, 27, 3.6, 9);
+  fc.fillStyle = '#e6c25a';
+  for (let i = 0; i < 6; i++) {
+    fc.beginPath();
+    fc.arc(-80 + i * 32, 62, 2.8, 0, TAU);
+    fc.fill();
+  }
+
+  sharedChestSprites = { glow, lid, front };
+  return sharedChestSprites;
+}
+
 export class TreasureChest {
   shake = 0;
   lid = 0;
@@ -20,8 +150,6 @@ export class TreasureChest {
 
   constructor() {
     // Overlapping tiers form a low, rounded heap WITHIN the 168px-wide mouth.
-    // Random independent positions used to leave coins suspended above the lid
-    // and get their crowns cut off by the old rectangular clip.
     const tiers = [
       { count: 5, halfWidth: 31, y: -29, radius: 9 },
       { count: 7, halfWidth: 49, y: -17, radius: 9.5 },
@@ -30,8 +158,6 @@ export class TreasureChest {
     ];
     this.coins = tiers.flatMap(({ count, halfWidth, y, radius }, row) =>
       Array.from({ length: count }, (_, i) => ({
-        // Keep neighboring rows in contact even at the edge of the random
-        // jitter range: a coin should never look suspended above the pile.
         x: -halfWidth + (2 * halfWidth * i) / (count - 1) + rand(-1.2, 1.2) + (row % 2 ? 2 : -2),
         y: y + rand(-1, 1),
         r: radius + rand(-0.45, 0.45),
@@ -53,12 +179,34 @@ export class TreasureChest {
   private getCoinPile() {
     if (this.coinPile) return this.coinPile;
     const image = document.createElement('canvas');
-    // Leave transparent breathing room around the WHOLE heap and its twinkles.
-    // The chest's front wall occludes the bottom; a bitmap clip never cuts off
-    // coin tops or leaves an artificial horizontal edge.
-    image.width = 220; image.height = 144;
+    // Pre-bakes shadow + recessed cavity + coin heap into one crisp sprite!
+    image.width = 240;
+    image.height = 180;
     const c = image.getContext('2d')!;
-    c.translate(110, 74);
+    c.translate(120, 82);
+
+    c.fillStyle = 'rgba(0,0,0,0.45)';
+    c.beginPath();
+    c.ellipse(0, 72, 108, 18, 0, 0, TAU);
+    c.fill();
+
+    c.fillStyle = '#633914';
+    c.beginPath();
+    c.roundRect(-87, -8, 174, 29, 9);
+    c.fill();
+    const cavity = c.createRadialGradient(0, 2, 8, 0, 3, 92);
+    cavity.addColorStop(0, '#47290d');
+    cavity.addColorStop(1, '#211207');
+    c.fillStyle = cavity;
+    c.beginPath();
+    c.ellipse(0, 3, 83, 17, 0, 0, TAU);
+    c.fill();
+    c.strokeStyle = '#a16d2d';
+    c.lineWidth = 2;
+    c.beginPath();
+    c.ellipse(0, 3, 85, 17, 0, Math.PI, TAU);
+    c.stroke();
+
     const mound = c.createLinearGradient(0, -40, 0, 18);
     mound.addColorStop(0, '#f4cf6d');
     mound.addColorStop(0.4, '#d5a337');
@@ -79,71 +227,34 @@ export class TreasureChest {
     return image;
   }
 
-  /** The source chest is drawn at (0,0), 184px across and 162px high. */
+  /** The source chest is drawn at (0,0), 184px across and 162px high (sprite-cached). */
   draw(ctx: CanvasRenderingContext2D, time: number, drawEmbedded?: (ctx: CanvasRenderingContext2D) => void) {
+    const shared = getSharedChestSprites();
     ctx.save();
-    ctx.translate(this.shake ? rand(-1, 1) * this.shake * 0.5 : 0, this.shake ? rand(-1, 1) * this.shake * 0.3 : 0);
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    const gl = ctx.createRadialGradient(0, -20, 10, 0, -20, 190);
-    gl.addColorStop(0, `rgba(255,210,90,${0.28 + this.lid * 0.3})`);
-    gl.addColorStop(1, 'rgba(255,170,0,0)');
-    ctx.fillStyle = gl;
-    ctx.beginPath(); ctx.arc(0, -20, 190, 0, TAU); ctx.fill();
-    ctx.restore();
+    ctx.translate(
+      this.shake ? rand(-1, 1) * this.shake * 0.5 : 0,
+      this.shake ? rand(-1, 1) * this.shake * 0.3 : 0,
+    );
 
-    ctx.fillStyle = 'rgba(0,0,0,0.45)';
-    ctx.beginPath(); ctx.ellipse(0, 72, 108, 18, 0, 0, TAU); ctx.fill();
+    if (shared) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = Math.min(1, 0.48 + this.lid * 0.48);
+      ctx.drawImage(shared.glow, -190, -210, 380, 380);
+      ctx.restore();
 
-    // Open lid behind the overflowing pile of gold.
-    ctx.save();
-    ctx.translate(0, -34);
-    ctx.rotate(-0.95 - this.lid * 0.25);
-    const lg = ctx.createLinearGradient(0, -46, 0, 6);
-    lg.addColorStop(0, '#8a5a2c'); lg.addColorStop(0.5, '#6b4420'); lg.addColorStop(1, '#4a2d14');
-    ctx.fillStyle = lg;
-    ctx.beginPath(); ctx.moveTo(-92, 4); ctx.quadraticCurveTo(-92, -48, 0, -48); ctx.quadraticCurveTo(92, -48, 92, 4); ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = '#c9972f'; ctx.lineWidth = 6;
-    ctx.beginPath(); ctx.moveTo(-34, -42); ctx.lineTo(-34, 4); ctx.moveTo(34, -42); ctx.lineTo(34, 4); ctx.stroke();
-    ctx.strokeStyle = '#8b6a1e'; ctx.lineWidth = 4;
-    ctx.beginPath(); ctx.moveTo(-92, 2); ctx.quadraticCurveTo(0, -46, 92, 2); ctx.stroke();
-    ctx.fillStyle = 'rgba(255,220,150,0.18)';
-    ctx.beginPath(); ctx.moveTo(-84, 2); ctx.quadraticCurveTo(-84, -40, 0, -40); ctx.quadraticCurveTo(84, -40, 84, 2); ctx.closePath(); ctx.fill();
-    ctx.restore();
+      ctx.save();
+      ctx.translate(0, -34);
+      ctx.rotate(-0.95 - this.lid * 0.25);
+      ctx.drawImage(shared.lid, -102, -58);
+      ctx.restore();
 
-    // A dark recessed cavity and rear rim put every coin INSIDE the box.
-    ctx.fillStyle = '#633914';
-    ctx.beginPath(); ctx.roundRect(-87, -8, 174, 29, 9); ctx.fill();
-    const cavity = ctx.createRadialGradient(0, 2, 8, 0, 3, 92);
-    cavity.addColorStop(0, '#47290d'); cavity.addColorStop(1, '#211207');
-    ctx.fillStyle = cavity;
-    ctx.beginPath(); ctx.ellipse(0, 3, 83, 17, 0, 0, TAU); ctx.fill();
-    ctx.strokeStyle = '#a16d2d'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.ellipse(0, 3, 85, 17, 0, Math.PI, TAU); ctx.stroke();
-    ctx.drawImage(this.getCoinPile(), -110, -74);
+      ctx.drawImage(this.getCoinPile(), -120, -82);
+      ctx.drawImage(shared.front, -100, 2);
+    }
 
-    // The front wall and raised lip naturally hide the lowest row; no crop,
-    // detached top layer or extra line of coins pasted over the wood.
-    const body = ctx.createLinearGradient(0, 7, 0, 70);
-    body.addColorStop(0, '#825326'); body.addColorStop(0.45, '#60401e'); body.addColorStop(1, '#3a2310');
-    ctx.fillStyle = body;
-    ctx.beginPath(); ctx.roundRect(-92, 10, 184, 58, 7); ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 2;
-    for (let i = 1; i < 3; i++) { ctx.beginPath(); ctx.moveTo(-92, 10 + i * 19); ctx.lineTo(92, 10 + i * 19); ctx.stroke(); }
-    ctx.fillStyle = '#c9972f'; ctx.fillRect(-40, 10, 11, 58); ctx.fillRect(29, 10, 11, 58);
-    ctx.fillStyle = 'rgba(255,240,180,0.45)'; ctx.fillRect(-40, 10, 3, 58); ctx.fillRect(29, 10, 3, 58);
-    ctx.fillStyle = '#a87b1d'; ctx.beginPath(); ctx.roundRect(-92, 6, 184, 10, 3); ctx.fill();
-    ctx.fillStyle = 'rgba(255,225,150,0.35)'; ctx.fillRect(-92, 6, 184, 2.5);
-    ctx.fillStyle = '#d4a62c'; ctx.beginPath(); ctx.roundRect(-13, 17, 26, 24, 5); ctx.fill();
-    ctx.fillStyle = '#5a3f0a'; ctx.beginPath(); ctx.arc(0, 27, 4.6, 0, TAU); ctx.fill(); ctx.fillRect(-1.8, 27, 3.6, 9);
-    ctx.fillStyle = '#e6c25a';
-    for (let i = 0; i < 6; i++) { ctx.beginPath(); ctx.arc(-80 + i * 32, 62, 2.8, 0, TAU); ctx.fill(); }
-    // The impacts stay attached to the same shaking chest, rather than floating
-    // at world coordinates while the treasure rattles under fire.
     drawEmbedded?.(ctx);
 
-    // A few highlights travel across the actual heap instead of floating
-    // above the chest (the coins ejected by gunfire animate separately).
     for (const [i, x, y] of [[0, -39, -21], [1, 5, -32], [2, 48, -12]]) {
       const glint = Math.max(0, Math.sin(time * 3 + i * 2.1)) ** 4;
       if (glint < 0.05) continue;
@@ -153,9 +264,16 @@ export class TreasureChest {
       ctx.globalAlpha = glint * 0.8;
       ctx.fillStyle = '#fff5c7';
       ctx.beginPath();
-      ctx.moveTo(0, -4); ctx.lineTo(1, -1); ctx.lineTo(4, 0); ctx.lineTo(1, 1);
-      ctx.lineTo(0, 4); ctx.lineTo(-1, 1); ctx.lineTo(-4, 0); ctx.lineTo(-1, -1);
-      ctx.closePath(); ctx.fill();
+      ctx.moveTo(0, -4);
+      ctx.lineTo(1, -1);
+      ctx.lineTo(4, 0);
+      ctx.lineTo(1, 1);
+      ctx.lineTo(0, 4);
+      ctx.lineTo(-1, 1);
+      ctx.lineTo(-4, 0);
+      ctx.lineTo(-1, -1);
+      ctx.closePath();
+      ctx.fill();
       ctx.restore();
     }
     ctx.restore();

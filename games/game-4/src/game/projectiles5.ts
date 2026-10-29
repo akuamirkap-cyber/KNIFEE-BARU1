@@ -1,6 +1,6 @@
 import { type Ctx, TAU, drawSprite, glowSprite, makeBolt, pick, rand, randomPoly } from './core';
 import { makeCracks, strokeLines } from './art';
-import { ChompFX, ComicPop, GhostSpirit, MoonSlash, RainbowBurst, RainbowRings, RuneCircle, SplatFlash, StormStrike, TractorPulse } from './fx5';
+import { ChompFX, ComicPop, GhostSpirit, SpiritAura, MoonSlash, RainbowBurst, RainbowRings, RuneCircle, SplatFlash, StormStrike, TractorPulse } from './fx5';
 import { PAINT, RAINBOW, drawDiamond, drawElectricOrb, drawGhost, drawGoldStar, drawMoon, drawPaintBall, drawPencil, drawRainbowArc, drawRock, drawSandal, drawShark, drawSplat, drawUfo, makeRock, strokeBolt } from './shapes5';
 import { GlowLines, GlowSpot, K, Light, Lightning, Rays, SplashSheet } from './particles';
 import * as S from './spawn5';
@@ -721,25 +721,26 @@ export class GhostShot extends Projectile {
   constructor(g: Game, x: number, y: number) {
     super(g, x, y, -820);
   }
-  trail() {
+  trail(dt: number) {
     const ps = this.g.particles;
-    if (Math.random() < 0.45) S.ghostWisps(ps, this.x + rand(-10, 10), this.y + rand(20, 50), 1, Math.PI / 2, 1.2, [20, 90]);
-    if (Math.random() < 0.7) ps.add({ k: K.GLOW, add: true, x: this.x + rand(-8, 8), y: this.y + rand(14, 40), vx: rand(-14, 14), vy: rand(20, 60), size: rand(16, 28), size2: 3, color: '100,255,238', life: rand(0.25, 0.4), alpha: 0.55 });
-    if (Math.random() < 0.4) ps.add({ k: K.SMOKE, x: this.x + rand(-8, 8), y: this.y + rand(24, 50), vx: rand(-14, 14), vy: rand(10, 40), size: 8, size2: 24, life: 0.5, color: '190,250,244', alpha: 0.25, rot: rand(0, TAU) });
+    // Keep a gentle mist and a few spirits at the same density on 60/120 Hz
+    // displays; the old per-frame emitter doubled the clutter at high refresh.
+    const ticks = this.cosmeticTicks(dt);
+    for (let i = 0; i < ticks; i++) {
+      if (Math.random() < 0.24) S.ghostWisps(ps, this.x + rand(-10, 10), this.y + rand(20, 50), 1, Math.PI / 2, 1.2, [20, 90]);
+      if (Math.random() < 0.55) ps.add({ k: K.GLOW, add: true, x: this.x + rand(-8, 8), y: this.y + rand(14, 40), vx: rand(-14, 14), vy: rand(20, 60), size: rand(16, 28), size2: 3, color: '100,255,238', life: rand(0.25, 0.4), alpha: 0.55 });
+      if (Math.random() < 0.3) ps.add({ k: K.SMOKE, x: this.x + rand(-8, 8), y: this.y + rand(24, 50), vx: rand(-14, 14), vy: rand(10, 40), size: 8, size2: 24, life: 0.5, color: '190,250,244', alpha: 0.25, rot: rand(0, TAU) });
+    }
   }
   draw(ctx: Ctx) {
+    // A short cloud of mist follows the ghost, with no long pointed tail.
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    const gr = ctx.createLinearGradient(0, this.y + 20, 0, this.y + 130);
-    gr.addColorStop(0, 'rgba(150,255,245,0.45)');
-    gr.addColorStop(1, 'rgba(100,255,238,0)');
-    ctx.fillStyle = gr;
-    ctx.beginPath();
-    ctx.moveTo(this.x - 14, this.y + 20);
-    ctx.quadraticCurveTo(this.x - 10 + Math.sin(this.age * 10) * 8, this.y + 70, this.x, this.y + 130);
-    ctx.quadraticCurveTo(this.x + 10 + Math.sin(this.age * 10) * 8, this.y + 70, this.x + 14, this.y + 20);
-    ctx.closePath();
-    ctx.fill();
+    for (let i = 0; i < 3; i++) {
+      const dx = Math.sin(this.age * 5 + i * 1.8) * (3 + i * 2);
+      drawSprite(ctx, glowSprite('140,255,245'), this.x + dx, this.y + 24 + i * 16,
+        32 - i * 5, 0.24 - i * 0.055);
+    }
     ctx.restore();
     ctx.save();
     ctx.translate(this.x, this.y + 6 + Math.sin(this.age * 9) * 2);
@@ -755,14 +756,11 @@ export class GhostShot extends Projectile {
     g.shake(6);
     g.flashScreen('120,255,240', 0.12);
     g.addFX(new GhostSpirit(hx, hy + 6));
+    g.addFX(new SpiritAura(hx, hy));
     g.addFX(new Light(hx, hy, 230, '100,255,238', 0.8, 0.45));
     S.glow(ps, hx, hy, 150, 20, '200,255,250', 0.26, 1);
-    S.ring(ps, hx, hy, 5, 100, '110,255,240', 5, 0.45, true);
-    S.ring(ps, hx, hy, 4, 66, '255,255,255', 3, 0.3, true);
-    S.ghostWisps(ps, hx, hy, 16, Math.PI / 2, 1.8, [60, 280]);
+    S.ghostWisps(ps, hx, hy, 10, Math.PI / 2, 1.8, [60, 280]);
     S.smoke(ps, hx, hy, 10, '190,250,244', [16, 64], { vx: [-90, 90], vy: [-60, 40], alpha: 0.35, life: [0.9, 1.5], drag: 2 });
-    S.stars(ps, hx, hy, 10, '170,255,248', [60, 240], [8, 14], Math.PI / 2, 1.6);
-    S.sparks(ps, hx, hy, 16, Math.PI / 2, 1.6, [180, 520], '140,255,244', 1.4);
     S.chips(ps, hx, hy, 8, Math.PI / 2, 1.5, [100, 320]);
     ps.add({ k: K.TEXT, x: hx, y: hy + 56, vy: -50, drag: 1.5, size: 26, text: 'BUUU!', color: '190,255,248', life: 0.85 });
     const p = loc(g, theta, 0.92);
@@ -775,17 +773,11 @@ export class GhostShot extends Projectile {
       c.beginPath();
       c.arc(p.x, p.y, 22, 0, TAU);
       c.fill();
-      c.strokeStyle = 'rgba(150,255,246,0.45)';
+      // Soft concentric spectral rings, rather than little curved tails.
+      c.strokeStyle = 'rgba(150,255,246,0.42)';
       c.lineWidth = 1;
-      for (let i = 0; i < 4; i++) {
-        c.beginPath();
-        for (let t = 0; t <= 1; t += 0.1) {
-          const x = p.x + Math.sin(t * 6 + i) * 6 + (i - 1.5) * 7;
-          const y = p.y - 12 + t * 26;
-          if (t === 0) c.moveTo(x, y);
-          else c.lineTo(x, y);
-        }
-        c.stroke();
+      for (const radius of [8, 14, 20]) {
+        c.beginPath(); c.ellipse(p.x, p.y, radius, radius * 0.65, 0, 0, TAU); c.stroke();
       }
     });
     woodCracks(g, theta, 5, [14, 32], '110,255,240', 1.6);
@@ -798,10 +790,9 @@ export class GhostShot extends Projectile {
     const g = this.g;
     const ps = g.particles;
     g.addFX(new GhostSpirit(hx, hy, 0.6));
+    g.addFX(new SpiritAura(hx, hy, 0.7));
     g.addFX(new Light(hx, hy, 210, '100,255,238', 0.75, 0.35));
-    S.ghostWisps(ps, hx, hy, 14, Math.PI / 2, 1.8, [60, 260]);
-    S.ring(ps, hx, hy, 4, 80, '110,255,240', 4, 0.34, true);
-    S.sparks(ps, hx, hy, 18, Math.PI / 2, 1.5, [150, 460], '140,255,244', 1.4);
+    S.ghostWisps(ps, hx, hy, 8, Math.PI / 2, 1.8, [60, 260]);
     sfx.play('ghost_hit');
     this.alive = false;
   }

@@ -94,7 +94,7 @@ test('a charged slide-7 round waits at the muzzle until slide 7 releases it', ()
 test('every charged slide-7 gun lands with slide 7’s own stuck art', () => {
   // These all release their round after the trigger: the emerald/rail/freeze
   // charge-ups, the buster, the moon staff, the meteor…
-  for (const id of ['emerald', 'railgun', 'freeze', 'buster', 'moonbeam', 'meteor', 'pirate', 'obliterator', 'gravity', 'storm']) {
+  for (const id of ['emerald', 'railgun', 'freeze', 'moonbeam', 'meteor', 'pirate', 'obliterator', 'gravity', 'storm']) {
     const game = stage(id);
     game.shoot();
     for (let i = 0; i < 90 && game.projs.length > 0; i++) {

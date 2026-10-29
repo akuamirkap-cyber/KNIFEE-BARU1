@@ -15,6 +15,7 @@ export abstract class Projectile {
   abstract weapon: WeaponId;
   tip = 6;
   half = 0.07;
+  private cosmeticCarry = 0;
   constructor(
     public g: Game,
     public x: number,
@@ -30,6 +31,21 @@ export abstract class Projectile {
     if (this.y < -80) this.alive = false;
   }
   trail(_dt: number) {}
+
+  /**
+   * Run legacy per-frame cosmetic emitters at their original 60 Hz density,
+   * irrespective of display refresh. Movement and collision still advance on
+   * every update. The small clamp prevents a resumed tab from spawning a
+   * frame's worth of backlog in one burst.
+   */
+  protected cosmeticTicks(dt: number): number {
+    if (!Number.isFinite(dt) || dt <= 0) return 0;
+    this.cosmeticCarry += Math.min(dt, 0.1) * 60;
+    const count = Math.min(6, Math.floor(this.cosmeticCarry + 1e-8));
+    this.cosmeticCarry = Math.max(0, this.cosmeticCarry - count);
+    return count;
+  }
+
   abstract draw(ctx: Ctx): void;
   abstract hit(theta: number, hx: number, hy: number): void;
   abstract block(hx: number, hy: number): void;
@@ -66,15 +82,24 @@ export class GoldenBullet extends Projectile {
   tip = 8;
   half = 0.06;
   startY: number;
+  private trailCarry = 0;
   constructor(g: Game, x: number, y: number) {
     super(g, x, y, -1750);
     this.startY = y;
   }
-  trail() {
+  trail(dt: number) {
+    // A fixed rate keeps the same luminous trail on 60/90/120 Hz displays:
+    // the old per-frame burst doubled particles on a 120 Hz phone.
+    if (!Number.isFinite(dt) || dt <= 0) return;
+    this.trailCarry += Math.min(dt, 0.1) * 40;
+    const count = Math.min(4, Math.floor(this.trailCarry + 1e-8));
+    this.trailCarry = Math.max(0, this.trailCarry - count);
     const ps = this.g.particles;
-    ps.add({ k: K.STAR, add: true, x: this.x + rand(-3, 3), y: this.y + rand(4, 26), vx: rand(-40, 40), vy: rand(-10, 50), size: rand(7, 14), life: rand(0.35, 0.7), color: '255,215,120', drag: 2.5 });
-    const a = this.age * 70;
-    ps.add({ k: K.EMBER, add: true, x: this.x + Math.cos(a) * 5, y: this.y + 12, vx: Math.cos(a) * 40, vy: 25, size: 1.5, life: 0.4, color: '255,200,90', drag: 3 });
+    for (let i = 0; i < count; i++) {
+      ps.add({ k: K.STAR, add: true, x: this.x + rand(-3, 3), y: this.y + rand(4, 26), vx: rand(-40, 40), vy: rand(-10, 50), size: rand(7, 14), life: rand(0.35, 0.7), color: '255,215,120', drag: 2.5 });
+      const a = this.age * 70;
+      ps.add({ k: K.EMBER, add: true, x: this.x + Math.cos(a) * 5, y: this.y + 12, vx: Math.cos(a) * 40, vy: 25, size: 1.5, life: 0.4, color: '255,200,90', drag: 3 });
+    }
   }
   draw(ctx: Ctx) {
     const tail = Math.min(160, this.startY - this.y);
@@ -162,18 +187,22 @@ export class BlackHoleShot extends Projectile {
   constructor(g: Game, x: number, y: number) {
     super(g, x, y, -620);
   }
-  trail() {
+  trail(dt: number) {
     const g = this.g;
     const ps = g.particles;
+    // Refraction follows the projectile every frame; only cosmetic emissions
+    // use a 60 Hz world-time rate instead of doubling on a 120 Hz display.
     g.lens(this.x, this.y, 46, 1);
-    for (let i = 0; i < 2; i++) {
-      const a = rand(0, TAU);
-      const d = rand(40, 76);
-      ps.add({ k: K.SPARK, add: true, x: this.x + Math.cos(a) * d, y: this.y + Math.sin(a) * d, target: this, pull: 2000, size: rand(0.9, 2), len: 0.03, life: 0.7, color: pick(PURPLES) });
+    for (let tick = 0, n = this.cosmeticTicks(dt); tick < n; tick++) {
+      for (let i = 0; i < 2; i++) {
+        const a = rand(0, TAU);
+        const d = rand(40, 76);
+        ps.add({ k: K.SPARK, add: true, x: this.x + Math.cos(a) * d, y: this.y + Math.sin(a) * d, target: this, pull: 2000, size: rand(0.9, 2), len: 0.03, life: 0.7, color: pick(PURPLES) });
+      }
+      if (Math.random() < 0.7)
+        ps.add({ k: K.SMOKE, x: this.x + rand(-6, 6), y: this.y + 14, vx: rand(-15, 15), vy: rand(10, 40), size: 18, size2: 50, life: 0.8, color: '55,18,105', alpha: 0.6, rot: rand(0, TAU), vrot: rand(-1, 1) });
+      if (Math.random() < 0.6) ps.add({ k: K.EMBER, add: true, x: this.x + rand(-12, 12), y: this.y + rand(8, 22), vx: rand(-30, 30), vy: rand(20, 70), size: 1.8, life: 0.55, color: '190,120,255' });
     }
-    if (Math.random() < 0.7)
-      ps.add({ k: K.SMOKE, x: this.x + rand(-6, 6), y: this.y + 14, vx: rand(-15, 15), vy: rand(10, 40), size: 18, size2: 50, life: 0.8, color: '55,18,105', alpha: 0.6, rot: rand(0, TAU), vrot: rand(-1, 1) });
-    if (Math.random() < 0.6) ps.add({ k: K.EMBER, add: true, x: this.x + rand(-12, 12), y: this.y + rand(8, 22), vx: rand(-30, 30), vy: rand(20, 70), size: 1.8, life: 0.55, color: '190,120,255' });
   }
   draw(ctx: Ctx) {
     drawSingularity(ctx, this.x, this.y, this.r, this.g.time * 1.7, 1.15);

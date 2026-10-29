@@ -62,17 +62,23 @@ class FireworkSlide2Sfx {
     this.dry = ctx.createGain();
     this.dry.connect(this.master);
 
-    // generated reverb — identical impulse to slide 2
+    // Warm 1.2s stereo reverb impulse with WebAudio equal-power normalization enabled
     const conv = ctx.createConvolver();
-    const len = ctx.sampleRate * 2.2;
+    conv.normalize = true;
+    const len = Math.max(1, Math.floor(ctx.sampleRate * 1.2));
     const imp = ctx.createBuffer(2, len, ctx.sampleRate);
-    for (let c = 0; c < 2; c++) {
-      const d = imp.getChannelData(c);
-      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.6);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = imp.getChannelData(ch);
+      let smooth = 0;
+      for (let i = 0; i < len; i++) {
+        const raw = Math.random() * 2 - 1;
+        smooth = smooth * 0.4 + raw * 0.6;
+        d[i] = smooth * Math.pow(1 - i / len, 2.7);
+      }
     }
     conv.buffer = imp;
     this.wet = ctx.createGain();
-    this.wet.gain.value = 0.45;
+    this.wet.gain.value = 0.36;
     this.wet.connect(conv);
     conv.connect(this.master);
 
@@ -88,11 +94,24 @@ class FireworkSlide2Sfx {
     }
   }
 
+  private volume = 1;
+
   setMuted(m: boolean) {
     this.muted = m;
     try {
       if (this.ctx && this.master) {
-        this.master.gain.setTargetAtTime(m ? 0 : 0.8, this.ctx.currentTime, 0.02);
+        this.master.gain.setTargetAtTime(m ? 0 : 0.8 * this.volume, this.ctx.currentTime, 0.02);
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  setVolume(v: number) {
+    this.volume = Math.max(0, Math.min(1, v));
+    try {
+      if (this.ctx && this.master) {
+        this.master.gain.setTargetAtTime(this.muted ? 0 : 0.8 * this.volume, this.ctx.currentTime, 0.02);
       }
     } catch {
       /* ignore */

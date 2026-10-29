@@ -1,3 +1,4 @@
+import { drawBreakerCoin } from '../../../shared/coinArt';
 import type { ProjKind } from '../weapons';
 import { TAU, lin, radial, star, gunState } from './kit';
 import { drawSandal } from './guns5';
@@ -388,28 +389,8 @@ export function drawProjectileExtra3(c: C, kind: ProjKind, len: number, t: numbe
       break;
     }
     case 'coingun': {
-      // Shiny solid gold coin projectile with bevel and dollar mark
-      c.save();
-      c.translate(0, 9);
-      c.scale(1, 0.45);
-      c.beginPath();
-      c.arc(0, 0, 11, 0, TAU);
-      c.fillStyle = radial(c, -3, -3, 11, ['#fef08a', '#eab308', '#a16207']);
-      c.shadowColor = '#fde047';
-      c.shadowBlur = 10;
-      c.fill();
-      c.shadowBlur = 0;
-      c.strokeStyle = '#713f12';
-      c.lineWidth = 2;
-      c.stroke();
-      c.fillStyle = '#713f12';
-      c.font = 'bold 12px sans-serif';
-      c.textAlign = 'center';
-      c.textBaseline = 'middle';
-      c.fillText('$', 0, 0);
-      c.restore();
-      c.fillStyle = 'rgba(250,204,21,0.6)';
-      c.fillRect(-1.5, 14, 3, len - 14);
+      // Same round, reflective face and moving glint as collectible coins.
+      drawBreakerCoin(c, 0, 12, 13, t, 0, 1, true, true);
       break;
     }
     case 'blaster': {

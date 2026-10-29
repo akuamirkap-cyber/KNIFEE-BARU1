@@ -480,11 +480,13 @@ export class BeeSwarm extends Projectile {
   constructor(g: Game, x: number, y: number) {
     super(g, x, y, -820);
   }
-  trail() {
+  trail(dt: number) {
     const ps = this.g.particles;
-    if (Math.random() < 0.5) ps.add({ k: K.SPARK, add: true, x: this.x + rand(-16, 16), y: this.y + rand(10, 60), vx: rand(-20, 20), vy: rand(20, 80), size: 1.2, len: 0.04, life: rand(0.25, 0.45), color: '255,215,80' });
-    if (Math.random() < 0.3) ps.add({ k: K.DROP, x: this.x + rand(-12, 12), y: this.y + rand(20, 60), vx: rand(-20, 20), vy: rand(60, 160), g: 600, size: rand(1, 1.9), life: 0.4, color: '255,184,30', alpha: 1.4, data: '150,80,0' });
-    if (Math.random() < 0.25) ps.add({ k: K.STAR, add: true, x: this.x + rand(-16, 16), y: this.y + rand(0, 50), vx: rand(-20, 20), vy: rand(0, 40), size: rand(5, 9), life: 0.35, color: '255,235,140', drag: 2 });
+    for (let i = 0, n = this.cosmeticTicks(dt); i < n; i++) {
+      if (Math.random() < 0.5) ps.add({ k: K.SPARK, add: true, x: this.x + rand(-16, 16), y: this.y + rand(10, 60), vx: rand(-20, 20), vy: rand(20, 80), size: 1.2, len: 0.04, life: rand(0.25, 0.45), color: '255,215,80' });
+      if (Math.random() < 0.3) ps.add({ k: K.DROP, x: this.x + rand(-12, 12), y: this.y + rand(20, 60), vx: rand(-20, 20), vy: rand(60, 160), g: 600, size: rand(1, 1.9), life: 0.4, color: '255,184,30', alpha: 1.4, data: '150,80,0' });
+      if (Math.random() < 0.25) ps.add({ k: K.STAR, add: true, x: this.x + rand(-16, 16), y: this.y + rand(0, 50), vx: rand(-20, 20), vy: rand(0, 40), size: rand(5, 9), life: 0.35, color: '255,235,140', drag: 2 });
+    }
   }
   draw(ctx: Ctx) {
     const t = this.age;
@@ -570,11 +572,13 @@ export class SakuraShot extends Projectile {
   constructor(g: Game, x: number, y: number) {
     super(g, x, y, -900);
   }
-  trail() {
+  trail(dt: number) {
     const ps = this.g.particles;
-    if (Math.random() < 0.5) S.petals(ps, this.x + rand(-10, 10), this.y + rand(8, 28), 1, Math.PI / 2, 1.3, [10, 60], [0.8, 1.5], 80);
-    if (Math.random() < 0.6) ps.add({ k: K.STAR, add: true, x: this.x + rand(-12, 12), y: this.y + rand(0, 30), vx: rand(-25, 25), vy: rand(0, 50), size: rand(6, 11), life: rand(0.3, 0.5), color: pick(['255,200,225', '255,240,248', '255,170,205']), drag: 2 });
-    if (Math.random() < 0.4) ps.add({ k: K.EMBER, add: true, x: this.x + rand(-10, 10), y: this.y + rand(4, 26), vx: rand(-30, 30), vy: rand(10, 60), size: 1.6, life: 0.45, color: '255,190,215' });
+    for (let i = 0, n = this.cosmeticTicks(dt); i < n; i++) {
+      if (Math.random() < 0.5) S.petals(ps, this.x + rand(-10, 10), this.y + rand(8, 28), 1, Math.PI / 2, 1.3, [10, 60], [0.8, 1.5], 80);
+      if (Math.random() < 0.6) ps.add({ k: K.STAR, add: true, x: this.x + rand(-12, 12), y: this.y + rand(0, 30), vx: rand(-25, 25), vy: rand(0, 50), size: rand(6, 11), life: rand(0.3, 0.5), color: pick(['255,200,225', '255,240,248', '255,170,205']), drag: 2 });
+      if (Math.random() < 0.4) ps.add({ k: K.EMBER, add: true, x: this.x + rand(-10, 10), y: this.y + rand(4, 26), vx: rand(-30, 30), vy: rand(10, 60), size: 1.6, life: 0.45, color: '255,190,215' });
+    }
   }
   draw(ctx: Ctx) {
     const t = this.age;
@@ -683,6 +687,8 @@ export class FireworkShot extends Projectile {
   baseX: number;
   startY: number;
   ci: number;
+  /** Optional independent lane for twin launchers; single guns aim at the wheel centre. */
+  targetX?: number;
   constructor(g: Game, x: number, y: number, ci: number) {
     super(g, x, y, -940);
     this.baseX = x;
@@ -695,7 +701,7 @@ export class FireworkShot extends Projectile {
     const w = g.wheel;
     const bottom = w.y + w.bumpY + w.R;
     const prog = clamp((this.startY - this.y) / Math.max(1, this.startY - bottom), 0, 1);
-    this.x = lerp(this.baseX, w.x, prog) + Math.sin(this.age * 28) * 2.4;
+    this.x = lerp(this.baseX, this.targetX ?? w.x, prog) + Math.sin(this.age * 28) * 2.4;
     const col = ROCKET_COLS[this.ci].burst;
     for (let i = 0; i < 3; i++) ps.add({ k: K.SPARK, add: true, x: this.x + rand(-3, 3), y: this.y + 22, vx: rand(-60, 60), vy: rand(60, 220), g: 380, drag: 1.5, size: rand(1.2, 2.2), len: 0.03, life: rand(0.35, 0.8), color: pick(['255,225,130', '255,200,90', col[0]]) });
     if (Math.random() < 0.6) ps.add({ k: K.SMOKE, x: this.x + rand(-3, 3), y: this.y + rand(24, 40), vx: rand(-16, 16), vy: rand(10, 50), size: 7, size2: 26, life: rand(0.5, 0.9), color: '235,235,240', alpha: 0.3, rot: rand(0, TAU), vrot: rand(-1, 1) });

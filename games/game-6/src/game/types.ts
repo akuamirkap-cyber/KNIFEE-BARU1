@@ -80,6 +80,7 @@ export interface WeaponDrawState {
   cycle: number; // 0 right after a shot -> 1 when ready again
   out?: number; // how many projectiles of this weapon are still alive in the arena
   catchT?: number; // seconds since the hand last caught something
+  saberSide?: -1 | 1; // mirror the energy sword's swing without changing its shot
   icon?: boolean;
 }
 

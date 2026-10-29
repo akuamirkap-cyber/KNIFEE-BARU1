@@ -100,12 +100,12 @@ test('reward details sit close below the fixed weapon reveal position', () => {
   assert.ok(modal.includes('max-w-[300px] px-4 py-2 text-[18px]'));
 });
 
-test('stage-clear sunburst stays pinned to the board pivot without a completion label', () => {
+test('stage-clear sunburst stays pinned behind the board pivot without a front DOM overlay or completion label', () => {
   const app = readFileSync(path.join(ROOT, 'src/games/gunhit/App.tsx'), 'utf8');
   const game = readFileSync(path.join(ROOT, 'src/games/gunhit/game/Game.ts'), 'utf8');
   assert.ok(game.includes('this.events.onStageCleared?.(this.level.n, this.level.boss, { x: CX, y: this.targetY });'));
-  assert.ok(app.includes("left: stageClearBurst.x, top: stageClearBurst.y, transform: 'translate(-50%, -50%)'"));
-  assert.ok(app.includes('<div className="stage-clear-burst">'));
+  assert.ok(game.includes('drawBehindWheelSunburst('));
+  assert.ok(!app.includes('<div className="stage-clear-burst">'), 'no front z-35 DOM sunburst above canvas');
   assert.ok(!app.includes('STAGE CLEAR!'));
 });
 

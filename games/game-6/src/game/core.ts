@@ -95,12 +95,19 @@ export function P(o: Partial<Particle>): Particle {
   };
 }
 
+const MAX_NINE_PARTICLES = 180;
+
 export function updateParticles(list: Particle[], dt: number) {
-  for (let i = list.length - 1; i >= 0; i--) {
+  const len = list.length;
+  const excess = len > MAX_NINE_PARTICLES ? len - MAX_NINE_PARTICLES : 0;
+  let dropped = 0;
+  let write = 0;
+  for (let i = 0; i < len; i++) {
     const p = list[i];
     p.life -= dt;
-    if (p.life <= 0) {
-      list.splice(i, 1);
+    if (p.life <= 0) continue;
+    if (dropped < excess && (p.type === 'smoke' || p.type === 'spark' || p.type === 'ember')) {
+      dropped++;
       continue;
     }
     const d = Math.pow(p.drag, dt * 60);
@@ -122,114 +129,224 @@ export function updateParticles(list: Particle[], dt: number) {
         p.spin *= 0.5;
       }
     }
+    list[write++] = p;
   }
+  list.length = write;
 }
+
+const rgbParseCache = new Map<string, string>();
 
 function hexA(color: string, a: number) {
   if (color.startsWith('rgba')) return color;
   if (color.startsWith('#')) {
-    const h = color.slice(1);
-    const n = parseInt(h.length === 3 ? h.split('').map((c) => c + c).join('') : h, 16);
-    const r = (n >> 16) & 255,
-      g = (n >> 8) & 255,
-      b = n & 255;
-    return `rgba(${r},${g},${b},${a})`;
+    let rgb = rgbParseCache.get(color);
+    if (rgb === undefined) {
+      const h = color.slice(1);
+      const n = parseInt(h.length === 3 ? h.split('').map((c) => c + c).join('') : h, 16);
+      rgb = `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`;
+      if (rgbParseCache.size > 512) rgbParseCache.clear();
+      rgbParseCache.set(color, rgb);
+    }
+    return `rgba(${rgb},${a})`;
   }
   return color;
 }
 export const withAlpha = hexA;
 
+const nineRadialSprites = new Map<string, HTMLCanvasElement | null>();
+
+export function getNineRadialSprite(
+  innerColor: string,
+  midColor: string,
+  midStop = 0.38,
+  innerAlpha = 1,
+  midAlpha = 0.55,
+): HTMLCanvasElement | null {
+  const key = `${innerColor}|${midColor}|${midStop}|${innerAlpha}|${midAlpha}`;
+  const cached = nineRadialSprites.get(key);
+  if (cached !== undefined) return cached;
+  if (typeof document === 'undefined' || typeof HTMLCanvasElement === 'undefined') {
+    nineRadialSprites.set(key, null);
+    return null;
+  }
+  const cv = document.createElement('canvas');
+  if (!(cv instanceof HTMLCanvasElement)) {
+    nineRadialSprites.set(key, null);
+    return null;
+  }
+  const S = 64;
+  cv.width = S;
+  cv.height = S;
+  const c = cv.getContext('2d');
+  if (!c) {
+    nineRadialSprites.set(key, null);
+    return null;
+  }
+  const R = S * 0.5;
+  const g = c.createRadialGradient(R, R, 0, R, R, R);
+  g.addColorStop(0, hexA(innerColor, innerAlpha));
+  g.addColorStop(midStop, hexA(midColor, midAlpha));
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  c.fillStyle = g;
+  c.fillRect(0, 0, S, S);
+  if (nineRadialSprites.size > 192) nineRadialSprites.clear();
+  nineRadialSprites.set(key, cv);
+  return cv;
+}
+
+export function drawNineRadial(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  r: number,
+  innerColor: string,
+  midColor: string,
+  alpha: number,
+  midStop = 0.38,
+  innerAlpha = 1,
+  midAlpha = 0.55,
+) {
+  if (r <= 0.25 || alpha <= 0.01) return;
+  const sp = getNineRadialSprite(innerColor, midColor, midStop, innerAlpha, midAlpha);
+  const prevAlpha = ctx.globalAlpha;
+  if (sp) {
+    ctx.globalAlpha = prevAlpha * clamp(alpha, 0, 1);
+    ctx.drawImage(sp, x - r, y - r, r * 2, r * 2);
+    ctx.globalAlpha = prevAlpha;
+    return;
+  }
+  // Headless fallback without allocating CanvasGradients
+  ctx.fillStyle = hexA(midColor, midAlpha * 0.55 * alpha);
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = hexA(innerColor, innerAlpha * 0.85 * alpha);
+  ctx.beginPath();
+  ctx.arc(x, y, r * midStop, 0, TAU);
+  ctx.fill();
+}
+
+function isAdditiveParticle(type: ParticleType): boolean {
+  return type !== 'smoke' && type !== 'shard' && type !== 'casing' && type !== 'ash';
+}
+
 export function drawParticles(ctx: CanvasRenderingContext2D, list: Particle[]) {
-  for (const p of list) drawParticle(ctx, p);
+  if (!list.length) return;
+  // Pass 1: all source-over particles together (zero composite mode thrashing)
+  let hasAdditive = false;
+  for (let i = 0; i < list.length; i++) {
+    const p = list[i];
+    if (isAdditiveParticle(p.type)) {
+      hasAdditive = true;
+      continue;
+    }
+    drawParticleBody(ctx, p);
+  }
+  if (!hasAdditive) return;
+  // Pass 2: all additive ('lighter') particles batched under a single composite state
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  // Fast batched path for sparks first
+  for (let i = 0; i < list.length; i++) {
+    const p = list[i];
+    if (p.type !== 'spark') continue;
+    const t = clamp(p.life / p.max, 0, 1);
+    if (t <= 0.03) continue;
+    const sp = Math.hypot(p.vx, p.vy) || 1;
+    const len = clamp(sp * 0.022, 2, 26) * (0.4 + t);
+    const inv = len / sp;
+    const tx = p.x - p.vx * inv;
+    const ty = p.y - p.vy * inv;
+    const mx = (tx + p.x) * 0.5;
+    const my = (ty + p.y) * 0.5;
+    const lw = p.width * (0.3 + t * 0.9);
+    ctx.lineCap = 'round';
+    ctx.lineWidth = lw * 0.72;
+    ctx.strokeStyle = hexA(p.color, t * 0.42);
+    ctx.beginPath();
+    ctx.moveTo(tx, ty);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+    ctx.lineWidth = lw;
+    ctx.strokeStyle = hexA(p.color, t);
+    ctx.beginPath();
+    ctx.moveTo(mx, my);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+  }
+  for (let i = 0; i < list.length; i++) {
+    const p = list[i];
+    if (!isAdditiveParticle(p.type) || p.type === 'spark') continue;
+    drawParticleBody(ctx, p);
+  }
+  ctx.restore();
 }
 
 export function drawParticle(ctx: CanvasRenderingContext2D, p: Particle) {
-  const t = clamp(p.life / p.max, 0, 1);
-  const additive = p.type !== 'smoke' && p.type !== 'shard' && p.type !== 'casing' && p.type !== 'ash';
+  const additive = isAdditiveParticle(p.type);
   ctx.save();
   if (additive) ctx.globalCompositeOperation = 'lighter';
+  drawParticleBody(ctx, p);
+  ctx.restore();
+}
+
+function drawParticleBody(ctx: CanvasRenderingContext2D, p: Particle) {
+  const t = clamp(p.life / p.max, 0, 1);
+  if (t <= 0.025) return;
 
   switch (p.type) {
     case 'spark': {
-      const len = clamp(Math.hypot(p.vx, p.vy) * 0.022, 2, 26) * (0.4 + t);
-      const a = Math.atan2(p.vy, p.vx);
-      const g = ctx.createLinearGradient(p.x - Math.cos(a) * len, p.y - Math.sin(a) * len, p.x, p.y);
-      g.addColorStop(0, hexA(p.color, 0));
-      g.addColorStop(1, hexA(p.color, t));
-      ctx.strokeStyle = g;
-      ctx.lineWidth = p.width * (0.3 + t * 0.9);
+      const sp = Math.hypot(p.vx, p.vy) || 1;
+      const len = clamp(sp * 0.022, 2, 26) * (0.4 + t);
+      const inv = len / sp;
+      const tx = p.x - p.vx * inv;
+      const ty = p.y - p.vy * inv;
+      const mx = (tx + p.x) * 0.5;
+      const my = (ty + p.y) * 0.5;
+      const lw = p.width * (0.3 + t * 0.9);
       ctx.lineCap = 'round';
+      ctx.lineWidth = lw * 0.72;
+      ctx.strokeStyle = hexA(p.color, t * 0.42);
       ctx.beginPath();
-      ctx.moveTo(p.x - Math.cos(a) * len, p.y - Math.sin(a) * len);
+      ctx.moveTo(tx, ty);
+      ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+      ctx.lineWidth = lw;
+      ctx.strokeStyle = hexA(p.color, t);
+      ctx.beginPath();
+      ctx.moveTo(mx, my);
       ctx.lineTo(p.x, p.y);
       ctx.stroke();
       break;
     }
     case 'ember': {
       const fl = 0.65 + 0.35 * Math.sin(p.seed + (p.max - p.life) * 30);
-      const r = p.size * (0.4 + t * 0.9) * fl;
-      const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, Math.max(0.5, r * 3.2));
-      g.addColorStop(0, hexA(p.color, t));
-      g.addColorStop(0.35, hexA(p.color2, t * 0.55));
-      g.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, Math.max(0.5, r * 3.2), 0, TAU);
-      ctx.fill();
+      const r = Math.max(0.5, p.size * (0.4 + t * 0.9) * fl * 3.2);
+      drawNineRadial(ctx, p.x, p.y, r, p.color, p.color2, t, 0.35, 1, 0.55);
       break;
     }
     case 'glow': {
-      const r = lerp(p.size2, p.size, t);
-      const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, Math.max(0.6, r));
-      g.addColorStop(0, hexA(p.color, t));
-      g.addColorStop(0.4, hexA(p.color2, t * 0.5));
-      g.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, Math.max(0.6, r), 0, TAU);
-      ctx.fill();
+      const r = Math.max(0.6, lerp(p.size2, p.size, t));
+      drawNineRadial(ctx, p.x, p.y, r, p.color, p.color2, t, 0.4, 1, 0.5);
       break;
     }
     case 'flash': {
-      const r = p.size * (0.5 + (1 - t) * 0.9);
-      const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
-      g.addColorStop(0, hexA('#ffffff', t));
-      g.addColorStop(0.25, hexA(p.color, t * 0.95));
-      g.addColorStop(0.6, hexA(p.color2, t * 0.35));
-      g.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, r, 0, TAU);
-      ctx.fill();
+      const r = Math.max(0.6, p.size * (0.5 + (1 - t) * 0.9));
+      drawNineRadial(ctx, p.x, p.y, r, '#ffffff', p.color, t, 0.32, 1, 0.85);
       break;
     }
     case 'fire': {
-      const r = lerp(p.size2, p.size, 1 - t) * 1.0;
-      const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, Math.max(1, r));
-      const hot = t;
-      g.addColorStop(0, `rgba(255,255,${Math.floor(200 * hot + 40)},${0.9 * t})`);
-      g.addColorStop(0.3, hexA(p.color, 0.75 * t));
-      g.addColorStop(0.7, hexA(p.color2, 0.35 * t));
-      g.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, Math.max(1, r), 0, TAU);
-      ctx.fill();
+      const r = Math.max(1, lerp(p.size2, p.size, 1 - t));
+      drawNineRadial(ctx, p.x, p.y, r, '#fff5a8', p.color, t, 0.36, 0.9, 0.72);
       break;
     }
     case 'smoke': {
-      const r = lerp(p.size2, p.size, 1 - t);
-      const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, Math.max(1, r));
-      g.addColorStop(0, hexA(p.color, 0.42 * t));
-      g.addColorStop(0.5, hexA(p.color, 0.2 * t));
-      g.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, Math.max(1, r), 0, TAU);
-      ctx.fill();
+      const r = Math.max(1, lerp(p.size2, p.size, 1 - t));
+      drawNineRadial(ctx, p.x, p.y, r, p.color, p.color, t, 0.5, 0.42, 0.2);
       break;
     }
     case 'shard': {
+      ctx.save();
       ctx.translate(p.x, p.y);
       ctx.rotate(p.rot);
       ctx.globalAlpha = clamp(t * 1.6, 0, 1);
@@ -243,20 +360,23 @@ export function drawParticle(ctx: CanvasRenderingContext2D, p: Particle) {
       ctx.fill();
       ctx.fillStyle = hexA(p.color2, 0.6);
       ctx.fillRect(-p.size, -p.size * 0.35, p.size * 1.9, p.size * 0.18);
+      ctx.restore();
       break;
     }
     case 'casing': {
+      ctx.save();
       ctx.translate(p.x, p.y);
       ctx.rotate(p.rot);
       ctx.globalAlpha = clamp(t * 1.8, 0, 1);
-      const g = ctx.createLinearGradient(0, -p.size * 0.4, 0, p.size * 0.4);
-      g.addColorStop(0, '#fde68a');
-      g.addColorStop(0.45, '#d4a017');
-      g.addColorStop(1, '#8a5a12');
-      ctx.fillStyle = g;
+      ctx.fillStyle = '#d4a017';
       ctx.fillRect(-p.size * 1.1, -p.size * 0.38, p.size * 2.2, p.size * 0.76);
+      ctx.fillStyle = '#fde68a';
+      ctx.fillRect(-p.size * 1.1, -p.size * 0.38, p.size * 2.2, p.size * 0.24);
+      ctx.fillStyle = '#8a5a12';
+      ctx.fillRect(-p.size * 1.1, p.size * 0.14, p.size * 2.2, p.size * 0.24);
       ctx.fillStyle = '#b8860b';
       ctx.fillRect(p.size * 0.7, -p.size * 0.45, p.size * 0.45, p.size * 0.9);
+      ctx.restore();
       break;
     }
     case 'ring': {
@@ -285,12 +405,8 @@ export function drawParticle(ctx: CanvasRenderingContext2D, p: Particle) {
     case 'bolt': {
       const a = p.rot;
       const len = p.size;
-      ctx.strokeStyle = hexA(p.color, t);
-      ctx.lineWidth = p.width * (0.4 + t);
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
-      ctx.shadowColor = p.color;
-      ctx.shadowBlur = 12;
       ctx.beginPath();
       ctx.moveTo(p.x, p.y);
       let cx = p.x,
@@ -303,85 +419,105 @@ export function drawParticle(ctx: CanvasRenderingContext2D, p: Particle) {
         cy = p.y + Math.sin(a) * len * prog + Math.cos(a) * off;
         ctx.lineTo(cx, cy);
       }
+      ctx.strokeStyle = hexA(p.color, t * 0.34);
+      ctx.lineWidth = p.width * (0.4 + t) * 2.5;
+      ctx.stroke();
+      ctx.strokeStyle = hexA(p.color, t);
+      ctx.lineWidth = p.width * (0.4 + t);
       ctx.stroke();
       break;
     }
     case 'cone': {
       const L = p.size * (0.6 + (1 - t) * 0.55);
       const h = Math.tan(p.width) * L * 0.6;
+      ctx.save();
       ctx.translate(p.x, p.y);
       ctx.rotate(p.rot);
-      const g = ctx.createLinearGradient(0, 0, L, 0);
-      g.addColorStop(0, hexA('#ffffff', t));
-      g.addColorStop(0.3, hexA(p.color, t * 0.9));
-      g.addColorStop(0.75, hexA(p.color2, t * 0.3));
-      g.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = g;
+      ctx.fillStyle = hexA(p.color, t * 0.72);
       ctx.beginPath();
       ctx.moveTo(0, -h * 0.14);
       ctx.quadraticCurveTo(L * 0.45, -h, L, 0);
       ctx.quadraticCurveTo(L * 0.45, h, 0, h * 0.14);
       ctx.closePath();
       ctx.fill();
+      ctx.fillStyle = hexA('#ffffff', t * 0.9);
+      ctx.beginPath();
+      ctx.moveTo(0, -h * 0.08);
+      ctx.quadraticCurveTo(L * 0.28, -h * 0.46, L * 0.62, 0);
+      ctx.quadraticCurveTo(L * 0.28, h * 0.46, 0, h * 0.08);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
       break;
     }
     case 'flare': {
       const n = Math.max(2, Math.round(p.size2));
       const full = p.width >= 3.1;
+      ctx.save();
       ctx.translate(p.x, p.y);
       ctx.rotate(p.rot);
+      ctx.fillStyle = hexA(p.color, t * 0.78);
+      ctx.beginPath();
       for (let i = 0; i < n; i++) {
         const a = full ? (i / n) * TAU : lerp(-p.width, p.width, i / (n - 1));
         const rr = Math.abs(Math.sin(p.seed * 12.9898 + i * 78.233) * 43758.5453) % 1;
         const len = p.size * (0.45 + rr * 0.55) * (0.5 + t * 0.7);
         const bw = Math.max(0.8, p.size * 0.045) * (0.4 + t);
-        ctx.save();
-        ctx.rotate(a);
-        const g = ctx.createLinearGradient(0, 0, len, 0);
-        g.addColorStop(0, hexA('#ffffff', t));
-        g.addColorStop(0.35, hexA(p.color, t * 0.85));
-        g.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx.fillStyle = g;
-        ctx.beginPath();
-        ctx.moveTo(0, -bw);
-        ctx.lineTo(len, 0);
-        ctx.lineTo(0, bw);
+        const ca = Math.cos(a), sa = Math.sin(a);
+        ctx.moveTo(sa * bw, -ca * bw);
+        ctx.lineTo(ca * len, sa * len);
+        ctx.lineTo(-sa * bw, ca * bw);
         ctx.closePath();
-        ctx.fill();
-        ctx.restore();
       }
+      ctx.fill();
+      ctx.fillStyle = `rgba(255,255,255,${t * 0.92})`;
+      ctx.beginPath();
+      for (let i = 0; i < n; i++) {
+        const a = full ? (i / n) * TAU : lerp(-p.width, p.width, i / (n - 1));
+        const rr = Math.abs(Math.sin(p.seed * 12.9898 + i * 78.233) * 43758.5453) % 1;
+        const len = p.size * (0.45 + rr * 0.55) * (0.5 + t * 0.7) * 0.48;
+        const bw = Math.max(0.5, p.size * 0.025) * (0.4 + t);
+        const ca = Math.cos(a), sa = Math.sin(a);
+        ctx.moveTo(sa * bw, -ca * bw);
+        ctx.lineTo(ca * len, sa * len);
+        ctx.lineTo(-sa * bw, ca * bw);
+        ctx.closePath();
+      }
+      ctx.fill();
+      ctx.restore();
       break;
     }
     case 'streak': {
       const L = p.size * (0.55 + (1 - t) * 0.45);
+      const h = p.width * (0.3 + t * 0.7);
+      ctx.save();
       ctx.translate(p.x, p.y);
       ctx.rotate(p.rot);
-      const g = ctx.createLinearGradient(-L, 0, L, 0);
-      g.addColorStop(0, 'rgba(0,0,0,0)');
-      g.addColorStop(0.5, hexA(p.color, t * 0.9));
-      g.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = g;
-      const h = p.width * (0.3 + t * 0.7);
-      ctx.fillRect(-L, -h / 2, L * 2, h);
-      const g2 = ctx.createLinearGradient(-L * 0.6, 0, L * 0.6, 0);
-      g2.addColorStop(0, 'rgba(255,255,255,0)');
-      g2.addColorStop(0.5, `rgba(255,255,255,${t})`);
-      g2.addColorStop(1, 'rgba(255,255,255,0)');
-      ctx.fillStyle = g2;
-      ctx.fillRect(-L * 0.6, -h * 0.18, L * 1.2, h * 0.36);
+      ctx.fillStyle = hexA(p.color, t * 0.48);
+      ctx.beginPath();
+      ctx.ellipse(0, 0, L, Math.max(0.6, h * 0.55), 0, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = `rgba(255,255,255,${t * 0.92})`;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, L * 0.55, Math.max(0.4, h * 0.22), 0, 0, TAU);
+      ctx.fill();
+      ctx.restore();
       break;
     }
     case 'pixel': {
       const s2 = p.size * (0.4 + 0.6 * t);
+      ctx.save();
       ctx.translate(p.x, p.y);
       ctx.rotate(p.rot);
       ctx.fillStyle = hexA(p.color, t * 0.28);
       ctx.fillRect(-s2 * 1.1, -s2 * 1.1, s2 * 2.2, s2 * 2.2);
       ctx.fillStyle = hexA(p.color, t);
       ctx.fillRect(-s2 / 2, -s2 / 2, s2, s2);
+      ctx.restore();
       break;
     }
     case 'ash': {
+      ctx.save();
       ctx.translate(p.x, p.y);
       ctx.rotate(p.rot);
       ctx.globalAlpha = clamp(t * 1.3, 0, 1) * 0.85;
@@ -393,6 +529,7 @@ export function drawParticle(ctx: CanvasRenderingContext2D, p: Particle) {
       ctx.lineTo(-p.size * 0.6, p.size * 0.45);
       ctx.closePath();
       ctx.fill();
+      ctx.restore();
       break;
     }
     case 'rimarc': {
@@ -428,7 +565,6 @@ export function drawParticle(ctx: CanvasRenderingContext2D, p: Particle) {
       break;
     }
   }
-  ctx.restore();
 }
 
 /* --------------------------- drawing helpers --------------------------- */
@@ -451,6 +587,8 @@ export function roundRect(
   ctx.closePath();
 }
 
+const metalGradCache = new WeakMap<CanvasRenderingContext2D, Map<string, CanvasGradient>>();
+
 export function metal(
   ctx: CanvasRenderingContext2D,
   y0: number,
@@ -459,11 +597,22 @@ export function metal(
   c1: string,
   c2: string
 ) {
-  const g = ctx.createLinearGradient(0, y0, 0, y1);
-  g.addColorStop(0, c0);
-  g.addColorStop(0.42, c1);
-  g.addColorStop(0.62, c1);
-  g.addColorStop(1, c2);
+  let map = metalGradCache.get(ctx);
+  if (!map) {
+    map = new Map();
+    metalGradCache.set(ctx, map);
+  }
+  const key = `${y0.toFixed(2)}|${y1.toFixed(2)}|${c0}|${c1}|${c2}`;
+  let g = map.get(key);
+  if (!g) {
+    g = ctx.createLinearGradient(0, y0, 0, y1);
+    g.addColorStop(0, c0);
+    g.addColorStop(0.42, c1);
+    g.addColorStop(0.62, c1);
+    g.addColorStop(1, c2);
+    if (map.size > 512) map.clear();
+    map.set(key, g);
+  }
   return g;
 }
 
@@ -552,30 +701,38 @@ class Synth {
       const AC = (window.AudioContext || (window as any).webkitAudioContext) as typeof AudioContext;
       const c = new AC();
       this.ctx = c;
-      const len = c.sampleRate * 1.2;
+      const len = Math.floor(c.sampleRate * 1.2);
       const buf = c.createBuffer(1, len, c.sampleRate);
       const d = buf.getChannelData(0);
       for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
       this.noise = buf;
       const comp = c.createDynamicsCompressor();
-      comp.threshold.value = -16;
-      comp.ratio.value = 7;
-      comp.attack.value = 0.002;
-      comp.release.value = 0.2;
+      comp.threshold.value = -10;
+      comp.knee.value = 12;
+      comp.ratio.value = 4;
+      comp.attack.value = 0.006;
+      comp.release.value = 0.14;
       this.master = c.createGain();
-      this.master.gain.value = 0.85;
+      this.master.gain.value = this.muted ? 0 : 0.92;
       this.master.connect(comp);
       comp.connect(c.destination);
-      const rl = Math.floor(c.sampleRate * 1.5);
+      // Warm 1.1s stereo room impulse with equal-power normalization enabled (crisp stereo, zero clipping)
+      const rl = Math.max(1, Math.floor(c.sampleRate * 1.1));
       const ir = c.createBuffer(2, rl, c.sampleRate);
       for (let ch = 0; ch < 2; ch++) {
         const dd = ir.getChannelData(ch);
-        for (let i = 0; i < rl; i++) dd[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / rl, 3.4);
+        let smooth = 0;
+        for (let i = 0; i < rl; i++) {
+          const raw = Math.random() * 2 - 1;
+          smooth = smooth * 0.42 + raw * 0.58;
+          dd[i] = smooth * Math.pow(1 - i / rl, 3.2);
+        }
       }
       this.verb = c.createConvolver();
+      this.verb.normalize = true;
       this.verb.buffer = ir;
       const wet = c.createGain();
-      wet.gain.value = 0.32;
+      wet.gain.value = 0.28;
       this.verb.connect(wet);
       wet.connect(comp);
     }
@@ -583,24 +740,44 @@ class Synth {
     return this.ctx;
   }
 
-  private out(node: AudioNode, send: number) {
+  private out(node: AudioNode, send: number): GainNode | null {
     node.connect(this.master!);
     if (send > 0) {
       const s = this.ctx!.createGain();
       s.gain.value = send;
       node.connect(s);
       s.connect(this.verb!);
+      return s;
     }
+    return null;
   }
 
-  private env(node: AudioNode, g: number, a: number, d: number, t0: number, send: number) {
+  private env(
+    srcNode: AudioScheduledSourceNode,
+    node: AudioNode,
+    g: number,
+    a: number,
+    d: number,
+    t0: number,
+    send: number,
+  ) {
     const ctx = this.ctx!;
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(0.0001, t0);
     gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, g), t0 + a);
     gain.gain.exponentialRampToValueAtTime(0.0001, t0 + a + d);
     node.connect(gain);
-    this.out(gain, send);
+    const sendGain = this.out(gain, send);
+    srcNode.onended = () => {
+      try {
+        srcNode.disconnect();
+        if (node !== srcNode) node.disconnect();
+        gain.disconnect();
+        sendGain?.disconnect();
+      } catch {
+        /* ignore */
+      }
+    };
   }
 
   noiseBurst(dur: number, gain: number, type: BiquadFilterType, freq: number, q = 1, t0 = 0, sweepTo = 0, send = 0.25) {
@@ -615,8 +792,9 @@ class Synth {
     f.frequency.setValueAtTime(freq, start);
     if (sweepTo) f.frequency.exponentialRampToValueAtTime(Math.max(30, sweepTo), start + dur);
     src.connect(f);
-    this.env(f, gain, 0.003, dur, start, send);
-    src.start(start, Math.random() * 0.5);
+    this.env(src, f, gain, 0.003, dur, start, send);
+    const maxOffset = Math.max(0, 1.15 - dur);
+    src.start(start, maxOffset > 0 ? Math.random() * Math.min(0.5, maxOffset) : 0);
     src.stop(start + dur + 0.1);
   }
 
@@ -629,7 +807,7 @@ class Synth {
     const start = ctx.currentTime + t0;
     o.frequency.setValueAtTime(f0, start);
     o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), start + dur);
-    this.env(o, gain, 0.004, dur, start, send);
+    this.env(o, o, gain, 0.004, dur, start, send);
     o.start(start);
     o.stop(start + dur + 0.1);
   }

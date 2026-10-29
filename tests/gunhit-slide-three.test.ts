@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { RETIRED_WEAPONS } from '../src/games/gunhit/game/retiredWeapons';
 import assert from 'node:assert/strict';
 
 import { installCanvasShim } from './supportCanvas';
@@ -9,7 +10,7 @@ import { installSilentAudio } from '../tools/supportAudioSilent';
  * weapons live on slide 1 behind a "Slide 3" card, and on that card a gun is
  * slide 3's gun: its own engine fires it (trigger, cooldown, round, flight,
  * impact), its own synthesizer is the only voice, its own wheel reaction
- * (bounce spring, rim flash, screen flash, 22 % hit-stop) is the only feel, and
+ * (bounce spring, rim flash and screen flash) is the only feel, and
  * none of slide 1's perks, combo beeps or extra bursts are layered on top.
  * The other cards of the same guns keep slide 1's behaviour untouched.
  */
@@ -157,6 +158,7 @@ test('all 71 of slide 3’s weapons are on slide 1, each with its own "Slide 3" 
   assert.equal(SLIDE3.length, 71);
   for (const w of SLIDE3) {
     const slide1 = SLIDE1_FOR[w.id];
+    if (RETIRED_WEAPONS.has(slide1)) continue;
     assert.ok(slide1, `${w.id} has a slide-1 gun`);
     assert.equal(slideThreeIdFor(slide1), w.id);
     assert.ok(variants.EDITABLE_WEAPONS.includes(slide1 as never), `${slide1} is selectable`);
@@ -174,6 +176,7 @@ test('a "Slide 3" shot is heard only through slide 3’s own synthesizer — all
   seeded(7, () => {
     for (const w of SLIDE3) {
       const slide1 = SLIDE1_FOR[w.id];
+      if (RETIRED_WEAPONS.has(slide1)) continue;
       const game = stage(slide1);
       heard = [];
       tap(game);
@@ -202,7 +205,7 @@ test('the other cards of the same guns keep slide 1’s own voice', () => {
 
 test('slide 3 fires once per press: no auto-fire, spin-up, scope or held charge', () => {
   seeded(7, () => {
-    for (const id of ['minigun', 'flamethrower', 'bee', 'paintball', 'soaker', 'sniper', 'beerifle', 'buster']) {
+    for (const id of ['minigun', 'flamethrower', 'bee', 'paintball', 'soaker', 'sniper', 'beerifle']) {
       const game = stage(id);
       shots = 0;
       game.press(); // held
@@ -293,7 +296,7 @@ test('a slide-3 hit moves the wheel and the screen the slide-3 way only', () => 
     assert.ok(f.bumpV < -100 || f.bumpY < -1, 'its bounce spring got the −26·15 kick');
     assert.ok(f.rim > 0.8, 'its rim flash lit');
     assert.ok(Math.abs(f.flashA - 0.24) < 0.05, `its screen flash is 0.24 (${f.flashA})`);
-    assert.ok(f.stop > 0.05, 'its hit-stop is running');
+    assert.equal(f.stop, 0, 'successful impacts no longer slow the world');
     assert.equal(game.bump, 0, 'no slide-1 bump');
     assert.equal(game.hitFlash, 0, 'no slide-1 white flash');
     assert.equal(game.tintA, 0, 'no slide-1 tint');

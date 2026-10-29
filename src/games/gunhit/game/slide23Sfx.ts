@@ -55,14 +55,21 @@ class Slide23Sfx {
    * rewriting the sound.
    */
   private shotGain = 1;
+  private volume = 1;
   muted = false;
 
   setMuted(m: boolean) {
     this.muted = m;
+    if (this.master) this.master.gain.value = m ? 0 : 0.88 * this.volume;
+  }
+
+  setVolume(v: number) {
+    this.volume = Math.max(0, Math.min(1, v));
+    if (this.master) this.master.gain.value = this.muted ? 0 : 0.88 * this.volume;
   }
 
   private ensure(): AudioContext | null {
-    if (this.muted) return null;
+    if (this.muted || this.volume <= 0) return null;
     if (typeof window === 'undefined') return null;
     if (!this.ctx) {
       const AC =
@@ -73,28 +80,35 @@ class Slide23Sfx {
       this.ctx = ctx;
 
       const comp = ctx.createDynamicsCompressor();
-      comp.threshold.value = -14;
+      comp.threshold.value = -10;
+      comp.knee.value = 12;
       comp.ratio.value = 4;
+      comp.attack.value = 0.006;
+      comp.release.value = 0.14;
       comp.connect(ctx.destination);
 
       const master = ctx.createGain();
-      master.gain.value = 0.8;
+      master.gain.value = 0.88 * this.volume;
       master.connect(comp);
       this.master = master;
 
-      // 1.5s stereo reverb impulse (Slide #2)
-      const rLen = Math.floor(ctx.sampleRate * 1.5);
+      // Warm 1.1s stereo reverb impulse with WebAudio equal-power normalization enabled
+      const rLen = Math.max(1, Math.floor(ctx.sampleRate * 1.1));
       const rBuf = ctx.createBuffer(2, rLen, ctx.sampleRate);
       for (let ch = 0; ch < 2; ch++) {
         const d = rBuf.getChannelData(ch);
+        let smooth = 0;
         for (let i = 0; i < rLen; i++) {
-          d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / rLen, 2.5);
+          const raw = Math.random() * 2 - 1;
+          smooth = smooth * 0.42 + raw * 0.58;
+          d[i] = smooth * Math.pow(1 - i / rLen, 2.7);
         }
       }
       const rev = ctx.createConvolver();
+      rev.normalize = true;
       rev.buffer = rBuf;
       const revGain = ctx.createGain();
-      revGain.gain.value = 0.28;
+      revGain.gain.value = 0.26;
       rev.connect(revGain);
       revGain.connect(master);
       this.reverb = rev;

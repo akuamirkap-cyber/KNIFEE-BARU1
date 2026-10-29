@@ -2,13 +2,14 @@ import { slide23Sfx } from './slide23Sfx';
 import { fireworkSfx } from './fireworkSlide2Sfx';
 import { slide2Sfx } from './slide2Audio';
 import { setOneSfx } from './setOneAudio';
-import { setNineMuted } from './setNineFx';
-import { setElevenMuted } from './setElevenFx';
+import { setNineMuted, setNineVolume } from './setNineFx';
+import { setElevenMuted, setElevenVolume } from './setElevenFx';
 
 let actx: AudioContext | null = null;
 let master: GainNode | null = null;
 let noiseBuf: AudioBuffer | null = null;
 let muted = false;
+let userVolume = 1;
 
 /**
  * Slide-1 master level.
@@ -20,7 +21,7 @@ let muted = false;
  * the slide the gun came from. 0.85 matches slide 9, and the compressor below
  * keeps the loudest recipes from clipping now that the bus is hotter.
  */
-const MASTER_LEVEL = 0.85;
+const MASTER_LEVEL = 0.92;
 
 /**
  * Per-call gain multiplier for slide 1's own `noise()`/`tone()` recipes.
@@ -50,7 +51,22 @@ export function withSfxGain<T>(k: number, fn: () => T): T {
 
 /** Current slide-1 master level (0 while muted). */
 export function masterLevel(): number {
-  return master ? master.gain.value : MASTER_LEVEL;
+  return master ? master.gain.value : (muted ? 0 : MASTER_LEVEL * userVolume);
+}
+
+export function getMasterVolume(): number {
+  return userVolume;
+}
+
+export function setMasterVolume(v: number) {
+  userVolume = Math.max(0, Math.min(1, Number.isFinite(v) ? v : 1));
+  slide23Sfx.setVolume(userVolume);
+  fireworkSfx.setVolume(userVolume);
+  slide2Sfx.setVolume(userVolume);
+  setOneSfx.setVolume(userVolume);
+  setNineVolume(userVolume);
+  setElevenVolume(userVolume);
+  if (master) master.gain.value = muted ? 0 : MASTER_LEVEL * userVolume;
 }
 
 export function setMuted(m: boolean) {
@@ -63,7 +79,7 @@ export function setMuted(m: boolean) {
   setNineMuted(m);
   // …and slide 11's through slide 11's.
   setElevenMuted(m);
-  if (master) master.gain.value = m ? 0 : MASTER_LEVEL;
+  if (master) master.gain.value = m ? 0 : MASTER_LEVEL * userVolume;
 }
 
 function ac(): AudioContext {
@@ -72,18 +88,17 @@ function ac(): AudioContext {
       window.AudioContext ||
       (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     actx = new AC();
-    // Slide 9 / slide 11 both run a compressor on their master bus; slide 1
-    // never had one, so the loud recipes (shotgun, sniper, AK) could clip
-    // while the quiet ones were buried. Same idea, gentler settings.
+    // Clean, punchy studio limiter: lets crisp hit/coin/gun transients snap
+    // through uncompressed while gently catching true multi-voice peaks.
     const comp = actx.createDynamicsCompressor();
-    comp.threshold.value = -16;
-    comp.knee.value = 24;
-    comp.ratio.value = 7;
-    comp.attack.value = 0.002;
-    comp.release.value = 0.2;
+    comp.threshold.value = -10;
+    comp.knee.value = 12;
+    comp.ratio.value = 4;
+    comp.attack.value = 0.006;
+    comp.release.value = 0.14;
     comp.connect(actx.destination);
     master = actx.createGain();
-    master.gain.value = muted ? 0 : MASTER_LEVEL;
+    master.gain.value = muted ? 0 : MASTER_LEVEL * userVolume;
     master.connect(comp);
     noiseBuf = actx.createBuffer(1, actx.sampleRate, actx.sampleRate);
     const d = noiseBuf.getChannelData(0);
@@ -110,6 +125,15 @@ export function noise(dur: number, freq: number, vol: number, type: BiquadFilter
     src.connect(f);
     f.connect(g);
     g.connect(master!);
+    src.onended = () => {
+      try {
+        src.disconnect();
+        f.disconnect();
+        g.disconnect();
+      } catch {
+        /* ignore */
+      }
+    };
     src.start(t);
     src.stop(t + dur + 0.02);
   } catch {
@@ -131,6 +155,14 @@ export function tone(f0: number, f1: number, dur: number, type: OscillatorType, 
     g.gain.exponentialRampToValueAtTime(0.001, t + dur);
     o.connect(g);
     g.connect(master!);
+    o.onended = () => {
+      try {
+        o.disconnect();
+        g.disconnect();
+      } catch {
+        /* ignore */
+      }
+    };
     o.start(t);
     o.stop(t + dur + 0.02);
   } catch {

@@ -16,10 +16,6 @@ import { TAU, rnd, hsl, drawSlide2Orb, type Slide2Fx } from './slide2Fx';
 const CX = 210;
 const GUNY = 596;
 
-/** Set by the game so the gun art can spawn charge sparks into the live FX layer. */
-let gunFx: Slide2Fx | null = null;
-export const setSlide2GunFx = (fx: Slide2Fx | null) => { gunFx = fx; };
-
 export interface Slide2GunState {
   time: number;
   /** Slide-2 `recoil`, 0..1 (decays 6/s). */
@@ -29,6 +25,8 @@ export interface Slide2GunState {
   /** Hue of the projectile that is currently loaded. */
   hue: number;
   live: boolean;
+  /** Present only for a live gameplay draw, never for menu previews. */
+  fx?: Slide2Fx;
 }
 
 /**
@@ -67,10 +65,10 @@ export function drawBlackHoleGun2(c: CanvasRenderingContext2D, cx: number, y0: n
     ctx.translate(CX, tipY);
     drawSlide2Orb(ctx, nextHue, 12, st.time, 4.2);
     ctx.restore();
-    if (gunFx && Math.random() < 0.6) {
+    if (st.fx && Math.random() < 0.6) {
       const a = rnd(0, TAU);
       const rr = rnd(22, 38);
-      gunFx.spawn(
+      st.fx.spawn(
         CX + Math.cos(a) * rr,
         tipY + Math.sin(a) * rr,
         -Math.cos(a) * 3 - Math.sin(a) * 2,

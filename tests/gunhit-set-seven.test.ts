@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { RETIRED_WEAPONS } from '../src/games/gunhit/game/retiredWeapons';
 import assert from 'node:assert/strict';
 
 import {
@@ -126,11 +127,12 @@ test('slide 3 designs and shots are available for all 65 SET 2..7 guns, and stay
   // 3's own guns now (user request), with the classic look still pickable.
   for (const id of ['plasma', 'laser'] as const) {
     assert.equal(getGunVariant(id), 'set7');
-    assert.equal(getGunEffect(id), 'set7');
+    assert.equal(getGunEffect(id), id === 'laser' ? 'original' : 'set7');
     assert.deepEqual(getGunVariantOptions(id).map((o) => o.id), ['original', 'set7']);
     assert.deepEqual(getGunEffectOptions(id).map((o) => o.id), ['original', 'set7']);
   }
   for (const [slide1, seven] of Object.entries(SET_SEVEN_BY_SLIDE1_ID)) {
+    if (RETIRED_WEAPONS.has(slide1)) continue;
     assert.ok(SET_SEVEN_SETS[seven] >= 2, `${seven} is SET 2..7`);
     assert.ok(EDITABLE_WEAPONS.includes(slide1 as never), `${slide1} is selectable`);
     const label = 'Slide 3';
@@ -152,7 +154,7 @@ test('slide 3 designs and shots are available for all 65 SET 2..7 guns, and stay
     if (slide1 === 'firework') assert.equal(getGunEffect('firework'), 'new');
   }
   for (const id of ['golden', 'blackhole', 'slingshot', 'blowgun', 'shotgun', 'soaker']) {
-    assert.equal(getGunVariant(id), 'set1');
+    assert.equal(getGunVariant(id), id === 'slingshot' || id === 'shotgun' ? 'original' : 'set1');
   }
 });
 

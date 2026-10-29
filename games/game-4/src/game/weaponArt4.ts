@@ -1,5 +1,5 @@
 import { type Ctx, TAU, clamp, drawSprite, glowSprite, lin, polyPath, roundRect, starSprite } from './core';
-import { drawBee, drawBlossom, drawCoconut, drawGravityOrb, drawKeris, drawKerisBlade, drawPetal, hexPath } from './shapes4';
+import { drawBee, drawBlossom, drawCoconut, drawGravityOrb, drawFireRocket, drawKeris, drawKerisBlade, drawPetal, hexPath } from './shapes4';
 import { drawWeapon5 } from './weaponArt5';
 import type { WeaponAnim, WeaponId } from './weapons';
 
@@ -1063,10 +1063,11 @@ function drawFireworkLauncher(ctx: Ctx, a: WeaponAnim, time: number) {
   ctx.strokeStyle = '#ffd23f';
   ctx.lineWidth = 2;
   for (let i = 0; i < 3; i++) line(ctx, -9, 214 + i * 12, 9, 214 + i * 12);
-  const order = [1, 0, 2];
+  // Red/yellow sit closer together, slightly lower, and behind blue.
+  const order = [0, 2, 1];
   for (const ti of order) {
-    const x = (ti - 1) * 19;
-    const top = ti === 1 ? -4 : 2;
+    const x = (ti - 1) * 15;
+    const top = ti === 1 ? -4 : 8;
     const rec = a.idx === ti && a.fireT < 0.35 ? Math.exp(-a.fireT * 9) * 7 : 0;
     ctx.save();
     ctx.translate(0, rec);
@@ -1107,6 +1108,12 @@ function drawFireworkLauncher(ctx: Ctx, a: WeaponAnim, time: number) {
     ctx.strokeStyle = '#d8d8dc';
     ctx.lineWidth = 1.2;
     ctx.stroke();
+    // All three openings have a colorful rocket waiting, like skin 1.
+    // Briefly dip the just-fired one into its tube as it reloads.
+    const loading = a.idx === ti && a.fireT < 0.34 ? Math.sin(Math.PI * a.fireT / 0.34) * 8 : 0;
+    ctx.save(); ctx.translate(x, top + 5 + loading);
+    drawFireRocket(ctx, ti, 0, time, 0);
+    ctx.restore();
     if (a.idx === ti && a.fireT < 0.5) {
       const h = 1 - a.fireT / 0.5;
       ctx.save();

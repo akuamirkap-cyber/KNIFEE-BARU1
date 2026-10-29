@@ -462,8 +462,52 @@ export function drawAppleHalf(ctx: Ctx, r: number, side: number) {
 }
 
 // ───────────────────────── projectile shapes ─────────────────────────
+interface SmallArtSprite { canvas: HTMLCanvasElement; x: number; y: number; w: number; h: number }
+const goldArtSprites = new Map<string, SmallArtSprite>();
+
+/** Cache static brass art at high resolution; headless recording contexts keep the original paths. */
+function cachedGoldArt(
+  ctx: Ctx, key: string, x: number, y: number, w: number, h: number,
+  draw: (c: Ctx, arg1: number, arg2: number) => void, arg1 = 0, arg2 = 0,
+): SmallArtSprite | null {
+  if (typeof document === 'undefined' || typeof HTMLCanvasElement === 'undefined'
+    || !(ctx.canvas instanceof HTMLCanvasElement)) return null;
+  const cached = goldArtSprites.get(key);
+  if (cached) return cached;
+  try {
+    const density = 3;
+    const canvas = makeCanvas(w * density, h * density);
+    const c = canvas.getContext('2d');
+    if (!c) return null;
+    c.setTransform(density, 0, 0, density, -x * density, -y * density);
+    draw(c, arg1, arg2);
+    const sprite = { canvas, x, y, w, h };
+    if (goldArtSprites.size >= 48) {
+      const oldest = goldArtSprites.keys().next().value;
+      if (oldest !== undefined) goldArtSprites.delete(oldest);
+    }
+    goldArtSprites.set(key, sprite);
+    return sprite;
+  } catch {
+    return null;
+  }
+}
+
 /** golden bullet, nose up, centered */
 export function drawGoldBullet(ctx: Ctx, L = 16, w = 6.4) {
+  const x = Math.floor(-w / 2 - 2);
+  const y = Math.floor(-L / 2 - 2);
+  const width = Math.ceil(w / 2 + 2) - x;
+  const height = Math.ceil(L / 2 + 2) - y;
+  const sprite = cachedGoldArt(ctx, `bullet:${L}:${w}`, x, y, width, height, drawGoldBulletVector, L, w);
+  if (sprite) {
+    ctx.drawImage(sprite.canvas, sprite.x, sprite.y, sprite.w, sprite.h);
+    return;
+  }
+  drawGoldBulletVector(ctx, L, w);
+}
+
+function drawGoldBulletVector(ctx: Ctx, L: number, w: number) {
   const top = -L / 2;
   const bot = L / 2;
   const sh = top + L * 0.42;
@@ -490,6 +534,15 @@ export function drawGoldBullet(ctx: Ctx, L = 16, w = 6.4) {
 
 /** brass casing, centered upright */
 export function drawCasing(ctx: Ctx) {
+  const sprite = cachedGoldArt(ctx, 'casing', -5, -8, 10, 16, drawCasingVector);
+  if (sprite) {
+    ctx.drawImage(sprite.canvas, sprite.x, sprite.y, sprite.w, sprite.h);
+    return;
+  }
+  drawCasingVector(ctx);
+}
+
+function drawCasingVector(ctx: Ctx) {
   const w = 5.2;
   const h = 12;
   ctx.fillStyle = lin(ctx, -w / 2, 0, w / 2, 0, GOLD_X);

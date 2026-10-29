@@ -1956,21 +1956,23 @@ function holyGun(c: C, cx: number, y0: number, t: number) {
     }
     c.restore();
   }
-  grip(c, cx, y0 + 112, '#fef3c7', '#fbbf24', 0.78);
-  guard(c, cx, y0 + 104, '#a16207');
+  // Sculpted pearl-white handle, not a dark pistol grip/trigger guard.
+  c.beginPath();
+  c.moveTo(cx - 12, y0 + 112); c.quadraticCurveTo(cx - 15, y0 + 139, cx - 11, y0 + 165);
+  c.quadraticCurveTo(cx, y0 + 177, cx + 11, y0 + 165);
+  c.quadraticCurveTo(cx + 15, y0 + 139, cx + 12, y0 + 112); c.closePath();
+  c.fillStyle = lin(c, cx - 15, cx + 15, ['#cbd5df', '#ffffff', '#fffdf8', '#e5eaf1']);
+  c.fill(); c.strokeStyle = '#cfb775'; c.lineWidth = 1.3; c.stroke();
+  rr(c, cx - 12, y0 + 153, 24, 4, 2, brass(c, cx - 12, cx + 12));
+  c.fillStyle = 'rgba(255,255,255,0.8)'; c.fillRect(cx - 7, y0 + 124, 2, 30);
   // ivory+gold body
   rr(c, cx - 14, y0 + 44, 28, 88, 8, lin(c, cx - 14, cx + 14, ['#e7e0cf', '#ffffff', '#f5f0e1']), '#a16207', 2);
   for (const y of [y0 + 52, y0 + 120]) rr(c, cx - 15, y, 30, 5, 2, brass(c, cx - 15, cx + 15));
-  // cross gem
-  c.save();
-  c.translate(cx, y0 + 86);
-  c.shadowColor = '#fde047';
-  c.shadowBlur = 14;
-  c.fillStyle = brass(c, -10, 10);
-  c.fillRect(-3, -14, 6, 28);
-  c.fillRect(-10, -6, 20, 6);
-  c.restore();
-  gem(c, cx, y0 + 83, 3.5, '#ffffff', '#fde68a', '#ca8a04');
+  // A luminous pearl medallion, in place of the former cross.
+  c.save(); c.shadowColor = '#fde68a'; c.shadowBlur = 12;
+  c.beginPath(); c.ellipse(cx, y0 + 86, 7, 10, 0, 0, TAU);
+  c.fillStyle = brass(c, cx - 7, cx + 7); c.fill(); c.restore();
+  gem(c, cx, y0 + 86, 5.5, '#ffffff', '#fff3ca', '#d6a84f');
   // barrel
   rr(c, cx - 5, y0 + 16, 10, 32, 3, brass(c, cx - 5, cx + 5), '#713f12', 1);
   // halo

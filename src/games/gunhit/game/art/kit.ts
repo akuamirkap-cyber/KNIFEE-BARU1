@@ -5,7 +5,7 @@ export const rand = (a: number, b: number) => a + Math.random() * (b - a);
 import type { WeaponAnim } from '../../../../../games/game-4/src/game/weapons';
 import type { WeaponDrawState as NineDrawState } from '../../../../../games/game-6/src/game/types';
 
-export const gunState = { spin: 0, spinAngle: 0, sinceShot: 9, reloadT: 0, charge: 0, shots: 0, tint: '244,63,94', bigShot: 0, rocketHue: 340, rocketFlash: 0, yoyoHue: 0, yoyoFlash: 0, yoyoSpin: 0, diamondFlash: 0, diamondSeed: 0, s7Anim: null as WeaponAnim | null, s9State: null as NineDrawState | null, s9Live: false, sixState: null as import('../setSixArt').SixDrawState | null, sixLive: false, elevenState: null as import('../../../../../games/game-8/src/game/types').WeaponState | null, elevenLive: false, elevenStage: false, nineStage: false, twoState: null as import('../setTwoArt').SetTwoState | null, twoLive: false, bazookaHue: 45, bazookaSeed: 1.7, bazookaFlash: 0, bazookaBite: 0.6, inPreview: false, ammoRatio: 1, jaw: 0, glow: 0, servo: 0, heat: 0 };
+export const gunState = { fireworkTube: 0, ghostSide: 1 as -1 | 1, saberSide: 1 as -1 | 1, spin: 0, spinAngle: 0, sinceShot: 9, reloadT: 0, charge: 0, shots: 0, tint: '244,63,94', bigShot: 0, rocketHue: 340, rocketFlash: 0, yoyoHue: 0, yoyoFlash: 0, yoyoSpin: 0, diamondFlash: 0, diamondSeed: 0, s7Anim: null as WeaponAnim | null, s9State: null as NineDrawState | null, s9Live: false, sixState: null as import('../setSixArt').SixDrawState | null, sixLive: false, elevenState: null as import('../../../../../games/game-8/src/game/types').WeaponState | null, elevenLive: false, elevenStage: false, nineStage: false, twoState: null as import('../setTwoArt').SetTwoState | null, twoLive: false, bazookaHue: 45, bazookaSeed: 1.7, bazookaFlash: 0, bazookaBite: 0.6, inPreview: false, ammoRatio: 1, jaw: 0, glow: 0, servo: 0, heat: 0 };
 
 type C = CanvasRenderingContext2D;
 
@@ -94,9 +94,19 @@ export function guard(_c: C, _cx: number, _y: number, _col = '#1a1c20', _r = 14)
 
 export function glow(c: C, x: number, y: number, r: number, col: string, blur = 12) {
   c.save();
-  c.shadowColor = col;
-  c.shadowBlur = blur;
+  const prevAlpha = c.globalAlpha;
   c.fillStyle = col;
+  if (blur > 0) {
+    c.globalAlpha = prevAlpha * 0.2;
+    c.beginPath();
+    c.arc(x, y, r + blur * 0.44, 0, TAU);
+    c.fill();
+    c.globalAlpha = prevAlpha * 0.42;
+    c.beginPath();
+    c.arc(x, y, r + blur * 0.2, 0, TAU);
+    c.fill();
+    c.globalAlpha = prevAlpha;
+  }
   c.beginPath();
   c.arc(x, y, r, 0, TAU);
   c.fill();

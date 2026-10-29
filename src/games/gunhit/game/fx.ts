@@ -1,3 +1,5 @@
+import { drawSpiritMote } from '../../shared/spiritArt';
+import { drawXenoMolecularBurst } from './art/xenoHybrid';
 import type { Weapon, WeaponId } from './weapons';
 import { getGunEffect, supportsGunVariants } from './art/gunVariants';
 import { spawnClassicMuzzle, spawnClassicImpact } from './classicShotFx';
@@ -218,7 +220,7 @@ export type PKind =
   | 'star' | 'shard' | 'shock' | 'drop' | 'streak' | 'petal'
   | 'snowflake' | 'snowChunk' | 'snowDust' | 'waterDrop' | 'waterSplash' | 'honeyDrop' | 'honeySplash'
   | 'bananaDrop' | 'bananaSplash' | 'slap' | 'pencilShaving' | 'paintSplat' | 'prism' | 'feather'
-  | 'ringE' | 'puff' | 'wind' | 'ash' | 'bubble' | 'acid' | 'speed';
+  | 'ringE' | 'puff' | 'wind' | 'ash' | 'bubble' | 'acid' | 'speed' | 'spirit' | 'xenoMolecular';
 
 export interface Particle {
   tx?: number; ty?: number;
@@ -278,7 +280,8 @@ export const FX: Record<WeaponId, FxProfile> = {
   electro: P('electric', 'glow', 'energy', '90,209,255', 150, { hitstop: 0.03, kick: 3, decalColors: ['#05202e', '#5ad1ff'] }),
   bazooka: P('explosive', 'scorch', 'fire', '255,140,50', 280, { hitstop: 0.11, kick: 13, tint: 0.3, streak: 1.4 }),
   freeze: P('ice', 'frost', 'energy', '155,231,255', 150, { hitstop: 0.04, kick: 3, tint: 0.15 }),
-  golden: P('gold', 'hole', 'fire', '255,215,90', 160, { hitstop: 0.03, kick: 4, ghost: 2, tint: 0.12 }),
+  // Frequent Golden Gun hits must stay responsive even on the original effect.
+  golden: P('gold', 'hole', 'fire', '255,215,90', 160, { hitstop: 0, kick: 4, ghost: 2, tint: 0.12 }),
   blackhole: P('void', 'glow', 'energy', '168,85,247', 180, { hitstop: 0.05, kick: 5, ghost: 5, tint: 0.2, decalColors: ['#000000', '#a855f7'] }),
 
   // Nusantara & fun
@@ -349,6 +352,7 @@ export const FX: Record<WeaponId, FxProfile> = {
   // ---------------------------------------------------------------- SCI-FI
   photon_saber: P('energy', 'glow', 'energy', '34,211,238', 220, { hitstop: 0.05, kick: 5, ghost: 3, tint: 0.18, decalColors: ['#083344', '#22d3ee'] }),
   gauntlet_cannon: P('energy', 'scorch', 'energy', '251,146,60', 340, { hitstop: 0.095, kick: 13, ghost: 5, speedLines: true, streak: 1.5, tint: 0.34, decalColors: ['#450a0a', '#ef4444', '#facc15'] }),
+  ironman_hand: P('energy', 'scorch', 'energy', '251,146,60', 340, { hitstop: 0.095, kick: 13, ghost: 5, speedLines: true, streak: 1.5, tint: 0.34, decalColors: ['#450a0a', '#ef4444', '#facc15'] }),
   pulse_rifle: P('electric', 'glow', 'energy', '56,189,248', 160, { hitstop: 0.02, kick: 3, ghost: 2, tint: 0.12, decalColors: ['#082f49', '#38bdf8'] }),
   cryo_blaster: P('ice', 'frost', 'energy', '103,232,249', 190, { hitstop: 0.04, kick: 3, ghost: 3, tint: 0.15 }),
   hyperdrive: P('energy', 'glow', 'energy', '96,165,250', 220, { hitstop: 0.04, kick: 4, ghost: 4, speedLines: true, tint: 0.18, decalColors: ['#1e3a8a', '#60a5fa'] }),
@@ -481,6 +485,15 @@ export function spawnSpeedLines(s: FxSink, x: number, yTop: number, yBot: number
 
 // ---------------------------------------------------------------- impact
 export function spawnImpact(s: FxSink, prof: FxProfile, w: Weapon, x: number, y: number, nx: number, ny: number, chips: string[]) {
+  if (w.id === 'ghost') {
+    // A soft, rising white aura replaces the old star/splash-shaped burst.
+    s.light(x, y, 110, '215,255,250', 0.22);
+    for (let i = 0; i < 7; i++) {
+      s.push(mk(x + rand(-8, 8), y + rand(-3, 3), rand(-25, 25), rand(-105, -35),
+        rand(0.55, 0.95), rand(13, 25), '240,255,255', 'spirit', { drag: 1, rot: rand(0, TAU) }));
+    }
+    return;
+  }
   if (supportsGunVariants(w.id) && getGunEffect(w.id) === 'original') {
     spawnClassicImpact(s, prof, w, x, y, nx, ny, chips);
     return;
@@ -1084,6 +1097,8 @@ export function drawDecal(c: CanvasRenderingContext2D, R: number, a: number, pro
 }
 
 // ---------------------------------------------------------------- render custom particle kinds
+const PUFF_LOBES = [[0, 0, 1], [-0.55, 0.15, 0.7], [0.55, 0.1, 0.72], [0.1, -0.5, 0.65], [-0.2, 0.45, 0.6]] as const;
+
 export function drawFxParticle(c: CanvasRenderingContext2D, p: Particle, time: number): void {
   const a = Math.max(0, p.life / p.max);
   const t = 1 - a;
@@ -1276,6 +1291,14 @@ export function drawFxParticle(c: CanvasRenderingContext2D, p: Particle, time: n
       c.closePath();
       c.fill();
       c.restore();
+      break;
+    }
+    case 'xenoMolecular': {
+      drawXenoMolecularBurst(c, p.x, p.y, p.max - p.life);
+      break;
+    }
+    case 'spirit': {
+      drawSpiritMote(c, p.x, p.y, p.size * 0.75, time * 3 + p.rot, Math.min(1, a * 1.4));
       break;
     }
     case 'shock': {
@@ -1511,11 +1534,26 @@ export function drawFxParticle(c: CanvasRenderingContext2D, p: Particle, time: n
       c.rotate(p.rot);
       c.globalAlpha = fade;
       const s = p.size;
-      const lobes = [[0, 0, 1], [-0.55, 0.15, 0.7], [0.55, 0.1, 0.72], [0.1, -0.5, 0.65], [-0.2, 0.45, 0.6]];
+      // Overlapping translucent lobes build up depth, so preserve their
+      // separate fills. Once the coloured body is opaque, its lobes can share
+      // a path without flattening the fading cloud's layered appearance.
       c.fillStyle = 'rgba(120,150,190,0.45)';
-      for (const [lx, ly, lr] of lobes) { c.beginPath(); c.arc(lx * s + 3, ly * s + 4, lr * s, 0, TAU); c.fill(); }
+      for (const [lx, ly, lr] of PUFF_LOBES) {
+        c.beginPath(); c.arc(lx * s + 3, ly * s + 4, lr * s, 0, TAU); c.fill();
+      }
       c.fillStyle = cssColor(p.color);
-      for (const [lx, ly, lr] of lobes) { c.beginPath(); c.arc(lx * s, ly * s, lr * s, 0, TAU); c.fill(); }
+      if (c.globalAlpha >= 1) {
+        c.beginPath();
+        for (const [lx, ly, lr] of PUFF_LOBES) {
+          const x = lx * s, y = ly * s, r = lr * s;
+          c.moveTo(x + r, y); c.arc(x, y, r, 0, TAU);
+        }
+        c.fill();
+      } else {
+        for (const [lx, ly, lr] of PUFF_LOBES) {
+          c.beginPath(); c.arc(lx * s, ly * s, lr * s, 0, TAU); c.fill();
+        }
+      }
       c.fillStyle = 'rgba(255,255,255,0.9)';
       c.beginPath(); c.arc(-s * 0.25, -s * 0.3, s * 0.4, 0, TAU); c.fill();
       c.restore();

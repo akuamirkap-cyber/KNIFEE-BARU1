@@ -1,8 +1,8 @@
 import { type Ctx, TAU, clamp, drawSprite, easeInCubic, glowSprite, lerp, makeBolt, normAngle, pick, rand, randomPoly } from './core';
 import { drawCasing, makeCracks, strokeLines } from './art';
-import { CONF_HEX, drawBolt, drawChicken, drawHarpoonProj, drawPizzaSlice, drawPlasmaOrb, drawSeed } from './shapes3';
+import { CONF_HEX, drawBolt, drawChicken, drawHarpoonProj, drawFastPizzaSlice, drawPlasmaOrb, drawSeed } from './shapes3';
 import { MiniFlash, PartyPop } from './fx3';
-import { GlowLines, GlowSpot, K, Light, Lightning, Rays } from './particles';
+import { BatchableWheelLightning, GlowLines, GlowSpot, K, Light, Lightning, Rays } from './particles';
 import * as S from './spawn3';
 import { sfx } from './audio';
 import { Projectile, fallingCustom, makeItem } from './projectiles';
@@ -205,13 +205,15 @@ export class ChickenShot extends Projectile {
   constructor(g: Game, x: number, y: number) {
     super(g, x, y, -920);
   }
-  trail() {
+  trail(dt: number) {
     this.rot = Math.sin(this.age * 11) * 0.45;
     this.flap = Math.sin(this.age * 30) * 0.5;
     const ps = this.g.particles;
-    if (Math.random() < 0.3) S.feathers(ps, this.x + rand(-8, 8), this.y + rand(8, 22), 1, Math.PI / 2, 1.2, [20, 90]);
-    if (Math.random() < 0.5) ps.add({ k: K.STAR, add: true, x: this.x + rand(-10, 10), y: this.y + rand(6, 30), vx: rand(-25, 25), vy: rand(0, 50), size: rand(6, 11), life: rand(0.3, 0.5), color: '255,235,120', drag: 2 });
-    if (Math.random() < 0.4) ps.add({ k: K.SMOKE, x: this.x + rand(-5, 5), y: this.y + rand(10, 22), vx: rand(-14, 14), vy: rand(10, 30), size: 7, size2: 22, life: 0.45, color: '255,248,215', alpha: 0.3, rot: rand(0, TAU) });
+    for (let tick = 0, n = this.cosmeticTicks(dt); tick < n; tick++) {
+      if (Math.random() < 0.3) S.feathers(ps, this.x + rand(-8, 8), this.y + rand(8, 22), 1, Math.PI / 2, 1.2, [20, 90]);
+      if (Math.random() < 0.5) ps.add({ k: K.STAR, add: true, x: this.x + rand(-10, 10), y: this.y + rand(6, 30), vx: rand(-25, 25), vy: rand(0, 50), size: rand(6, 11), life: rand(0.3, 0.5), color: '255,235,120', drag: 2 });
+      if (Math.random() < 0.4) ps.add({ k: K.SMOKE, x: this.x + rand(-5, 5), y: this.y + rand(10, 22), vx: rand(-14, 14), vy: rand(10, 30), size: 7, size2: 22, life: 0.45, color: '255,248,215', alpha: 0.3, rot: rand(0, TAU) });
+    }
   }
   draw(ctx: Ctx) {
     ctx.save();
@@ -292,10 +294,12 @@ export class ConfettiShot extends Projectile {
   constructor(g: Game, x: number, y: number) {
     super(g, x, y, -1100);
   }
-  trail() {
+  trail(dt: number) {
     const ps = this.g.particles;
-    S.confetti(ps, this.x + rand(-4, 4), this.y + rand(6, 16), 2, Math.PI / 2, 1.3, [20, 90], [3, 5.5], [0.7, 1.3]);
-    if (Math.random() < 0.5) ps.add({ k: K.STAR, add: true, x: this.x + rand(-9, 9), y: this.y + rand(0, 26), vx: rand(-25, 25), vy: rand(0, 50), size: rand(7, 13), life: rand(0.3, 0.55), color: pick(['255,200,240', '200,230,255', '255,245,170']), drag: 2 });
+    for (let tick = 0, n = this.cosmeticTicks(dt); tick < n; tick++) {
+      S.confetti(ps, this.x + rand(-4, 4), this.y + rand(6, 16), 2, Math.PI / 2, 1.3, [20, 90], [3, 5.5], [0.7, 1.3]);
+      if (Math.random() < 0.5) ps.add({ k: K.STAR, add: true, x: this.x + rand(-9, 9), y: this.y + rand(0, 26), vx: rand(-25, 25), vy: rand(0, 50), size: rand(7, 13), life: rand(0.3, 0.55), color: pick(['255,200,240', '200,230,255', '255,245,170']), drag: 2 });
+    }
   }
   draw(ctx: Ctx) {
     const t = this.age;
@@ -417,11 +421,13 @@ export class SeedShot extends Projectile {
   constructor(g: Game, x: number, y: number) {
     super(g, x, y, -1250);
   }
-  trail() {
+  trail(dt: number) {
     const ps = this.g.particles;
-    if (Math.random() < 0.35) S.leaves(ps, this.x + rand(-6, 6), this.y + rand(8, 22), 1, Math.PI / 2, 1.3, [20, 90]);
-    if (Math.random() < 0.7) ps.add({ k: K.EMBER, add: true, x: this.x + rand(-5, 5), y: this.y + rand(6, 26), vx: rand(-30, 30), vy: rand(10, 70), size: 1.7, life: 0.45, color: pick(['140,255,110', '255,235,120']) });
-    if (Math.random() < 0.3) ps.add({ k: K.STAR, add: true, x: this.x + rand(-8, 8), y: this.y + rand(4, 26), vx: rand(-20, 20), vy: rand(0, 40), size: rand(6, 10), life: 0.4, color: '170,255,140', drag: 2 });
+    for (let i = 0, n = this.cosmeticTicks(dt); i < n; i++) {
+      if (Math.random() < 0.35) S.leaves(ps, this.x + rand(-6, 6), this.y + rand(8, 22), 1, Math.PI / 2, 1.3, [20, 90]);
+      if (Math.random() < 0.7) ps.add({ k: K.EMBER, add: true, x: this.x + rand(-5, 5), y: this.y + rand(6, 26), vx: rand(-30, 30), vy: rand(10, 70), size: 1.7, life: 0.45, color: pick(['140,255,110', '255,235,120']) });
+      if (Math.random() < 0.3) ps.add({ k: K.STAR, add: true, x: this.x + rand(-8, 8), y: this.y + rand(4, 26), vx: rand(-20, 20), vy: rand(0, 40), size: rand(6, 10), life: 0.4, color: '170,255,140', drag: 2 });
+    }
   }
   draw(ctx: Ctx) {
     ctx.save();
@@ -514,9 +520,11 @@ export class PizzaShot extends Projectile {
   trail(dt: number) {
     this.rot += dt * 14;
     const ps = this.g.particles;
-    if (Math.random() < 0.6) ps.add({ k: K.SMOKE, x: this.x + rand(-6, 6), y: this.y + rand(8, 20), vx: rand(-16, 16), vy: rand(10, 40), size: 8, size2: 24, life: 0.5, color: '255,248,235', alpha: 0.3, rot: rand(0, TAU) });
-    if (Math.random() < 0.6) ps.add({ k: K.EMBER, add: true, x: this.x + rand(-9, 9), y: this.y + rand(4, 22), vx: rand(-40, 40), vy: rand(20, 90), size: 1.9, life: 0.5, color: pick(['255,210,80', '255,170,50']) });
-    if (Math.random() < 0.08) S.pepperoni(ps, this.x, this.y, 1, Math.PI / 2, 0.8, [40, 140]);
+    for (let i = 0, n = this.cosmeticTicks(dt); i < n; i++) {
+      if (Math.random() < 0.6) ps.add({ k: K.SMOKE, x: this.x + rand(-6, 6), y: this.y + rand(8, 20), vx: rand(-16, 16), vy: rand(10, 40), size: 8, size2: 24, life: 0.5, color: '255,248,235', alpha: 0.3, rot: rand(0, TAU) });
+      if (Math.random() < 0.6) ps.add({ k: K.EMBER, add: true, x: this.x + rand(-9, 9), y: this.y + rand(4, 22), vx: rand(-40, 40), vy: rand(20, 90), size: 1.9, life: 0.5, color: pick(['255,210,80', '255,170,50']) });
+      if (Math.random() < 0.08) S.pepperoni(ps, this.x, this.y, 1, Math.PI / 2, 0.8, [40, 140]);
+    }
   }
   draw(ctx: Ctx) {
     ctx.save();
@@ -528,14 +536,14 @@ export class PizzaShot extends Projectile {
       ctx.save();
       ctx.translate(this.x, this.y + i * 11);
       ctx.rotate(this.rot - i * 0.4);
-      drawPizzaSlice(ctx, 36);
+      drawFastPizzaSlice(ctx, 36);
       ctx.restore();
     }
     ctx.globalAlpha = 1;
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.rotate(this.rot);
-    drawPizzaSlice(ctx, 36);
+    drawFastPizzaSlice(ctx, 36);
     ctx.restore();
   }
   private splat(hx: number, hy: number, n: number) {
@@ -606,7 +614,7 @@ export class PizzaShot extends Projectile {
   }
   block(hx: number, hy: number) {
     this.splat(hx, hy, 10);
-    fallingCustom(this.g, hx, hy, (c) => drawPizzaSlice(c, 36));
+    fallingCustom(this.g, hx, hy, (c) => drawFastPizzaSlice(c, 36));
     sfx.play('pizza_hit');
     this.alive = false;
   }
@@ -896,6 +904,84 @@ export class CrossbowShot extends Projectile {
   }
 }
 
+// The Plasma Gun's hit is shared with the yellow Mega Buster tap. These
+// palettes only change color: rings, sparks, rays, wheel lightning, glowing
+// cracks and timings remain the authored Plasma Gun effect.
+export interface PlasmaImpactPalette {
+  light: string; burst: string; ringAndWheel: string; darkRing: string;
+  rays: string; sparks: string; brightSparks: string; smoke: string; stars: string;
+  outwardLightning: string; scarCore: string; scarMiddle: string; scarOuter: string;
+  scarRing: string; scarCracks: string; screenFlash: string;
+}
+export const GREEN_PLASMA_IMPACT: Readonly<PlasmaImpactPalette> = {
+  light: '60,255,150', burst: '200,255,220', ringAndWheel: '90,255,170', darkRing: '30,200,110',
+  rays: '110,255,170', sparks: '140,255,190', brightSparks: '230,255,240', smoke: '60,110,80',
+  stars: '170,255,200', outwardLightning: '150,255,190',
+  scarCore: 'rgba(6,14,8,0.95)', scarMiddle: 'rgba(18,40,24,0.6)', scarOuter: 'rgba(30,60,40,0)',
+  scarRing: 'rgba(80,255,160,0.5)', scarCracks: 'rgba(10,20,12,0.9)', screenFlash: '80,255,160',
+};
+export const YELLOW_PLASMA_IMPACT: Readonly<PlasmaImpactPalette> = {
+  light: '255,213,35', burst: '255,248,190', ringAndWheel: '255,226,65', darkRing: '211,155,10',
+  rays: '255,226,90', sparks: '255,237,120', brightSparks: '255,252,220', smoke: '116,94,52',
+  stars: '255,240,150', outwardLightning: '255,238,135',
+  scarCore: 'rgba(28,18,3,0.95)', scarMiddle: 'rgba(72,49,7,0.6)', scarOuter: 'rgba(100,75,10,0)',
+  scarRing: 'rgba(255,220,70,0.5)', scarCracks: 'rgba(30,20,4,0.9)', screenFlash: '255,228,80',
+};
+
+/** Cosmetic burst only; the caller owns scoring, collision, speed and sound. */
+export function spawnPlasmaImpact(
+  g: Game, theta: number, hx: number, hy: number,
+  color: Readonly<PlasmaImpactPalette> = GREEN_PLASMA_IMPACT,
+) {
+  const ps = g.particles;
+  const R = g.wheel.R;
+  g.addFX(new Light(hx, hy, 270, color.light, 0.95, 0.45));
+  S.glow(ps, hx, hy, 170, 24, color.burst, 0.28, 1);
+  S.ring(ps, hx, hy, 6, 140, color.ringAndWheel, 8, 0.45, true);
+  S.ring(ps, hx, hy, 4, 84, '255,255,255', 3.5, 0.28, true);
+  S.ring(ps, hx, hy, 3, 54, color.darkRing, 5, 0.24, true);
+  g.addFX(new Rays(hx, hy, color.rays, 0.4, 12, Math.PI / 2, Math.PI * 0.8));
+  S.sparks(ps, hx, hy, 40, Math.PI / 2, 1.6, [220, 680], color.sparks, 1.7);
+  S.sparks(ps, hx, hy, 12, Math.PI / 2, 1.4, [300, 700], color.brightSparks, 1.2);
+  S.chips(ps, hx, hy, 12, Math.PI / 2, 1.5, [120, 380]);
+  S.smoke(ps, hx, hy, 8, color.smoke, [16, 60], { vx: [-80, 80], vy: [-60, 60], alpha: 0.5, life: [0.8, 1.3], drag: 2.4 });
+  S.stars(ps, hx, hy, 10, color.stars, [80, 260], [9, 16], Math.PI / 2, 1.6);
+  const lx = Math.cos(theta) * R;
+  const ly = Math.sin(theta) * R;
+  for (let i = 0; i < 7; i++) {
+    const a2 = theta + Math.PI + rand(-1.05, 1.05);
+    const d = rand(40, 100);
+    const WheelBolt = color === YELLOW_PLASMA_IMPACT ? BatchableWheelLightning : Lightning;
+    g.addWheelFX(new WheelBolt(lx * 0.98, ly * 0.98, lx + Math.cos(a2) * d, ly + Math.sin(a2) * d, rand(0.3, 0.55), color.ringAndWheel, 1.5, 2, 0.04));
+  }
+  for (let i = 0; i < 4; i++) {
+    const a = Math.PI / 2 + rand(-1.3, 1.3);
+    const L = rand(46, 90);
+    g.addFX(new Lightning(hx, hy, hx + Math.cos(a) * L, hy + Math.sin(a) * L, 0.22, color.outwardLightning, 1.3, 1));
+  }
+  const cracks = makeCracks(theta, R, 6, [14, 32], 1.3);
+  g.paint((c) => {
+    const cx = lx * 0.94;
+    const cy = ly * 0.94;
+    const rg = c.createRadialGradient(cx, cy, 0, cx, cy, 22);
+    rg.addColorStop(0, color.scarCore);
+    rg.addColorStop(0.5, color.scarMiddle);
+    rg.addColorStop(1, color.scarOuter);
+    c.fillStyle = rg;
+    c.beginPath();
+    c.arc(cx, cy, 22, 0, TAU);
+    c.fill();
+    c.strokeStyle = color.scarRing;
+    c.lineWidth = 1.6;
+    c.beginPath();
+    c.arc(cx, cy, 12, 0, TAU);
+    c.stroke();
+    strokeLines(c, cracks, color.scarCracks, 1.2);
+  });
+  g.addWheelFX(new GlowLines(cracks, color.ringAndWheel, 1.3, 2.2));
+  g.addWheelFX(new GlowSpot(lx * 0.95, ly * 0.95, 80, color.light, 2.0, 0.85));
+}
+
 // ───────────────────────── PLASMA BOLT ─────────────────────────
 export class PlasmaShot extends Projectile {
   weapon = 'plasma' as const;
@@ -953,56 +1039,11 @@ export class PlasmaShot extends Projectile {
   }
   hit(theta: number, hx: number, hy: number) {
     const g = this.g;
-    const ps = g.particles;
-    const R = g.wheel.R;
     g.wheelImpact(9, 'rgba(170,255,200,');
     g.hitStop(0.07);
     g.shake(9);
     g.flashScreen('80,255,160', 0.18);
-    g.addFX(new Light(hx, hy, 270, '60,255,150', 0.95, 0.45));
-    S.glow(ps, hx, hy, 170, 24, '200,255,220', 0.28, 1);
-    S.ring(ps, hx, hy, 6, 140, '90,255,170', 8, 0.45, true);
-    S.ring(ps, hx, hy, 4, 84, '255,255,255', 3.5, 0.28, true);
-    S.ring(ps, hx, hy, 3, 54, '30,200,110', 5, 0.24, true);
-    g.addFX(new Rays(hx, hy, '110,255,170', 0.4, 12, Math.PI / 2, Math.PI * 0.8));
-    S.sparks(ps, hx, hy, 40, Math.PI / 2, 1.6, [220, 680], '140,255,190', 1.7);
-    S.sparks(ps, hx, hy, 12, Math.PI / 2, 1.4, [300, 700], '230,255,240', 1.2);
-    S.chips(ps, hx, hy, 12, Math.PI / 2, 1.5, [120, 380]);
-    S.smoke(ps, hx, hy, 8, '60,110,80', [16, 60], { vx: [-80, 80], vy: [-60, 60], alpha: 0.5, life: [0.8, 1.3], drag: 2.4 });
-    S.stars(ps, hx, hy, 10, '170,255,200', [80, 260], [9, 16], Math.PI / 2, 1.6);
-    const lx = Math.cos(theta) * R;
-    const ly = Math.sin(theta) * R;
-    for (let i = 0; i < 7; i++) {
-      const a2 = theta + Math.PI + rand(-1.05, 1.05);
-      const d = rand(40, 100);
-      g.addWheelFX(new Lightning(lx * 0.98, ly * 0.98, lx + Math.cos(a2) * d, ly + Math.sin(a2) * d, rand(0.3, 0.55), '90,255,170', 1.5, 2, 0.04));
-    }
-    for (let i = 0; i < 4; i++) {
-      const a = Math.PI / 2 + rand(-1.3, 1.3);
-      const L = rand(46, 90);
-      g.addFX(new Lightning(hx, hy, hx + Math.cos(a) * L, hy + Math.sin(a) * L, 0.22, '150,255,190', 1.3, 1));
-    }
-    const cracks = makeCracks(theta, R, 6, [14, 32], 1.3);
-    g.paint((c) => {
-      const cx = lx * 0.94;
-      const cy = ly * 0.94;
-      const rg = c.createRadialGradient(cx, cy, 0, cx, cy, 22);
-      rg.addColorStop(0, 'rgba(6,14,8,0.95)');
-      rg.addColorStop(0.5, 'rgba(18,40,24,0.6)');
-      rg.addColorStop(1, 'rgba(30,60,40,0)');
-      c.fillStyle = rg;
-      c.beginPath();
-      c.arc(cx, cy, 22, 0, TAU);
-      c.fill();
-      c.strokeStyle = 'rgba(80,255,160,0.5)';
-      c.lineWidth = 1.6;
-      c.beginPath();
-      c.arc(cx, cy, 12, 0, TAU);
-      c.stroke();
-      strokeLines(c, cracks, 'rgba(10,20,12,0.9)', 1.2);
-    });
-    g.addWheelFX(new GlowLines(cracks, '90,255,170', 1.3, 2.2));
-    g.addWheelFX(new GlowSpot(lx * 0.95, ly * 0.95, 80, '60,255,150', 2.0, 0.85));
+    spawnPlasmaImpact(g, theta, hx, hy);
     g.landed(makeItem('plasma', theta, 0.095, 12, false), 0.45);
     sfx.play('plasma_hit');
     this.alive = false;

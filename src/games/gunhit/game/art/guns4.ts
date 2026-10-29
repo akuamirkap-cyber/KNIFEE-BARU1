@@ -748,31 +748,24 @@ function kerisGun(c: C, cx: number, y0: number, t: number, ready: boolean) {
 function fireworkGun(c: C, cx: number, y0: number, t: number, ready: boolean) {
   grip(c, cx, y0 + 112, '#1e1b4b', '#4338ca', 0.8);
   guard(c, cx, y0 + 104, '#0f0a2e');
-  // launcher tubes (3)
   const cols = [['#be123c', '#fb7185'], ['#1d4ed8', '#60a5fa'], ['#a16207', '#fde047']];
-  for (let i = 0; i < 3; i++) {
-    const x = cx - 18 + i * 12;
-    rr(c, x, y0 + 30 + Math.abs(i - 1) * 8, 12, 100 - Math.abs(i - 1) * 8, 3, lin(c, x, x + 12, [cols[i][0], cols[i][1], cols[i][0]]), '#0f0a2e', 1.2);
-    c.fillStyle = 'rgba(255,255,255,0.8)';
-    for (let k = 0; k < 4; k++) star(c, x + 6, y0 + 50 + k * 20 + Math.abs(i - 1) * 4, 2.5, '#ffffff');
+  // Side tubes are behind the blue tube and a little lower.
+  for (const i of [0, 2, 1]) {
+    const x = cx + (i - 1) * 12;
+    const top = y0 + (i === 1 ? 30 : 38);
+    rr(c, x - 6, top, 12, y0 + 130 - top, 3,
+      lin(c, x - 6, x + 6, [cols[i][0], cols[i][1], cols[i][0]]), '#0f0a2e', 1.2);
+    for (let k = 0; k < 4; k++) star(c, x, top + 19 + k * 20, 2.4, '#ffffff');
+    c.fillStyle = '#17152a'; c.beginPath(); c.ellipse(x, top, 5.3, 2.3, 0, 0, TAU); c.fill();
+    // A loaded rocket remains visible in every tube; only the firing tube
+    // momentarily dips while reloading.
+    const dip = !ready && i === gunState.fireworkTube && gunState.sinceShot < 0.35 ? 6 : 0;
+    c.fillStyle = lin(c, x - 3.5, x + 3.5, [cols[i][0], cols[i][1], cols[i][0]]);
+    c.fillRect(x - 3.5, top - 6 + dip, 7, 12);
+    c.beginPath(); c.moveTo(x - 4.5, top - 6 + dip); c.lineTo(x, top - 18 + dip); c.lineTo(x + 4.5, top - 6 + dip); c.closePath();
+    c.fillStyle = '#fde047'; c.fill();
   }
-  rr(c, cx - 22, y0 + 116, 44, 16, 4, '#111827', '#000', 1);
-  // rocket in center
-  if (ready) {
-    c.save();
-    c.translate(cx, y0 + 6);
-    c.fillStyle = lin(c, -5, 5, ['#9f1239', '#fb7185', '#9f1239']);
-    c.fillRect(-5, 6, 10, 26);
-    c.beginPath();
-    c.moveTo(-6, 7);
-    c.lineTo(0, -8);
-    c.lineTo(6, 7);
-    c.closePath();
-    c.fillStyle = '#fde047';
-    c.fill();
-    c.restore();
-  }
-  // sparkle fuse
+  rr(c, cx - 20, y0 + 116, 40, 16, 4, '#111827', '#000', 1);
   if (Math.sin(t * 20) > 0) glow(c, cx + 18, y0 + 26, 2, '#fde047', 10);
 }
 

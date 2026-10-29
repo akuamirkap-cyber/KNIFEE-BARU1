@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { RETIRED_WEAPONS } from '../src/games/gunhit/game/retiredWeapons';
 import assert from 'node:assert/strict';
 
 import {
@@ -84,12 +85,16 @@ function probe(weapon: string) {
 test('slide 11 is 27 weapons: seventeen slide-1 guns updated by name, ten brand-new guns', () => {
   assert.equal(SET_ELEVEN_IDS.length, 27);
   assert.equal(new Set(SET_ELEVEN_IDS).size, 27);
-  assert.equal(SET_ELEVEN_NEW_WEAPONS.length, 10);
+  assert.equal(SET_ELEVEN_NEW_WEAPONS.length, 11);
   assert.equal(Object.keys(SET_ELEVEN_BY_SLIDE1_ID).length, 27);
   for (const id of SET_ELEVEN_IDS) {
     const slide1 = slide1IdForEleven(id);
     assert.equal(elevenWeapon(id).id, id, `${id} exists in slide 11`);
     assert.equal(setElevenIdFor(slide1), id);
+    if (RETIRED_WEAPONS.has(slide1)) {
+      assert.ok(!WEAPONS.some(w => w.id === slide1));
+      continue;
+    }
     assert.ok(WEAPONS.some((w) => w.id === slide1), `${slide1} exists on slide 1`);
     assert.ok(EDITABLE_WEAPONS.includes(slide1 as never), `${slide1} can be picked on slide 1`);
     assert.equal(isElevenNewSlide1Id(slide1), isElevenNewWeapon(id), `${id} new-gun flag`);
@@ -157,39 +162,59 @@ test('every one of the 27 fires slide 11’s own round, burst and muzzle FX', ()
 });
 
 test('slide 11 artwork draws through the normal gun pipeline, with its own recoil', () => {
-  setGunVariant('pistol', 'set11');
-  const idle: string[] = [];
-  drawGun(fakeCtx(idle), 'pistol', 210, 575, 0.4, 0, true);
-  assert.ok(idle.length > 40, 'the beretta renders');
-  const other: string[] = [];
-  drawGun(fakeCtx(other), 'pistol', 210, 575, 1.2, 0, true);
-  assert.notEqual(idle.join('|'), other.join('|'), 'slide 11 guns breathe while idle');
-  for (const variant of ['original', 'set9'] as const) {
-    const before: string[] = [];
-    drawGun(fakeCtx(before), 'pistol', 210, 575, 0.4, 0, true, undefined, variant);
-    assert.notEqual(before.join('|'), idle.join('|'), `slide 11 differs from ${variant}`);
-  }
-  // Every slide-11 id draws a whole gun, at slide 1's size.
-  for (const id of SET_ELEVEN_IDS) {
-    const calls: string[] = [];
-    drawSetElevenGun(fakeCtx(calls), id, 210, 575, 0.4, restElevenState());
-    assert.ok(calls.length > 30, `${id} must draw a whole gun`);
-    const metrics = SET_ELEVEN_METRICS[id];
-    assert.ok(metrics.totalLen > 60 && metrics.totalLen < 200, `${id} is slide-1 sized`);
-    assert.ok(elevenScale(id) > 0.2, `${id} has a real scale`);
+  const previous = getGunVariant('ak47');
+  try {
+    setGunVariant('ak47', 'set11');
+    const idle: string[] = [];
+    drawGun(fakeCtx(idle), 'ak47', 210, 575, 0.4, 0, true);
+    assert.ok(idle.length > 40, 'the ak47 renders');
+    const other: string[] = [];
+    drawGun(fakeCtx(other), 'ak47', 210, 575, 1.2, 0, true);
+    assert.notEqual(idle.join('|'), other.join('|'), 'slide 11 guns breathe while idle');
+    for (const variant of ['original', 'set9'] as const) {
+      const before: string[] = [];
+      drawGun(fakeCtx(before), 'ak47', 210, 575, 0.4, 0, true, undefined, variant);
+      assert.notEqual(before.join('|'), idle.join('|'), `slide 11 differs from ${variant}`);
+    }
+    // PISTOL no longer accepts 'set11' as a weapon design and always draws Slide 01's pistol by default.
+    const pistolDefault: string[] = [];
+    const pistolOriginal: string[] = [];
+    drawGun(fakeCtx(pistolDefault), 'pistol', 210, 575, 0.4, 0, true);
+    drawGun(fakeCtx(pistolOriginal), 'pistol', 210, 575, 0.4, 0, true, undefined, 'original');
+    assert.equal(pistolDefault.join('|'), pistolOriginal.join('|'), 'pistol draws Slide 01 design by default');
+    // Every slide-11 id draws a whole gun, at slide 1's size.
+    for (const id of SET_ELEVEN_IDS) {
+      const calls: string[] = [];
+      drawSetElevenGun(fakeCtx(calls), id, 210, 575, 0.4, restElevenState());
+      assert.ok(calls.length > 30, `${id} must draw a whole gun`);
+      const metrics = SET_ELEVEN_METRICS[id];
+      assert.ok(metrics.totalLen > 60 && metrics.totalLen < 200, `${id} is slide-1 sized`);
+      assert.ok(elevenScale(id) > 0.2, `${id} has a real scale`);
+    }
+  } finally {
+    setGunVariant('ak47', previous);
   }
 });
 
 test('every slide-11 gun has preview metrics and never clips the play field', () => {
   for (const id of SET_ELEVEN_IDS) {
     const slide1 = slide1IdForEleven(id);
+    if (RETIRED_WEAPONS.has(slide1)) continue;
+    if (slide1 === 'pistol') {
+      assert.equal(getGunVariant('pistol'), 'original');
+      const metrics = getGunMetrics('pistol');
+      assert.ok(metrics.span > 0 && metrics.totalLen > 0, 'pistol is measured');
+      assert.ok(metrics.span <= 400, 'pistol fits inside the 420-wide field');
+      continue;
+    }
+    const previous = getGunVariant(slide1 as never);
     setGunVariant(slide1 as never, 'set11');
     const metrics = getGunMetrics(slide1 as never);
     assert.equal(getGunVariant(slide1 as never), 'set11');
     assert.ok(metrics.span > 0 && metrics.totalLen > 0, `${slide1} is measured`);
     assert.ok(metrics.span <= 400, `${slide1} fits inside the 420-wide field`);
-    // Put the gun back on its shipped default so later tests see a clean slate.
-    setGunVariant(slide1 as never, 'set11');
+    // Restore the shipped choice, which can differ from the newest card.
+    setGunVariant(slide1 as never, previous);
   }
 });
 
@@ -210,31 +235,58 @@ test('slide 1 flies slide 11’s round, and only slide 11’s shot fires for its
   classic.shoot();
   const classicRound = (classic.projs as unknown[])[0] as { setEleven?: unknown };
   assert.equal(classicRound.setEleven, undefined, 'Sebelumnya keeps slide 1’s shot');
-  setGunEffect('pistol', 'set11');
+  // Restore PISTOL's shipped default shot effect (Slide 4 = 'set9').
+  setGunEffect('pistol', 'set9');
 });
 
-test('slide 11 is the newest design and shot of its 27 guns, and older cards stay pickable', () => {
+test('slide 11 is the newest design and shot of its guns (with pistol keeping Slide 01 design + Slide 4 default shot + Slide 5 shot option)', () => {
   const matched = Object.keys(SET_ELEVEN_BY_SLIDE1_ID).filter((id) => !isElevenNewSlide1Id(id));
-  assert.equal(matched.length, 17);
+  assert.equal(matched.length, 16);
   for (const slide1 of Object.keys(SET_ELEVEN_BY_SLIDE1_ID)) {
+    if (RETIRED_WEAPONS.has(slide1)) continue;
     assert.ok(EDITABLE_WEAPONS.includes(slide1 as never), `${slide1} is selectable`);
-    assert.equal(getGunVariant(slide1 as never), 'set11', `${slide1} shows slide 11's art by default`);
-    assert.equal(getGunEffect(slide1 as never), 'set11', `${slide1} fires slide 11's shot by default`);
+    const effects = getGunEffectOptions(slide1 as never);
+    if (slide1 === 'ironman_hand') {
+      assert.deepEqual(effects.map(o => o.id), ['ironman_combo']);
+      assert.deepEqual(getGunVariantOptions(slide1).map(o => o.id), ['set11']);
+      continue;
+    }
+    if (slide1 === 'photon_saber') {
+      assert.ok(getGunVariantOptions(slide1).some(o => o.id === 'set11'));
+      assert.ok(!effects.some(o => o.id === 'set11'));
+      continue;
+    }
+    if (slide1 === 'xeno') {
+      assert.equal(effects.at(-1)?.id, 'xeno_hybrid');
+      assert.equal(effects.at(-1)?.label, 'Efek 4');
+      continue;
+    }
+    assert.equal(effects.at(-1)?.id, 'set11');
+    assert.equal(effects.at(-1)?.label, 'Slide 5');
+    if (slide1 === 'pistol') {
+      assert.equal(getGunVariant('pistol'), 'original', 'pistol shows Slide 01 art by default');
+      assert.equal(getGunEffect('pistol'), 'set9', 'pistol fires Slide 4 shot by default');
+      assert.equal(hasSlide11Update('pistol'), false, 'pistol Slide 5 design was removed');
+      assert.equal(hasSlide9Update('pistol'), true);
+      assert.deepEqual(getGunVariantOptions('pistol').map((o) => o.id), ['original', 'set9']);
+      assert.deepEqual(effects.map((o) => o.id), ['original', 'new', 'set9', 'set11']);
+      continue;
+    }
+    const expectedArt = slide1 === 'ak47' || slide1 === 'sniper' ? 'original' : 'set11';
+    const expectedShot = slide1 === 'sniper' ? 'set9' : slide1 === 'railgun' ? 'set7' : 'set11';
+    assert.equal(getGunVariant(slide1 as never), expectedArt, `${slide1} shows its requested default art`);
+    assert.equal(getGunEffect(slide1 as never), expectedShot, `${slide1} fires its requested default shot`);
     assert.equal(hasSlide11Update(slide1), true, `${slide1} carries the green NEW badge`);
     const designs = getGunVariantOptions(slide1 as never);
     assert.equal(designs.at(-1)?.id, 'set11');
     assert.equal(designs.at(-1)?.label, 'Slide 5');
-    const effects = getGunEffectOptions(slide1 as never);
-    assert.equal(effects.at(-1)?.id, 'set11');
-    assert.equal(effects.at(-1)?.label, 'Slide 5');
     if (isElevenNewSlide1Id(slide1)) {
       assert.deepEqual(designs.map((o) => o.id), ['set11'], `${slide1} never existed before slide 11`);
       assert.deepEqual(effects.map((o) => o.id), ['set11']);
       assert.equal(hasSlide7Update(slide1), false);
     }
   }
-  // The gun slide 1 already had keeps every older card, slide 11's on top.
-  assert.deepEqual(getGunVariantOptions('pistol').map((o) => o.id), ['original', 'set9', 'set11']);
+  assert.deepEqual(getGunVariantOptions('pistol').map((o) => o.id), ['original', 'set9']);
   assert.deepEqual(getGunEffectOptions('pistol').map((o) => o.id), ['original', 'new', 'set9', 'set11']);
   assert.deepEqual(getGunVariantOptions('dragon').map((o) => o.id),
     ['original', 'current', 'latest', 'set7', 'set9', 'set11']);
@@ -259,6 +311,7 @@ test('a stuck slide-11 round never survives a gun or level change', () => {
   (game as unknown as { resetSevenLayer(): void }).resetSevenLayer();
   const s11 = (game as unknown as { s11State?: SetElevenFx }).s11State;
   assert.ok(!s11 || !s11.busy, 'the slide-11 layer is empty after a reset');
+  setGunEffect('pistol', 'set9');
 });
 
 test('slide 11’s own wheel never breaks behind a slide-1 stage', () => {
@@ -534,7 +587,7 @@ test('slide 11’s aiming overlays land on the wheel: laser sight, three-dot loc
 });
 
 test('slide 11’s xenomorph and shoulder caster hit with their own FX only', () => {
-  for (const weapon of ['xeno', 'pred'] as const) {
+  for (const weapon of ['xeno'] as const) {
     for (const effect of ['set11', 'original'] as const) {
       setGunEffect(weapon, effect);
       const game = probe(weapon);

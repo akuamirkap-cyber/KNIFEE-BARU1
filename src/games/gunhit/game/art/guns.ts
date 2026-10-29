@@ -1,12 +1,15 @@
 import type { WeaponId } from '../weapons';
 import { getGunVariant, hasSeparateOriginal, isFixedClassicGun, isSetNineDesignWeapon, isSetOneDesignWeapon, isSetSevenDesignWeapon, supportsGunVariants, supportsLatestDesign, type GunVariant } from './gunVariants';
 import { drawOriginalGun } from './legacyVariants';
+import { drawGhostSpiritGun } from './ghostSpiritGun';
+import { fireworkMouth } from './fireworkTubes';
 import { drawLatestGun } from './latestVariants';
 import { drawGunExtra, drawFlashExtra } from './guns3';
 import { gunState, lin as sharedLin, radial } from './kit';
 import { shotPulse } from './commonGunMotion';
 import { drawSlide3BazookaMuzzleFx } from '../bazookaSlideFx';
 import { drawBlackHoleGun2, type Slide2GunState } from '../slide2Weapons';
+import type { Slide2Fx } from '../slide2Fx';
 import { drawSetOneGun, setOneIdFor } from '../setOneArt';
 import { drawSetTwoGun, restTwoState, setTwoIdFor } from '../setTwoArt';
 import { drawSetSevenGun, setSevenIdFor } from '../setSevenArt';
@@ -14,7 +17,7 @@ import { restSevenAnim } from '../setSevenArt';
 import { drawSetNineGun, isNineNewWeapon, restNineState, setNineIdFor } from '../setNineArt';
 import { drawSetSixGun, setSixIdFor, sixStateFor } from '../setSixArt';
 import { drawSetElevenGun, elevenScale, isElevenNewSlide1Id, restElevenState, setElevenIdFor } from '../setElevenArt';
-import { isElevenOnlyWeapon } from './gunVariants';
+import { isElevenOnlyWeapon, isSetElevenDesignWeapon } from './gunVariants';
 import type { WeaponAnim } from '../../../../../games/game-4/src/game/weapons';
 
 const TAU = Math.PI * 2;
@@ -51,9 +54,19 @@ function triggerGuard(_c: CanvasRenderingContext2D, _cx: number, _y: number, _co
 
 function glowDot(c: CanvasRenderingContext2D, x: number, y: number, r: number, col: string, blur = 12) {
   c.save();
-  c.shadowColor = col;
-  c.shadowBlur = blur;
+  const prevAlpha = c.globalAlpha;
   c.fillStyle = col;
+  if (blur > 0) {
+    c.globalAlpha = prevAlpha * 0.2;
+    c.beginPath();
+    c.arc(x, y, r + blur * 0.44, 0, TAU);
+    c.fill();
+    c.globalAlpha = prevAlpha * 0.42;
+    c.beginPath();
+    c.arc(x, y, r + blur * 0.2, 0, TAU);
+    c.fill();
+    c.globalAlpha = prevAlpha;
+  }
   c.beginPath();
   c.arc(x, y, r, 0, TAU);
   c.fill();
@@ -66,34 +79,51 @@ export function drawGun(
   c: CanvasRenderingContext2D, id: WeaponId, cx: number, y0: number, t: number, flash: number, ready = true,
   snowLoaded?: number,
   variant: GunVariant = getGunVariant(id),
+  liveFx?: Slide2Fx,
 ) {
   c.save();
+  if (id === 'ghost') {
+    drawGhostSpiritGun(c, cx, y0, t, gunState.sinceShot, gunState.ghostSide, variant === 'set7');
+    c.restore();
+    return;
+  }
   // Slide 9 (games/game-6): the newest design is slide 9's own artwork, drawn
   // at the same muzzle origin with slide 9's own draw state (recoil, slide,
   // bolt, pump, charge meter, spin-up, drum index). The nine guns slide 1 never
   // had only ever exist as this design, so they always render it.
   // Slide 11 (games/game-8) is the newest layer: its own artwork, drawn at the
   // same muzzle origin with slide 11's own weapon state.
-  const setElevenId = variant === 'set11' || isElevenOnlyWeapon(id) ? setElevenIdFor(id) : null;
+  const setElevenId =
+    (variant === 'set11' && isSetElevenDesignWeapon(id)) || isElevenOnlyWeapon(id)
+      ? setElevenIdFor(id)
+      : null;
   if (setElevenId) {
     const sinceShot = Math.max(0, gunState.sinceShot);
+    // Photon normally wears the slide-11 skin while firing slide-9 shots.
+    // Do not let a stale slide-11 state from a different weapon drive it.
+    const supplied = id === 'photon_saber' && !gunState.elevenLive ? null : gunState.elevenState;
+    const baseState = supplied ?? {
+      ...restElevenState(),
+      // Rebuild the motion when a different effect owns the trigger.
+      recoil: sinceShot >= 0.16 ? 0 : 1 - sinceShot / 0.16,
+      fireT: sinceShot,
+      ready: Math.min(1, sinceShot / 0.35),
+      charge: gunState.charge,
+    };
+    // Drive this skin from the accepted trigger clock and direction, without
+    // spawning or altering any slide-11 projectile.
+    const state = id === 'photon_saber'
+      ? { ...baseState, t, fireT: sinceShot, data: { ...baseState.data, side: gunState.saberSide } }
+      : baseState;
     drawSetElevenGun(
       c, setElevenId, cx, y0, t,
-      gunState.elevenState ?? {
-        ...restElevenState(),
-        // Menus and cards rebuild the same recoil/cycle slide 11 shows right
-        // after a shot, so the gun visibly kicks instead of standing still.
-        recoil: sinceShot >= 0.16 ? 0 : 1 - sinceShot / 0.16,
-        fireT: sinceShot,
-        ready: Math.min(1, sinceShot / 0.35),
-        charge: gunState.charge,
-      },
+      state,
       elevenScale(setElevenId),
       // Only the gun standing in a live game (`drawGunNow`), never a card.
       gunState.elevenStage,
     );
     c.restore();
-    if (flash > 0 && !gunState.elevenLive) drawFlash(c, id, cx, y0, t, flash);
+    if (flash > 0 && !gunState.elevenLive) drawFlash(c, id, cx, y0, t, flash, variant);
     return;
   }
   // Slide 6 (`games/game-2`): the original Weapon Wheel Hit beam art, drawn at
@@ -110,7 +140,7 @@ export function drawGun(
         : sixStateFor(Math.max(0, gunState.sinceShot), setSixId, t),
     );
     c.restore();
-    if (flash > 0 && !gunState.sixLive) drawFlash(c, id, cx, y0, t, flash);
+    if (flash > 0 && !gunState.sixLive) drawFlash(c, id, cx, y0, t, flash, variant);
     return;
   }
   const setNineId = variant === 'set9' || isNineNewWeapon(id) ? setNineIdFor(id) : null;
@@ -118,16 +148,18 @@ export function drawGun(
     // Live games hand over their own state; menus and cards rebuild the same
     // recoil/cycle from the shared shot clock so the gun still reacts to a shot.
     const sinceShot = Math.max(0, gunState.sinceShot);
-    drawSetNineGun(c, setNineId, cx, y0, t, gunState.s9State ?? restNineState({
+    const state = gunState.s9State ?? restNineState({
       recoil: sinceShot >= 0.16 ? 0 : 1 - sinceShot / 0.16,
       charge: gunState.charge,
       cycle: Math.min(1, sinceShot / 0.35),
       catchT: sinceShot,
-    }), undefined,
-    // Only the gun standing in a live game (`drawGunNow`), never a card.
-    gunState.nineStage);
+    });
+    drawSetNineGun(c, setNineId, cx, y0, t,
+      id === 'photon_saber' ? { ...state, saberSide: gunState.saberSide } : state, undefined,
+      // Only the gun standing in a live game (`drawGunNow`), never a card.
+      gunState.nineStage);
     c.restore();
-    if (flash > 0 && !gunState.s9Live) drawFlash(c, id, cx, y0, t, flash);
+    if (flash > 0 && !gunState.s9Live) drawFlash(c, id, cx, y0, t, flash, variant);
     return;
   }
   // SET 1 of slide 7: the newest design is slide 7's own artwork, drawn at the
@@ -149,7 +181,7 @@ export function drawGun(
       ready,
     });
     c.restore();
-    if (flash > 0) drawFlash(c, id, cx, y0, t, flash);
+    if (flash > 0) drawFlash(c, id, cx, y0, t, flash, variant);
     return;
   }
   // Slide 2 (`games/fireworkgun`): its own artwork, drawn at the same muzzle
@@ -166,7 +198,7 @@ export function drawGun(
       loadP: Math.min(1, since * 7),
     }));
     c.restore();
-    if (flash > 0 && !gunState.twoLive) drawFlash(c, id, cx, y0, t, flash);
+    if (flash > 0 && !gunState.twoLive) drawFlash(c, id, cx, y0, t, flash, variant);
     return;
   }
   // Slide-7 SET 2..5: slide 7's own artwork, drawn at the same muzzle origin
@@ -174,12 +206,14 @@ export function drawGun(
   // through `gunState.s7Anim`; menus and cards get the rested pose).
   const setSevenId = isSetSevenDesignWeapon(id) && variant === 'set7' ? setSevenIdFor(id) : null;
   if (setSevenId && supportsGunVariants(id)) {
-    drawSetSevenGun(c, setSevenId, cx, y0, t, gunState.s7Anim ?? restSevenAnim());
+    const anim = gunState.s7Anim ?? restSevenAnim();
+    drawSetSevenGun(c, setSevenId, cx, y0, t,
+      id === 'photon_saber' ? { ...anim, saberSide: gunState.saberSide } : anim);
     c.restore();
     // In play, slide 7's own fire recipe already throws its muzzle flash (and
     // its smoke, sparks and light); slide 1's generic flash would stack a
     // second burst of sparks on the barrel. Menus and cards still get one.
-    if (flash > 0 && !gunState.s7Anim) drawFlash(c, id, cx, y0, t, flash);
+    if (flash > 0 && !gunState.s7Anim) drawFlash(c, id, cx, y0, t, flash, variant);
     return;
   }
   // Slide-2 guns: the newest design is slide 2's own art, drawn at the same
@@ -192,10 +226,11 @@ export function drawGun(
       loadP: Math.min(1, since * 7),
       hue: 215 + ((gunState.shots * 53) % 105),
       live: ready,
+      fx: liveFx,
     };
     drawBlackHoleGun2(c, cx, y0, st);
     c.restore();
-    if (flash > 0) drawFlash(c, id, cx, y0, t, flash);
+    if (flash > 0) drawFlash(c, id, cx, y0, t, flash, variant);
     return;
   }
   // The retired guns ALWAYS render the original, even if an obsolete
@@ -220,7 +255,7 @@ export function drawGun(
     default: drawGunExtra(c, id, cx, y0, t, ready, snowLoaded); break;
   }
   c.restore();
-  if (flash > 0) drawFlash(c, id, cx, y0, t, flash);
+  if (flash > 0 && !gunState.s9Live && !gunState.elevenLive) drawFlash(c, id, cx, y0, t, flash, variant);
 }
 
 function pistol(c: CanvasRenderingContext2D, cx: number, y0: number, t: number) {
@@ -3827,9 +3862,10 @@ function blackhole(c: CanvasRenderingContext2D, cx: number, y0: number, t: numbe
 }
 
 // ---------------------------------------------------------------- muzzle flashes
-function drawFlash(c: CanvasRenderingContext2D, id: WeaponId, cx: number, y0: number, t: number, a: number) {
+function drawFlash(c: CanvasRenderingContext2D, id: WeaponId, cx: number, y0: number, t: number, a: number, variant: GunVariant) {
   c.save();
-  c.translate(cx, y0 - 6);
+  const mouth = id === 'firework' ? fireworkMouth(variant, gunState.fireworkTube) : null;
+  c.translate(cx + (mouth?.x ?? 0), y0 + (mouth?.y ?? -6));
   c.globalCompositeOperation = 'lighter';
   const fire = (big: number) => {
     const fg = c.createRadialGradient(0, 0, 2, 0, 0, 46 * big);

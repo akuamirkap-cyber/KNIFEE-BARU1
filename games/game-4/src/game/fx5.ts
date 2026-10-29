@@ -1,3 +1,4 @@
+import { drawSpiritMote } from '../../../../src/games/shared/spiritArt';
 import { type Ctx, TAU, clamp, drawSprite, easeOutBack, easeOutCubic, glowSprite, rand, starSprite } from './core';
 import { type FX, Lightning, spike } from './particles';
 import { type PaintCol, RAINBOW, crescentPath, drawGhost, drawSplat } from './shapes5';
@@ -354,7 +355,25 @@ export class SplatFlash extends Timed {
   }
 }
 
-/** a big translucent ghost rising out of the impact and fading */
+/** Flowing pale spirit ribbons for a ghost impact, not a radial splash. */
+export class SpiritAura extends Timed {
+  constructor(public x: number, public y: number, life = 0.9) { super(life); }
+  draw(ctx: Ctx) {
+    const k = Math.min(1, this.age / this.life);
+    const fade = Math.sin(Math.PI * k) * (1 - 0.25 * k);
+    ctx.save(); ctx.translate(this.x, this.y); ctx.globalCompositeOperation = 'lighter';
+    drawSprite(ctx, glowSprite('215,255,252'), 0, -16 - k * 10, 100 + k * 35, 0.28 * fade);
+    ctx.restore();
+    // Small sheet-shaped spirits rise through a soft mist, not thin ribbons.
+    for (let i = 0; i < 5; i++) {
+      const x = this.x + (i - 2) * 13 + Math.sin(this.age * 4 + i) * 5;
+      const y = this.y - 12 - k * (38 + i * 5);
+      drawSpiritMote(ctx, x, y, 11 + (i % 2) * 3, this.age * 3 + i, fade * 0.72);
+    }
+  }
+}
+
+/** A big translucent ghost rising out of the impact and fading. */
 export class GhostSpirit extends Timed {
   constructor(public x: number, public y: number, life = 0.8) {
     super(life);

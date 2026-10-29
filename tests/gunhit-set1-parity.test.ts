@@ -64,8 +64,8 @@ test('slide 7 SET 1 is exactly the six weapons slide 1 shares, matched by name',
   assert.equal(setOneIdFor('dragon'), null);
   for (const id of ['golden', 'blackhole', 'slingshot', 'blowgun', 'shotgun', 'soaker'] as const) {
     assert.ok((EDITABLE_WEAPONS as readonly string[]).includes(id), `${id} offers the SET 1 card`);
-    assert.equal(getGunVariant(id), 'set1', `${id} defaults to the newest design`);
-    assert.equal(getGunEffect(id), 'new', `${id} defaults to the SET 1 shot`);
+    assert.equal(getGunVariant(id), id === 'slingshot' || id === 'shotgun' ? 'original' : 'set1', `${id} default design`);
+    assert.equal(getGunEffect(id), id === 'shotgun' ? 'original' : id === 'soaker' ? 'set2' : 'new', `${id} default shot`);
     assert.ok(getGunVariantOptions(id).some(o => o.id === 'set1'));
     // SOAKER is also one of the eight slide-2 weapons, so it carries slide 2's
     // shot as a third card on top of the two SET 1 ones.
@@ -76,6 +76,7 @@ test('slide 7 SET 1 is exactly the six weapons slide 1 shares, matched by name',
 
 test('design and effect stay independent: old art + SET 1 shot, SET 1 art + old shot', () => {
   const id = 'shotgun';
+  const previous = [getGunVariant(id), getGunEffect(id)] as const;
   try {
     setGunVariant(id, 'original');
     setGunEffect(id, 'new');
@@ -84,15 +85,15 @@ test('design and effect stay independent: old art + SET 1 shot, SET 1 art + old 
     setGunEffect(id, 'original');
     assert.deepEqual([getGunVariant(id), getGunEffect(id)], ['set1', 'original']);
   } finally {
-    setGunVariant(id, 'set1');
-    setGunEffect(id, 'new');
+    setGunVariant(id, previous[0]);
+    setGunEffect(id, previous[1]);
   }
 });
 
-test('the default card draws slide 7 own artwork, and it is not the slide-1 body', () => {
+test('the slide 3 card draws its own artwork, distinct from the slide-1 body', () => {
   for (const id of ['golden', 'blackhole', 'slingshot', 'blowgun', 'shotgun', 'soaker'] as const) {
     const setOne = recorder();
-    drawGun(setOne.ctx, id, 210, 575, 0.8, 0);
+    drawGun(setOne.ctx, id, 210, 575, 0.8, 0, true, undefined, 'set1');
     assert.ok(setOne.calls.length > 150, `${id} draws the whole slide-7 weapon`);
 
     const slide1 = recorder();

@@ -53,7 +53,7 @@ export type ElevenId = (typeof SET_ELEVEN_IDS)[number];
  */
 export const SLIDE1_ID_FOR_ELEVEN: Record<ElevenId, string> = {
   tripod: 'heat_ray',
-  ironman: 'gauntlet_cannon',
+  ironman: 'ironman_hand',
   xenomorph: 'xeno',
   'mega-buster': 'mega_buster',
   harmonic: 'harmonic_disruptor',
@@ -83,6 +83,7 @@ export const SLIDE1_ID_FOR_ELEVEN: Record<ElevenId, string> = {
 
 /** The ten guns slide 1 did not have: slide 11's own weapons arrive as new. */
 const NEW_ELEVEN_IDS = new Set<ElevenId>([
+  'ironman',
   'mega-buster',
   'harmonic',
   'absolute-zero',
@@ -130,7 +131,9 @@ export function isElevenId(id: string): id is ElevenId {
 
 /** Slide-1 id -> slide-11 weapon id (null when slide 1 owns nothing for it). */
 export function setElevenIdFor(slide1Id: string): ElevenId | null {
-  return SET_ELEVEN_BY_SLIDE1_ID[slide1Id] ?? null;
+  // Gauntlet keeps the old Slide-5 *effect* as an effect-only alias; the
+  // corresponding design now belongs exclusively to Ironman Hand.
+  return slide1Id === 'gauntlet_cannon' ? 'ironman' : SET_ELEVEN_BY_SLIDE1_ID[slide1Id] ?? null;
 }
 
 /** Slide-11 weapon id -> the slide-1 gun it lives on. */

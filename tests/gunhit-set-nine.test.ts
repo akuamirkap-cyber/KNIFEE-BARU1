@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { RETIRED_WEAPONS } from '../src/games/gunhit/game/retiredWeapons';
 import assert from 'node:assert/strict';
 
 import {
@@ -63,6 +64,7 @@ test('slide 9 is 17 weapons: eight slide-1 guns updated by name, nine brand-new 
     assert.equal(setNineIdFor(slide1), nine);
     assert.equal(slide1IdForNine(nine), slide1);
     assert.equal(nineWeapon(nine).id, nine, `${nine} exists in slide 9`);
+    if (RETIRED_WEAPONS.has(slide1)) { assert.ok(!WEAPONS.some(w => w.id === slide1)); continue; }
     assert.ok(WEAPONS.some((w) => w.id === slide1), `${slide1} exists on slide 1`);
   }
   // The eight guns slide 1 already had, matched by what the weapon IS.
@@ -130,17 +132,22 @@ test('every slide-9 gun has measured preview metrics and real artwork', () => {
 });
 
 test('slide 9 keeps its card on all 17 guns, newest wherever slide 11 has no newer one', () => {
-  const matched = ['pistol', 'ak47', 'sniper', 'railgun', 'dragon', 'pred',
+  const matched = ['pistol', 'ak47', 'sniper', 'railgun', 'dragon',
     'photon_saber', 'gauntlet_cannon'];
   // Slide 11 later adopted every one of those eight, plus eight of the nine
   // guns slide 9 introduced; YAUTJA is the only slide-9 gun it never had.
   const elevenNewer = (id: string) => hasSlide11Update(id);
   for (const id of [...matched, ...SET_NINE_NEW_WEAPONS]) {
+    if (RETIRED_WEAPONS.has(id)) continue;
     assert.ok(EDITABLE_WEAPONS.includes(id as never), `${id} is selectable`);
     assert.equal(hasSlide9Update(id), true, `${id} carries the NEW badge`);
     const newest = elevenNewer(id) ? 'set11' : 'set9';
-    assert.equal(getGunVariant(id as never), newest, `${id} shows its newest art by default`);
-    assert.equal(getGunEffect(id as never), newest, `${id} fires its newest shot by default`);
+    assert.equal(
+      getGunVariant(id as never),
+      id === 'pistol' || id === 'ak47' || id === 'sniper' || id === 'gauntlet_cannon' ? 'original' : newest,
+      `${id} shows its expected default art`,
+    );
+    assert.equal(getGunEffect(id as never), id === 'sniper' || id === 'photon_saber' ? 'set9' : id === 'railgun' || id === 'gauntlet_cannon' ? 'set7' : newest, `${id} fires its requested shot by default`);
     // Slide 9's own card is always there, labelled, and pickable.
     const designs = getGunVariantOptions(id as never);
     const design = designs.find((o) => o.id === 'set9');
@@ -154,9 +161,9 @@ test('slide 9 keeps its card on all 17 guns, newest wherever slide 11 has no new
     assert.ok(designs.some((o) => o.id === getGunVariant(id as never)));
     assert.ok(effects.some((o) => o.id === getGunEffect(id as never)));
   }
-  // YAUTJA: slide 9 is still the newest and only layer.
-  assert.deepEqual(getGunVariantOptions('yautja').map((o) => o.id), ['set9']);
-  assert.deepEqual(getGunEffectOptions('yautja').map((o) => o.id), ['set9']);
+  // YAUTJA's imported renderer remains internally available but it is retired.
+  assert.deepEqual(getGunVariantOptions('yautja'), []);
+  assert.deepEqual(getGunEffectOptions('yautja'), []);
   // Slide-1 designs and shots remain selectable for the matched guns.
   for (const id of matched) {
     const designs = getGunVariantOptions(id as never).map((o) => o.id);
@@ -245,8 +252,8 @@ test('the carried round keeps slide 9’s trail spacing, so it never freezes', (
 });
 
 test('slide 1 flies slide 9’s round, and only slide 9’s shot fires for its guns', () => {
-  setGunEffect('longbow', 'set9');
-  const game = probe('longbow');
+  setGunEffect('ak47', 'set9');
+  const game = probe('ak47');
   game.shoot();
   assert.equal(game.projs.length, 1, 'one carrier round');
   const carrier = (game.projs as unknown[])[0] as {
@@ -256,12 +263,12 @@ test('slide 1 flies slide 9’s round, and only slide 9’s shot fires for its g
   assert.equal(game.particles.length, 0, 'slide 1’s own muzzle particles stay off');
 
   // The classic effect still fires slide 1's own shot.
-  setGunEffect('longbow', 'original');
-  const classic = probe('longbow');
+  setGunEffect('ak47', 'original');
+  const classic = probe('ak47');
   classic.shoot();
   const plain = (classic.projs as unknown[])[0] as { setNine?: unknown };
   assert.equal(plain.setNine, undefined);
-  setGunEffect('longbow', 'set9');
+  setGunEffect('ak47', 'set9');
 });
 
 test('a slide-9 hit paints its entry hole, hides slide 1’s bullet art and scores', () => {

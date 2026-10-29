@@ -1,4 +1,4 @@
-import { type Ctx, TAU, clamp, drawSprite, glowSprite, lin, makeBolt, polyPath, roundRect } from './core';
+import { type Ctx, TAU, clamp, drawSprite, glowSprite, lin, makeBolt, makeCanvas, polyPath, roundRect } from './core';
 import { GOLD_X, GOLD_Y, drawShell, drawSingularity, drawStone } from './art';
 import { drawWeapon2 } from './weaponArt2';
 import { drawWeapon6 } from './weaponArt6';
@@ -38,13 +38,50 @@ export function drawWeapon(ctx: Ctx, id: WeaponId, a: WeaponAnim, time: number) 
 
 // ───────────────────────── GOLDEN GUN (desert-eagle style) ─────────────────────────
 export const GOLDEN_SCALE = 0.92;
-function drawGolden(ctx: Ctx, a: WeaponAnim, time: number) {
-  ctx.save();
-  ctx.rotate(-Math.PI / 2);
-  ctx.scale(GOLDEN_SCALE, GOLDEN_SCALE);
-  const sx = a.slide * 17;
-  const gy = (y0: number, y1: number) => lin(ctx, 0, y0, 0, y1, GOLD_Y);
+// The body and the sliding metal are detailed but mostly static. Bake the
+// exact vector artwork at 3x once; keep the actual slide movement, shine sweep,
+// chamber reveal and muzzle glow live on top. This removes the clipped grip's
+// 88 strokes and repeated gradients from every gameplay frame.
+interface GoldenLayer { canvas: HTMLCanvasElement; x: number; y: number; w: number; h: number }
+interface GoldenLayers { body: GoldenLayer; slide: GoldenLayer }
+let goldenLayers: GoldenLayers | undefined;
+const GOLDEN_CACHE_SCALE = 3;
 
+function bakeGoldenLayer(x: number, y: number, w: number, h: number, draw: (c: Ctx) => void): GoldenLayer | null {
+  const canvas = makeCanvas(w * GOLDEN_CACHE_SCALE, h * GOLDEN_CACHE_SCALE);
+  const c = canvas.getContext('2d');
+  if (!c) return null;
+  c.setTransform(GOLDEN_CACHE_SCALE, 0, 0, GOLDEN_CACHE_SCALE, -x * GOLDEN_CACHE_SCALE, -y * GOLDEN_CACHE_SCALE);
+  draw(c);
+  return { canvas, x, y, w, h };
+}
+
+function getGoldenLayers(ctx: Ctx): GoldenLayers | null {
+  // A headless recording context must still see the actual paths, not a
+  // throwaway shim canvas. Real browser and Skia canvases can reuse the art.
+  if (typeof document === 'undefined' || typeof HTMLCanvasElement === 'undefined'
+    || !(ctx.canvas instanceof HTMLCanvasElement)) return null;
+  if (goldenLayers) return goldenLayers;
+  try {
+    const body = bakeGoldenLayer(-158, -22, 162, 112, drawGoldenBody);
+    const slide = bakeGoldenLayer(-134, -18, 72, 30, (c) => {
+      // The live body sets round caps on the trigger before drawing the slide.
+      c.lineCap = 'round';
+      drawGoldenSlide(c, 0, 0);
+    });
+    if (body && slide) goldenLayers = { body, slide };
+  } catch {
+    // An unavailable offscreen canvas must not make the weapon disappear.
+  }
+  return goldenLayers ?? null;
+}
+
+function drawGoldenLayer(ctx: Ctx, layer: GoldenLayer) {
+  ctx.drawImage(layer.canvas, layer.x, layer.y, layer.w, layer.h);
+}
+
+function drawGoldenBody(ctx: Ctx) {
+  const gy = (y0: number, y1: number) => lin(ctx, 0, y0, 0, y1, GOLD_Y);
   // chamber (revealed when slide moves back)
   ctx.fillStyle = lin(ctx, 0, -8, 0, 6, [
     [0, '#c88a1a'],
@@ -159,10 +196,10 @@ function drawGolden(ctx: Ctx, a: WeaponAnim, time: number) {
     ctx.quadraticCurveTo(ex + 9, ey - 3, ex + 13, ey + 1);
     ctx.stroke();
   }
+}
 
-  // slide
-  ctx.save();
-  ctx.translate(-sx, 0);
+function drawGoldenSlide(ctx: Ctx, sx: number, slide: number) {
+  const gy = (y0: number, y1: number) => lin(ctx, 0, y0, 0, y1, GOLD_Y);
   polyPath(ctx, [-64, -12, -64, 9, -128, 9, -131, 5, -131, -9, -128, -12]);
   ctx.fillStyle = gy(-12, 9);
   ctx.fill();
@@ -172,7 +209,7 @@ function drawGolden(ctx: Ctx, a: WeaponAnim, time: number) {
   ctx.fillStyle = '#2b1702';
   roundRect(ctx, -98, -9.5, 22, 8, 1.5);
   ctx.fill();
-  if (a.slide > 0.25) {
+  if (slide > 0.25) {
     ctx.fillStyle = lin(ctx, 0, -9, 0, -2, GOLD_Y);
     ctx.fillRect(-94 + sx * 0.4, -8.6, 13, 6);
   }
@@ -181,6 +218,29 @@ function drawGolden(ctx: Ctx, a: WeaponAnim, time: number) {
   ctx.strokeStyle = 'rgba(255,244,200,0.45)';
   ctx.lineWidth = 0.8;
   line(ctx, -128, 2.5, -66, 2.5);
+}
+
+function drawGolden(ctx: Ctx, a: WeaponAnim, time: number) {
+  ctx.save();
+  ctx.rotate(-Math.PI / 2);
+  ctx.scale(GOLDEN_SCALE, GOLDEN_SCALE);
+  const sx = a.slide * 17;
+  const gy = (y0: number, y1: number) => lin(ctx, 0, y0, 0, y1, GOLD_Y);
+  const layers = getGoldenLayers(ctx);
+  if (layers) drawGoldenLayer(ctx, layers.body);
+  else drawGoldenBody(ctx);
+
+  // The slide remains independently animated. The brass chamber only appears
+  // on its live frame, inside the open ejection port.
+  ctx.save();
+  ctx.translate(-sx, 0);
+  if (layers) {
+    drawGoldenLayer(ctx, layers.slide);
+    if (a.slide > 0.25) {
+      ctx.fillStyle = lin(ctx, 0, -9, 0, -2, GOLD_Y);
+      ctx.fillRect(-94 + sx * 0.4, -8.6, 13, 6);
+    }
+  } else drawGoldenSlide(ctx, sx, a.slide);
   ctx.restore();
   // hammer
   polyPath(ctx, [-134, -5, -141, -12, -145, -10, -139, -2]);
