@@ -1,4 +1,4 @@
-import { P, TAU, pick, rng, rnd, withAlpha } from './core';
+import { P, TAU, drawNineRadial, pick, rng, rnd, withAlpha } from './core';
 import { emissive } from './art';
 import type { Beam, Bullet, GameAPI, Weapon } from './types';
 
@@ -49,20 +49,25 @@ export function makeBullet(o: {
 }
 
 export function trailPath(ctx: CanvasRenderingContext2D, b: Bullet, color: string, w: number, alpha = 1) {
-  if (b.trail.length < 2) return;
+  const n = b.trail.length;
+  if (n < 2) return;
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  const n = b.trail.length;
-  // tapered trail: draw as segments with increasing width/alpha
-  for (let i = 1; i < n; i++) {
-    const u = i / (n - 1);
-    const p0 = b.trail[i - 1],
-      p1 = b.trail[i];
+  // Group resampled trail points into up to 4 tapered polyline bands instead of
+  // issuing ~80 separate stroke() calls per flying bullet every frame.
+  const bands = Math.min(4, n - 1);
+  for (let band = 0; band < bands; band++) {
+    const startIdx = Math.floor((band * (n - 1)) / bands);
+    const endIdx = Math.floor(((band + 1) * (n - 1)) / bands);
+    if (endIdx <= startIdx) continue;
+    const u = (band + 0.75) / bands;
     ctx.beginPath();
-    ctx.moveTo(p0.x, p0.y);
-    ctx.lineTo(p1.x, p1.y);
+    ctx.moveTo(b.trail[startIdx].x, b.trail[startIdx].y);
+    for (let i = startIdx + 1; i <= endIdx; i++) {
+      ctx.lineTo(b.trail[i].x, b.trail[i].y);
+    }
     ctx.strokeStyle = withAlpha(color, 0.2 * alpha * u);
     ctx.lineWidth = w * 3 * u;
     ctx.stroke();
@@ -499,14 +504,7 @@ export function heatGlow(ctx: CanvasRenderingContext2D, r: number, color: string
   if (a <= 0.01) return;
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
-  const g = ctx.createRadialGradient(ox, 0, 0, ox, 0, r);
-  g.addColorStop(0, withAlpha('#fff3c0', a));
-  g.addColorStop(0.4, withAlpha(color, a * 0.7));
-  g.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = g;
-  ctx.beginPath();
-  ctx.arc(ox, 0, r, 0, TAU);
-  ctx.fill();
+  drawNineRadial(ctx, ox, 0, r, '#fff3c0', color, a, 0.4, 1, 0.7);
   ctx.restore();
 }
 

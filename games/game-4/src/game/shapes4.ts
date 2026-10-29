@@ -1,4 +1,4 @@
-import { type Ctx, TAU, clamp, drawSprite, easeOutBack, easeOutCubic, glowSprite, lin, mulberry32, polyPath, roundRect, starSprite } from './core';
+import { type Ctx, TAU, clamp, drawSprite, easeOutBack, easeOutCubic, glowSprite, lin, makeCanvas, mulberry32, polyPath, roundRect, starSprite } from './core';
 import { drawAmmoGlyph5, drawStuckItem5 } from './shapes5';
 import type { StuckItem, WeaponId } from './weapons';
 
@@ -409,7 +409,49 @@ function petalPath(ctx: Ctx, r: number) {
   ctx.closePath();
 }
 
+interface PetalSprite { canvas: HTMLCanvasElement; x: number; y: number; w: number; h: number; radius: number }
+const petalSprites = new Map<string, PetalSprite>();
+
+/** Petal colours and geometry are static; sway, spin and opacity remain live. */
+function getPetalSprite(ctx: Ctx, r: number, c0: string, c1: string): PetalSprite | null {
+  if (typeof document === 'undefined' || typeof HTMLCanvasElement === 'undefined'
+    || !(ctx.canvas instanceof HTMLCanvasElement) || !Number.isFinite(r) || r < 1 || r > 32) return null;
+  const radius = Math.round(r);
+  const key = `${radius}:${c0}:${c1}`;
+  const cached = petalSprites.get(key);
+  if (cached) return cached;
+  try {
+    const x = Math.floor(-radius * 0.8 - 2);
+    const y = Math.floor(-radius - 2);
+    const w = Math.ceil(radius * 0.8 + 2) - x;
+    const h = 2 - y;
+    const density = 3;
+    const canvas = makeCanvas(w * density, h * density);
+    const c = canvas.getContext('2d');
+    if (!c) return null;
+    c.setTransform(density, 0, 0, density, -x * density, -y * density);
+    drawPetalVector(c, radius, c0, c1);
+    const sprite = { canvas, x, y, w, h, radius };
+    if (petalSprites.size >= 96) {
+      const oldest = petalSprites.keys().next().value;
+      if (oldest !== undefined) petalSprites.delete(oldest);
+    }
+    petalSprites.set(key, sprite);
+    return sprite;
+  } catch {
+    return null;
+  }
+}
+
 export function drawPetal(ctx: Ctx, r: number, c0 = '#fff2f6', c1 = '#ffb3cc') {
+  const sprite = getPetalSprite(ctx, r, c0, c1);
+  if (sprite) {
+    const scale = r / sprite.radius;
+    ctx.drawImage(sprite.canvas, sprite.x * scale, sprite.y * scale, sprite.w * scale, sprite.h * scale);
+  } else drawPetalVector(ctx, r, c0, c1);
+}
+
+function drawPetalVector(ctx: Ctx, r: number, c0: string, c1: string) {
   petalPath(ctx, r);
   ctx.fillStyle = lin(ctx, 0, 0, 0, -r, [
     [0, c0],
@@ -459,22 +501,52 @@ export function drawBlossom(ctx: Ctx, r: number, bloom = 1, rot = 0) {
 }
 
 // ───────────────────────── bee (head up) ─────────────────────────
+let beeBodySprite: HTMLCanvasElement | undefined;
+function getBeeBodySprite(ctx: Ctx): HTMLCanvasElement | null {
+  if (typeof document === 'undefined' || typeof HTMLCanvasElement === 'undefined'
+    || !(ctx.canvas instanceof HTMLCanvasElement)) return null;
+  if (beeBodySprite) return beeBodySprite;
+  try {
+    const density = 4;
+    const canvas = makeCanvas(18 * density, 31 * density);
+    const c = canvas.getContext('2d');
+    if (!c) return null;
+    c.setTransform(density, 0, 0, density, 9 * density, 15 * density);
+    drawBeeBody(c);
+    beeBodySprite = canvas;
+  } catch {
+    return null;
+  }
+  return beeBodySprite ?? null;
+}
+
 export function drawBee(ctx: Ctx, s = 1, flap = 0) {
   ctx.save();
   ctx.scale(s, s);
+  // Both wings keep their individual, continuously animated flap angle,
+  // while sharing one fill and outline instead of drawing each separately.
+  ctx.beginPath();
   for (const k of [-1, 1]) {
-    ctx.save();
-    ctx.translate(k * 2.4, -1);
-    ctx.rotate(k * (0.7 + 0.55 * flap));
-    ctx.beginPath();
-    ctx.ellipse(0, -6.4, 3.4, 7.4, 0, 0, TAU);
-    ctx.fillStyle = 'rgba(232,248,255,0.8)';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(110,150,185,0.95)';
-    ctx.lineWidth = 0.6;
-    ctx.stroke();
-    ctx.restore();
+    const angle = k * (0.7 + 0.55 * flap);
+    const cos = Math.cos(angle), sin = Math.sin(angle);
+    const x = k * 2.4 + 6.4 * sin, y = -1 - 6.4 * cos;
+    ctx.moveTo(x + 3.4 * cos, y + 3.4 * sin);
+    ctx.ellipse(x, y, 3.4, 7.4, angle, 0, TAU);
   }
+  ctx.fillStyle = 'rgba(232,248,255,0.8)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(110,150,185,0.95)';
+  ctx.lineWidth = 0.6;
+  ctx.stroke();
+  // Wing movement stays continuous; only the unchanging detailed body is
+  // cached, so dozens of bees do not recreate gradients and clipped stripes.
+  const body = getBeeBodySprite(ctx);
+  if (body) ctx.drawImage(body, -9, -15, 18, 31);
+  else drawBeeBody(ctx);
+  ctx.restore();
+}
+
+function drawBeeBody(ctx: Ctx) {
   ctx.strokeStyle = '#2a1706';
   ctx.lineWidth = 0.7;
   ctx.beginPath();
@@ -530,7 +602,6 @@ export function drawBee(ctx: Ctx, s = 1, flap = 0) {
   ctx.moveTo(1, -9.4);
   ctx.lineTo(3, -12.6);
   ctx.stroke();
-  ctx.restore();
 }
 
 // ───────────────────────── firework rocket (nose up, body centred) ─────────────────────────

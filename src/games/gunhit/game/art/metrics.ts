@@ -1,5 +1,5 @@
 import type { WeaponId } from '../weapons';
-import { getGunVariant, isFixedClassicGun, supportsGunVariants, type GunVariant, type VariantWeapon } from './gunVariants';
+import { getGunVariant, isFixedClassicGun, isSetElevenDesignWeapon, supportsGunVariants, type GunVariant, type VariantWeapon } from './gunVariants';
 import { SET_ELEVEN_BY_SLIDE1_ID, SET_ELEVEN_METRICS, SET_ELEVEN_NEW_IDS, SET_ELEVEN_NEW_WEAPONS } from '../setElevenArt';
 import { SET_SIX_BY_SLIDE1_ID, SET_SIX_METRICS } from '../setSixArt';
 
@@ -110,7 +110,7 @@ export const GUN_METRICS: Partial<Record<WeaponId, Partial<GunMetrics>>> = {
   firework: { totalLen: 185, centerOffsetY: 90, centerOffsetX: 14, span: 190 },
   anchor: { totalLen: 220, centerOffsetY: 108, centerOffsetX: 14, span: 225 },
   shark: { totalLen: 180, centerOffsetY: 88, centerOffsetX: 16, span: 185 },
-  ghost: { totalLen: 186, centerOffsetY: 92, centerOffsetX: 2, span: 196 },
+  ghost: { totalLen: 152, centerOffsetY: 82, centerOffsetX: 0, span: 186 },
   ufo: { totalLen: 194, centerOffsetY: 86, centerOffsetX: 2, span: 204 },
   rainbow: { totalLen: 188, centerOffsetY: 90, centerOffsetX: 2, span: 196 },
   meteor: { totalLen: 178, centerOffsetY: 78, centerOffsetX: 3, span: 184 },
@@ -272,7 +272,7 @@ const SET_SEVEN_METRICS: Partial<Record<WeaponId, GunMetrics>> = {
   paintball: { totalLen: 244, centerOffsetY: 119, centerOffsetX: 5, span: 229 }, // -33,-3..43,241
   wand: { totalLen: 353, centerOffsetY: 155, centerOffsetX: 0, span: 299 }, // -33,-22..33,331
   shark: { totalLen: 258, centerOffsetY: 139, centerOffsetX: 0, span: 261 }, // -54,10..53,268
-  ghost: { totalLen: 261, centerOffsetY: 117, centerOffsetX: 0, span: 305 }, // -84,-14..83,247
+  ghost: { totalLen: 152, centerOffsetY: 82, centerOffsetX: 0, span: 186 }, // barrel-free spirit
   ufo: { totalLen: 279, centerOffsetY: 126, centerOffsetX: 0, span: 263 }, // -45,-14..44,265
   rainbow: { totalLen: 281, centerOffsetY: 112, centerOffsetX: 1, span: 270 }, // -48,-29..49,252
   meteor: { totalLen: 269, centerOffsetY: 125, centerOffsetX: 0, span: 250 }, // -41,-10..40,259
@@ -359,7 +359,10 @@ const SET_SIX_METRICS_BY_SLIDE1: Partial<Record<WeaponId, GunMetrics>> = Object.
 export function getGunMetrics(id: WeaponId, variant: GunVariant = getGunVariant(id)): GunMetrics {
   const effectiveVariant = isFixedClassicGun(id) ? 'original'
     : id === 'honey' && variant === 'latest' ? 'current' : variant;
-  const eleven = effectiveVariant === 'set11' ? SET_ELEVEN_METRICS_BY_SLIDE1[id] : undefined;
+  const eleven =
+    effectiveVariant === 'set11' && isSetElevenDesignWeapon(id)
+      ? SET_ELEVEN_METRICS_BY_SLIDE1[id]
+      : undefined;
   const six = effectiveVariant === 'set6' ? SET_SIX_METRICS_BY_SLIDE1[id] : undefined;
   const measured = eleven
     ? eleven

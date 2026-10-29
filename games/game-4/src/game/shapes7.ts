@@ -1,3 +1,4 @@
+import { drawBreakerCoin } from '../../../../src/games/shared/coinArt';
 import { type Ctx, TAU, clamp, drawSprite, easeOutBack, easeOutCubic, glowSprite, lin, polyPath, roundRect, starSprite } from './core';
 import { RAINBOW, crescentPath } from './shapes5';
 import { drawCoin, drawIceCluster } from './shapes6';
@@ -225,23 +226,19 @@ export function drawHolyOrb(ctx: Ctx, r: number, t: number) {
   ctx.restore();
 }
 
-export function drawCross(ctx: Ctx, s: number) {
-  const w = s * 0.34;
-  ctx.fillStyle = lin(ctx, -w, 0, w, 0, [
-    [0, '#b8801a'],
-    [0.35, '#ffe9a0'],
-    [0.5, '#ffffff'],
-    [0.75, '#f0c458'],
-    [1, '#8a5a0a'],
+/** Pearl and halo used by Holy Light (no cross symbols). */
+export function drawHolyEmblem(ctx: Ctx, s: number) {
+  ctx.save();
+  ctx.beginPath(); ctx.ellipse(0, 0, s * 0.7, s, 0, 0, TAU);
+  ctx.fillStyle = lin(ctx, -s, 0, s, 0, [
+    [0, '#b8801a'], [0.32, '#ffe9a0'], [0.5, '#ffffff'],
+    [0.75, '#f0c458'], [1, '#8a5a0a'],
   ]);
-  roundRect(ctx, -w / 2, -s, w, s * 2, w * 0.3);
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(120,70,0,0.85)';
-  ctx.lineWidth = Math.max(0.6, s * 0.06);
-  ctx.stroke();
-  roundRect(ctx, -s * 0.62, -s * 0.46, s * 1.24, w, w * 0.3);
-  ctx.fill();
-  ctx.stroke();
+  ctx.fill(); ctx.strokeStyle = 'rgba(120,70,0,0.8)';
+  ctx.lineWidth = Math.max(0.6, s * 0.06); ctx.stroke();
+  ctx.beginPath(); ctx.ellipse(-s * 0.12, -s * 0.2, s * 0.32, s * 0.48, 0, 0, TAU);
+  ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.fill();
+  ctx.restore();
 }
 
 // ───────────────────────── unicorn ─────────────────────────
@@ -649,7 +646,7 @@ export function drawStuckItem7(ctx: Ctx, it: StuckItem, R: number, time: number)
       drawSprite(ctx, glowSprite('255,225,140'), 0, 0, 62, 0.45 * tw + 0.2);
       ctx.restore();
       ctx.rotate(Math.PI / 2);
-      drawCross(ctx, 14);
+      drawHolyEmblem(ctx, 14);
       ctx.strokeStyle = '#f6c040';
       ctx.lineWidth = 2;
       ctx.beginPath();
@@ -687,11 +684,10 @@ export function drawStuckItem7(ctx: Ctx, it: StuckItem, R: number, time: number)
       break;
     }
     case 'coin': {
-      const flip = 0.4 + 0.6 * Math.abs(Math.sin(it.t * 14)) * Math.exp(-it.t * 1.8);
       ctx.save();
       ctx.translate(R + 9, 0);
       ctx.rotate(Math.PI / 2);
-      drawCoin(ctx, 10, flip);
+      drawBreakerCoin(ctx, 0, 0, 10, time, it.seed, 1, true, true);
       ctx.restore();
       break;
     }
@@ -877,7 +873,7 @@ export function drawStuckItem7(ctx: Ctx, it: StuckItem, R: number, time: number)
 export function drawAmmoGlyph7(g: Ctx, weapon: WeaponId) {
   switch (weapon) {
     case 'holy':
-      drawCross(g, 9);
+      drawHolyEmblem(g, 9);
       break;
     case 'unicorn':
       g.save();

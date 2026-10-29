@@ -28,6 +28,7 @@ type RockCell = {
   cracks: Point[][];
   flash: number;
   path?: Path2D;
+  speckPath?: Path2D;
   fallenSprite?: { image: HTMLCanvasElement; x: number; y: number };
 };
 
@@ -182,7 +183,8 @@ export class DiamondRock {
       if (!this.flashing.includes(c)) this.flashing.push(c);
       if (!this.cracked.includes(c)) this.cracked.push(c);
       // Stable crack marks on the impacted chunk, not random lines each frame.
-      c.cracks.push([at, { x: (at.x + c.center.x) / 2 + rand(-4, 4), y: (at.y + c.center.y) / 2 + rand(-4, 4) }, c.center]);
+      const crackLine = [at, { x: (at.x + c.center.x) / 2 + rand(-4, 4), y: (at.y + c.center.y) / 2 + rand(-4, 4) }, c.center];
+      c.cracks.push(crackLine);
       if (c.hp <= 0) {
         c.alive = false;
         this.remaining--;
@@ -190,6 +192,8 @@ export class DiamondRock {
         broken.push({ id: c.id, ...c.center });
         this.shimmer = this.shimmer.filter(s => s !== c);
         this.cracked = this.cracked.filter(s => s !== c);
+      } else {
+        this.paintCrackOnCanvas(c, crackLine);
       }
     };
     damageCell(struck, damage, p);
@@ -202,6 +206,26 @@ export class DiamondRock {
       }
     }
     return { kind: 'rock', struckId: struck.id, broken, remaining: this.remaining };
+  }
+
+  private paintCrackOnCanvas(c: RockCell, line: { x: number; y: number }[]) {
+    if (!this.canvas || !c.path || line.length < 2) return;
+    const ctx = this.canvas.getContext('2d')!;
+    ctx.save();
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    ctx.translate(IMAGE_RADIUS, IMAGE_RADIUS);
+    ctx.clip(c.path);
+    ctx.beginPath();
+    ctx.moveTo(line[0].x, line[0].y);
+    for (let k = 1; k < line.length; k++) ctx.lineTo(line[k].x, line[k].y);
+    ctx.strokeStyle = 'rgba(8,14,22,0.92)';
+    ctx.lineWidth = 2.2;
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(225,240,255,0.3)';
+    ctx.lineWidth = 1;
+    ctx.translate(1.2, 1.2);
+    ctx.stroke();
+    ctx.restore();
   }
 
   private eraseChunk(c: RockCell) {
@@ -227,6 +251,20 @@ export class DiamondRock {
     }
   }
 
+  /** Pre-bake rock bitmap on stage load so Frame 1 of Bonus/Boulder play has 0ms hitch. */
+  prebake() {
+    if (
+      this.dirty &&
+      typeof document !== 'undefined' &&
+      typeof HTMLCanvasElement !== 'undefined'
+    ) {
+      const probe = document.createElement('canvas');
+      if (probe instanceof HTMLCanvasElement) {
+        this.bake();
+      }
+    }
+  }
+
   private bake() {
     const R = IMAGE_RADIUS, size = R * 2;
     if (!this.canvas) {
@@ -244,6 +282,7 @@ export class DiamondRock {
     ctx.lineJoin = 'round';
     const lightDir = -Math.PI * 0.72;
     const gx = Math.cos(lightDir), gy = Math.sin(lightDir);
+    const hasPath2D = typeof Path2D !== 'undefined';
 
     for (const c of this.cells) {
       if (!c.alive) continue;
@@ -253,6 +292,15 @@ export class DiamondRock {
         for (let k = 1; k < c.poly.length; k++) path.lineTo(c.poly[k].x, c.poly[k].y);
         path.closePath();
         c.path = path;
+      }
+      if (c.type === 'ore' && !c.speckPath && hasPath2D) {
+        const spPath = new Path2D();
+        for (const sp of c.specks) {
+          const sr = sp.r * 0.75;
+          spPath.moveTo(sp.x + sr, sp.y);
+          spPath.arc(sp.x, sp.y, sr, 0, TAU);
+        }
+        c.speckPath = spPath;
       }
       const path = c.path;
       const lit = Math.cos(Math.atan2(c.center.y, c.center.x) - lightDir);
@@ -264,75 +312,139 @@ export class DiamondRock {
       g.addColorStop(0.32, `hsl(${c.hue},${c.sat}%,${L + 4}%)`);
       g.addColorStop(0.66, `hsl(${c.hue + 4},${c.sat + 2}%,${L - 5}%)`);
       g.addColorStop(1, `hsl(${c.hue + 10},${c.sat + 8}%,${Math.max(5, L - 17)}%)`);
-      ctx.fillStyle = g; ctx.fill(path);
-      ctx.save(); ctx.clip(path);
-      for (let f = 0; f < 4; f++) {
+      ctx.fillStyle = g;
+      ctx.fill(path);
+
+      ctx.save();
+      ctx.clip(path);
+
+      // Faceted crystalline planes (2 batched color passes instead of 4)
+      ctx.globalAlpha = 0.25;
+      ctx.fillStyle = `hsl(${c.hue + 8},${c.sat + 4}%,${L - 13}%)`;
+      ctx.beginPath();
+      for (let f = 0; f < 4; f += 2) {
         const a = c.shardSeed + f * 1.7;
-        ctx.globalAlpha = f % 2 ? 0.2 : 0.26;
-        ctx.fillStyle = f % 2 ? `hsl(${c.hue - 4},${c.sat}%,${L + 16}%)` : `hsl(${c.hue + 8},${c.sat + 4}%,${L - 13}%)`;
-        ctx.beginPath();
         ctx.moveTo(c.center.x + Math.cos(a) * 44, c.center.y + Math.sin(a) * 44);
         ctx.lineTo(c.center.x + Math.cos(a + 1) * 50, c.center.y + Math.sin(a + 1) * 50);
         ctx.lineTo(c.center.x + Math.cos(a + 2.3) * 28, c.center.y + Math.sin(a + 2.3) * 28);
-        ctx.closePath(); ctx.fill();
+        ctx.closePath();
       }
+      ctx.fill();
+
+      ctx.globalAlpha = 0.2;
+      ctx.fillStyle = `hsl(${c.hue - 4},${c.sat}%,${L + 16}%)`;
+      ctx.beginPath();
+      for (let f = 1; f < 4; f += 2) {
+        const a = c.shardSeed + f * 1.7;
+        ctx.moveTo(c.center.x + Math.cos(a) * 44, c.center.y + Math.sin(a) * 44);
+        ctx.lineTo(c.center.x + Math.cos(a + 1) * 50, c.center.y + Math.sin(a + 1) * 50);
+        ctx.lineTo(c.center.x + Math.cos(a + 2.3) * 28, c.center.y + Math.sin(a + 2.3) * 28);
+        ctx.closePath();
+      }
+      ctx.fill();
+
+      // Batched stone grain (2 fillStyle switches instead of 22 hsla() strings per cell)
       ctx.globalAlpha = 0.5;
+      ctx.fillStyle = `hsla(${c.hue - 10},${c.sat + 10}%,${L + 30}%,0.5)`;
       for (const grain of c.grain) {
-        ctx.fillStyle = grain.d > 0
-          ? `hsla(${c.hue - 10},${c.sat + 10}%,${L + 30}%,0.5)`
-          : `hsla(${c.hue + 14},${c.sat}%,${Math.max(4, L - 24)}%,0.55)`;
-        ctx.fillRect(grain.x, grain.y, grain.r, grain.r);
+        if (grain.d > 0) ctx.fillRect(grain.x, grain.y, grain.r, grain.r);
       }
+      ctx.fillStyle = `hsla(${c.hue + 14},${c.sat}%,${Math.max(4, L - 24)}%,0.55)`;
+      for (const grain of c.grain) {
+        if (grain.d <= 0) ctx.fillRect(grain.x, grain.y, grain.r, grain.r);
+      }
+
       ctx.globalAlpha = 1;
       for (const pit of c.pits) {
         ctx.fillStyle = `rgba(0,0,0,${pit.a})`;
-        ctx.beginPath(); ctx.ellipse(pit.x, pit.y, pit.r, pit.r * 0.72, pit.r, 0, TAU); ctx.fill();
-        ctx.fillStyle = 'rgba(255,255,255,0.07)';
-        ctx.beginPath(); ctx.ellipse(pit.x - pit.r * 0.25, pit.y - pit.r * 0.35, pit.r * 0.55, pit.r * 0.4, 0, 0, TAU); ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(pit.x, pit.y, pit.r, pit.r * 0.72, pit.r, 0, TAU);
+        ctx.fill();
       }
-      for (const m of c.moss) {
+      ctx.fillStyle = 'rgba(255,255,255,0.07)';
+      ctx.beginPath();
+      for (const pit of c.pits) {
+        const hx = pit.x - pit.r * 0.25, hy = pit.y - pit.r * 0.35;
+        ctx.moveTo(hx + pit.r * 0.55, hy);
+        ctx.ellipse(hx, hy, pit.r * 0.55, pit.r * 0.4, 0, 0, TAU);
+      }
+      ctx.fill();
+
+      if (c.moss.length) {
         ctx.fillStyle = 'rgba(120,165,180,0.16)';
-        ctx.beginPath(); ctx.arc(m.x, m.y, m.r, 0, TAU); ctx.fill();
+        ctx.beginPath();
+        for (const m of c.moss) {
+          ctx.moveTo(m.x + m.r, m.y);
+          ctx.arc(m.x, m.y, m.r, 0, TAU);
+        }
+        ctx.fill();
       }
+
       if (c.type === 'hard') {
-        ctx.strokeStyle = 'rgba(165,190,225,0.35)'; ctx.lineWidth = 1.6;
-        ctx.beginPath(); ctx.moveTo(c.poly[0].x, c.poly[0].y); ctx.lineTo(c.center.x, c.center.y);
-        ctx.lineTo(c.poly[(c.poly.length / 2) | 0].x, c.poly[(c.poly.length / 2) | 0].y); ctx.stroke();
-        ctx.fillStyle = 'rgba(190,215,255,0.1)'; ctx.fill(path);
+        ctx.strokeStyle = 'rgba(165,190,225,0.35)';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(c.poly[0].x, c.poly[0].y);
+        ctx.lineTo(c.center.x, c.center.y);
+        ctx.lineTo(c.poly[(c.poly.length / 2) | 0].x, c.poly[(c.poly.length / 2) | 0].y);
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(190,215,255,0.1)';
+        ctx.fill(path);
       } else if (c.type === 'crystal') {
-        ctx.fillStyle = 'rgba(190,140,255,0.18)'; ctx.fill(path);
-        ctx.strokeStyle = 'rgba(226,190,255,0.55)'; ctx.lineWidth = 1.8;
+        ctx.fillStyle = 'rgba(190,140,255,0.18)';
+        ctx.fill(path);
+        ctx.strokeStyle = 'rgba(226,190,255,0.55)';
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
         for (let v = 0; v < 2; v++) {
           const a = c.shardSeed * 2 + v * 2;
-          ctx.beginPath();
           ctx.moveTo(c.center.x + Math.cos(a) * 26, c.center.y + Math.sin(a) * 26);
           ctx.quadraticCurveTo(c.center.x, c.center.y, c.center.x + Math.cos(a + 2.6) * 24, c.center.y + Math.sin(a + 2.6) * 24);
-          ctx.stroke();
         }
+        ctx.stroke();
       } else if (c.type === 'ore') {
-        ctx.strokeStyle = 'rgba(190,225,245,0.3)'; ctx.lineWidth = 2.6; ctx.lineCap = 'round';
+        ctx.strokeStyle = 'rgba(190,225,245,0.3)';
+        ctx.lineWidth = 2.6;
+        ctx.lineCap = 'round';
         ctx.beginPath();
         c.specks.forEach((sp, k) => (k ? ctx.lineTo(sp.x, sp.y) : ctx.moveTo(sp.x, sp.y)));
         ctx.stroke();
+        ctx.fillStyle = 'rgba(205,235,255,0.85)';
+        ctx.beginPath();
         for (const sp of c.specks) {
-          ctx.fillStyle = 'rgba(205,235,255,0.85)';
-          ctx.beginPath(); ctx.arc(sp.x, sp.y, sp.r, 0, TAU); ctx.fill();
-          ctx.fillStyle = 'rgba(255,255,255,0.8)';
-          ctx.beginPath(); ctx.arc(sp.x - sp.r * 0.3, sp.y - sp.r * 0.3, sp.r * 0.35, 0, TAU); ctx.fill();
+          ctx.moveTo(sp.x + sp.r, sp.y);
+          ctx.arc(sp.x, sp.y, sp.r, 0, TAU);
         }
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.8)';
+        ctx.beginPath();
+        for (const sp of c.specks) {
+          const hx = sp.x - sp.r * 0.3, hy = sp.y - sp.r * 0.3, hr = sp.r * 0.35;
+          ctx.moveTo(hx + hr, hy);
+          ctx.arc(hx, hy, hr, 0, TAU);
+        }
+        ctx.fill();
       }
-      // Dark beveled seams and bright edges make each chunk readable as a separate stone.
-      ctx.save(); ctx.translate(-gx * 3, -gy * 3);
-      ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = 9; ctx.stroke(path); ctx.restore();
-      ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.lineWidth = 5; ctx.stroke(path);
-      ctx.save(); ctx.translate(gx * 2.6, gy * 2.6);
-      ctx.strokeStyle = `hsla(${c.hue - 8},${c.sat + 16}%,${Math.min(94, L + 32)}%,0.7)`;
-      ctx.lineWidth = 3; ctx.stroke(path);
-      ctx.translate(gx * 1.2, gy * 1.2);
-      ctx.strokeStyle = `hsla(${c.hue - 12},${c.sat + 20}%,${Math.min(98, L + 44)}%,0.4)`;
-      ctx.lineWidth = 1.2; ctx.stroke(path); ctx.restore();
+
+      // Dark beveled seams + bright lit edges (3 crisp passes instead of 5)
+      ctx.save();
+      ctx.translate(-gx * 2.8, -gy * 2.8);
+      ctx.strokeStyle = 'rgba(0,0,0,0.52)';
+      ctx.lineWidth = 8.5;
+      ctx.stroke(path);
       ctx.restore();
-      ctx.strokeStyle = 'rgba(6,11,18,0.8)'; ctx.lineWidth = 1.7; ctx.stroke(path);
+
+      ctx.save();
+      ctx.translate(gx * 2.8, gy * 2.8);
+      ctx.strokeStyle = `hsla(${c.hue - 8},${c.sat + 16}%,${Math.min(95, L + 34)}%,0.74)`;
+      ctx.lineWidth = 3.2;
+      ctx.stroke(path);
+      ctx.restore();
+
+      ctx.restore();
+      ctx.strokeStyle = 'rgba(6,11,18,0.82)';
+      ctx.lineWidth = 1.7;
+      ctx.stroke(path);
     }
     ctx.restore();
     if (!this.intactCanvas) {
@@ -344,20 +456,27 @@ export class DiamondRock {
     this.dirty = false;
   }
 
-  /** A whole textured cell, detached from the spinning rock after it breaks. */
+  /** A whole textured cell, detached from the spinning rock after it breaks (with pre-baked drop rim, zero shadowBlur). */
   drawFallenCell(ctx: CanvasRenderingContext2D, id: number, radius: number) {
     const cell = this.cells[id];
     if (!cell || !this.intactCanvas) return;
     if (!cell.fallenSprite) {
-      const pad = 6;
+      const pad = 8;
       const x0 = Math.floor(Math.min(...cell.poly.map(p => p.x)) - pad);
       const y0 = Math.floor(Math.min(...cell.poly.map(p => p.y)) - pad);
       const x1 = Math.ceil(Math.max(...cell.poly.map(p => p.x)) + pad);
-      const y1 = Math.ceil(Math.max(...cell.poly.map(p => p.y)) + pad);
+      const y1 = Math.ceil(Math.max(...cell.poly.map(p => p.y)) + pad + 3);
       const image = document.createElement('canvas');
-      image.width = x1 - x0; image.height = y1 - y0;
+      image.width = x1 - x0;
+      image.height = y1 - y0;
       const c = image.getContext('2d')!;
       c.translate(-x0, -y0);
+      // Pre-baked crisp dark drop rim so runtime never needs expensive shadowBlur
+      c.save();
+      c.translate(0, 3);
+      c.fillStyle = 'rgba(0,0,0,0.34)';
+      c.fill(cell.path!);
+      c.restore();
       c.clip(cell.path!);
       c.drawImage(this.intactCanvas, -IMAGE_RADIUS, -IMAGE_RADIUS);
       cell.fallenSprite = { image, x: x0 - cell.center.x, y: y0 - cell.center.y };
@@ -371,7 +490,8 @@ export class DiamondRock {
   draw(ctx: CanvasRenderingContext2D, radius: number, time: number) {
     if (this.dirty || !this.canvas) this.bake();
     const sc = radius / REFERENCE_RADIUS;
-    ctx.save(); ctx.scale(sc, sc);
+    ctx.save();
+    ctx.scale(sc, sc);
     ctx.drawImage(this.canvas!, -IMAGE_RADIUS, -IMAGE_RADIUS, IMAGE_RADIUS * 2, IMAGE_RADIUS * 2);
     if (this.shimmer.length) {
       ctx.globalCompositeOperation = 'lighter';
@@ -380,41 +500,76 @@ export class DiamondRock {
         const pulse = 0.5 + 0.5 * Math.sin(time * 3 + c.shardSeed);
         if (c.type === 'crystal') {
           ctx.globalAlpha = 0.1 + pulse * 0.14;
-          ctx.fillStyle = '#c084fc'; ctx.fill(c.path!);
+          ctx.fillStyle = '#c084fc';
+          ctx.fill(c.path!);
         } else {
           ctx.globalAlpha = 0.25 + pulse * 0.45;
           ctx.fillStyle = '#e6f6ff';
-          for (const sp of c.specks) { ctx.beginPath(); ctx.arc(sp.x, sp.y, sp.r * 0.75, 0, TAU); ctx.fill(); }
+          if (c.speckPath) {
+            ctx.fill(c.speckPath);
+          } else {
+            ctx.beginPath();
+            for (const sp of c.specks) {
+              const sr = sp.r * 0.75;
+              ctx.moveTo(sp.x + sr, sp.y);
+              ctx.arc(sp.x, sp.y, sr, 0, TAU);
+            }
+            ctx.fill();
+          }
         }
       }
-      ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
-    }
-    for (const c of this.cracked) {
-      if (!c.alive) continue;
-      ctx.save(); ctx.clip(c.path!);
-      for (const line of c.cracks) {
-        ctx.beginPath(); ctx.moveTo(line[0].x, line[0].y);
-        for (let k = 1; k < line.length; k++) ctx.lineTo(line[k].x, line[k].y);
-        ctx.strokeStyle = 'rgba(8,14,22,0.92)'; ctx.lineWidth = 2.2; ctx.stroke();
-        ctx.strokeStyle = 'rgba(225,240,255,0.3)'; ctx.lineWidth = 1;
-        ctx.translate(1.2, 1.2); ctx.stroke(); ctx.translate(-1.2, -1.2);
-      }
-      ctx.restore();
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = 1;
     }
     for (const c of this.flashing) {
-      if (c.alive && c.flash > 0) { ctx.fillStyle = `rgba(255,255,255,${c.flash * 0.55})`; ctx.fill(c.path!); }
+      if (c.alive && c.flash > 0) {
+        ctx.fillStyle = `rgba(255,255,255,${c.flash * 0.55})`;
+        ctx.fill(c.path!);
+      }
     }
     ctx.restore();
   }
 }
 
+let cachedDiamondAura: HTMLCanvasElement | null = null;
+function getDiamondAuraSprite(): HTMLCanvasElement | null {
+  if (cachedDiamondAura) return cachedDiamondAura;
+  const doc = (globalThis as { document?: Document }).document;
+  if (!doc || typeof doc.createElement !== 'function') return null;
+  const size = 256;
+  const cv = doc.createElement('canvas');
+  cv.width = cv.height = size;
+  const c = cv.getContext('2d');
+  if (!c) return null;
+  const r = size * 0.5;
+  const aura = c.createRadialGradient(r, r, 4, r, r, r);
+  aura.addColorStop(0, 'rgba(174,247,255,0.78)');
+  aura.addColorStop(0.55, 'rgba(94,224,255,0.28)');
+  aura.addColorStop(1, 'rgba(56,189,248,0)');
+  c.fillStyle = aura;
+  c.beginPath();
+  c.arc(r, r, r, 0, TAU);
+  c.fill();
+  cachedDiamondAura = cv;
+  return cv;
+}
+
 /** The diamond sits *behind* the segmented rock, like in Diamond Breaker. */
 export function drawRockDiamond(ctx: CanvasRenderingContext2D, radius: number, time: number, ping = 0) {
   const sc = radius / REFERENCE_RADIUS;
-  const aura = ctx.createRadialGradient(0, 0, 5, 0, 0, radius * 0.7);
-  aura.addColorStop(0, `rgba(174,247,255,${0.47 + ping * 0.3})`);
-  aura.addColorStop(1, 'rgba(56,189,248,0)');
-  ctx.fillStyle = aura;
-  ctx.beginPath(); ctx.arc(0, 0, radius * 0.7, 0, TAU); ctx.fill();
+  const auraR = radius * 0.7;
+  const sprite = getDiamondAuraSprite();
+  if (sprite) {
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, 0.62 + ping * 0.38);
+    ctx.drawImage(sprite, -auraR, -auraR, auraR * 2, auraR * 2);
+    ctx.restore();
+  } else {
+    const aura = ctx.createRadialGradient(0, 0, 5, 0, 0, auraR);
+    aura.addColorStop(0, `rgba(174,247,255,${0.47 + ping * 0.3})`);
+    aura.addColorStop(1, 'rgba(56,189,248,0)');
+    ctx.fillStyle = aura;
+    ctx.beginPath(); ctx.arc(0, 0, auraR, 0, TAU); ctx.fill();
+  }
   drawBreakerDiamond(ctx, 0, 0, time, sc * (1 + ping * 0.08));
 }

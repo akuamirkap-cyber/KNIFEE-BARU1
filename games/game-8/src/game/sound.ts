@@ -13,7 +13,9 @@ export class SoundEngine {
   muted = false;
   musicOn = true;
   private loops = new Map<string, { stop: StopFn; set: (v: number, dt: number) => void }>();
-  private timers: number[] = [];
+  /** Only callbacks that have not fired yet; completed IDs must not accumulate. */
+  private timers = new Set<number>();
+  private disposed = false;
   private lastAt = new Map<string, number>();
   private mTimer: number | undefined;
   private nextStep = 0;
@@ -28,34 +30,39 @@ export class SoundEngine {
 
   /* ---------------- graph ---------------- */
   private ensure(): boolean {
+    if (this.disposed) return false;
     if (this.ac) return true;
     const AC = window.AudioContext || (window as any).webkitAudioContext;
     if (!AC) return false;
     const ac = (this.ac = new AC());
     const comp = ac.createDynamicsCompressor();
-    comp.threshold.value = -14; comp.knee.value = 22; comp.ratio.value = 9;
-    comp.attack.value = 0.002; comp.release.value = 0.18;
+    comp.threshold.value = -10; comp.knee.value = 12; comp.ratio.value = 4.5;
+    comp.attack.value = 0.006; comp.release.value = 0.15;
     this.master = ac.createGain();
-    this.master.gain.value = this.muted ? 0 : 0.92;
+    this.master.gain.value = this.muted ? 0 : 0.94;
     this.fxBus = ac.createGain(); this.fxBus.gain.value = 1;
     this.musicBus = ac.createGain(); this.musicBus.gain.value = 0.62;
     this.fxBus.connect(comp); this.musicBus.connect(comp);
     comp.connect(this.master); this.master.connect(ac.destination);
-    // generated impulse response: lush hall
-    const sr = ac.sampleRate, len = Math.floor(sr * 1.7);
+    // Warm 1.15s stereo hall impulse with equal-power normalization enabled & limiter protection
+    const sr = ac.sampleRate, len = Math.max(1, Math.floor(sr * 1.15));
     const ir = ac.createBuffer(2, len, sr);
     for (let c = 0; c < 2; c++) {
       const d = ir.getChannelData(c);
+      let smooth = 0;
       for (let i = 0; i < len; i++) {
-        const t = i / sr;
-        d[i] = (Math.random() * 2 - 1) * Math.pow(1 - t / 1.7, 2.6) * 0.6;
+        const raw = Math.random() * 2 - 1;
+        smooth = smooth * 0.4 + raw * 0.6;
+        d[i] = smooth * Math.pow(1 - i / len, 2.8) * 0.6;
       }
     }
-    this.rev = ac.createConvolver(); this.rev.buffer = ir;
-    this.revG = ac.createGain(); this.revG.gain.value = 0.34;
-    this.rev.connect(this.revG); this.revG.connect(this.master);
+    this.rev = ac.createConvolver();
+    this.rev.normalize = true;
+    this.rev.buffer = ir;
+    this.revG = ac.createGain(); this.revG.gain.value = 0.3;
+    this.rev.connect(this.revG); this.revG.connect(comp);
     // global fx send into reverb
-    const send = ac.createGain(); send.gain.value = 0.5;
+    const send = ac.createGain(); send.gain.value = 0.45;
     this.fxBus.connect(send); send.connect(this.rev);
     // shared noise buffer
     const n = ac.sampleRate * 2;
@@ -87,7 +94,22 @@ export class SoundEngine {
     for (const l of this.loops.values()) l.stop();
     this.loops.clear();
     for (const t of this.timers) clearTimeout(t);
-    this.timers = [];
+    this.timers.clear();
+  }
+
+  /** Release the per-game graph when its owning game is destroyed. */
+  dispose() {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.stopAll();
+    if (this.mTimer !== undefined) clearInterval(this.mTimer);
+    this.mTimer = undefined;
+    this.lastAt.clear();
+    const ac = this.ac;
+    this.ac = null;
+    if (ac && ac.state !== 'closed') {
+      try { void ac.close().catch(() => {}); } catch { /* already closed */ }
+    }
   }
 
   /* ---------------- primitives ---------------- */
@@ -192,7 +214,12 @@ export class SoundEngine {
     return true;
   }
   private later(ms: number, fn: () => void) {
-    this.timers.push(window.setTimeout(() => { fn(); }, ms));
+    if (this.disposed) return;
+    const timer = window.setTimeout(() => {
+      this.timers.delete(timer);
+      fn();
+    }, ms);
+    this.timers.add(timer);
   }
 
   /* ---------------- events ---------------- */

@@ -1,4 +1,4 @@
-import { type Ctx, TAU, clamp, drawSprite, easeOutCubic, glowSprite, lin, makeBolt, mulberry32, polyPath, starSprite } from './core';
+import { type Ctx, TAU, clamp, drawSprite, easeOutCubic, glowSprite, lin, makeBolt, makeCanvas, mulberry32, polyPath, starSprite } from './core';
 import { drawAmmoGlyph4, drawStuckItem4 } from './shapes4';
 import type { StuckItem, WeaponId } from './weapons';
 
@@ -325,6 +325,45 @@ export function drawPizzaSlice(ctx: Ctx, L = 36) {
   ctx.fill();
 }
 
+interface PizzaSprite { canvas: HTMLCanvasElement; x: number; y: number; w: number; h: number }
+const pizzaSprites = new Map<string, PizzaSprite>();
+
+/** Reuse the static shaded pizza while its rotation, squash and translucent afterimages stay animated. */
+export function drawFastPizzaSlice(ctx: Ctx, length = 36) {
+  const a = ctx.globalAlpha;
+  // These are the actual three afterimage opacities and the opaque pizza. By
+  // baking each opacity into all the vector layers we preserve translucent
+  // overlap; fading the finished opaque image would flatten the toppings.
+  const alpha = [0.12, 0.24, 0.36, 1].find((value) => Math.abs(value - a) < 1e-6);
+  const canCache = typeof document !== 'undefined' && typeof HTMLCanvasElement !== 'undefined'
+    && ctx.canvas instanceof HTMLCanvasElement && ctx.globalCompositeOperation === 'source-over'
+    && (length === 24 || length === 34 || length === 36) && alpha !== undefined;
+  if (!canCache) { drawPizzaSlice(ctx, length); return; }
+  const key = `${length}:${alpha}`;
+  let sprite = pizzaSprites.get(key);
+  if (!sprite) {
+    try {
+      const x = Math.floor(-length * 0.56 - 3), y = Math.floor(-length * 0.5 - 3);
+      const w = Math.ceil(length * 0.56 + 3) - x, h = Math.ceil(length * 0.67 + 3) - y;
+      const density = 4;
+      const canvas = makeCanvas(w * density, h * density);
+      const c = canvas.getContext('2d');
+      if (c) {
+        c.setTransform(density, 0, 0, density, -x * density, -y * density);
+        c.globalAlpha = alpha;
+        drawPizzaSlice(c, length);
+        sprite = { canvas, x, y, w, h };
+        pizzaSprites.set(key, sprite); // at most 3 sizes × 4 opacity levels
+      }
+    } catch { /* Keep the original vector path when an offscreen canvas fails. */ }
+  }
+  if (!sprite) { drawPizzaSlice(ctx, length); return; }
+  ctx.save();
+  ctx.globalAlpha = 1;
+  ctx.drawImage(sprite.canvas, sprite.x, sprite.y, sprite.w, sprite.h);
+  ctx.restore();
+}
+
 // ───────────────────────── crossbow bolt (tip at 0,0 pointing up; tail +Y 52) ─────────────────────────
 export function drawBolt(ctx: Ctx) {
   ctx.fillStyle = lin(ctx, -1.9, 0, 1.9, 0, [
@@ -417,21 +456,49 @@ export function drawHarpoonProj(ctx: Ctx) {
 }
 
 // ───────────────────────── plasma orb ─────────────────────────
-export function drawPlasmaOrb(ctx: Ctx, x: number, y: number, r: number, t: number, power = 1) {
+export interface PlasmaOrbPalette {
+  outerGlow: string; innerGlow: string;
+  coreLight: string; coreMid: string; coreEdge: string;
+  filament: string; outline: string;
+}
+export const GREEN_PLASMA_ORB: Readonly<PlasmaOrbPalette> = {
+  outerGlow: '40,255,140', innerGlow: '170,255,210',
+  coreLight: '#c9ffdc', coreMid: '#33e87c', coreEdge: '#08863f',
+  filament: '215,255,228', outline: 'rgba(190,255,215,0.9)',
+};
+export const YELLOW_PLASMA_ORB: Readonly<PlasmaOrbPalette> = {
+  outerGlow: '255,209,28', innerGlow: '255,244,165',
+  coreLight: '#fff8bc', coreMid: '#ffe02b', coreEdge: '#b47e06',
+  filament: '255,247,200', outline: 'rgba(255,239,155,0.95)',
+};
+
+export function drawPlasmaOrb(
+  ctx: Ctx, x: number, y: number, r: number, t: number, power = 1,
+  color: Readonly<PlasmaOrbPalette> = GREEN_PLASMA_ORB,
+  coreSprite?: HTMLCanvasElement | null,
+) {
+  // The old green path remains identical. A colored sprite can be supplied for
+  // long-lived copies so many stuck orbs do not build gradients every frame.
+  const alpha = Number.isFinite(ctx.globalAlpha) ? ctx.globalAlpha : 1;
+  const alphaForGlow = color === GREEN_PLASMA_ORB ? 1 : alpha;
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
-  drawSprite(ctx, glowSprite('40,255,140'), x, y, r * 6.4, 0.6 * power);
-  drawSprite(ctx, glowSprite('170,255,210'), x, y, r * 3, 0.5 * power);
+  drawSprite(ctx, glowSprite(color.outerGlow), x, y, r * 6.4, 0.6 * power * alphaForGlow);
+  drawSprite(ctx, glowSprite(color.innerGlow), x, y, r * 3, 0.5 * power * alphaForGlow);
   ctx.restore();
-  const g = ctx.createRadialGradient(x - r * 0.25, y - r * 0.3, r * 0.1, x, y, r);
-  g.addColorStop(0, '#ffffff');
-  g.addColorStop(0.35, '#c9ffdc');
-  g.addColorStop(0.7, '#33e87c');
-  g.addColorStop(1, '#08863f');
-  ctx.fillStyle = g;
-  ctx.beginPath();
-  ctx.arc(x, y, r, 0, TAU);
-  ctx.fill();
+  if (coreSprite) {
+    ctx.drawImage(coreSprite, x - r, y - r, r * 2, r * 2);
+  } else {
+    const g = ctx.createRadialGradient(x - r * 0.25, y - r * 0.3, r * 0.1, x, y, r);
+    g.addColorStop(0, '#ffffff');
+    g.addColorStop(0.35, color.coreLight);
+    g.addColorStop(0.7, color.coreMid);
+    g.addColorStop(1, color.coreEdge);
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, TAU);
+    ctx.fill();
+  }
   ctx.save();
   ctx.beginPath();
   ctx.arc(x, y, r, 0, TAU);
@@ -439,7 +506,7 @@ export function drawPlasmaOrb(ctx: Ctx, x: number, y: number, r: number, t: numb
   ctx.globalCompositeOperation = 'lighter';
   ctx.lineCap = 'round';
   for (let k = 0; k < 3; k++) {
-    ctx.strokeStyle = `rgba(215,255,228,${0.6 - k * 0.14})`;
+    ctx.strokeStyle = `rgba(${color.filament},${0.6 - k * 0.14})`;
     ctx.lineWidth = r * 0.2;
     const a0 = t * (5 + k * 1.7) + k * 2.1;
     ctx.beginPath();
@@ -447,7 +514,7 @@ export function drawPlasmaOrb(ctx: Ctx, x: number, y: number, r: number, t: numb
     ctx.stroke();
   }
   ctx.restore();
-  ctx.strokeStyle = 'rgba(190,255,215,0.9)';
+  ctx.strokeStyle = color.outline;
   ctx.lineWidth = Math.max(0.8, r * 0.08);
   ctx.beginPath();
   ctx.arc(x, y, r, 0, TAU);
@@ -645,7 +712,7 @@ export function drawStuckItem3(ctx: Ctx, it: StuckItem, R: number, time: number)
       ctx.translate(R + 8, 0);
       ctx.rotate(-Math.PI / 2);
       ctx.scale(sq, 1 / sq);
-      drawPizzaSlice(ctx, 34);
+      drawFastPizzaSlice(ctx, 34);
       ctx.restore();
       break;
     }
@@ -748,7 +815,7 @@ export function drawAmmoGlyph3(g: Ctx, weapon: WeaponId) {
     case 'pizza':
       g.save();
       g.rotate(0.3);
-      drawPizzaSlice(g, 24);
+      drawFastPizzaSlice(g, 24);
       g.restore();
       break;
     case 'minigun':

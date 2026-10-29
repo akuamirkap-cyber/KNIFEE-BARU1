@@ -44,6 +44,8 @@ export class Game {
   hitstop = 0;
   swapT = 1;
   pending = 0;
+  /** Optional host for Mega Buster's yellow Plasma Gun hit; returns true when drawn. */
+  busterPlasmaImpact?: (x: number, y: number) => boolean;
   private face!: HTMLCanvasElement;
   private faceSize = 0;
   private bg!: HTMLCanvasElement;

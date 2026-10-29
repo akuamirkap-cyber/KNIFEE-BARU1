@@ -8,6 +8,10 @@
  * context, one weapon at a time, and reports the per-second budget.
  *
  * Run with:  npx tsx tools/perf-audit.ts [weaponId ...]
+ *
+ * This is a mock structural audit, not a device-FPS benchmark. Its plain
+ * canvas intentionally uses vector fallbacks; browser sprite-cache costs are
+ * measured separately by golden-perf-audit.ts with a real Skia canvas.
  */
 import { installCanvasShim } from '../tests/supportCanvas';
 
@@ -33,19 +37,33 @@ const OPS = [
   'fill', 'stroke', 'drawImage', 'fillRect', 'strokeRect', 'clearRect',
   'arc', 'ellipse', 'moveTo', 'lineTo', 'quadraticCurveTo', 'bezierCurveTo',
   'roundRect', 'fillText', 'clip', 'save', 'restore',
-  'createRadialGradient', 'createLinearGradient', 'createPattern',
+  'createRadialGradient', 'createLinearGradient', 'createConicGradient', 'createPattern',
 ] as const;
 
 type Counts = Record<string, number>;
 
 function countingContext(counts: Counts) {
   const gradient = { addColorStop: () => {} };
-  const state: Record<string, unknown> = { canvas: { width: 420, height: 760 } };
+  const state: Record<string, unknown> = {
+    canvas: { width: 420, height: 760 },
+    globalAlpha: 1, globalCompositeOperation: 'source-over', shadowBlur: 0,
+    fillStyle: '#000000', strokeStyle: '#000000', lineWidth: 1,
+  };
+  const stack: Record<string, unknown>[] = [];
   return new Proxy(state, {
     get(t, prop) {
       const name = String(prop);
-      if (name === 'canvas') return t.canvas;
-      if (name === 'createRadialGradient' || name === 'createLinearGradient' || name === 'createPattern') {
+      if (name in t) return t[name];
+      if (name === 'save') return () => { counts.save = (counts.save ?? 0) + 1; stack.push({ ...t }); };
+      if (name === 'restore') return () => {
+        counts.restore = (counts.restore ?? 0) + 1;
+        const prev = stack.pop();
+        if (prev) {
+          for (const key of Object.keys(t)) if (!(key in prev)) delete t[key];
+          Object.assign(t, prev);
+        }
+      };
+      if (name === 'createRadialGradient' || name === 'createLinearGradient' || name === 'createConicGradient' || name === 'createPattern') {
         return () => { counts[name] = (counts[name] ?? 0) + 1; return gradient; };
       }
       if (name === 'measureText') return () => ({ width: 10 });
@@ -83,7 +101,7 @@ const { Game, makeLevel } = await import('../src/games/gunhit/game/Game.ts');
 const { WEAPONS, getWeapon } = await import('../src/games/gunhit/game/weapons.ts');
 const { K } = await import('../games/game-4/src/game/particles.ts');
 
-/** Slide-7 particle kinds, for the per-frame histogram. */
+/** Slide-3 particle kinds (the port's internal name is set 7). */
 const KIND_NAME: Record<number, string> = Object.fromEntries(
   Object.entries(K).map(([name, value]) => [value as number, name]),
 );
@@ -130,7 +148,7 @@ function audit(id: string) {
     // this cap a 2.5 s burst piles up a hundred rounds of weapon art and the
     // measurement drifts into the target's stuck-art cost.
     if (game.items.length > 10) game.items.splice(0, game.items.length - 10);
-    if (game.s7?.stuck?.length > 10) game.s7.stuck.splice(0, game.s7.stuck.length - 10);
+    if (game.s7State?.stuck?.length > 10) game.s7State.stuck.splice(0, game.s7State.stuck.length - 10);
     game.ammoLeft = game.level.ammo;
     game.reloadT = 0;
     if (game.cooldown <= 0) {
@@ -142,9 +160,11 @@ function audit(id: string) {
     game.update(DT);
     updateNs += performance.now() - t0;
     peakOwn = Math.max(peakOwn, game.particles.length);
-    peakSet7 = Math.max(peakSet7, game.s7?.particles?.list?.length ?? 0);
+    // Inspect the optional state directly: reading the `s7` getter here would
+    // accidentally create the slide-3 layer even for an unrelated weapon.
+    peakSet7 = Math.max(peakSet7, game.s7State?.particles?.list?.length ?? 0);
     for (const p of game.particles) ownKinds[p.kind] = (ownKinds[p.kind] ?? 0) + 1;
-    for (const p of game.s7?.particles?.list ?? []) set7Kinds[KIND_NAME[p.k] ?? String(p.k)] = (set7Kinds[KIND_NAME[p.k] ?? String(p.k)] ?? 0) + 1;
+    for (const p of game.s7State?.particles?.list ?? []) set7Kinds[KIND_NAME[p.k] ?? String(p.k)] = (set7Kinds[KIND_NAME[p.k] ?? String(p.k)] ?? 0) + 1;
     t0 = performance.now();
     game.render();
     renderNs += performance.now() - t0;
@@ -163,7 +183,7 @@ function audit(id: string) {
     strokes: perSec('stroke'),
     images: perSec('drawImage'),
     paths: perSec('arc') + perSec('ellipse') + perSec('lineTo') + perSec('quadraticCurveTo') + perSec('bezierCurveTo'),
-    gradients: perSec('createRadialGradient') + perSec('createLinearGradient'),
+    gradients: perSec('createRadialGradient') + perSec('createLinearGradient') + perSec('createConicGradient'),
     blurs: perSec('shadowBlur'),
     blends: perSec('globalCompositeOperation'),
     peakOwn,
@@ -183,6 +203,7 @@ for (const id of ids) {
     rows.push(audit(id));
   } catch (err) {
     console.error(`skip ${id}: ${(err as Error).message}`);
+    process.exitCode = 1;
   }
 }
 
@@ -201,7 +222,7 @@ if (args.includes('--kinds')) {
     const avg = (o: Record<string, number>) => Object.fromEntries(
       Object.entries(o).map(([k, v]) => [k, +(v / FRAMES).toFixed(1)]).filter(([, v]) => (v as number) >= 1),
     );
-    console.log(`${r.id}: own`, JSON.stringify(avg(r.ownKinds)), 'slide7', JSON.stringify(avg(r.set7Kinds)));
+    console.log(`${r.id}: own`, JSON.stringify(avg(r.ownKinds)), 'slide3', JSON.stringify(avg(r.set7Kinds)));
   }
 }
 

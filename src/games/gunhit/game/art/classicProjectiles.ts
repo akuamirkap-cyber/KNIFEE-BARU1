@@ -15,7 +15,7 @@ const NO_CLASSIC_ART = [
   'shark', 'ghost', 'ufo', 'rpg', 'bazooka',
   'freeze', 'magnet', 'shrink', 'grow', 'pirate',
   'card', 'holy', 'unicorn', 'obliterator', 'coingun',
-  'photon_saber', 'gauntlet_cannon', 'ruby', 'emerald', 'sapphire',
+  'photon_saber', 'gauntlet_cannon', 'ironman_hand', 'ruby', 'emerald', 'sapphire',
   'crystal', 'beerifle', 'buster', 'pulse_rifle', 'cryo_blaster',
   'hyperdrive', 'quantum_destabilizer', 'blaster', 'railgun',
 ] as const;
@@ -91,6 +91,7 @@ export function drawClassicProjectile(c: C, kind: VariantWeapon, len: number, t:
     case 'coingun':
     case 'photon_saber':
     case 'gauntlet_cannon':
+    case 'ironman_hand':
     case 'ruby':
     case 'emerald':
     case 'sapphire':

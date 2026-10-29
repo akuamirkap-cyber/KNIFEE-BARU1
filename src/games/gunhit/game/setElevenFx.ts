@@ -17,6 +17,8 @@ export interface ElevenHooks {
   shake(amount: number): void;
   flash(color: string, strength: number): void;
   hitStop(seconds: number): void;
+  /** Optional visual-only yellow Plasma Gun burst for the Buster's tap. */
+  busterPlasmaImpact?(x: number, y: number): void;
   /**
    * Slide 1's wheel; `dir` is the way it spins right now (+1 / -1). `marks`
    * is false on a stage with no wheel face to mark (the rock, the chest, the
@@ -62,7 +64,7 @@ const NO_HOOKS: ElevenHooks = {
 
 /** Slide 11's own master switch, so slide 1's mute button silences it too. */
 let muted = false;
-/** Every slide-11 sound engine slide 1 has built so far (one per gun shell). */
+/** Live slide-11 sound engines; disposed game shells remove their own engine. */
 const engines = new Set<Game['sfx']>();
 
 function useEngine(sfx: Game['sfx']) {
@@ -81,13 +83,30 @@ export function elevenMuted(): boolean {
   return muted;
 }
 
+let elevenVolume = 1;
+
 export function setElevenMuted(m: boolean) {
   muted = m;
   for (const sfx of engines) {
     try {
       sfx.muted = m;
+      if (m) (sfx as unknown as { stopAll?: () => void }).stopAll?.();
+      const node = (sfx as unknown as { master?: GainNode | null }).master;
+      if (node) node.gain.value = m ? 0 : 0.94 * elevenVolume;
     } catch {
       /* an engine that was never unlocked has nothing to mute */
+    }
+  }
+}
+
+export function setElevenVolume(v: number) {
+  elevenVolume = Math.max(0, Math.min(1, v));
+  for (const sfx of engines) {
+    try {
+      const node = (sfx as unknown as { master?: GainNode | null }).master;
+      if (node) node.gain.value = muted ? 0 : 0.94 * elevenVolume;
+    } catch {
+      /* ignore */
     }
   }
 }
@@ -187,8 +206,9 @@ export class SetElevenFx {
     this.hooks = hooks;
     const canvas = spriteCanvas();
     if (!canvas) return;
+    let g: Game | null = null;
     try {
-      const g = new Game(canvas, 1);
+      g = new Game(canvas, 1);
       useEngine(g.sfx);
       // Slide 11's constants become slide 1's, so every authored world point
       // (`g.lw`, `g.muzzlePos`, `g.aim`, embed angles) lands where slide 1 is.
@@ -199,13 +219,39 @@ export class SetElevenFx {
       raw.swapT = 1;
       (g.wheel as { scale: number }).scale = 1;
       this.raw = g;
+      g.busterPlasmaImpact = (x, y) => {
+        const emit = this.hooks.busterPlasmaImpact;
+        if (!emit) return false;
+        emit(x, y);
+        return true;
+      };
       this.muteOwnWheelBreak();
       this.forwardShake(g);
       this.adopt();
       this.selectWeapon('ak47');
     } catch {
+      // Initialization can fail after the sound engine was registered.
+      if (g) {
+        engines.delete(g.sfx);
+        g.sfx.dispose();
+      }
+      this.raw = null;
       /* No 2D canvas available: the runtime simply has nothing to draw. */
     }
+  }
+
+  /** A permanently removed host must not retain its hooks, canvas or audio. */
+  dispose() {
+    const g = this.raw;
+    this.raw = null;
+    this.hooks = NO_HOOKS;
+    this.taken.clear();
+    this.carried.clear();
+    this.carriedAt.clear();
+    this.flights.clear();
+    if (!g) return;
+    engines.delete(g.sfx);
+    g.sfx.dispose();
   }
 
   setHooks(h: ElevenHooks) {

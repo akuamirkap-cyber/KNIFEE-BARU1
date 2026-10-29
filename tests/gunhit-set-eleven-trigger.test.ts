@@ -110,13 +110,15 @@ function run(game: Live, seconds: number) {
 /** Slide 7's guns that fire shot by shot (no channel beam, no charged release). */
 const PLAIN = SET_ELEVEN_IDS.filter((id) => {
   const w = elevenWeapon(id);
-  return !w.channel && !w.onRelease;
+  const sga = SLIDE1_ID_FOR_ELEVEN[id];
+  return !w.channel && !w.onRelease
+    && variants.getGunEffectOptions(sga as never).some(option => option.id === 'set11');
 });
 
 /* ── fire rate ───────────────────────────────────────────────────────────── */
 
 test('every plain Slide 7 gun recharges on slide 7’s own cooldown; its other card keeps slide 1’s', () => {
-  assert.ok(PLAIN.length >= 20, `plain guns: ${PLAIN.length}`);
+  assert.ok(PLAIN.length >= 15, `plain guns: ${PLAIN.length}`);
   for (const id of PLAIN) {
     const sga = SLIDE1_ID_FOR_ELEVEN[id];
     const game = stage(sga);
@@ -291,37 +293,7 @@ test('slide 5 paints its marks with the wheel and its beams, sparks and rounds u
 
 /* ── the shoulder caster and the buster, live ────────────────────────────── */
 
-test('held, the Slide 7 caster fires each time its 2.6 s lock closes; let go early, nothing fires', () => {
-  seeded(2, () => {
-    const game = stage('pred');
-    shots = 0;
-    game.press();
-    assert.equal(game.charging, false, 'no slide-1 charge');
-    run(game, 2.5);
-    assert.equal(shots, 0, '2.5 s held: still locking on');
-    run(game, 0.2);
-    assert.equal(shots, 1, 'the burst leaves when the lock closes, with no release');
-    run(game, 2.45);
-    assert.equal(shots, 1, 'the lock starts over');
-    run(game, 0.25);
-    assert.equal(shots, 2, 'and fires again 2.6 s later while it is held');
-    game.holding = false;
 
-    const early = stage('pred');
-    shots = 0;
-    early.press();
-    run(early, 1.5);
-    early.holding = false;
-    early.releaseScope();
-    run(early, 2);
-    assert.equal(shots, 0, 'let go after 1.5 s: nothing fires');
-
-    const classic = stage('pred', 'original');
-    classic.press();
-    assert.equal(classic.charging, true, 'Sebelumnya keeps slide 1’s charge and release');
-    classic.holding = false;
-  });
-});
 
 test('the Slide 7 buster releases its mid blast from 0.45 s and its full blast from 1.2 s held', () => {
   const levels: number[] = [];

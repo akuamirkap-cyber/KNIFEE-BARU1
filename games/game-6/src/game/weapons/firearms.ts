@@ -47,6 +47,32 @@ interface BulletCfg {
   draw: (ctx: Ctx, s: WeaponDrawState) => void;
 }
 
+const bulletGradCache = new WeakMap<CanvasRenderingContext2D, Map<string, CanvasGradient>>();
+
+function cachedBulletGrad(
+  ctx: CanvasRenderingContext2D,
+  key: string,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  build: (g: CanvasGradient) => void,
+): CanvasGradient {
+  let map = bulletGradCache.get(ctx);
+  if (!map) {
+    map = new Map();
+    bulletGradCache.set(ctx, map);
+  }
+  let g = map.get(key);
+  if (!g) {
+    g = ctx.createLinearGradient(x0, y0, x1, y1);
+    build(g);
+    if (map.size > 128) map.clear();
+    map.set(key, g);
+  }
+  return g;
+}
+
 function bulletWeapon(cfg: BulletCfg): Weapon {
   const w: Weapon = {
     id: cfg.id,
@@ -81,22 +107,24 @@ function bulletWeapon(cfg: BulletCfg): Weapon {
           trailMax: 9,
           update(b, dt, g) {
             b.data.acc = (b.data.acc ?? 0) + dt;
-            if (b.data.acc > 0.011) {
+            if (b.data.acc > 0.018) {
               b.data.acc = 0;
-              g.particles.push(
-                P({
-                  type: 'smoke',
-                  x: b.x,
-                  y: b.y,
-                  vx: rnd(-10, 10),
-                  vy: rnd(-14, 2),
-                  size: 11,
-                  size2: 1.5,
-                  color: '#c3cad4',
-                  life: 0.5,
-                  drag: 0.9,
-                })
-              );
+              if (g.particles.length < 105) {
+                g.particles.push(
+                  P({
+                    type: 'smoke',
+                    x: b.x,
+                    y: b.y,
+                    vx: rnd(-10, 10),
+                    vy: rnd(-14, 2),
+                    size: 11,
+                    size2: 1.5,
+                    color: '#c3cad4',
+                    life: 0.42,
+                    drag: 0.9,
+                  })
+                );
+              }
             }
           },
           draw(ctx, b) {
@@ -117,10 +145,10 @@ function bulletWeapon(cfg: BulletCfg): Weapon {
               ctx.stroke();
             }
             // hot tracer tail
-            const tg = ctx.createLinearGradient(-L * 6, 0, 0, 0);
-            tg.addColorStop(0, withAlpha(cfg.tracer, 0));
-            tg.addColorStop(1, withAlpha(cfg.tracer, 0.85));
-            ctx.fillStyle = tg;
+            ctx.fillStyle = cachedBulletGrad(ctx, `tr|${cfg.id}`, -L * 6, 0, 0, 0, (tg) => {
+              tg.addColorStop(0, withAlpha(cfg.tracer, 0));
+              tg.addColorStop(1, withAlpha(cfg.tracer, 0.85));
+            });
             ctx.fillRect(-L * 6, -R * 0.65, L * 6, R * 1.3);
             ctx.restore();
             ctx.save();
@@ -135,12 +163,12 @@ function bulletWeapon(cfg: BulletCfg): Weapon {
             ctx.lineTo(-L * 0.45, R);
             ctx.quadraticCurveTo(L * 0.3, R, L, 0);
             ctx.closePath();
-            const bg = ctx.createLinearGradient(0, -R, 0, R);
-            bg.addColorStop(0, '#fff2c2');
-            bg.addColorStop(0.35, '#e2b04a');
-            bg.addColorStop(0.65, '#9a6a1d');
-            bg.addColorStop(1, '#4e300a');
-            ctx.fillStyle = bg;
+            ctx.fillStyle = cachedBulletGrad(ctx, `bg|${cfg.id}`, 0, -R, 0, R, (bg) => {
+              bg.addColorStop(0, '#fff2c2');
+              bg.addColorStop(0.35, '#e2b04a');
+              bg.addColorStop(0.65, '#9a6a1d');
+              bg.addColorStop(1, '#4e300a');
+            });
             ctx.fill();
             ctx.strokeStyle = 'rgba(40,24,6,0.6)';
             ctx.lineWidth = 0.7;
@@ -192,7 +220,7 @@ function bulletWeapon(cfg: BulletCfg): Weapon {
       heatGlow(ctx, cfg.id === 'rifle' ? 8 : 6, cfg.tracer, hot * 0.3);
     },
     ambient(api, x, y, out, m, dt) {
-      if (m.age < 2.2 && Math.random() < dt * 8)
+      if (m.age < 1.6 && api.particles.length < 72 && Math.random() < dt * 5)
         api.particles.push(
           P({
             type: 'smoke',
@@ -203,7 +231,7 @@ function bulletWeapon(cfg: BulletCfg): Weapon {
             size: rnd(10, 17),
             size2: 2,
             color: '#9aa2ad',
-            life: rnd(0.6, 1.2),
+            life: rnd(0.5, 0.95),
             drag: 0.97,
           })
         );

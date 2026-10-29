@@ -12,8 +12,31 @@ import { sfx4 } from '../game/sfx4';
 import { useSlideActive } from '../../shared/SlideActivity';
 import { SunburstFX } from '../../knife-hit/components/Effects';
 import { gunSunburstColor } from '../game/sunburstPalette';
-import { EDITABLE_WEAPONS, getGunVariant, setGunVariant, getGunEffect, setGunEffect, getGunVariantOptions, canChooseGunDesign, hasSlide7Update, slide7UpdateSet, hasSlide9Update, hasSlide11Update, hasSlide6Update, type GunVariant } from '../game/art/gunVariants';
+import { getSavedSgaSpeed } from '../game/gameSpeed';
+import { getFast2DContext, getOptimalCanvasDpr } from '../utils/mobilePerf';
+import {
+  UNIQUE_EDITABLE_WEAPONS,
+  getGunVariant,
+  setGunVariant,
+  getGunEffect,
+  setGunEffect,
+  getGunSkinAndEffectPosition,
+  canChooseGunDesign,
+  markGunDefault,
+  unmarkGunDefault,
+  isGunDefaultMarked,
+  isCurrentSelectionMarkedDefault,
+  getWeaponDefaultExportEntries,
+  hasSlide7Update,
+  slide7UpdateSet,
+  hasSlide9Update,
+  hasSlide11Update,
+  hasSlide6Update,
+  type EditableWeapon,
+  type GunVariant,
+} from '../game/art/gunVariants';
 import GunVariantPicker from './GunVariantPicker';
+import DefaultExportModal from './DefaultExportModal';
 
 type Tab = 'ALL' | 'DESAIN' | 'EPIC' | 'LANGKA' | 'LEGENDARIS' | 'UMUM' | 'BOSS';
 
@@ -40,23 +63,18 @@ function GunItemCanvas({ weapon, isSelected, variant, size = 110 }: { weapon: We
   useEffect(() => {
     const cv = canvasRef.current;
     if (!cv) return;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    cv.width = size * dpr;
-    cv.height = size * dpr;
-    const ctx = cv.getContext('2d');
+    const dpr = getOptimalCanvasDpr(2);
+    cv.width = Math.round(size * dpr);
+    cv.height = Math.round(size * dpr);
+    const ctx = getFast2DContext(cv);
     if (!ctx) return;
 
     let raf = 0;
     const start = performance.now();
-    let lastDraw = -Infinity;
+    const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
 
     const loop = (now: number) => {
-      if (now - lastDraw < 1000 / 30 - 1) {
-        raf = requestAnimationFrame(loop);
-        return;
-      }
-      lastDraw = now;
-      const t = (now - start) / 1000;
+      const t = reducedMotion?.matches ? 0 : ((now - start) / 1000) * getSavedSgaSpeed();
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, size, size);
 
@@ -84,18 +102,20 @@ function GunItemCanvas({ weapon, isSelected, variant, size = 110 }: { weapon: We
 
       // Eleven static thumbnails and just one animated selection: no grid of
       // twelve simultaneous canvas loops while browsing the arsenal.
-      if (active && isSelected) raf = requestAnimationFrame(loop);
+      if (active && isSelected && !reducedMotion?.matches) raf = requestAnimationFrame(loop);
     };
 
+    const onMotionChange = () => { cancelAnimationFrame(raf); loop(performance.now()); };
+    reducedMotion?.addEventListener?.('change', onMotionChange);
     loop(start);
-    return () => cancelAnimationFrame(raf);
+    return () => { cancelAnimationFrame(raf); reducedMotion?.removeEventListener?.('change', onMotionChange); };
   }, [weapon.id, size, isSelected, active, variant]);
 
   return (
     <canvas
       ref={canvasRef}
       style={{ width: size, height: size }}
-      className="block pointer-events-none drop-shadow-[0_6px_14px_rgba(0,0,0,0.7)]"
+      className="block pointer-events-none"
     />
   );
 }
@@ -110,25 +130,20 @@ function SpotlightGun({ weapon, variant }: { weapon: Weapon; variant: GunVariant
   useEffect(() => {
     const cv = canvasRef.current;
     if (!cv) return;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = getOptimalCanvasDpr(2);
     const w = 220;
     const h = 170;
-    cv.width = w * dpr;
-    cv.height = h * dpr;
-    const ctx = cv.getContext('2d');
+    cv.width = Math.round(w * dpr);
+    cv.height = Math.round(h * dpr);
+    const ctx = getFast2DContext(cv);
     if (!ctx) return;
 
     let raf = 0;
     const start = performance.now();
-    let lastDraw = -Infinity;
+    const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
 
     const loop = (now: number) => {
-      if (now - lastDraw < 1000 / 30 - 1) {
-        raf = requestAnimationFrame(loop);
-        return;
-      }
-      lastDraw = now;
-      const t = (now - start) / 1000;
+      const t = reducedMotion?.matches ? 0 : ((now - start) / 1000) * getSavedSgaSpeed();
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w, h);
 
@@ -145,11 +160,13 @@ function SpotlightGun({ weapon, variant }: { weapon: Weapon; variant: GunVariant
       drawGunCentered(ctx, weapon.id, t, 0, true, variant, true);
       ctx.restore();
 
-      if (active) raf = requestAnimationFrame(loop);
+      if (active && !reducedMotion?.matches) raf = requestAnimationFrame(loop);
     };
 
+    const onMotionChange = () => { cancelAnimationFrame(raf); loop(performance.now()); };
+    reducedMotion?.addEventListener?.('change', onMotionChange);
     loop(start);
-    return () => cancelAnimationFrame(raf);
+    return () => { cancelAnimationFrame(raf); reducedMotion?.removeEventListener?.('change', onMotionChange); };
   }, [weapon.id, active, variant]);
 
   return (
@@ -178,7 +195,7 @@ function BossAttackPreview({ boss }: { boss: BossProfile }) {
     let raf = 0;
     const start = performance.now();
     const draw = (now: number) => {
-      const t = (now - start) / 1000;
+      const t = ((now - start) / 1000) * getSavedSgaSpeed();
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, W, H);
       ctx.fillStyle = 'rgba(5,9,22,.92)';
@@ -235,6 +252,7 @@ export default function Arsenal({
     } catch { return []; }
   });
   const [editingDesign, setEditingDesign] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
   const [, setDesignRevision] = useState(0);
   const [selectedBoss, setSelectedBoss] = useState<BossProfile>(BOSS_ROSTER[0]);
   const [bulkUnlockMessage, setBulkUnlockMessage] = useState('');
@@ -286,6 +304,27 @@ export default function Arsenal({
   const selectedVariant = getGunVariant(selectedGunId);
   const isLocked = (w: Weapon) => w.rarity === 'LANGKA' && !ownedRare.includes(w.id);
   const selectedLocked = isLocked(selectedGun);
+  const editableCatalogIds: EditableWeapon[] = WEAPONS
+    .map((w) => w.id)
+    .filter((id): id is EditableWeapon => canChooseGunDesign(id));
+  const stepIds = editableCatalogIds.length > 0 ? editableCatalogIds : [...UNIQUE_EDITABLE_WEAPONS];
+  const exportableCount = getWeaponDefaultExportEntries('marked_or_changed', WEAPONS).length;
+  const selectedPos = canChooseGunDesign(selectedGunId)
+    ? getGunSkinAndEffectPosition(selectedGunId, selectedVariant, getGunEffect(selectedGunId))
+    : null;
+  const selectedIsCurrentDefault = isCurrentSelectionMarkedDefault(selectedGunId);
+  const selectedHasMarkedDefault = isGunDefaultMarked(selectedGunId);
+
+  const stepEditableWeapon = (delta: -1 | 1) => {
+    if (!stepIds.length) return;
+    const idx = stepIds.indexOf(selectedGunId as EditableWeapon);
+    const nextIdx = idx < 0 ? 0 : (idx + delta + stepIds.length) % stepIds.length;
+    const nextId = stepIds[nextIdx];
+    const nextWeapon = getWeapon(nextId);
+    setSelectedGunId(nextId);
+    if (!isLocked(nextWeapon)) onPick(nextId);
+    sfx.unlock();
+  };
 
   // Filter weapons
   const filteredWeapons = WEAPONS.filter((w) => {
@@ -387,11 +426,24 @@ export default function Arsenal({
             rel="noopener"
             title={`Unduh seluruh ${WEAPONS.length} senjata sebagai SVG vektor dalam satu ZIP`}
             aria-label={`Unduh seluruh ${WEAPONS.length} senjata sebagai SVG vektor dalam satu ZIP`}
-            className="flex h-8 items-center gap-1 rounded-xl border border-cyan-300/35 bg-cyan-950/60 px-2.5 text-[9.5px] font-black text-cyan-100 shadow-md backdrop-blur-sm transition hover:bg-cyan-900/70 active:scale-95"
+            className="flex h-8 items-center gap-1 rounded-xl border border-cyan-300/35 bg-cyan-950/60 px-2 text-[9px] font-black text-cyan-100 shadow-md backdrop-blur-sm transition hover:bg-cyan-900/70 active:scale-95"
           >
             <Download className="h-3.5 w-3.5 text-cyan-300" />
             SVG ZIP
           </a>
+
+          <button
+            type="button"
+            onClick={() => {
+              setShowExportModal(true);
+              sfx.unlock();
+            }}
+            aria-label="Export data default senjata massal"
+            title="Export data pilihan skin & efek default massal untuk dicopas ke chat"
+            className="flex h-8 items-center gap-1 rounded-xl border border-amber-300/55 bg-gradient-to-b from-amber-400/25 to-amber-600/25 px-2 text-[9px] font-black text-amber-200 shadow-md backdrop-blur-sm transition hover:border-amber-200 hover:bg-amber-400/35 active:scale-95"
+          >
+            <span>📋 EXPORT{exportableCount > 0 ? ` (${exportableCount})` : ''}</span>
+          </button>
         </div>
 
         {/* Currency Pill with + */}
@@ -477,12 +529,37 @@ export default function Arsenal({
             </button>
           </div>
         )}
-        {canChooseGunDesign(selectedGunId) && (
-          <button type="button" onClick={() => setEditingDesign(true)}
-            aria-label={`Bandingkan desain ${selectedGun.name}`}
-            className="relative z-20 mt-1 rounded-xl border border-amber-200/70 bg-[#342354] px-3.5 py-0.5 text-[10px] font-black text-amber-200 shadow-[0_0_12px_rgba(250,204,21,0.22)] transition hover:bg-[#4d3475] active:scale-95">
-            ✦ PILIH DESAIN · {(getGunVariantOptions(selectedGunId).find((v) => v.id === selectedVariant)?.label ?? '').toUpperCase()} ▸
-          </button>
+        {canChooseGunDesign(selectedGunId) && selectedPos && (
+          <div className="relative z-20 mt-1 flex items-center gap-1.5">
+            <button type="button" onClick={() => setEditingDesign(true)}
+              aria-label={`Bandingkan desain ${selectedGun.name}`}
+              className="rounded-xl border border-amber-200/70 bg-[#342354] px-2.5 py-0.5 text-[9.5px] font-black text-amber-200 shadow-[0_0_12px_rgba(250,204,21,0.22)] transition hover:bg-[#4d3475] active:scale-95">
+              ✦ PILIH DESAIN · SKIN #{selectedPos.skinNo}/{selectedPos.skinTotal} · EFEK #{selectedPos.effectNo}/{selectedPos.effectTotal} ▸
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (selectedIsCurrentDefault) {
+                  unmarkGunDefault(selectedGunId);
+                } else {
+                  markGunDefault(selectedGunId, selectedVariant, getGunEffect(selectedGunId));
+                }
+                setDesignRevision((n) => n + 1);
+                sfx.coin();
+              }}
+              aria-label={`Tandai ${selectedGun.name} sebagai default`}
+              title="Tandai kombinasi skin & efek saat ini sebagai default senjata ini"
+              className={`rounded-xl border px-2 py-0.5 text-[9.5px] font-black shadow transition active:scale-95 ${
+                selectedIsCurrentDefault
+                  ? 'border-emerald-200 bg-gradient-to-b from-emerald-400 to-green-600 text-[#052e16]'
+                  : selectedHasMarkedDefault
+                  ? 'border-amber-200 bg-amber-500/30 text-amber-100 hover:bg-amber-500/45'
+                  : 'border-emerald-300/45 bg-[#16313a] text-emerald-200 hover:bg-[#1f4450]'
+              }`}
+            >
+              {selectedIsCurrentDefault ? '★ DEFAULT ✓' : '★ DEFAULT'}
+            </button>
+          </div>
         )}
       </div>
 
@@ -528,7 +605,7 @@ export default function Arsenal({
             {tab === 'ALL'
               ? 'ALL WEAPONS'
               : tab === 'DESAIN'
-              ? `${EDITABLE_WEAPONS.length} CUSTOM SKINS`
+              ? `${editableCatalogIds.length} CUSTOM SKINS`
               : tab === 'EPIC'
               ? 'EPIC ARSENAL'
               : tab === 'LANGKA'
@@ -599,6 +676,14 @@ export default function Arsenal({
                         <span>{rarityLabel}</span>
                       </div>
                       <div className="flex items-center gap-1">
+                        {isGunDefaultMarked(w.id) && (
+                          <span
+                            className="rounded-md border border-amber-200/90 bg-gradient-to-b from-amber-300 to-yellow-500 px-1 py-px text-[7.5px] font-black leading-none text-[#241204] shadow-[0_0_6px_rgba(250,204,21,0.75)]"
+                            title="Sudah ditandai sebagai default"
+                          >
+                            ★
+                          </span>
+                        )}
                         {(hasSlide11Update(w.id) || hasSlide9Update(w.id) || hasSlide6Update(w.id) || hasSlide7Update(w.id)) && (
                           <span
                             className="rounded-md border border-emerald-200/80 bg-gradient-to-b from-emerald-400 to-green-500 px-1 py-px text-[7.5px] font-black uppercase leading-none tracking-wider text-[#052e16] shadow-[0_0_8px_rgba(52,211,153,0.75)]"
@@ -805,7 +890,37 @@ export default function Arsenal({
             setDesignRevision((n) => n + 1);
             sfx.unlock();
           }}
+          onMarkDefault={() => {
+            markGunDefault(selectedGunId, selectedVariant, getGunEffect(selectedGunId));
+            setDesignRevision((n) => n + 1);
+            sfx.coin();
+          }}
+          onUnmarkDefault={() => {
+            unmarkGunDefault(selectedGunId);
+            setDesignRevision((n) => n + 1);
+            sfx.unlock();
+          }}
+          onOpenExport={() => {
+            setShowExportModal(true);
+            sfx.unlock();
+          }}
+          onPrevWeapon={() => stepEditableWeapon(-1)}
+          onNextWeapon={() => stepEditableWeapon(1)}
+          weaponStepLabel={`${Math.max(1, stepIds.indexOf(selectedGunId) + 1)} / ${stepIds.length} · ${selectedGun.id}`}
+          exportCount={exportableCount}
           onClose={() => setEditingDesign(false)}
+        />
+      )}
+      {showExportModal && (
+        <DefaultExportModal
+          onClose={() => setShowExportModal(false)}
+          onJumpToWeapon={(id) => {
+            setSelectedGunId(id);
+            setShowExportModal(false);
+            setEditingDesign(true);
+            sfx.unlock();
+          }}
+          onChanged={() => setDesignRevision((n) => n + 1)}
         />
       )}
     </div>

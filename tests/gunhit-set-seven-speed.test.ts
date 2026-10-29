@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { RETIRED_WEAPONS } from '../src/games/gunhit/game/retiredWeapons';
 import assert from 'node:assert/strict';
 
 import { Game, makeLevel } from '../src/games/gunhit/game/Game';
@@ -82,6 +83,7 @@ test('every slide-3 gun (all 71) fires on slide 3’s own trigger interval', () 
   assert.equal(SET_SEVEN_DESIGN_WEAPONS.length, 65);
   assert.equal(SET_ONE_DESIGN_WEAPONS.length, 6);
   for (const id of [...SET_SEVEN_DESIGN_WEAPONS, ...SET_ONE_DESIGN_WEAPONS]) {
+    if (RETIRED_WEAPONS.has(id)) continue;
     const s7 = slideThreeIdFor(id);
     assert.ok(s7, `${id} maps to a slide-3 gun`);
     const want = sevenCooldown(s7!);
@@ -97,6 +99,7 @@ test('every slide-3 gun (all 71) fires on slide 3’s own trigger interval', () 
 
 test('every slide-7 round flies at the speed slide 7 launches it with', () => {
   for (const id of SET_SEVEN_DESIGN_WEAPONS) {
+    if (RETIRED_WEAPONS.has(id)) continue;
     const { game, carrier } = fireWithSetSeven(id);
     const w = getWeapon(id as never);
     // Charge-style recipes that never released a round in the first frame keep
@@ -119,6 +122,7 @@ test('a late round adopts slide 7’s speed when it is finally released', () => 
   // flying at slide 1's speed once the real round exists.
   const checked = new Set<string>();
   for (const id of SET_SEVEN_DESIGN_WEAPONS) {
+    if (RETIRED_WEAPONS.has(id)) continue;
     const { game, carrier } = fireWithSetSeven(id);
     if (!carrier.setSeven) continue;
     const own = Math.abs(carrier.setSeven.vy);

@@ -1,4 +1,8 @@
+import { advanceCosmeticTrail } from './cosmeticTrail';
 import { sfx, withSfxGain } from './audio';
+import { normalizeSgaSpeed, type SgaGameSpeed } from './gameSpeed';
+import { getFast2DContext, getOptimalCanvasDpr, isMobilePerfProfile } from '../utils/mobilePerf';
+import { AdaptiveCanvasDpr } from '../utils/adaptiveCanvasDpr';
 import { slide2Sfx } from './slide2Audio';
 import { Slide2Fx } from './slide2Fx';
 import {
@@ -6,7 +10,6 @@ import {
   drawBlackHoleShot2,
   fireBlackHole2,
   launchVoidSky2,
-  setSlide2GunFx,
   trailBlackHole2,
   voidBurst2,
 } from './slide2Weapons';
@@ -27,8 +30,9 @@ import { setSixIdFor, sixCooldown, sixStateFor, type SixId } from './setSixArt';
 import { nineGunOrigin, nineWeapon, setNineIdFor, type NineId } from './setNineArt';
 import { SetElevenFx, setElevenMuted, unlockElevenAudio, type ElevenHooks, type ElevenWheelMotion } from './setElevenFx';
 import type { Proj as ElevenProj } from '../../../../games/game-8/src/game/types';
+import { drawBusterPelletOrb } from '../../../../games/game-8/src/game/weapons/busterPellet';
 import { elevenWeapon, setElevenIdFor, type ElevenId } from './setElevenArt';
-import { SetTwoFx, twoAmmoHue, type TwoRound } from './setTwoFx';
+import { SetTwoFx, advanceTwoRoundTrail, twoAmmoHue, type TwoRound } from './setTwoFx';
 import {
   drawSetTwoAtmosphere,
   drawSetTwoPins,
@@ -44,7 +48,9 @@ import { newAnim, type StuckItem } from '../../../../games/game-4/src/game/weapo
 import { drawStuckItem } from '../../../../games/game-4/src/game/art';
 import { RECOIL_ROT } from '../../../../games/game-4/src/game/Game';
 import { drawSprite, glowSprite } from '../../../../games/game-4/src/game/core';
+import { sfx as sevenSfx } from '../../../../games/game-4/src/game/audio';
 import type { Projectile as SevenShot } from '../../../../games/game-4/src/game/projectiles';
+import { spawnPlasmaImpact, YELLOW_PLASMA_IMPACT } from '../../../../games/game-4/src/game/projectiles3';
 import { sfx2 } from './sfx2';
 import { sfx3 } from './sfx3';
 import { sfx4 } from './sfx4';
@@ -53,8 +59,14 @@ import { sfx5 } from './sfx5';
 import { gunState } from './art/kit';
 import { FX, spawnImpact, spawnMuzzle, spawnSpeedLines, drawFxParticle, drawSmokeParticle, drawDropParticles, cssColor, type Particle, type FxSink } from './fx';
 import { drawPreciseWeaponDecal } from './art/decalSystem';
-import { drawGlow } from './art/glowSprite';
+import { drawBehindWheelSunburst, drawGlow, drawRgbGlowSprite, drawScreenTintWash } from './art/glowSprite';
+import { drawForestFireflies } from './art/forestFireflies';
 import { AcidFluid, type AcidStuckBlob } from './acidFluid';
+import { drawCrystalEffectTwo, drawIronmanCombo } from './art/combinedShots';
+import { drawXenoCorrosion, drawXenoHybridFlight, drawXenoSpecialPuddle } from './art/xenoHybrid';
+import { GHOST_HAND_X, GHOST_HAND_Y, type GhostHand } from './art/ghostSpiritGun';
+import { fireworkMouth } from './art/fireworkTubes';
+import type { FireworkShot } from '../../../../games/game-4/src/game/projectiles4';
 import { SNOWBALL_MAG_SIZE } from './art/guns2';
 import { drawMaterialTrail } from './art/projectileTrails';
 import { drawClassicBeam, drawLaserBeam, drawVoidTether } from './art/beamEffects';
@@ -68,7 +80,12 @@ import { drawBonusCoin, TreasureChest } from './art/bonusArt';
 import { advanceTreasureCoins, throwTreasureCoins, type TreasureCoin } from './treasureShower';
 import { drawBreakerCoin } from '../../shared/coinArt';
 import { getBossDef, type BossType } from './bossRoster';
-import { drawBossProjectile } from './bossProjectileArt';
+import { getWheelSunburstTheme, gunSunburstColor } from './sunburstPalette';
+import {
+  drawBossMuzzleFlash,
+  drawBossProjectile,
+  type BossMuzzleFlash,
+} from './bossProjectileArt';
 import { getExactBossRadius, onBossAssetsLoaded } from './bossAssetProcessor';
 import {
   createFirework8State,
@@ -138,13 +155,20 @@ import {
   drawSlide3BazookaShell,
   drawSlide3BazookaStuckCrater,
 } from './bazookaSlideFx';
+import {
+  drawCustomSgaTheme,
+  normalizeSgaBgTheme,
+  type SgaBackgroundTheme,
+} from './backgroundThemes';
 
 export const W = 420;
 export const H = 760;
 const CX = W / 2;
-const CY = 255;
-const SPECIAL_CY = 282; // Give the full-size Diamond Breaker rock room below the HUD.
+export const BASE_WHEEL_CY = 255;
+export const CY = Math.round(BASE_WHEEL_CY * (1 - 0.28)); // 28% higher wheel position (184)
+export const SPECIAL_CY = CY; // Bonus / Special stage wheel sits at the same vertical position as the normal wheel.
 const ROCK_RADIUS = 166; // ~80% of the 420px screen, as on Diamond Breaker's 480px screen.
+export const GAMEPLAY_GUN_SCALE = 1.08; // -10% from 1.2x (1.2 * 0.9 = 1.08)
 const TWIN_SPACING = 30; // dual lebih rapat: 60px antar laras (dulu 92px)
 const SINGLE_BARREL = [0] as const;
 const TWIN_BARRELS = [-TWIN_SPACING, TWIN_SPACING] as const;
@@ -155,8 +179,41 @@ const EMBED = 21; // tertancap setengah (50% masuk ke dalam)
 const L = TOTAL_LEN - EMBED; // hanya terlihat setengah (50% di luar)
 const BLEN = TOTAL_LEN;
 // projectile speed depends on weapon
-const GUN_Y = H - 185; // muzzle tip
+export const GUN_Y = H - Math.round(185 * GAMEPLAY_GUN_SCALE); // muzzle tip raised so +20% gun never clips bottom
 const TAU = Math.PI * 2;
+
+// A new run brings the weapon in from beneath the screen. This is only a
+// drawing offset: collision, muzzle origins, recoil and weapon scale stay put.
+export const GAMEPLAY_GUN_ENTRY_DURATION = 0.8;
+export const GAMEPLAY_GUN_ENTRY_DISTANCE = 380;
+export function gameplayGunEntryOffset(age: number): number {
+  // The normal gameplay hot path is settled; do no easing work in that case.
+  if (!Number.isFinite(age) || age >= GAMEPLAY_GUN_ENTRY_DURATION) return 0;
+  const remaining = 1 - Math.max(0, age) / GAMEPLAY_GUN_ENTRY_DURATION;
+  return GAMEPLAY_GUN_ENTRY_DISTANCE * remaining * remaining * remaining;
+}
+
+/** Symmetrical 5-pointed star path used for the Boss stage indicator on the gameplay HUD. */
+export function traceHudStarPath(
+  c: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  outerR: number,
+  innerR = outerR * 0.44,
+  points = 5,
+) {
+  c.beginPath();
+  const step = Math.PI / points;
+  for (let i = 0; i < points * 2; i++) {
+    const r = i % 2 === 0 ? outerR : innerR;
+    const a = i * step - Math.PI / 2;
+    const px = cx + Math.cos(a) * r;
+    const py = cy + Math.sin(a) * r;
+    if (i === 0) c.moveTo(px, py);
+    else c.lineTo(px, py);
+  }
+  c.closePath();
+}
 const SPIKE_LEN = 28;
 export const BOARD_OBSTACLE_SCALE = 2;
 export const SPIKE_SCALE = BOARD_OBSTACLE_SCALE;
@@ -179,13 +236,36 @@ export function diamondCoreProjectileRadius(weaponHalf: number, shotScale: numbe
   return Math.max(6, weaponHalf * shotScale / Math.max(0.1, rockScale));
 }
 
-/** Bosses turn 20% faster while keeping the same readable reversal rhythms. */
+/**
+ * Fast, distinctive signature rotation choreography for each boss:
+ * - knight: Duelist sword-lunge & counter-parry (4.4s cycle)
+ * - oni: Berserker rage whiplash & sudden fake-out snap (3.6s cycle)
+ * - cyborg: High-torque servo overdrive with 3x harmonic burst pulses
+ * - pirate: Stormy swashbuckler sea-surge pendulum whip
+ */
 export function bossRotationSpeed(type: BossType, levelTime: number) {
+  const t = Math.max(0, levelTime);
   switch (type) {
-    case 'knight': return (Math.floor(levelTime / 7) % 2 === 0 ? 1.65 : -1.65) * 1.2;
-    case 'oni': return (Math.floor(levelTime / 5) % 2 === 0 ? -2.05 : 2.05) * 1.2;
-    case 'cyborg': return 1.9 * Math.cos(levelTime * 0.82) * 1.2;
-    case 'pirate': return 2.1 * Math.cos(levelTime * 0.52 + 0.3) * 1.2;
+    case 'knight': {
+      const phase = t % 4.4;
+      if (phase < 2.2) {
+        const lunge = Math.sin((phase / 2.2) * Math.PI);
+        return 2.65 + lunge * 1.05;
+      }
+      const parry = Math.sin(((phase - 2.2) / 2.2) * Math.PI);
+      return -(2.75 + parry * 0.95);
+    }
+    case 'oni': {
+      const phase = t % 3.6;
+      if (phase < 1.55) return -3.45 - Math.sin((phase / 1.55) * Math.PI) * 0.75;
+      if (phase < 2.25) return 3.35;
+      if (phase < 2.85) return -3.75;
+      return 3.15 + Math.sin(((phase - 2.85) / 0.75) * Math.PI) * 0.65;
+    }
+    case 'cyborg':
+      return Math.cos(t * 1.48) * 3.15 + Math.sin(t * 4.44) * 1.05;
+    case 'pirate':
+      return Math.cos(t * 1.18 + 0.25) * 3.55 + Math.sin(t * 2.55) * 1.15;
   }
 }
 
@@ -260,7 +340,7 @@ export const FIRE_SFX: Record<WeaponId, () => void> = {
   pencil: sfx4.pencil, sandal: sfx4.sandal, wand: sfx4.wand,
   coingun: sfx5.coinGun, blaster: sfx5.blaster,
   photon_saber: sfx6.saberShoot,
-  gauntlet_cannon: sfx6.gauntlet,
+  gauntlet_cannon: sfx6.gauntlet, ironman_hand: sfx6.gauntlet,
   pulse_rifle: sfx6.pulse, cryo_blaster: sfx6.cryo, hyperdrive: sfx6.hyper,
   quantum_destabilizer: sfx6.quantum,
   xeno: sfx6.xeno,
@@ -282,7 +362,7 @@ export const FIRE_SFX: Record<WeaponId, () => void> = {
 export const HIT_SFX: Partial<Record<WeaponId, () => void>> = {
   coingun: sfx.coin, blaster: sfx5.blasterHit,
   photon_saber: sfx6.saberHit,
-  gauntlet_cannon: sfx6.gauntletHit,
+  gauntlet_cannon: sfx6.gauntletHit, ironman_hand: sfx6.gauntletHit,
   pulse_rifle: sfx6.pulseHit, cryo_blaster: sfx6.cryoHit, hyperdrive: sfx6.hyperHit,
   quantum_destabilizer: sfx6.quantumHit,
   chicken: sfx2.squeak, bubble: sfx2.pop, card: sfx2.card, snowball: sfx2.thud, soaker: sfx2.splat,
@@ -350,23 +430,23 @@ const SET_TWO_FAIL: Record<string, () => void> = {
 const PAINT = ['244,63,94', '250,204,21', '34,211,238', '168,85,247', '74,222,128', '251,146,60'];
 
 type ItemType = 'bullet' | 'old' | 'spike' | 'coin' | 'diamond_chest';
-interface AcidStuck { blobs: AcidStuckBlob[]; dripT: number; drip: number; seed: number }
-interface Item { angle: number; type: ItemType; age: number; w?: WeaponId; scale?: number; vel?: number; harvested?: boolean; tint?: string; big?: number; hits?: number; hue?: number; flash?: number; acid?: AcidStuck; hideArt?: boolean; setTwo?: boolean; s7Half?: number; s7Protrude?: number }
-interface Proj { x: number; y: number; vx: number; vy: number; originX?: number; setSix?: true; setOne?: SetOneShot; setSeven?: SevenShot; setSevenPending?: boolean; s7Ghost?: boolean; hold?: number; setNine?: NineBullet; setNinePending?: boolean; s9Ghost?: boolean; setNineBeam?: number; setEleven?: ElevenProj; setElevenPending?: boolean; s11Wait?: boolean; s11Ghost?: boolean; setTwo?: TwoRound; pierced?: number; hist?: { x: number; y: number }[]; tint?: string; big?: number; mini?: boolean; giant?: boolean; hue?: number; flash?: number; spawnDelay?: number; wob?: number; lastEcho?: number; t?: number; trail?: { x: number; y: number }[] }
+interface AcidStuck { blobs: AcidStuckBlob[]; dripT: number; drip: number; seed: number; hybrid?: boolean }
+interface Item { angle: number; type: ItemType; age: number; ghostVolley?: number; w?: WeaponId; scale?: number; vel?: number; harvested?: boolean; tint?: string; big?: number; hits?: number; hue?: number; flash?: number; acid?: AcidStuck; hideArt?: boolean; busterPellet?: boolean; setTwo?: boolean; s7Half?: number; s7Protrude?: number }
+interface Proj { x: number; y: number; vx: number; vy: number; originX?: number; ghostAim?: boolean; ghostVolley?: number; setSix?: true; setOne?: SetOneShot; setSeven?: SevenShot; setSevenPending?: boolean; s7Ghost?: boolean; hold?: number; setNine?: NineBullet; setNinePending?: boolean; s9Ghost?: boolean; setNineBeam?: number; setEleven?: ElevenProj; setElevenPending?: boolean; s11Wait?: boolean; s11Ghost?: boolean; setTwo?: TwoRound; pierced?: number; hist?: { x: number; y: number }[]; tint?: string; big?: number; mini?: boolean; giant?: boolean; hue?: number; flash?: number; spawnDelay?: number; wob?: number; lastEcho?: number; t?: number; trail?: { x: number; y: number }[] }
 type StepRes = { res: 'none' | 'stick' | 'fail' | 'hit'; spike?: boolean; local?: number };
 interface Light { x: number; y: number; r: number; rgb: string; life: number; max: number }
 interface Fragment { x: number; y: number; vx: number; vy: number; rot: number; vr: number; a0: number; a1: number }
-interface Flyer { x: number; y: number; vx: number; vy: number; rot: number; vr: number; kind: ItemType; w?: WeaponId; hue?: number }
+interface Flyer { x: number; y: number; vx: number; vy: number; rot: number; vr: number; kind: ItemType; w?: WeaponId; hue?: number; busterPellet?: boolean; scale?: number }
 interface Beam { x: number; y: number; life: number; max: number; rgb: string }
 interface Portal { x: number; y: number; life: number; max: number; rgb: string }
 interface BossProjectile { x: number; y: number; vx: number; vy: number; rot: number; type: BossType }
 
 interface RockFragment { x: number; y: number; vx: number; vy: number; rot: number; vr: number; size: number; seed: number; life: number; max: number }
 /** Coordinates and angle are local to a rock cell (or to the open chest). */
-interface EmbeddedShot { x: number; y: number; angle: number; age: number; w: WeaponId; scale: number; big: number; tint?: string; cellId?: number; hue?: number; flash?: number; s7?: SevenShot }
+interface EmbeddedShot { x: number; y: number; angle: number; age: number; w: WeaponId; scale: number; big: number; tint?: string; cellId?: number; hue?: number; flash?: number; s7?: SevenShot; xenoHybrid?: boolean; busterPellet?: boolean }
 interface FallingCell { id: number; cx: number; cy: number; x: number; y: number; vx: number; vy: number; rot: number; vr: number; life: number; bullets: EmbeddedShot[] }
 interface Star { x: number; y: number; r: number; vx: number; baseY: number; age: number; life: number; max: number }
-interface BonusCoin { angle: number; radius: number; phase: number; taken: boolean }
+interface BonusCoin { angle: number; radius: number; lx: number; ly: number; phase: number; taken: boolean }
 export type TreasureBuff = 'rapid' | 'double' | 'mini' | 'giant';
 export type BuffKind = 'speed' | 'ammo' | 'power' | TreasureBuff;
 export type SpecialMode = 'bonus' | 'treasure';
@@ -480,10 +560,17 @@ export class Game {
   private events: GameEvents;
   private scale = 1;
   private dpr = 1;
+  private adaptiveDpr = new AdaptiveCanvasDpr();
   private raf = 0;
   private last = 0;
   private active = false;
   private hasRendered = false;
+  private unlistenBossAssets: (() => void) | null = null;
+  private motionPreference: MediaQueryList | null = null;
+  private gunEntryT = GAMEPLAY_GUN_ENTRY_DURATION;
+  private onMotionPreferenceChange = () => {
+    if (this.motionPreference?.matches) this.gunEntryT = GAMEPLAY_GUN_ENTRY_DURATION;
+  };
 
   state: State = 'idle';
   level: LevelCfg;
@@ -492,6 +579,11 @@ export class Game {
   private rotDir = 1;
   private levelTime = 0;
   private items: Item[] = [];
+  private ghostHand: GhostHand = -1;
+  /** One direction per accepted Photon Saber trigger, independent of preview frames. */
+  private saberSide: -1 | 1 = -1;
+  private ghostVolleySequence = 0;
+  private fireworkShots = 0;
   private projs: Proj[] = [];
   private particles: Particle[] = [];
   /** Metaball acid layer (slide-7 Xenomorph Acid Spitter parity). */
@@ -509,6 +601,8 @@ export class Game {
   private flashWhite = 0;
   private flashRed = 0;
   private timeScale = 1;
+  private pace: SgaGameSpeed = 1;
+  private bgTheme: SgaBackgroundTheme = 'auto';
   private bump = 0;
   private hitFlash = 0;
   /** game-3 wheelFlash: tints only the target, never the whole screen. */
@@ -570,12 +664,16 @@ export class Game {
   private buff: 'speed' | 'ammo' | 'power' | 'double' | null = null;
   private treasureBuff: TreasureBuff | null = null;
   private twinGuns = false;
+  private stageClearBurstT = 0;
+  private stageClearBurstMax = 0.9;
+  private stageClearBurstBoss = false;
   private star: Star | null = null;
   private starTimer = 6;
   private speedMult = 1;
   private dmgMult = 1;
   private maxAmmoMult = 1;
   private bossProjs: BossProjectile[] = [];
+  private bossMuzzleFlashes: BossMuzzleFlash[] = [];
   private bossShootTimer = 1.6;
   private bossHp = 100;
   private bossMaxHp = 100;
@@ -708,7 +806,7 @@ export class Game {
   private s1Hooks(): SetOneHooks {
     return {
       shake: (amount) => { this.shake = Math.max(this.shake, amount); },
-      hitStop: (seconds) => { this.hitStop = Math.max(this.hitStop, seconds); },
+      hitStop: () => { /* impact feedback stays visual; don't stall gameplay */ },
       flash: (rgb, strength) => {
         this.tintRgb = rgb;
         this.tintA = Math.max(this.tintA, strength);
@@ -830,8 +928,8 @@ export class Game {
         this.nineFlashRgb = hexToRgbTriplet(color);
         this.nineFlashA = Math.max(this.nineFlashA, strength);
       },
-      // Slide 9's hit-stop runs the world at 12 %, not slide 1's 6 %.
-      hitStop: (seconds) => { this.nineStop = Math.max(this.nineStop, seconds); },
+      // Keep the slide's flashes and shake, without a whole-world impact stall.
+      hitStop: () => {},
       wheel: () => ({ x: CX, y: this.targetY, R: this.level.radius, angle: this.rot }),
     };
   }
@@ -965,7 +1063,18 @@ export class Game {
         this.tintRgb = hexToRgbTriplet(color);
         this.tintA = Math.max(this.tintA, Math.min(0.36, strength * 0.45));
       },
-      hitStop: (seconds) => { this.elevenStop = Math.max(this.elevenStop, Math.min(0.12, seconds)); },
+      // AK-47 and other Slide 5 hits stay responsive, while their own flash and jolt remain.
+      hitStop: () => {},
+      busterPlasmaImpact: (x, y) => {
+        // Use Plasma Gun's actual burst recipe in yellow. This is visual only:
+        // slide 11 still owns the Mega Buster's speed, scoring and collision.
+        const fx = this.s7;
+        fx.special = isSpecial(this.level.mode);
+        fx.syncWheel();
+        const local = norm(Math.atan2(y - this.targetY, x - CX) - this.rot);
+        fx.flashScreen(YELLOW_PLASMA_IMPACT.screenFlash, 0.18);
+        spawnPlasmaImpact(fx.g, local, x, y, YELLOW_PLASMA_IMPACT);
+      },
       wheel: () => ({
         x: CX, y: this.targetY, R: this.level.radius, angle: this.rot, dir: this.rotDir,
         marks: !isSpecial(this.level.mode),
@@ -975,7 +1084,7 @@ export class Game {
 
   /** The slide-3 weapon (SET 1..7) behind the equipped slide-1 gun, if any. */
   private get setSevenId(): SlideThreeId | null {
-    return slideThreeIdFor(this.weapon.id);
+    return this.weapon.id === 'ironman_hand' ? 'gauntlet' : slideThreeIdFor(this.weapon.id);
   }
 
   /**
@@ -987,6 +1096,7 @@ export class Game {
   private get setSevenLive(): boolean {
     const id = this.weapon.id;
     if (this.setSevenId === null) return false;
+    if (id === 'ironman_hand') return getGunEffect(id) === 'ironman_combo';
     if (setOneIdFor(id)) return getGunEffect(id) === 'new' && !this.slide2Void;
     return getGunEffect(id) === 'set7';
   }
@@ -1098,12 +1208,16 @@ export class Game {
   private camY = 0;
   private tintA = 0;
   private tintRgb = '255,255,255';
+  private maxParticles = isMobilePerfProfile() ? 240 : 480;
+  private vignetteBackdrop: HTMLCanvasElement | null = null;
+  private vignetteBackdropDpr = 0;
+  private vignetteGrad: CanvasGradient | null = null;
   private sink: FxSink = {
     push: (p: Particle) => {
-      if (this.particles.length < 1100 || p.kind === 'text') this.particles.push(p);
+      if (this.particles.length < this.maxParticles || p.kind === 'text') this.particles.push(p);
     },
     light: (x, y, r, rgb, life) => {
-      if (this.lights.length < 24) this.lights.push({ x, y, r, rgb, life, max: life });
+      if (this.lights.length < 18) this.lights.push({ x, y, r, rgb, life, max: life });
     },
   };
 
@@ -1111,10 +1225,10 @@ export class Game {
     const changed = this.weapon?.id !== id;
     this.weapon = getWeapon(id);
     // Rounds stuck in the wheel belong to the gun that fired them.
-    if (changed) this.resetSevenLayer();
-    // The gun art may only spawn its charge sparks into a live FX layer, never
-    // into menu thumbnails.
-    setSlide2GunFx(id === 'blackhole' && getGunVariant(id) === 'latest' ? this.s2 : null);
+    if (changed) {
+      this.resetSevenLayer();
+      if (id === 'photon_saber') this.saberSide = -1;
+    }
     this.aiming = false;
     this.spin = 0;
     // A newly equipped cannon starts with no more balls than the level's
@@ -1125,15 +1239,45 @@ export class Game {
 
   private get targetY() {
     if (isSpecial(this.level.mode)) return SPECIAL_CY;
-    return CY - (this.level.boss ? bossRiseOffset(this.levelTime) : 0);
+    if (this.level.boss) {
+      const bossBaseY = CY + 36;
+      return Math.max(60 + this.level.radius, bossBaseY - bossRiseOffset(this.levelTime));
+    }
+    return CY;
+  }
+
+  /**
+   * Steady stage Y used for cached full-screen background canvases so `bossRiseOffset`
+   * never invalidates and reallocates 840x1520 Retina canvases 60 times per second.
+   */
+  private get steadyTargetY() {
+    if (isSpecial(this.level.mode)) return SPECIAL_CY;
+    if (this.level.boss) return CY + 36;
+    return CY;
   }
   private get hasTwinGuns() { return this.level.mode === 'double' || this.twinGuns; }
   private get gunOffsets(): readonly number[] { return this.hasTwinGuns ? TWIN_BARRELS : SINGLE_BARREL; }
 
+  /** Centre of the target's lower edge, accounting for the imported ghost's tip. */
+  private ghostAimY(tip = 0): number {
+    const radius = this.level.mode === 'treasure' ? 88
+      : this.level.boss ? getExactBossRadius(this.level.style as BossType, norm(Math.PI / 2 - this.rot), this.level.radius)
+        : this.level.radius;
+    return this.targetY + radius + (isSpecial(this.level.mode) ? 0 : tip);
+  }
+
+  private ghostAimVx(x: number, y: number, vy: number, tip = 0): number {
+    return (CX - x) * Math.max(0, -vy) / Math.max(1, y - this.ghostAimY(tip));
+  }
+
   constructor(canvas: HTMLCanvasElement, events: GameEvents) {
     this.canvas = canvas;
-    this.ctx = canvas.getContext('2d')!;
+    this.ctx = getFast2DContext(canvas, { opaque: true, desynchronized: true }) ?? canvas.getContext('2d')!;
     this.events = events;
+    try {
+      this.motionPreference = window.matchMedia?.('(prefers-reduced-motion: reduce)') ?? null;
+      this.motionPreference?.addEventListener?.('change', this.onMotionPreferenceChange);
+    } catch { this.motionPreference = null; }
     this.level = makeLevel(1);
     this.events.onStageChange?.();
     this.level.style = 'orange';
@@ -1153,11 +1297,34 @@ export class Game {
     // Paint a still frame for inactive slides; start the simulation only on focus.
     this.render();
     this.hasRendered = true;
-    onBossAssetsLoaded(() => {
+    this.unlistenBossAssets = onBossAssetsLoaded(() => {
       if (this.level.boss) {
         this.buildFace();
       }
     });
+  }
+
+  setGameSpeed(speed: number) {
+    this.pace = normalizeSgaSpeed(speed, 1);
+  }
+
+  getGameSpeed(): SgaGameSpeed {
+    return this.pace;
+  }
+
+  getWheelStyle(): Style {
+    return this.level.style;
+  }
+
+  setBackgroundTheme(theme: SgaBackgroundTheme) {
+    this.bgTheme = normalizeSgaBgTheme(theme);
+    if (!this.active && this.hasRendered) {
+      this.render();
+    }
+  }
+
+  getBackgroundTheme(): SgaBackgroundTheme {
+    return this.bgTheme;
   }
 
   setActive(active: boolean) {
@@ -1170,6 +1337,7 @@ export class Game {
     } else {
       cancelAnimationFrame(this.raf);
       this.raf = 0;
+      this.adaptiveDpr.pause();
       // A held mouse/key must not resume firing when this slide is selected again.
       this.holding = false;
       this.aiming = false;
@@ -1182,7 +1350,11 @@ export class Game {
 
   destroy() {
     this.setActive(false);
-    this.s11State?.silence();
+    this.motionPreference?.removeEventListener?.('change', this.onMotionPreferenceChange);
+    this.unlistenBossAssets?.();
+    this.unlistenBossAssets = null;
+    this.s11State?.dispose();
+    this.s11State = undefined;
     window.removeEventListener('resize', this.resize);
     window.removeEventListener('keydown', this.onKey);
     window.removeEventListener('keyup', this.onKeyUp);
@@ -1206,6 +1378,9 @@ export class Game {
 
   private press() {
     if (this.choosingBuff) return;
+    // Once input is accepted, keep the visible muzzle at the real projectile
+    // origin even if the last few pixels of the entrance are still settling.
+    if (this.state === 'play') this.gunEntryT = GAMEPLAY_GUN_ENTRY_DURATION;
     this.holding = true;
     const plain = this.plainTrigger;
     // Slide 3 fires on the press (see `sevenPlainTrigger`).
@@ -1269,15 +1444,23 @@ export class Game {
     this.shoot();
   }
 
+  /** Change only raster density; world coordinates, input and effects stay intact. */
+  private applyCanvasDpr(dpr: number) {
+    this.dpr = dpr;
+    const width = Math.round(W * dpr), height = Math.round(H * dpr);
+    if (this.canvas.width !== width) this.canvas.width = width;
+    if (this.canvas.height !== height) this.canvas.height = height;
+  }
+
   private resize = () => {
     this.scale = 1;
-    // Cap the backing store: a 420×760 game remains crisp at 2× without
-    // rasterizing the costly canvas effects at 2.5–3× on mobile devices.
-    this.dpr = Math.min(window.devicePixelRatio || 1, 2);
+    // Start at the usual sharp mobile DPR; sustained slow frames may reduce it
+    // gradually, and sustained smooth play restores it. No effects are removed.
+    const baseDpr = getOptimalCanvasDpr(2);
+    this.adaptiveDpr.reset(baseDpr, isMobilePerfProfile());
     this.canvas.style.width = `${W}px`;
     this.canvas.style.height = `${H}px`;
-    this.canvas.width = Math.round(W * this.dpr);
-    this.canvas.height = Math.round(H * this.dpr);
+    this.applyCanvasDpr(baseDpr);
     this.acidFluid.resize(W, H);
     // Resizing clears the backing store. Restore a single still frame even
     // if the game is paused rather than leaving an empty thumbnail.
@@ -1307,17 +1490,32 @@ export class Game {
     this.press();
   };
 
+  private prewarmWeaponAudio() {
+    try {
+      if (this.setNineLive) unlockNineAudio();
+      else if (this.setElevenLive) unlockElevenAudio(this.s11);
+      else if (this.setSevenLive) sevenSfx.ensure();
+      else if (this.weapon?.id === 'firework') fireworkSfx.unlock();
+      else if (this.weapon && isSlide23Weapon(this.weapon.id)) slide23Sfx.unlock();
+    } catch {
+      /* AudioContext unavailable in headless tests */
+    }
+  }
+
   private startRun(level: number, forcedMode?: LevelMode) {
     sfx.unlock();
     // Slide 7's own AudioContext can only start after a user gesture as well.
     setOneSfx.unlock();
+    this.prewarmWeaponAudio();
     this.score = 0;
     this.coins = 0;
     this.bankedCoins = 0;
+    this.saberSide = -1;
     this.particles = [];
     this.frags = [];
     this.flyers = [];
     this.loadLevel(level, forcedMode);
+    this.gunEntryT = this.motionPreference?.matches ? GAMEPLAY_GUN_ENTRY_DURATION : 0;
   }
 
   start() { this.startRun(1); }
@@ -1330,6 +1528,7 @@ export class Game {
 
   toIdle() {
     this.state = 'idle';
+    this.gunEntryT = GAMEPLAY_GUN_ENTRY_DURATION;
     this.snowLoaded = SNOWBALL_MAG_SIZE;
     this.level = makeLevel(1);
     this.events.onStageChange?.();
@@ -1338,6 +1537,7 @@ export class Game {
     this.items = [];
     this.projs = [];
     this.bossProjs = [];
+    this.bossMuzzleFlashes = [];
     this.particles = [];
     this.frags = [];
     this.flyers = [];
@@ -1445,7 +1645,7 @@ export class Game {
     if (!allowsStarPowerups(this.level)) return;
     const bottom = this.targetY + this.level.radius;
     const midGap = (bottom + GUN_Y) / 2;
-    const baseY = Math.min(GUN_Y - 75, Math.max(bottom + 48, midGap + rand(-18, 18)));
+    const baseY = Math.min(GUN_Y - 36, Math.max(bottom + 34, midGap + rand(-18, 18)));
     const fromLeft = Math.random() < 0.5;
     this.star = {
       x: fromLeft ? -40 : W + 40, y: baseY, baseY,
@@ -1490,6 +1690,9 @@ export class Game {
   }
 
   private loadLevel(n: number, forcedMode?: LevelMode) {
+    // A continuing run keeps its weapon in place between stages. startRun()
+    // explicitly re-arms the entrance for Play, map and special-stage starts.
+    this.gunEntryT = GAMEPLAY_GUN_ENTRY_DURATION;
     this.level = makeLevel(n, forcedMode);
     this.events.onStageChange?.();
     // A new level starts with an empty wheel: no rounds stuck from the last one.
@@ -1514,9 +1717,15 @@ export class Game {
     this.treasureCoins = [];
     this.stageRewardPaid = false;
     this.coinPulse = 0;
+    this.stageClearBurstT = 0;
+    this.stageClearBurstBoss = false;
     this.rock = this.level.mode === 'boulder' || this.level.mode === 'bonus' ? new DiamondRock() : null;
+    this.rock?.prebake();
     this.chest = this.level.mode === 'treasure' ? new TreasureChest() : null;
-    this.bonusCoins = this.level.mode === 'bonus' ? this.buildBonusCoins() : [];
+    this.bonusCoins =
+      this.level.mode === 'bonus' || this.level.mode === 'boulder'
+        ? this.buildBonusCoins()
+        : [];
     this.stageTime = isSpecial(this.level.mode) ? STAGE_SECONDS[this.level.mode] : 0;
     this.stageStartCoins = this.coins;
     this.reloadT = 0;
@@ -1559,6 +1768,7 @@ export class Game {
     this.aiming = false;
     this.portals = [];
     this.bossProjs = [];
+    this.bossMuzzleFlashes = [];
     this.bossShootTimer = 1.8;
     const fw = this.getFwState();
     fw.shotIdx = 0;
@@ -1592,7 +1802,15 @@ export class Game {
       { radius: 96, count: 12 }, { radius: 132, count: 16 }, { radius: 168, count: 20 },
     ]) {
       for (let i = 0; i < count; i++) {
-        coins.push({ angle: i * TAU / count, radius, phase: rand(0, TAU), taken: false });
+        const angle = (i * TAU) / count;
+        coins.push({
+          angle,
+          radius,
+          lx: Math.cos(angle) * radius,
+          ly: Math.sin(angle) * radius,
+          phase: rand(0, TAU),
+          taken: false,
+        });
       }
     }
     return coins;
@@ -1744,12 +1962,28 @@ export class Game {
     // burst, no held charge and no paint roulette — those are slide 1's.
     const s3 = this.setSevenLive;
     if (w.id === 'snowball' && this.snowLoaded <= 0 && !s3) return;
+    // Automatic/queued shots can fire without a new press; settle them too.
+    this.gunEntryT = GAMEPLAY_GUN_ENTRY_DURATION;
     const n = s3 ? 1 : Math.min(w.burst ?? 1, this.ammoLeft);
     this.ammoLeft -= n;
     if (w.id === 'snowball' && !s3) this.snowLoaded = Math.max(0, Math.min(this.snowLoaded - n, this.ammoLeft));
     this.lastShotRT = this.rt;
     this.stretchPlayed = false;
     gunState.shots++;
+    if (w.id === 'ghost') { this.ghostHand = this.ghostHand === 1 ? -1 : 1; gunState.ghostSide = this.ghostHand; }
+    // Count the trigger, not the barrel/projectile: twin guns and rapid buffs
+    // still alternate once per accepted shot, and rejected taps never flip it.
+    if (w.id === 'photon_saber') this.saberSide = this.saberSide === 1 ? -1 : 1;
+    // Twin hands converge on the same point; only siblings from this trigger
+    // may overlap each other, never an older round or an obstacle.
+    const ghostVolley = w.id === 'ghost' && this.hasTwinGuns ? ++this.ghostVolleySequence : undefined;
+    const tube = w.id === 'firework' ? ((this.fireworkShots ?? 0) % 3) : 0;
+    if (w.id === 'firework') { this.fireworkShots = (this.fireworkShots ?? 0) + 1; gunState.fireworkTube = tube; }
+    const fireworkMuzzle = (ox: number) => {
+      const m = fireworkMouth(getGunVariant('firework'), tube);
+      const mirror = this.hasTwinGuns && ox < 0 ? -1 : 1;
+      return { x: CX + ox + m.x * GAMEPLAY_GUN_SCALE * mirror, y: GUN_Y + m.y * GAMEPLAY_GUN_SCALE };
+    };
     this.events?.onShotFired?.(n);
     const big = w.charge && !s3 ? this.chargeLevel : 0;
     const tint = w.paint && !s3 ? pick(PAINT) : undefined;
@@ -1927,10 +2161,11 @@ export class Game {
     const s2id = this.setTwoId;
     if (s2id && this.setTwoLive) {
       const fx = this.s2w;
-      fx.cx = CX;
+      const firstMuzzle = w.id === 'firework' ? fireworkMuzzle(offsets[0] ?? 0) : null;
+      fx.cx = firstMuzzle?.x ?? CX;
       fx.cy = this.targetY;
       fx.radius = this.level.radius;
-      fx.gunY = GUN_Y;
+      fx.gunY = firstMuzzle ? firstMuzzle.y + 22 : GUN_Y;
       fx.h = H;
       slide2Sfx.unlock();
       // `fire()` also hands back the round slide 2 just loaded (its own seed),
@@ -1940,12 +2175,15 @@ export class Game {
       // Its own recipe again for the second barrel: slide 2 hands back a fresh
       // round seed, so the two barrels do not share one trail.
       this.fireTwinBarrel(rounds, () => {
+        if (w.id === 'firework') { const m = fireworkMuzzle(offsets[1] ?? 0); fx.cx = m.x; fx.gunY = m.y + 22; }
         rounds.push(fx.fire(s2id, this.s2HueFor(s2id)));
       }, () => []);
+      fx.cx = CX; fx.gunY = GUN_Y;
       const plan = this.carrierPlan(n, rounds.length, w.speed);
       for (let i = 0; i < plan.length; i++) {
+        const mouth = w.id === 'firework' ? fireworkMuzzle(plan[i].ox) : null;
         this.projs.push({
-          x: CX + plan[i].ox, originX: CX + plan[i].ox, y: GUN_Y - 22,
+          x: mouth?.x ?? CX + plan[i].ox, originX: CX + plan[i].ox, y: mouth ? mouth.y - 8 : GUN_Y - 22,
           vx: vx + plan[i].vx, vy,
           big, tint, ...sizeBuff,
           setTwo: { ...(rounds[i] ?? round) },
@@ -1984,18 +2222,29 @@ export class Game {
       fx.syncWheel();
       // Slide 3's muzzle is its gun's own origin (`fire()`: mx = GUN_X,
       // my = GUN_Y, the point `drawWeaponLayer()` draws the gun from).
-      const mx = CX + (offsets[0] ?? 0);
-      const my = GUN_Y;
+      const firstOx = offsets[0] ?? 0;
+      const handShift = (ox: number) => w.id === 'ghost'
+        ? this.ghostHand * (this.hasTwinGuns && ox < 0 ? -1 : 1) * GHOST_HAND_X * GAMEPLAY_GUN_SCALE : 0;
+      const recipePoint = (ox: number) => {
+        if (w.id === 'firework') {
+          const mouth = fireworkMuzzle(ox);
+          return { x: mouth.x - (tube - 1) * 15 * 0.92, y: mouth.y - (tube === 1 ? -4 : 8) * 0.92 };
+        }
+        return { x: CX + ox + handShift(ox), y: w.id === 'ghost' ? GUN_Y + GHOST_HAND_Y * GAMEPLAY_GUN_SCALE + 6 : GUN_Y };
+      };
+      const firstPoint = recipePoint(firstOx);
+      const mx = firstPoint.x, my = firstPoint.y;
       // Slide 3 counts the shot before the recipe runs (the firework cycle
       // picks its rocket from that counter) and reads its ammo after spending
       // it (the soaker's tank gauge).
-      fx.shotsFired++;
+      if (w.id === 'firework') fx.shotsFired = this.fireworkShots;
+      else fx.shotsFired++;
       fx.ammoLeft = this.ammoLeft;
       fx.ammoTotal = Math.max(1, this.level.ammo * this.maxAmmoMult);
       FIRE_RECIPES[s7id](fx, mx, my);
       const made = fx.takeShots();
       this.fireTwinBarrel(made,
-        () => FIRE_RECIPES[s7id](fx, CX + (offsets[1] ?? offsets[0] ?? 0), my),
+        () => { const point = recipePoint(offsets[1] ?? offsets[0] ?? 0); FIRE_RECIPES[s7id](fx, point.x, point.y); },
         () => fx.takeShots());
       // The round slide 7 just launched decides how fast slide 1's carrier
       // travels: its own `vy` is the launch speed its class was built with, so
@@ -2012,10 +2261,17 @@ export class Game {
       // the blowpipe's breath, the meteor's summon…) leaves one waiting
       // carrier per barrel.
       if (made.length) {
-        for (const own of made) {
+        for (const [i, own] of made.entries()) {
+          if (w.id === 'firework' && this.hasTwinGuns) {
+            // The original rocket homes to wheel centre. Twin launchers need
+            // separate targets so their two rockets cannot collide on landing.
+            (own as FireworkShot).targetX = CX + (offsets[i % offsets.length] ?? 0);
+          }
+          const ownVy = -sevenCarrierSpeed(own, w.speed) * this.speedMult;
           this.projs.push({
-            x: own.x, originX: own.x, y: own.y, vx: 0,
-            vy: -sevenCarrierSpeed(own, w.speed) * this.speedMult,
+            x: own.x, originX: own.x, y: own.y,
+            vx: w.id === 'ghost' ? this.ghostAimVx(own.x, own.y, ownVy, own.tip) : 0,
+            vy: ownVy, ghostAim: w.id === 'ghost', ghostVolley,
             big, tint, hue: undefined, ...sizeBuff, setSeven: own,
           });
         }
@@ -2074,14 +2330,18 @@ export class Game {
       if (yoyo && shotHue !== undefined) gunState.yoyoHue = shotHue;
       if (bazooka && shotHue !== undefined) gunState.bazookaHue = shotHue;
       // Weapon-specific spawn Y: dora barrel extends 70px above gun base, pred muzzle at GUN_Y-72 (game-3: my-68)
+      const fwMouth = fw ? fireworkMuzzle(ox) : null;
       const spawnY = s1spawn ? s1spawn.y
-        : w.id === 'dora' ? GUN_Y + w.recoil * 22 - 50 : w.id === 'pred' ? GUN_Y - 72 : GUN_Y - 4;
-      const spawnX = s1spawn ? s1spawn.x : CX + ox;
+        : fwMouth ? fwMouth.y - 8
+        : w.id === 'dora' ? GUN_Y + w.recoil * 22 - 50 : w.id === 'pred' ? GUN_Y - 72
+          : w.id === 'ghost' ? GUN_Y + GHOST_HAND_Y * GAMEPLAY_GUN_SCALE : GUN_Y - 4;
+      const spawnX = s1spawn ? s1spawn.x : fwMouth ? fwMouth.x : CX + ox + (w.id === 'ghost'
+        ? this.ghostHand * (this.hasTwinGuns && ox < 0 ? -1 : 1) * GHOST_HAND_X * GAMEPLAY_GUN_SCALE : 0);
       const isNewWeapon = w.id === 'dora' || w.id === 'xeno' || w.id === 'pred';
       const projExtra = isNewWeapon ? { wob: Math.random() * TAU, lastEcho: spawnY } : {};
       const s1State = s1spawn ? this.s1.newShot(this.setOneId!, spawnX, spawnY) : undefined;
       if (s1State) this.s1Last = s1State;
-      if (n === 1) this.projs.push({ x: spawnX, originX: spawnX, y: spawnY, vx, vy, big, tint, hue: shotHue, spawnDelay, setOne: s1State, ...sizeBuff, ...projExtra });
+      if (n === 1) this.projs.push({ x: spawnX, originX: spawnX, y: spawnY, vx: w.id === 'ghost' ? this.ghostAimVx(spawnX, spawnY, vy) : vx, vy, ghostAim: w.id === 'ghost', ghostVolley, big, tint, hue: shotHue, spawnDelay, setOne: s1State, ...sizeBuff, ...projExtra });
       else {
         const travel = GUN_Y - (this.targetY + this.level.radius);
         for (let i = 0; i < n; i++) {
@@ -2093,9 +2353,10 @@ export class Game {
         }
       }
       if (fw && shotHue !== undefined) {
-        spawnFirework8Muzzle(fw, CX + ox, GUN_Y - 6, shotHue);
-        this.sink.light(CX + ox, GUN_Y - 6, 70, '255,180,220', 0.25);
-        this.sink.push({ x: CX + ox, y: GUN_Y - 6, vx: 0, vy: 0, life: 0.3, max: 0.3, size: 38, color: '#ff80bf', kind: 'ring', rot: 0, vr: 0, g: 0 });
+        const m = fwMouth!;
+        spawnFirework8Muzzle(fw, m.x, m.y, shotHue);
+        this.sink.light(m.x, m.y, 70, '255,180,220', 0.25);
+        this.sink.push({ x: m.x, y: m.y, vx: 0, vy: 0, life: 0.3, max: 0.3, size: 38, color: '#ff80bf', kind: 'ring', rot: 0, vr: 0, g: 0 });
       }
       if (yoyo && shotHue !== undefined) {
         spawnYoyoLaunch(yoyo, CX + ox, GUN_Y - 6, shotHue);
@@ -2119,7 +2380,10 @@ export class Game {
     const fxp = FX[w.id];
     if (w.id !== 'firework' && w.id !== 'yoyo' && w.id !== 'keris' && w.id !== 'diamond' && w.id !== 'bazooka'
       && !(w.id === 'blackhole' && this.slide2Void) && !setOneLive) {
-      for (const ox of offsets) spawnMuzzle(this.sink, fxp, w, CX + ox, GUN_Y - 6);
+      for (const ox of offsets) {
+        const hand = w.id === 'ghost' ? this.ghostHand * (this.hasTwinGuns && ox < 0 ? -1 : 1) * GHOST_HAND_X * GAMEPLAY_GUN_SCALE : 0;
+        spawnMuzzle(this.sink, fxp, w, CX + ox + hand, w.id === 'ghost' ? GUN_Y + GHOST_HAND_Y * GAMEPLAY_GUN_SCALE : GUN_Y - 6);
+      }
     }
     // Slide 2 black hole: collapsing sparks into the muzzle, cosmic hue band.
     if (w.id === 'blackhole' && this.slide2Void) {
@@ -2885,6 +3149,12 @@ export class Game {
     for (let i = 0; i < 20; i++) this.sink.push({ x, y, vx: rand(-380, 380), vy: rand(-480, 80), life: rand(0.8, 1.5), max: 1.5, size: rand(3, 7), color: pick(['28,20,16', '74,48,32', '217,180,122']), kind: 'ash', rot: 0, vr: rand(-16, 16), g: 1000 });
   }
 
+  /** One short, visual-only effect-3 molecular wave for the hybrid's impact. */
+  private xenoMolecularImpact(x: number, y: number) {
+    this.particles.push({ x, y, vx: 0, vy: 0, life: 0.95, max: 0.95, size: 1,
+      color: '200,255,90', kind: 'xenoMolecular', rot: 0, vr: 0, g: 0 });
+  }
+
   private splash(x: number, y: number, k: number) {
     // Ported 100% from game-3 splash() (acid)
     const down = Math.PI / 2;
@@ -2976,16 +3246,18 @@ export class Game {
       const a = it.angle + this.rot;
       const ca = Math.cos(a);
       const sa = Math.sin(a);
+      const surfaceR = it.acid.hybrid && this.level.boss
+        ? getExactBossRadius(this.level.style as BossType, it.angle, this.level.radius) * wScale : R;
       const sag = Math.min(1, it.age / 1.2);
       for (const b of it.acid.blobs) {
         const wob = Math.sin(t * 3 + b.ph) * 1.2;
-        const d = R + b.d * (0.6 + 0.4 * sag) + wob;
+        const d = surfaceR + b.d * (0.6 + 0.4 * sag) + wob;
         const sd = b.s + Math.cos(t * 2.5 + b.ph) * 0.8;
         fluid.add(CX + ca * d - sa * sd, cy + sa * d + ca * sd, b.r);
       }
       if (it.acid.drip > 0) {
-        const bx = CX + ca * (R + 8);
-        const by = cy + sa * (R + 8);
+        const bx = CX + ca * (surfaceR + 8);
+        const by = cy + sa * (surfaceR + 8);
         fluid.add(bx, by + it.acid.drip * 0.5, 3.5);
         fluid.add(bx, by + it.acid.drip, 3 + it.acid.drip * 0.12);
       }
@@ -3189,16 +3461,22 @@ export class Game {
     const hue = s2Hit ? s2Hit.hue : p?.hue ?? (w.id === 'firework' ? gunState.rocketHue : w.id === 'yoyo' ? gunState.yoyoHue : undefined);
     if (w.id === 'firework' && hue !== undefined) gunState.rocketHue = hue;
     if (w.id === 'yoyo' && hue !== undefined) gunState.yoyoHue = hue;
+    // Only the real uncharged yellow shot remains visible as a plasma-like
+    // orb. The larger blue charge shots keep their own existing impact art.
+    const busterPellet = w.id === 'mega_buster' && !!s11Hit && big === 0;
     this.items.push({
       angle: local,
       type: 'bullet',
       age: 0,
+      ghostVolley: p?.ghostVolley,
       w: w.id,
       big,
       tint,
       hue,
       flash: w.id === 'firework' || w.id === 'yoyo' || w.id === 'diamond' || w.id === 'bazooka' ? 1 : undefined,
-      scale: big ? embeddedProjectileScale(big) : undefined,
+      scale: busterPellet ? projectileSizeMultiplier(w.id, !!p?.mini, !!p?.giant)
+        : big ? embeddedProjectileScale(big) : undefined,
+      busterPellet: busterPellet || undefined,
       // Slide 9 / slide 11 / slide 2 paint their own round into the wheel, so
       // the slide-1 bullet art must not be drawn on top of it.
       hideArt: layerHit ? true : undefined,
@@ -3255,8 +3533,10 @@ export class Game {
           dripT: rand(0.5, 1.5),
           drip: 0,
           seed: Math.random() * 1000,
+          hybrid: getGunEffect('xeno') === 'xeno_hybrid',
         };
       }
+      if (getGunEffect('xeno') === 'xeno_hybrid') this.xenoMolecularImpact(hp.x, hp.y);
       this.splash(hp.x, hp.y, 1);
       sfx6.xenoHit();
     }
@@ -3267,9 +3547,8 @@ export class Game {
     if (big) {
       this.addText(big === 2 ? '⚡ FULL CHARGE x4!' : 'CHARGE x2', CX + rand(-40, 40), this.targetY + R + 60, big === 2 ? '#fde047' : '#7dd3fc', big === 2 ? 28 : 20);
       // A slide-11 charge shot (the Mega Buster's plasma, the caster's burst)
-      // lands with slide 11's own hit-stop, light and blast; slide 1's freeze,
-      // shock ring and white screen flash are not part of it.
-      if (!layerFeel) this.hitStop = Math.max(this.hitStop, big === 2 ? 0.12 : 0.04);
+      // lands with slide 11's own light and blast; slide 1's shock ring and
+      // white screen flash are not layered on top of it.
       if (big === 2 && !layerFeel) {
         const hp0 = this.worldPos(local, R);
         this.sink.light(hp0.x, hp0.y, 360, '254,240,138', 0.5);
@@ -3402,12 +3681,11 @@ export class Game {
       && !s1Hit && !layerHit) {
       spawnImpact(this.sink, fxp, w, hx, hy, (hx - CX) / R, (hy - this.targetY) / R, cols);
     }
-    // Slide 1's own hit reaction (its freeze, camera kick, shake and screen
+    // Slide 1's own hit reaction (camera kick, shake and screen
     // tint from the FX table). A slide-11 shot already got slide 11's own
     // from its `g.hit()`: a pistol round barely moves the screen there, while
     // these added a camera jolt, a 3 px+ shake and a colour wash to every hit.
     if (!layerFeel) {
-      this.hitStop = Math.max(this.hitStop, fxp.hitstop);
       this.camY -= fxp.kick;
       this.shake = Math.max(this.shake, 3 + fxp.kick * 0.8);
       if (fxp.tint) {
@@ -3529,6 +3807,7 @@ export class Game {
     if (this.weapon.id === 'pred' && !elevenShot && !nineShot) this.plasmaImpact(p.x, p.y, 1.3);
     // Acid splashes off the obstacle (game-3 resolveHit fail branch).
     if (this.weapon.id === 'xeno' && !elevenShot) {
+      if (getGunEffect('xeno') === 'xeno_hybrid') this.xenoMolecularImpact(p.x, p.y);
       this.splash(p.x, p.y + 10, 1.4);
       this.sink.light(p.x, p.y, 90, '255,255,255', 0.15);
       this.sink.push({ x: p.x, y: p.y, vx: 0, vy: 0, life: 0.25, max: 0.25, size: 6, color: '255,255,255', kind: 'ring', rot: 0, vr: 0, g: 0 });
@@ -3564,6 +3843,9 @@ export class Game {
 
   private clearLevel() {
     this.state = 'clear';
+    this.stageClearBurstMax = this.level.boss ? 1.15 : 0.9;
+    this.stageClearBurstT = this.stageClearBurstMax;
+    this.stageClearBurstBoss = !!this.level.boss;
     this.events.onStageCleared?.(this.level.n, this.level.boss, { x: CX, y: this.targetY });
     this.stateT = 0;
     this.projs = [];
@@ -3583,6 +3865,7 @@ export class Game {
       this.flyers.push({
         x: CX + Math.cos(wa) * R, y: this.targetY + Math.sin(wa) * R, vx: Math.cos(wa) * v, vy: Math.sin(wa) * v - 200,
         rot: wa - Math.PI / 2, vr: rand(-14, 14), kind: it.type, w: it.w, hue: it.hue,
+        busterPellet: it.busterPellet, scale: it.scale,
       });
     }
     if (this.weapon.id === 'firework') {
@@ -3666,9 +3949,9 @@ export class Game {
     this.flashWhite = 0.7;
     this.timeScale = 0.35;
     this.hitStop = 0.07;
-    const lr = FX[this.weapon.id].light;
-    this.sink.light(CX, this.targetY, R * 2.5, lr, 0.6);
-    this.sink.push({ x: CX, y: this.targetY, vx: 0, vy: 0, life: 0.5, max: 0.5, size: R * 1.8, color: lr, kind: 'shock', rot: 0, vr: 0, g: 0 });
+    const wheelBurstRgb = getWheelSunburstTheme(this.level.style).rgb;
+    this.sink.light(CX, this.targetY, R * 2.6, wheelBurstRgb, 0.65);
+    this.sink.push({ x: CX, y: this.targetY, vx: 0, vy: 0, life: 0.5, max: 0.5, size: R * 1.85, color: wheelBurstRgb, kind: 'shock', rot: 0, vr: 0, g: 0 });
     const cc = STYLE_COLORS[this.level.style].chips;
     for (let i = 0; i < 18; i++) {
       const a = rand(0, TAU);
@@ -3691,8 +3974,10 @@ export class Game {
   private addText(text: string, x: number, y: number, color: string, size: number) {
     // Jaga area target (Y: 120..420) agar selalu bersih dan tidak terhalang teks!
     let safeY = y;
-    if (safeY < 430 && safeY > 110) {
-      safeY = 440;
+    const wheelTop = this.targetY - this.level.radius - 16;
+    const wheelBottom = this.targetY + this.level.radius + 38;
+    if (safeY > wheelTop && safeY < wheelBottom) {
+      safeY = wheelBottom + 8;
     }
     // Bergerak turun menjauh dari target dan memudar dengan cepat
     this.particles.push({ x, y: safeY, vx: 0, vy: 25, life: 0.65, max: 0.65, size: Math.min(size, 24), color, kind: 'text', rot: 0, vr: 0, g: 0, text });
@@ -3701,14 +3986,25 @@ export class Game {
   // ---------- loop ----------
   private loop = (now: number) => {
     if (!this.active) return;
-    // 60 FPS during play (also on 120 Hz displays); the covered menu needs
-    // only a few frames. Never spend RAF time on an unfocused slide.
-    const interval = this.state === 'idle' || this.state === 'over' ? 1000 / 15 : 1000 / 60;
-    if (now - this.last >= interval - 1) {
-      const dt = Math.min(0.033, (now - this.last) / 1000);
-      this.last = now;
-      this.update(dt);
-      this.render();
+    // Tick natively on every VSync (60 Hz / 90 Hz / 120 Hz) during live play so
+    // 90 Hz & 60 Hz mobile screens never suffer beat-frequency frame drops;
+    // throttle only idle/covered game-over backdrops.
+    const idle = this.state === 'idle' || this.state === 'over';
+    if (!idle || now - this.last >= 1000 / 15 - 1) {
+      const elapsed = now - this.last;
+      if (elapsed > 0) {
+        const dt = Math.min(0.033, elapsed / 1000);
+        this.last = now;
+        if (this.state === 'play' && !this.choosingBuff &&
+            (typeof document === 'undefined' || document.visibilityState !== 'hidden')) {
+          const dpr = this.adaptiveDpr.recordFrame(elapsed);
+          if (dpr !== null) this.applyCanvasDpr(dpr);
+        } else {
+          this.adaptiveDpr.pause();
+        }
+        this.update(dt);
+        this.render();
+      }
     }
     this.raf = requestAnimationFrame(this.loop);
   };
@@ -3748,6 +4044,7 @@ export class Game {
     // Only triggers failure if projectile hits an existing bullet or spike near the surface
     for (const it of [...this.items]) {
       if (it.type === 'coin') continue;
+      if (p.ghostVolley !== undefined && p.ghostVolley === it.ghostVolley) continue;
       const d = angDiff(local, it.angle);
       // Tangential angular clearance threshold
       const itemR = bType ? getExactBossRadius(bType, it.angle, this.level.radius) : this.level.radius;
@@ -3854,20 +4151,38 @@ export class Game {
     const dx = p.x - CX, dy = p.y - ty;
     const local = { x: (dx * Math.cos(a) - dy * Math.sin(a)) / sc, y: (dx * Math.sin(a) + dy * Math.cos(a)) / sc };
 
-    if (mode === 'bonus') {
-      // Gold rings rotate with the rock; collect a coin once, then consume the shot.
-      const coin = this.bonusCoins.find(c => !c.taken && Math.hypot(local.x - Math.cos(c.angle) * c.radius, local.y - Math.sin(c.angle) * c.radius) < 16 + this.weapon.coinRadius * 0.35);
+    if (this.bonusCoins?.length && (mode === 'bonus' || mode === 'boulder')) {
+      // Gold rings rotate with the rock; in bonus mode a coin consumes the shot,
+      // while in boulder (Diamond) mode the shot collects the coin stuck on the
+      // stone AND continues through to crack the rock beneath it.
+      const hitRad = 16 + this.weapon.coinRadius * 0.35;
+      const hitRadSq = hitRad * hitRad;
+      let coin: BonusCoin | undefined;
+      for (let ci = 0; ci < this.bonusCoins.length; ci++) {
+        const cand = this.bonusCoins[ci];
+        if (cand.taken) continue;
+        const cdx = local.x - cand.lx;
+        const cdy = local.y - cand.ly;
+        if (cdx * cdx + cdy * cdy < hitRadSq) {
+          coin = cand;
+          break;
+        }
+      }
       if (coin) {
         coin.taken = true;
         const x = CX + Math.cos(coin.angle + this.rot) * coin.radius * sc;
         const y = ty + Math.sin(coin.angle + this.rot) * coin.radius * sc;
         this.coins += 2;
         this.score += 50;
-        if (!this.elevenSpecialImpact(p, x, y)) this.specialImpact(x, y, 'gold');
-        this.burstSpecial(x, y, 'gold', 8);
+        if (mode === 'bonus') {
+          if (!this.elevenSpecialImpact(p, x, y)) this.specialImpact(x, y, 'gold');
+          this.burstSpecial(x, y, 'gold', 6);
+          sfx.coin();
+          if (this.bonusCoins.every(c => c.taken)) this.finishSpecialStage();
+          return { res: 'hit' };
+        }
+        this.burstSpecial(x, y, 'gold', 5);
         sfx.coin();
-        if (this.bonusCoins.every(c => c.taken)) this.finishSpecialStage();
-        return { res: 'hit' };
       }
     }
 
@@ -3912,16 +4227,21 @@ export class Game {
     }
     this.level.hp = hit.remaining;
     this.score += 1 + hit.broken.length * 10;
-    // A Slide 7 round brings its own impact, shake and hit-stop.
+    // A Slide 7 round brings its own impact and shake.
     const ownRockHit = this.elevenSpecialImpact(p, p.x, p.y);
     if (!ownRockHit) {
       this.specialImpact(p.x, p.y, 'rock');
-      this.hitStop = Math.max(this.hitStop, 0.018);
-      this.shake = Math.max(this.shake, hit.broken.length ? 5 : 2);
+      // Rock impacts retain their particles and shake without interrupting
+      // rapid coin-farming or pausing the wheel and player controls.
+      this.shake = Math.max(
+        this.shake,
+        mode === 'bonus' ? (hit.broken.length ? 3.2 : 1.2) : (hit.broken.length ? 5 : 2),
+      );
     }
     // Every round belongs to the exact cell it struck, including rounds that
     // break it immediately. Splash damage can knock off previously hit cells.
     const tip = 7 / sc;
+    if (this.rockBullets.length >= 28) this.rockBullets.shift();
     this.rockBullets.push(this.makeEmbeddedShot(p,
       local.x - Math.sin(this.rot) * tip, local.y - Math.cos(this.rot) * tip,
       Math.PI / 2 - this.rot, hit.struckId));
@@ -3932,13 +4252,14 @@ export class Game {
         const y = ty + (cell.x * Math.sin(this.rot) + cell.y * Math.cos(this.rot)) * sc;
         const outward = Math.atan2(y - ty, x - CX);
         for (let i = 0; i < 2; i++) {
+          if (this.rockFragments.length >= 28) this.rockFragments.shift();
           const speed = rand(130, 360);
           this.rockFragments.push({
             x, y, vx: Math.cos(outward) * speed + rand(-70, 70), vy: Math.sin(outward) * speed - rand(90, 170),
             rot: rand(0, TAU), vr: rand(-10, 10), size: rand(5, 12), seed: rand(0, 10), life: 1.3, max: 1.3,
           });
         }
-        this.burstSpecial(x, y, 'rock', 3);
+        this.burstSpecial(x, y, 'rock', 2);
       }
       if (!isSlide23Weapon(this.weapon.id)) sfx4.shatter();
     } else if (!isSlide23Weapon(this.weapon.id) && !ownRockHit) sfx.hit();
@@ -3951,13 +4272,15 @@ export class Game {
     this.flyers.push({
       x: CX + shot.x, y: this.targetY + 15 + shot.y + BLEN / 2,
       vx: side * rand(100, 240), vy: rand(-160, 50), rot: 0, vr: side * rand(7, 14),
-      kind: 'bullet', w: shot.w, hue: shot.hue,
+      kind: 'bullet', w: shot.w, hue: shot.hue, busterPellet: shot.busterPellet, scale: shot.scale,
     });
   }
 
   private makeEmbeddedShot(p: Proj, x: number, y: number, angle: number, cellId?: number): EmbeddedShot {
     return {
       x, y, angle, cellId, age: 0, w: this.weapon.id, big: p.big ?? 0, tint: p.tint,
+      xenoHybrid: this.weapon.id === 'xeno' && getGunEffect('xeno') === 'xeno_hybrid',
+      busterPellet: this.weapon.id === 'mega_buster' && this.setElevenLive && !!p.setEleven && !(p.big ?? 0),
       hue: p.hue ?? (this.weapon.id === 'firework' ? gunState.rocketHue : this.weapon.id === 'yoyo' ? gunState.yoyoHue : undefined),
       flash: this.weapon.id === 'firework' || this.weapon.id === 'yoyo' || this.weapon.id === 'diamond' || this.weapon.id === 'bazooka' ? 1 : undefined,
       scale: (1 + (p.big ?? 0) * 0.3) * projectileSizeMultiplier(this.weapon.id, !!p.mini, !!p.giant),
@@ -3978,11 +4301,49 @@ export class Game {
     });
     const sc = this.level.radius / 196;
     const rot = this.rot;
+    if (this.level?.mode === 'boulder' && this.bonusCoins?.length) {
+      // Coins in Diamond Breaker are physically stuck to the stone: when the
+      // stone chunk under a coin shatters away, pop & collect that coin so no
+      // orphan coins float over empty air.
+      let poppedBursts = 0;
+      const attachRadSq = 28 * 28;
+      for (let ci = 0; ci < this.bonusCoins.length; ci++) {
+        const coin = this.bonusCoins[ci];
+        if (coin.taken) continue;
+        let attached = this.centerDiamondCollected;
+        if (!attached) {
+          for (let bi = 0; bi < cells.length; bi++) {
+            const dx = coin.lx - cells[bi].x;
+            const dy = coin.ly - cells[bi].y;
+            if (dx * dx + dy * dy <= attachRadSq) {
+              attached = true;
+              break;
+            }
+          }
+        }
+        if (attached) {
+          coin.taken = true;
+          this.coins += 2;
+          this.score += 50;
+          if (poppedBursts < 6) {
+            const wx = CX + Math.cos(coin.angle + rot) * coin.radius * sc;
+            const wy = this.targetY - this.bump * 9 + Math.sin(coin.angle + rot) * coin.radius * sc;
+            this.burstSpecial(wx, wy, 'gold', 3);
+            poppedBursts++;
+          }
+        }
+      }
+      if (poppedBursts > 0 && this.time - this.lastCoinSound > 0.06) {
+        sfx.coin();
+        this.lastCoinSound = this.time;
+      }
+    }
     for (const cell of cells) {
       const x = CX + (cell.x * Math.cos(rot) - cell.y * Math.sin(rot)) * sc;
       const y = this.targetY - this.bump * 9 + (cell.x * Math.sin(rot) + cell.y * Math.cos(rot)) * sc;
       const outward = Math.atan2(y - this.targetY, x - CX);
       const speed = rand(120, 290);
+      if (this.fallenCells.length >= 24) this.fallenCells.shift();
       this.fallenCells.push({
         id: cell.id, cx: cell.x, cy: cell.y, x, y,
         vx: Math.cos(outward) * speed + rand(-55, 55),
@@ -4056,6 +4417,10 @@ export class Game {
       impactSetOne(this.s1, s1Special, x, y, theta, this.s1Hooks(), (n) => setOneSfx.play(n));
     }
     this.slide2Impact(x, y);
+    if (w.id === 'xeno' && getGunEffect('xeno') === 'xeno_hybrid') {
+      this.xenoMolecularImpact(x, y);
+      this.splash(x, y, 0.8);
+    }
     if (w.id !== 'firework' && w.id !== 'yoyo' && w.id !== 'keris' && w.id !== 'diamond' && w.id !== 'bazooka'
       && !s1Special) {
       spawnImpact(this.sink, fx, w, x, y, dx / dist, dy / dist, chips);
@@ -4072,7 +4437,6 @@ export class Game {
     if (w.id === 'bazooka') {
       this.getBazookaState().onHit(x, y, 1.05);
     }
-    this.hitStop = Math.max(this.hitStop, fx.hitstop);
     this.camY -= fx.kick;
     this.bump = Math.max(this.bump, material === 'rock' ? 0.55 : 0.2);
     this.shake = Math.max(this.shake, 3 + fx.kick * 0.8);
@@ -4161,6 +4525,20 @@ export class Game {
     c.restore();
   }
 
+  /** Draw yellow tap pellets in the wheel's already-transformed coordinates. */
+  private drawBusterWheelPellets(c: CanvasRenderingContext2D, radius: number) {
+    for (const it of this.items) {
+      if (it.type !== 'bullet' || !it.busterPellet) continue;
+      c.save();
+      c.rotate(it.angle);
+      const itemR = this.level.boss ? getExactBossRadius(this.level.style as BossType, it.angle, radius) : radius;
+      c.translate(itemR + 3, 0);
+      if (it.scale) c.scale(it.scale, it.scale);
+      drawBusterPelletOrb(c, 0, 0, this.time + it.angle * 2);
+      c.restore();
+    }
+  }
+
   private drawEmbeddedShot(c: CanvasRenderingContext2D, shot: EmbeddedShot, x: number, y: number, surfaceOffset = 0) {
     const item = shot.s7 ? this.s7Embeds.get(shot.s7) : undefined;
     if (item) {
@@ -4183,7 +4561,7 @@ export class Game {
     // energy orbs and celestial star art without moving the hitboxes.
     const surfaceAligned = shot.w === 'honey' || shot.w === 'banana'
       || shot.w === 'bee' || shot.w === 'moonbeam' || shot.w === 'plasma' || shot.w === 'blackhole'
-      || shot.w === 'xeno' || shot.w === 'dora' || shot.w === 'pred';
+      || shot.w === 'xeno' || shot.w === 'dora' || shot.w === 'pred' || shot.busterPellet;
     if (surfaceAligned) c.translate(0, surfaceOffset - (getWeapon(shot.w).stick + EMBED)
       * (shot.w === 'moonbeam' ? 0.53 : 0.5));
     if (shot.w === 'snowball') c.translate(0, surfaceOffset);
@@ -4227,8 +4605,20 @@ export class Game {
     };
     const rgbaH = (h: string, a: number) => { const n = parseInt(h.slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; };
     let skipProj = false;
-    if (shot.w === 'xeno') {
-      // game-3: acid stuck NOT drawn on rim (only drips in update loop)
+    if (shot.busterPellet) {
+      // Rock cells and the open chest carry the very same orb with their
+      // surface; falling cells retain it as they tumble away.
+      const surfaceY = (getWeapon(shot.w).stick + EMBED) * 0.5 / shot.scale;
+      drawBusterPelletOrb(c, 0, surfaceY, this.time + seed * 0.01);
+      skipProj = true;
+    } else if (shot.w === 'xeno') {
+      if (shot.xenoHybrid) {
+        // The special surface has no wheel metaball layer: paint its liquid
+        // puddle over the same growing corrosion mark in surface coordinates.
+        const surfaceY = (getWeapon(shot.w).stick + EMBED) * 0.5 / shot.scale;
+        drawXenoCorrosion(c, 0, surfaceY - 8, this.time, seed, shot.age);
+        drawXenoSpecialPuddle(c, 0, surfaceY, this.time);
+      }
       skipProj = true;
     } else if (shot.w === 'dora') {
       // game-3 drawAirVortex: rotating torus ring, curls, impact star
@@ -4339,6 +4729,9 @@ export class Game {
     if (this.state !== 'play' || !isSpecial(this.level.mode)) return;
     const mode = this.level.mode;
     this.state = 'clear';
+    this.stageClearBurstMax = 0.95;
+    this.stageClearBurstT = 0.95;
+    this.stageClearBurstBoss = false;
     this.stateT = 0;
     this.projs = [];
     this.star = null;
@@ -4356,8 +4749,8 @@ export class Game {
       this.addText('🪙 KOIN BERTEBARAN!', CX, this.targetY + 185, '#fde68a', 26);
     }
     this.payStageReward();
-    this.sink.light(CX, this.targetY, 250, mode === 'boulder' ? '125,230,255' : '255,213,74', 0.8);
-    this.burstSpecial(CX, this.targetY, mode === 'boulder' ? 'diamond' : 'gold', 38);
+    this.sink.light(CX, this.targetY, 250, '255,255,255', 0.8);
+    this.burstSpecial(CX, this.targetY, mode === 'boulder' ? 'diamond' : 'gold', 28);
     if (!this.setTwoVoice('clear')) sfx.clear(this.weapon?.id);
   }
 
@@ -4393,9 +4786,14 @@ export class Game {
     if (this.weapon.id === 'snowball') this.snowLoaded = Math.min(SNOWBALL_MAG_SIZE, this.ammoLeft);
   }
 
-  private update(dt: number) {
+  private update(rawDt: number) {
+    const dt = rawDt * this.pace;
     // The stage clock and gun must stop while the player chooses a star upgrade.
     if (this.choosingBuff) return;
+    if (this.gunEntryT < GAMEPLAY_GUN_ENTRY_DURATION) {
+      this.gunEntryT = Math.min(GAMEPLAY_GUN_ENTRY_DURATION, this.gunEntryT + dt);
+    }
+    if (this.stageClearBurstT > 0) this.stageClearBurstT = Math.max(0, this.stageClearBurstT - dt);
     this.rock?.update(dt);
     this.chest?.update(dt);
     this.diamondPing = Math.max(0, this.diamondPing - dt * 3);
@@ -4669,30 +5067,51 @@ export class Game {
         const dist = Math.hypot(dx, dy);
         // Boss shots travel 1.9x faster, but retain clear telegraphing and interceptable hitboxes.
         const spd = (160 + this.level.n * 3) * 1.9;
+        const shotRot = Math.atan2(dy, dx) - Math.PI / 2;
         this.bossProjs.push({
           x: CX,
           y: spawnY,
           vx: (dx / dist) * spd,
           vy: (dy / dist) * spd,
-          rot: Math.atan2(dy, dx) - Math.PI / 2,
+          rot: shotRot,
           type: bType,
+        });
+        this.bossMuzzleFlashes.push({
+          x: CX,
+          y: spawnY,
+          rot: shotRot,
+          type: bType,
+          age: 0,
+          max: 0.28,
         });
         // Attack SFX & alert cue
         if (bType === 'oni') sfx4.busterMid();
         else if (bType === 'cyborg') sfx2.railgun();
         else if (bType === 'pirate') sfx2.pirate();
         else sfx3.keris();
-        // Crisp boss-specific firing flecks instead of a large halo around the boss.
+        // Crisp boss-specific firing flecks + directional shockwave ring.
         const bossRgb = bType === 'knight' ? '56,189,248' : bType === 'oni' ? '239,68,68' : bType === 'cyborg' ? '34,211,238' : '234,179,8';
-        for (let k = 0; k < 5; k++) {
+        this.particles.push({
+          x: CX, y: spawnY, vx: 0, vy: 0, life: 0.24, max: 0.24,
+          size: 46, color: `rgb(${bossRgb})`, kind: 'ring', rot: 0, vr: 0, g: 0,
+        });
+        for (let k = 0; k < 6; k++) {
+          const sa = shotRot + Math.PI / 2 + rand(-0.62, 0.62);
+          const sv = rand(80, 195);
           this.particles.push({
-            x: CX + rand(-12, 12), y: spawnY + rand(-8, 8),
-            vx: rand(-95, 95), vy: rand(-70, 70), life: 0.16, max: 0.16,
-            size: rand(2, 4), color: bossRgb, kind: bType === 'oni' ? 'glow' : 'spark',
+            x: CX + rand(-10, 10), y: spawnY + rand(-6, 6),
+            vx: Math.cos(sa) * sv, vy: Math.sin(sa) * sv, life: 0.2, max: 0.2,
+            size: rand(2.2, 4.4), color: bossRgb, kind: bType === 'oni' ? 'glow' : 'spark',
             rot: 0, vr: 0, g: 0,
           });
         }
       }
+    }
+
+    for (let i = this.bossMuzzleFlashes.length - 1; i >= 0; i--) {
+      const mf = this.bossMuzzleFlashes[i];
+      mf.age += s;
+      if (mf.age >= mf.max) this.bossMuzzleFlashes.splice(i, 1);
     }
 
     // Update & step boss projectiles
@@ -4708,51 +5127,52 @@ export class Game {
       // gerak), bukan menempel di badan peluru.
       const spdH = Math.hypot(bp.vx, bp.vy) || 1;
       const dirx = bp.vx / spdH, diry = bp.vy / spdH;
-      const tailX = bp.x - dirx * 44;
-      const tailY = bp.y - diry * 44;
-      if (Math.random() < 0.85) {
-        // Tail material/color follows each boss rather than sharing orange fire.
-        const trail = bp.type === 'knight'
-          ? { color: '56,189,248', kind: 'spark' as const }
-          : bp.type === 'oni'
-          ? { color: '239,68,68', kind: 'glow' as const }
-          : bp.type === 'cyborg'
-          ? { color: '34,211,238', kind: 'spark' as const }
-          : { color: '71,85,105', kind: 'smoke' as const };
-        this.particles.push({
-          x: tailX + rand(-7, 7),
-          y: tailY + rand(-7, 7),
-          vx: -dirx * rand(30, 90) + rand(-25, 25),
-          vy: -diry * rand(30, 90) + rand(-25, 25),
-          life: bp.type === 'pirate' ? 0.48 : 0.28,
-          max: bp.type === 'pirate' ? 0.48 : 0.28,
-          size: bp.type === 'pirate' ? rand(4, 7) : rand(2.5, 5),
-          color: bp.type === 'pirate' ? 'rgba(71,85,105,' : trail.color,
-          kind: trail.kind,
-          rot: 0,
-          vr: 0,
-          g: 0,
-        });
-        if (bp.type === 'oni') {
+      advanceCosmeticTrail(bp, s, (x, y) => {
+        const tailX = x - dirx * 44;
+        const tailY = y - diry * 44;
+        if (Math.random() < 0.5) {
+          // Tail material/color follows each boss rather than sharing orange fire.
+          const trail = bp.type === 'knight'
+            ? { color: '56,189,248', kind: 'spark' as const }
+            : bp.type === 'oni'
+            ? { color: '239,68,68', kind: 'glow' as const }
+            : bp.type === 'cyborg'
+            ? { color: '34,211,238', kind: 'spark' as const }
+            : { color: '71,85,105', kind: 'smoke' as const };
           this.particles.push({
-            x: tailX + rand(-5, 5),
-            y: tailY + rand(-5, 5),
-            vx: -dirx * rand(40, 110) + rand(-18, 18),
-            vy: -diry * rand(40, 110) + rand(-18, 18),
-            life: 0.22, max: 0.22, size: rand(4, 7.5),
-            color: pick(['255,200,80', '255,120,30', '255,60,20']),
-            kind: 'glow', rot: 0, vr: 0, g: 0,
+            x: tailX + rand(-7, 7),
+            y: tailY + rand(-7, 7),
+            vx: -dirx * rand(30, 90) + rand(-25, 25),
+            vy: -diry * rand(30, 90) + rand(-25, 25),
+            life: bp.type === 'pirate' ? 0.42 : 0.24,
+            max: bp.type === 'pirate' ? 0.42 : 0.24,
+            size: bp.type === 'pirate' ? rand(4, 6.5) : rand(2.5, 4.8),
+            color: bp.type === 'pirate' ? 'rgba(71,85,105,' : trail.color,
+            kind: trail.kind,
+            rot: 0,
+            vr: 0,
+            g: 0,
           });
-        } else if (bp.type === 'pirate' && Math.random() < 0.45) {
-          this.particles.push({
-            x: tailX + rand(-5, 5), y: tailY + rand(-5, 5),
-            vx: -dirx * 35 + rand(-20, 20), vy: -diry * 35 + rand(-20, 20),
-            life: 0.3, max: 0.3, size: rand(2, 3.5), color: '34,197,94',
-            kind: 'spark', rot: 0, vr: 0, g: 0,
-          });
+          if (bp.type === 'oni' && Math.random() < 0.65) {
+            this.particles.push({
+              x: tailX + rand(-5, 5),
+              y: tailY + rand(-5, 5),
+              vx: -dirx * rand(40, 110) + rand(-18, 18),
+              vy: -diry * rand(40, 110) + rand(-18, 18),
+              life: 0.2, max: 0.2, size: rand(3.8, 6.8),
+              color: pick(['255,200,80', '255,120,30', '255,60,20']),
+              kind: 'glow', rot: 0, vr: 0, g: 0,
+            });
+          } else if (bp.type === 'pirate' && Math.random() < 0.45) {
+            this.particles.push({
+              x: tailX + rand(-5, 5), y: tailY + rand(-5, 5),
+              vx: -dirx * 35 + rand(-20, 20), vy: -diry * 35 + rand(-20, 20),
+              life: 0.26, max: 0.26, size: rand(2, 3.5), color: '34,197,94',
+              kind: 'spark', rot: 0, vr: 0, g: 0,
+            });
+          }
         }
-      }
-
+      });
       // 1. Collision with player's rising projectiles (Hitbox besar 40px karena ukuran proyektil 3x!)
       let intercepted = false;
       for (let j = this.projs.length - 1; j >= 0; j--) {
@@ -4771,11 +5191,12 @@ export class Game {
         this.score += 2;
         // AMMO KEMBALI 1 KALO BERHASIL HANCURKAN SERANGAN BOS!
         this.ammoLeft = Math.min(this.level.ammo * this.maxAmmoMult, this.ammoLeft + 1);
-        this.addText('💥 TANGKIS! +1 AMMO +2', bp.x, bp.y - 15, '#38bdf8', 22);
-        this.sink.push({ x: bp.x, y: bp.y, vx: 0, vy: 0, life: 0.4, max: 0.4, size: 90, color: '#38bdf8', kind: 'shock', rot: 0, vr: 0, g: 0 });
-        for (let k = 0; k < 12; k++) {
+        const parryHex = bp.type === 'oni' ? '#fb923c' : bp.type === 'cyborg' ? '#22d3ee' : bp.type === 'pirate' ? '#4ade80' : '#38bdf8';
+        this.addText('💥 TANGKIS! +1 AMMO +2', bp.x, bp.y - 15, parryHex, 22);
+        this.sink.push({ x: bp.x, y: bp.y, vx: 0, vy: 0, life: 0.4, max: 0.4, size: 92, color: parryHex, kind: 'shock', rot: 0, vr: 0, g: 0 });
+        for (let k = 0; k < 10; k++) {
           this.particles.push({
-            x: bp.x, y: bp.y, vx: rand(-200, 200), vy: rand(-200, 200), life: 0.3, max: 0.3, size: rand(2.5, 5), color: '#38bdf8', kind: 'spark', rot: 0, vr: 0, g: 300,
+            x: bp.x, y: bp.y, vx: rand(-210, 210), vy: rand(-210, 210), life: 0.28, max: 0.28, size: rand(2.5, 5), color: parryHex, kind: 'spark', rot: 0, vr: 0, g: 300,
           });
         }
         continue;
@@ -4883,11 +5304,10 @@ export class Game {
         // says where the round is.
         const s2id = this.setTwoId;
         if (s2id) {
-          p.setTwo.age += dt;
           const fx = this.s2w;
           fx.cx = CX;
           fx.gunY = GUN_Y;
-          fx.trail(s2id, p.x, p.y, p.setTwo);
+          advanceTwoRoundTrail(fx, s2id, p.x, p.y, p.setTwo, dt);
         }
         continue;
       }
@@ -4954,19 +5374,19 @@ export class Game {
         continue;
       }
       if (tw.id === 'firework') {
-        spawnFirework8FlightSparks(this.getFwState(), p.x, p.y, p.hue ?? gunState.rocketHue);
+        advanceCosmeticTrail(p, s, (x, y) => spawnFirework8FlightSparks(this.getFwState(), x, y, p.hue ?? gunState.rocketHue));
         continue;
       }
       if (tw.id === 'yoyo') {
-        spawnYoyoFlightSparks(this.getYoyoState(), p.x, p.y, p.hue ?? gunState.yoyoHue);
+        advanceCosmeticTrail(p, s, (x, y) => spawnYoyoFlightSparks(this.getYoyoState(), x, y, p.hue ?? gunState.yoyoHue));
         continue;
       }
       if (tw.id === 'keris') {
-        spawnKerisFlightSparks(this.getKerisState(), p.x, p.y);
+        advanceCosmeticTrail(p, s, (x, y) => spawnKerisFlightSparks(this.getKerisState(), x, y));
         continue;
       }
       if (tw.id === 'diamond') {
-        spawnDiamondFlightSparks(this.getDiamondState(), p.x, p.y);
+        advanceCosmeticTrail(p, s, (x, y) => spawnDiamondFlightSparks(this.getDiamondState(), x, y));
         continue;
       }
       if (tw.id === 'bazooka') {
@@ -4975,27 +5395,31 @@ export class Game {
       const px = p.x + rand(-4, 4);
       const py = p.y + rand(20, 46);
       if (tw.id === 'snowball') {
-        for (let k = 0; k < 6; k++) {
-          this.sink.push({ x: p.x + rand(-16, 16), y: p.y + rand(29, 69),
-            vx: rand(-60, 60), vy: rand(25, 90), life: rand(0.25, 0.49), max: 0.49,
-            size: rand(1.5, 3.6), color: pick(['#ffffff', '#f8fdff', '#eaf6fb']), kind: 'snowDust',
-            rot: 0, vr: 0, g: 110, drag: 1.4 });
-        }
-        for (let k = 0; k < 2; k++) {
-          this.sink.push({ x: p.x + rand(-15, 15), y: p.y + rand(36, 64),
-            vx: rand(-50, 50), vy: rand(20, 85), life: rand(0.3, 0.52), max: 0.52,
-            size: rand(2.2, 4.2), color: '#ffffff', kind: 'snowflake',
-            rot: rand(0, TAU), vr: rand(-5, 5), g: 75, drag: 1.7 });
-        }
+        advanceCosmeticTrail(p, s, (x, y) => {
+          for (let k = 0; k < 6; k++) {
+            this.sink.push({ x: x + rand(-16, 16), y: y + rand(29, 69),
+              vx: rand(-60, 60), vy: rand(25, 90), life: rand(0.25, 0.49), max: 0.49,
+              size: rand(1.5, 3.6), color: pick(['#ffffff', '#f8fdff', '#eaf6fb']), kind: 'snowDust',
+              rot: 0, vr: 0, g: 110, drag: 1.4 });
+          }
+          for (let k = 0; k < 2; k++) {
+            this.sink.push({ x: x + rand(-15, 15), y: y + rand(36, 64),
+              vx: rand(-50, 50), vy: rand(20, 85), life: rand(0.3, 0.52), max: 0.52,
+              size: rand(2.2, 4.2), color: '#ffffff', kind: 'snowflake',
+              rot: rand(0, TAU), vr: rand(-5, 5), g: 75, drag: 1.7 });
+          }
+        });
         continue;
       }
       if (tw.id === 'soaker') {
-        for (let k = 0; k < 3; k++) {
-          this.sink.push({ x: p.x + rand(-11, 11), y: p.y + rand(23, 67), vx: rand(-95, 95),
-            vy: rand(45, 155), life: rand(0.23, 0.45), max: 0.45, size: rand(1.6, 4.1),
-            color: pick(['#ddfaff', '#7dd3fc', '#bae6fd']), kind: 'waterDrop',
-            rot: 0, vr: 0, g: 800, drag: 0.8 });
-        }
+        advanceCosmeticTrail(p, s, (x, y) => {
+          for (let k = 0; k < 3; k++) {
+            this.sink.push({ x: x + rand(-11, 11), y: y + rand(23, 67), vx: rand(-95, 95),
+              vy: rand(45, 155), life: rand(0.23, 0.45), max: 0.45, size: rand(1.6, 4.1),
+              color: pick(['#ddfaff', '#7dd3fc', '#bae6fd']), kind: 'waterDrop',
+              rot: 0, vr: 0, g: 800, drag: 0.8 });
+          }
+        });
         continue;
       }
       // Dora projectile: echo ringE rings + wind streaks + puff particles (game-3)
@@ -5007,19 +5431,24 @@ export class Game {
           p.lastEcho -= 44;
           this.sink.push({ x: p.x, y: p.lastEcho, vx: 0, vy: 0, life: 0.32, max: 0.32, size: 26, color: '#ffffff', kind: 'ringE', rot: 0, vr: 0, g: 0 });
         }
-        if (Math.random() < 0.8) this.sink.push({ x: p.x + rand(-26, 26), y: p.y + rand(10, 40), vx: rand(-30, 30), vy: rand(150, 320), life: rand(0.15, 0.3), max: 0.3, size: rand(10, 24), color: '#ffffff', kind: 'wind', rot: 0, vr: 0, g: 0, drag: 1 });
-        if (Math.random() < 0.3) this.sink.push({ x: p.x + rand(-30, 30), y: p.y + rand(0, 30), vx: rand(-80, 80), vy: rand(60, 160), life: rand(0.3, 0.5), max: 0.5, size: rand(5, 10), color: '#ffffff', kind: 'puff', rot: rand(0, TAU), vr: rand(-3, 3), g: 0, drag: 2 });
+        advanceCosmeticTrail(p, s, (x, y) => {
+          if (Math.random() < 0.8) this.sink.push({ x: x + rand(-26, 26), y: y + rand(10, 40), vx: rand(-30, 30), vy: rand(150, 320), life: rand(0.15, 0.3), max: 0.3, size: rand(10, 24), color: '#ffffff', kind: 'wind', rot: 0, vr: 0, g: 0, drag: 1 });
+          if (Math.random() < 0.3) this.sink.push({ x: x + rand(-30, 30), y: y + rand(0, 30), vx: rand(-80, 80), vy: rand(60, 160), life: rand(0.3, 0.5), max: 0.5, size: rand(5, 10), color: '#ffffff', kind: 'puff', rot: rand(0, TAU), vr: rand(-3, 3), g: 0, drag: 2 });
+        });
         continue;
       }
       // Xeno projectile: shed droplets + green smoke (game-3)
       if (tw.id === 'xeno') {
-        // sampled tail for the metaball body (game-3 p.trail)
         p.t = (p.t ?? 0) + s;
         p.trail = p.trail ?? [];
-        p.trail.unshift({ x: p.x + rand(-1, 1), y: p.y });
-        if (p.trail.length > 12) p.trail.pop();
-        if (Math.random() < 0.7) this.sink.push({ x: p.x + rand(-7, 7), y: p.y + rand(10, 40), vx: rand(-70, 70), vy: rand(-200, 100), life: rand(0.5, 1), max: 1, size: rand(1.5, 3.5), color: '#b6ff1a', kind: 'acid', rot: 0, vr: 0, g: 1100, drag: 0.15 });
-        if (Math.random() < 0.3) this.sink.push({ x: p.x + rand(-6, 6), y: p.y + 20, vx: rand(-20, 20), vy: rand(-20, 20), life: 0.8, max: 0.8, size: rand(6, 12), color: '182,255,26', kind: 'smoke', rot: 0, vr: 0, g: 0, drag: 0 });
+        advanceCosmeticTrail(p, s, (x, y) => {
+          // Keep the sampled metaball tail the same world-time length on
+          // 60/90/120 Hz screens instead of shrinking it at high refresh.
+          p.trail!.unshift({ x: x + rand(-1, 1), y });
+          if (p.trail!.length > 12) p.trail!.pop();
+          if (Math.random() < 0.7) this.sink.push({ x: x + rand(-7, 7), y: y + rand(10, 40), vx: rand(-70, 70), vy: rand(-200, 100), life: rand(0.5, 1), max: 1, size: rand(1.5, 3.5), color: '#b6ff1a', kind: 'acid', rot: 0, vr: 0, g: 1100, drag: 0.15 });
+          if (Math.random() < 0.3) this.sink.push({ x: x + rand(-6, 6), y: y + 20, vx: rand(-20, 20), vy: rand(-20, 20), life: 0.8, max: 0.8, size: rand(6, 12), color: '182,255,26', kind: 'smoke', rot: 0, vr: 0, g: 0, drag: 0 });
+        });
         continue;
       }
       // Pred projectile: sparks + bolts + ringE echo + smoke (game-3)
@@ -5033,35 +5462,36 @@ export class Game {
         if (Math.random() < 0.4) this.sink.push({ x: p.x + rand(-10, 10), y: p.y + 40, vx: rand(-20, 20), vy: rand(-10, 30), life: 0.7, max: 0.7, size: rand(8, 16), color: '74,106,144', kind: 'smoke', rot: 0, vr: 0, g: 0, drag: 0 });
         continue;
       }
-      switch (tw.trailFx) {
+      const emitTrail = this.particles.length < this.maxParticles && Math.random() < Math.min(1, s * 60);
+      if (emitTrail) switch (tw.trailFx) {
         case 'glow':
         case 'void':
-          this.particles.push({ x: px, y: py, vx: rand(-30, 30), vy: rand(20, 80), life: rand(0.2, 0.4), max: 0.4, size: rand(2.5, 5), color: tw.trail, kind: 'glow', rot: 0, vr: 0, g: 0 });
+          this.sink.push({ x: px, y: py, vx: rand(-30, 30), vy: rand(20, 80), life: rand(0.2, 0.4), max: 0.4, size: rand(2.5, 5), color: tw.trail, kind: 'glow', rot: 0, vr: 0, g: 0 });
           break;
         case 'smoke':
-          this.particles.push({ x: px, y: py + 6, vx: rand(-25, 25), vy: rand(30, 90), life: rand(0.5, 0.9), max: 0.9, size: rand(6, 12), color: 'rgba(170,170,170,', kind: 'smoke', rot: 0, vr: 0, g: -20 });
-          this.particles.push({ x: p.x, y: p.y + 44, vx: rand(-20, 20), vy: rand(60, 140), life: 0.15, max: 0.15, size: rand(5, 9), color: '255,160,50', kind: 'glow', rot: 0, vr: 0, g: 0 });
+          this.sink.push({ x: px, y: py + 6, vx: rand(-25, 25), vy: rand(30, 90), life: rand(0.5, 0.9), max: 0.9, size: rand(6, 12), color: 'rgba(170,170,170,', kind: 'smoke', rot: 0, vr: 0, g: -20 });
+          this.sink.push({ x: p.x, y: p.y + 44, vx: rand(-20, 20), vy: rand(60, 140), life: 0.15, max: 0.15, size: rand(5, 9), color: '255,160,50', kind: 'glow', rot: 0, vr: 0, g: 0 });
           break;
         case 'spark':
-          this.particles.push({ x: px, y: py, vx: rand(-200, 200), vy: rand(-50, 150), life: 0.15, max: 0.15, size: 1.5, color: pick(tw.sparks), kind: 'spark', rot: 0, vr: 0, g: 0 });
+          this.sink.push({ x: px, y: py, vx: rand(-200, 200), vy: rand(-50, 150), life: 0.15, max: 0.15, size: 1.5, color: pick(tw.sparks), kind: 'spark', rot: 0, vr: 0, g: 0 });
           break;
         case 'bubble':
-          if (Math.random() < 0.6) this.particles.push({ x: px, y: py, vx: rand(-20, 20), vy: rand(-10, 30), life: rand(0.3, 0.5), max: 0.5, size: rand(1.5, 3), color: tw.trail, kind: 'glow', rot: 0, vr: 0, g: 0 });
+          if (Math.random() < 0.6) this.sink.push({ x: px, y: py, vx: rand(-20, 20), vy: rand(-10, 30), life: rand(0.3, 0.5), max: 0.5, size: rand(1.5, 3), color: tw.trail, kind: 'glow', rot: 0, vr: 0, g: 0 });
           break;
         case 'frost':
-          this.particles.push({ x: px, y: py, vx: rand(-40, 40), vy: rand(10, 60), life: rand(0.3, 0.5), max: 0.5, size: rand(2, 4), color: tw.trail, kind: 'glow', rot: 0, vr: 0, g: 0 });
+          this.sink.push({ x: px, y: py, vx: rand(-40, 40), vy: rand(10, 60), life: rand(0.3, 0.5), max: 0.5, size: rand(2, 4), color: tw.trail, kind: 'glow', rot: 0, vr: 0, g: 0 });
           break;
         case 'gold':
-          this.particles.push({ x: px, y: py, vx: rand(-60, 60), vy: rand(0, 80), life: 0.25, max: 0.25, size: 1.5, color: pick(tw.sparks), kind: 'spark', rot: 0, vr: 0, g: 200 });
+          this.sink.push({ x: px, y: py, vx: rand(-60, 60), vy: rand(0, 80), life: 0.25, max: 0.25, size: 1.5, color: pick(tw.sparks), kind: 'spark', rot: 0, vr: 0, g: 200 });
           break;
         case 'fire':
-          for (let k = 0; k < 2; k++) this.particles.push({ x: px, y: py, vx: rand(-40, 40), vy: rand(40, 120), life: rand(0.2, 0.4), max: 0.4, size: rand(4, 8), color: pick(['255,200,80', '255,120,30', '255,60,20']), kind: 'glow', rot: 0, vr: 0, g: -100 });
+          for (let k = 0; k < 2; k++) this.sink.push({ x: px, y: py, vx: rand(-40, 40), vy: rand(40, 120), life: rand(0.2, 0.4), max: 0.4, size: rand(4, 8), color: pick(['255,200,80', '255,120,30', '255,60,20']), kind: 'glow', rot: 0, vr: 0, g: -100 });
           break;
         case 'pixel':
-          this.particles.push({ x: px, y: py, vx: 0, vy: rand(20, 60), life: 0.3, max: 0.3, size: rand(2, 4), color: pick(['#ff0055', '#00ffee', '#22ff88']), kind: 'chip', rot: 0, vr: 0, g: 0 });
+          this.sink.push({ x: px, y: py, vx: 0, vy: rand(20, 60), life: 0.3, max: 0.3, size: rand(2, 4), color: pick(['#ff0055', '#00ffee', '#22ff88']), kind: 'chip', rot: 0, vr: 0, g: 0 });
           break;
         case 'confetti':
-          this.particles.push({ x: px, y: py, vx: rand(-80, 80), vy: rand(0, 80), life: rand(0.4, 0.7), max: 0.7, size: rand(2, 4), color: pick(tw.sparks), kind: 'chip', rot: rand(0, TAU), vr: rand(-20, 20), g: 200 });
+          this.sink.push({ x: px, y: py, vx: rand(-80, 80), vy: rand(0, 80), life: rand(0.4, 0.7), max: 0.7, size: rand(2, 4), color: pick(tw.sparks), kind: 'chip', rot: rand(0, TAU), vr: rand(-20, 20), g: 200 });
           break;
         case 'rainbow': {
           // Lush ribbon trail across all 6 pastel rainbow bands with trailing stardust
@@ -5079,22 +5509,22 @@ export class Game {
           if (Math.random() < 0.7) this.sink.push({ x: px, y: py, vx: rand(-90, 90), vy: rand(-20, 60), life: rand(0.7, 1.2), max: 1.2, size: rand(2.5, 4.5), color: pick(['#fbcfe8', '#f9a8d4', '#fdf2f8']), kind: 'petal', rot: rand(0, TAU), vr: rand(-8, 8), g: 60, drag: 1.5 });
           break;
         case 'note':
-          if (Math.random() < 0.25) this.particles.push({ x: px + rand(-14, 14), y: py, vx: rand(-40, 40), vy: rand(-30, 30), life: 0.7, max: 0.7, size: 14, color: pick(['#fde68a', '#fca5a5', '#a5f3fc']), kind: 'text', rot: 0, vr: 0, g: 0, text: pick(['♪', '♫']) });
+          if (Math.random() < 0.25) this.sink.push({ x: px + rand(-14, 14), y: py, vx: rand(-40, 40), vy: rand(-30, 30), life: 0.7, max: 0.7, size: 14, color: pick(['#fde68a', '#fca5a5', '#a5f3fc']), kind: 'text', rot: 0, vr: 0, g: 0, text: pick(['♪', '♫']) });
           this.sink.push({ x: px, y: py, vx: 0, vy: 40, life: 0.3, max: 0.3, size: 3, color: tw.trail, kind: 'glow', rot: 0, vr: 0, g: 0 });
           break;
         case 'acid':
           // Xenomorph viscous acid drips + fine mist
-          this.particles.push({ x: px, y: py, vx: rand(-20, 20), vy: rand(40, 100), life: rand(0.3, 0.6), max: 0.6, size: rand(3, 6), color: tw.trail, kind: 'drop', rot: 0, vr: 0, g: 500, drag: 0.8 });
-          if (Math.random() < 0.5) this.particles.push({ x: px + rand(-8, 8), y: py + rand(5, 15), vx: rand(-30, 30), vy: rand(20, 80), life: rand(0.3, 0.6), max: 0.6, size: rand(1.5, 3), color: 'rgba(126,200,30,', kind: 'smoke', rot: 0, vr: 0, g: 100, drag: 2 });
+          this.sink.push({ x: px, y: py, vx: rand(-20, 20), vy: rand(40, 100), life: rand(0.3, 0.6), max: 0.6, size: rand(3, 6), color: tw.trail, kind: 'drop', rot: 0, vr: 0, g: 500, drag: 0.8 });
+          if (Math.random() < 0.5) this.sink.push({ x: px + rand(-8, 8), y: py + rand(5, 15), vx: rand(-30, 30), vy: rand(20, 80), life: rand(0.3, 0.6), max: 0.6, size: rand(1.5, 3), color: 'rgba(126,200,30,', kind: 'smoke', rot: 0, vr: 0, g: 100, drag: 2 });
           break;
         case 'air':
           // Dora compressed air ring puffs + light streaks
-          this.particles.push({ x: px, y: py, vx: rand(-40, 40), vy: rand(30, 90), life: rand(0.4, 0.8), max: 0.8, size: rand(8, 14), color: 'rgba(220,240,255,', kind: 'smoke', rot: rand(0, TAU), vr: rand(-2, 2), g: -30, drag: 3 });
+          this.sink.push({ x: px, y: py, vx: rand(-40, 40), vy: rand(30, 90), life: rand(0.4, 0.8), max: 0.8, size: rand(8, 14), color: 'rgba(220,240,255,', kind: 'smoke', rot: rand(0, TAU), vr: rand(-2, 2), g: -30, drag: 3 });
           if (Math.random() < 0.4) this.sink.push({ x: px, y: py, vx: 0, vy: 0, life: 0.2, max: 0.2, size: 14, color: '255,255,255', kind: 'ring', rot: 0, vr: 0, g: 0 });
           break;
         case 'plasma':
           // Predator plasma ion sparks + electric arcs
-          this.particles.push({ x: px, y: py, vx: rand(-60, 60), vy: rand(40, 120), life: rand(0.15, 0.3), max: 0.3, size: rand(2, 4), color: tw.trail, kind: 'glow', rot: 0, vr: 0, g: 0, drag: 3 });
+          this.sink.push({ x: px, y: py, vx: rand(-60, 60), vy: rand(40, 120), life: rand(0.15, 0.3), max: 0.3, size: rand(2, 4), color: tw.trail, kind: 'glow', rot: 0, vr: 0, g: 0, drag: 3 });
           if (Math.random() < 0.3) this.sink.push({ x: px + rand(-10, 10), y: py, vx: rand(-30, 30), vy: 0, life: 0.12, max: 0.12, size: 2, color: '255,255,255', kind: 'bolt', rot: 0, vr: 0, g: 0 });
           break;
       }
@@ -5179,10 +5609,14 @@ export class Game {
       b.age += s;
       if (b.flash) b.flash = Math.max(0, b.flash - dt * 3.5);
     }
-    if (this.weapon.id === 'firework' || (this.fwState && (this.fwState.particles.length > 0 || this.fwState.glows.length > 0 || this.fwState.rings.length > 0 || this.fwState.sky.length > 0))) {
+    if (
+      this.bgTheme === 'skyline' ||
+      this.weapon.id === 'firework' ||
+      (this.fwState && (this.fwState.particles.length > 0 || this.fwState.glows.length > 0 || this.fwState.rings.length > 0 || this.fwState.sky.length > 0))
+    ) {
       // Slide 2 runs its sky show on the menu / game over only — mirror that here.
       // (Gun Hit's idle screen uses its own menu backdrop, so 'over' is the match.)
-      updateFirework8State(this.getFwState(), dt, this.state === 'over');
+      updateFirework8State(this.getFwState(), dt, this.weapon.id === 'firework' && this.state === 'over');
     }
     if (
       this.slide2Void || this.s2.particles.length > 0 || this.s2.glows.length > 0
@@ -5302,6 +5736,7 @@ export class Game {
       updateYoyoSlideState(yoyo, dt, stuckPins);
     }
     if (
+      this.bgTheme === 'mystic' ||
       this.weapon.id === 'keris' ||
       (this.kerisState &&
         (this.kerisState.particles.length > 0 ||
@@ -5440,12 +5875,23 @@ export class Game {
       if (this.slide2Void) trailBlackHole2(this.s2, p.x, p.y, this.s2Hue);
       // A slide-9 instant beam is light: its carrier ignores the hit-stop.
       const ps = p.setNineBeam === 0 ? dt * this.timeScale : s;
+      // Imported GhostShot.update() resets vx; re-aim after its own update so
+      // all three effects leave the moving hand and reach the same centre.
+      const ghostTargetY = p.ghostAim ? this.ghostAimY(p.setSeven?.tip ?? 0) : 0;
+      if (p.ghostAim) p.vx = (CX - p.x) * Math.max(0, -p.vy) / Math.max(1, p.y - ghostTargetY);
       const dist = Math.hypot(p.vx, p.vy) * ps;
       const steps = Math.max(1, Math.ceil(dist / 7));
       let r: StepRes = { res: 'none' };
       for (let k = 0; k < steps; k++) {
-        p.x += (p.vx * ps) / steps;
-        p.y += (p.vy * ps) / steps;
+        const dy = (p.vy * ps) / steps;
+        if (p.ghostAim) {
+          // Clamp at centre when this substep passes the aim point; special
+          // rocks can leave empty space and must not send the shot past centre.
+          const remaining = p.y - ghostTargetY;
+          const fraction = remaining > 0 ? Math.min(1, Math.max(0, -dy) / remaining) : 1;
+          p.x += (CX - p.x) * fraction;
+        } else p.x += (p.vx * ps) / steps;
+        p.y += dy;
         r = this.stepProj(p);
         if (r.res !== 'none') break;
       }
@@ -5473,12 +5919,17 @@ export class Game {
       }
     }
 
-    // particles
-    for (let i = this.particles.length - 1; i >= 0; i--) {
+    // particles — zero-allocation in-place compaction (no per-particle splice GC)
+    let pWrite = 0;
+    const pLen = this.particles.length;
+    const dropExcess = pLen > this.maxParticles ? pLen - this.maxParticles : 0;
+    let dropped = 0;
+    for (let i = 0; i < pLen; i++) {
       const p = this.particles[i];
       p.life -= s;
-      if (p.life <= 0) {
-        this.particles.splice(i, 1);
+      if (p.life <= 0) continue;
+      if (dropped < dropExcess && p.kind !== 'text' && p.kind !== 'xenoMolecular') {
+        dropped++;
         continue;
       }
       p.vy += p.g * s;
@@ -5502,23 +5953,31 @@ export class Game {
         p.vy *= -0.4;
         p.vx *= 0.6;
       }
+      this.particles[pWrite++] = p;
     }
-    for (let i = this.frags.length - 1; i >= 0; i--) {
+    this.particles.length = pWrite;
+
+    let fragWrite = 0;
+    for (let i = 0; i < this.frags.length; i++) {
       const f = this.frags[i];
       f.vy += 1300 * s;
       f.x += f.vx * s;
       f.y += f.vy * s;
       f.rot += f.vr * s;
-      if (f.y > H + 200) this.frags.splice(i, 1);
+      if (f.y <= H + 200) this.frags[fragWrite++] = f;
     }
-    for (let i = this.flyers.length - 1; i >= 0; i--) {
+    this.frags.length = fragWrite;
+
+    let flyerWrite = 0;
+    for (let i = 0; i < this.flyers.length; i++) {
       const f = this.flyers[i];
       f.vy += 1400 * s;
       f.x += f.vx * s;
       f.y += f.vy * s;
       f.rot += f.vr * s;
-      if (f.y > H + 150) this.flyers.splice(i, 1);
+      if (f.y <= H + 150) this.flyers[flyerWrite++] = f;
     }
+    this.flyers.length = flyerWrite;
     for (const d of this.dust) {
       d.y -= d.v * dt;
       d.x += Math.sin(this.time + d.y * 0.01) * 4 * dt;
@@ -5592,9 +6051,11 @@ export class Game {
 
     const D_SIZE = 14; // Entire normal-stage diamond, including facets and badge, is 20% larger.
 
-    // Pendaran kilau kristal (glow aura)
-    c.shadowColor = hits === 1 ? '#fb7185' : '#38bdf8';
-    c.shadowBlur = hits === 1 ? 16 : 14;
+    // Pendaran kilau kristal (fast vector halo, zero Gaussian shadowBlur)
+    c.fillStyle = hits === 1 ? 'rgba(251,113,133,0.28)' : 'rgba(56,189,248,0.26)';
+    c.beginPath();
+    c.arc(0, D_SIZE * 0.2, D_SIZE * 1.18, 0, TAU);
+    c.fill();
 
     // Retakan & serpihan tanah/kayu di sekitar titik tancap (y = 0)
     c.fillStyle = 'rgba(0,0,0,0.45)';
@@ -5688,13 +6149,15 @@ export class Game {
     }
 
     // Badge hit indicator: "1x lagi!" atau "2x"
-    c.fillStyle = hits === 1 ? '#ffe4e6' : '#ffffff';
     c.font = 'bold 8.5px sans-serif';
     c.textAlign = 'center';
     c.textBaseline = 'middle';
-    c.shadowColor = 'rgba(0,0,0,0.8)';
-    c.shadowBlur = 4;
-    c.fillText(hits === 1 ? '1x!' : '2x', 0, D_SIZE * 0.3);
+    const badgeLabel = hits === 1 ? '1x!' : '2x';
+    c.strokeStyle = 'rgba(0,0,0,0.82)';
+    c.lineWidth = 2.4;
+    c.strokeText(badgeLabel, 0, D_SIZE * 0.3);
+    c.fillStyle = hits === 1 ? '#ffe4e6' : '#ffffff';
+    c.fillText(badgeLabel, 0, D_SIZE * 0.3);
 
     c.restore();
   }
@@ -5709,7 +6172,7 @@ export class Game {
    * weapon's accent from the muzzle to where it meets the wheel, and a
    * breathing ring with four turning ticks on that spot.
    */
-  private drawNineAim(c: CanvasRenderingContext2D) {
+  private drawNineAim(c: CanvasRenderingContext2D, muzzleY: number) {
     const id = this.setNineId;
     if (!id || this.level.mode === 'treasure') return;
     const acc = hexToRgbTriplet(nineWeapon(id).accent);
@@ -5725,7 +6188,7 @@ export class Game {
       c.strokeStyle = `rgba(${acc},0.3)`;
       c.lineWidth = 1.6;
       c.beginPath();
-      c.moveTo(x, GUN_Y - 4);
+      c.moveTo(x, muzzleY - 4);
       c.lineTo(x, hy);
       c.stroke();
       c.setLineDash([]);
@@ -5754,27 +6217,25 @@ export class Game {
     const id = this.setNineId;
     if (!id) return;
     const acc = hexToRgbTriplet(nineWeapon(id).accent);
+    const gs = GAMEPLAY_GUN_SCALE;
     for (const ox of this.gunOffsets) {
-      const o = nineGunOrigin(id, CX + ox, y0);
+      const anchorX = CX + ox;
+      const o = nineGunOrigin(id, anchorX, y0);
+      const localDx = (o.x - anchorX) * gs;
+      const localDy = (o.y - y0) * gs;
       // The left twin is drawn mirrored, so is its grip.
-      const px = ox < 0 ? 2 * (CX + ox) - o.x : o.x;
-      const py = o.y;
+      const px = anchorX + (ox < 0 ? -localDx : localDx);
+      const py = y0 + localDy;
       c.save();
       c.globalCompositeOperation = 'lighter';
-      const g = c.createRadialGradient(px, py + 40, 4, px, py + 40, 120);
-      g.addColorStop(0, `rgba(${acc},0.3)`);
-      g.addColorStop(1, 'rgba(0,0,0,0)');
-      c.fillStyle = g;
-      c.beginPath();
-      c.ellipse(px, py + 42, 120, 32, 0, 0, TAU);
-      c.fill();
+      drawRgbGlowSprite(c, px, py + 42 * gs, 120 * gs, 32 * gs, acc, 0.72);
       c.restore();
       c.save();
       c.fillStyle = '#121824';
       c.strokeStyle = 'rgba(150,200,255,0.3)';
       c.lineWidth = 2;
       c.beginPath();
-      c.ellipse(px, py + 44, 68, 18, 0, 0, TAU);
+      c.ellipse(px, py + 44 * gs, 68 * gs, 18 * gs, 0, 0, TAU);
       c.fill();
       c.stroke();
       c.restore();
@@ -5785,10 +6246,11 @@ export class Game {
     const sinceShot = this.state === 'idle' ? 9 : this.rt - this.lastShotRT;
     const kerisCharging =
       this.weapon.id === 'keris' && sinceShot >= 0 && sinceShot < KERIS_GLEAM_DUR;
-    const ry = kerisCharging
+    const ry = this.weapon.id === 'ghost' ? 0 : kerisCharging
       ? -3.5 * Math.sin((sinceShot / KERIS_GLEAM_DUR) * Math.PI)
       : this.recoil * 22 - (this.state === 'idle' ? Math.sin(this.time * 2) * 3 : 0);
-    const y0 = GUN_Y + ry;
+    const entryOffset = gameplayGunEntryOffset(this.gunEntryT);
+    const y0 = GUN_Y + ry + entryOffset;
     const R = this.level.radius;
 
     // Two upright barrels get two straight sights; a star never steers either.
@@ -5822,7 +6284,7 @@ export class Game {
         }
       } else if (this.setNineLive) {
         // Slide 9 brings its own aim guide (see `drawNineAim`).
-        this.drawNineAim(c);
+        this.drawNineAim(c, y0);
       } else if (!this.setElevenLive) {
         // Slide 11 shows no generic aim line: its own sights (the rifle's
         // laser, the caster's three dots, the beacon's designator) come from
@@ -5902,6 +6364,7 @@ export class Game {
         && (this.weapon.id !== 'snowball' || this.snowLoaded > 0)
         && (this.weapon.id !== 'yoyo' || this.projs.length === 0));
     gunState.sinceShot = this.state === 'idle' ? 9 : this.rt - this.lastShotRT;
+    gunState.saberSide = this.saberSide;
     gunState.reloadT = this.reloadT;
     // Slide-3 SET 1..7 artwork: hand the live motion over to the real renderer.
     // Firing slide 3's own shot, that is slide 3's own spring state (every
@@ -5914,6 +6377,7 @@ export class Game {
       ? (this.setSevenLive && this.s7State ? this.s7State.anim
         : buildSevenAnim({ sinceShot: gunState.sinceShot, charge: gunState.charge, spin: this.spin }))
       : null;
+    if (this.weapon.id === 'firework' && gunState.s7Anim) gunState.s7Anim.idx = gunState.fireworkTube;
     // Slide 9's own draw state: its recoil curve, cycle, held charge and how
     // many of its rounds are still out (the identity disc uses that).
     gunState.s9Live = this.setNineLive;
@@ -5976,7 +6440,7 @@ export class Game {
       const nextHue = firework8ShotHue(this.level?.n ?? 1, fw.shotIdx);
       gunState.rocketHue = nextHue;
       for (const ox of this.gunOffsets) {
-        drawFirework8GunGlow(c, CX + ox, y0 + 50, nextHue, 0);
+        drawFirework8GunGlow(c, CX + ox, y0 + 50 * GAMEPLAY_GUN_SCALE, nextHue, 0);
       }
     }
     if (this.weapon.id === 'yoyo' && !s3Art) {
@@ -5984,7 +6448,7 @@ export class Game {
       const nextHue = yoyoAmmoHue(yoyo.shotIdx);
       gunState.yoyoHue = nextHue;
       for (const ox of this.gunOffsets) {
-        drawYoyoSlideGunGlow(c, CX + ox, y0 + 60, nextHue, this.recoil);
+        drawYoyoSlideGunGlow(c, CX + ox, y0 + 60 * GAMEPLAY_GUN_SCALE, nextHue, this.recoil);
       }
     }
     if (this.weapon.id === 'keris' && !s3Art) {
@@ -5992,14 +6456,14 @@ export class Game {
       c.fillStyle = 'rgba(0,0,0,0.42)';
       for (const ox of this.gunOffsets) {
         c.beginPath();
-        c.ellipse(CX + ox, GUN_Y + 172, 44, 9, 0, 0, TAU);
+        c.ellipse(CX + ox, GUN_Y + entryOffset + 172 * GAMEPLAY_GUN_SCALE, 44 * GAMEPLAY_GUN_SCALE, 9 * GAMEPLAY_GUN_SCALE, 0, 0, TAU);
         c.fill();
       }
       c.restore();
     }
     if (this.weapon.id === 'diamond' && !s3Art) {
       for (const ox of this.gunOffsets) {
-        drawDiamondSlideGunGlow(c, CX + ox, y0 + 70, this.recoil);
+        drawDiamondSlideGunGlow(c, CX + ox, y0 + 70 * GAMEPLAY_GUN_SCALE, this.recoil);
       }
     }
 
@@ -6014,7 +6478,17 @@ export class Game {
     // The slide-9 gun stands still on slide 9's pedestal, in its accent light.
     gunState.nineStage = this.setNineLive;
     try {
+      if (this.weapon?.rarity) {
+        const rarityRgb = gunSunburstColor(this.weapon.rarity);
+        c.save();
+        c.globalCompositeOperation = 'lighter';
+        drawRgbGlowSprite(c, CX, GUN_Y + entryOffset + 42, 165, 92, rarityRgb, 0.42);
+        c.restore();
+      }
       if (this.setNineLive) this.drawNinePedestal(c, y0);
+      // Only this live game draw supplies a particle sink. Menu and arsenal
+      // previews can draw the same gun without mutating a paused game.
+      const liveGunFx = this.weapon.id === 'blackhole' && s3Variant === 'latest' ? this.s2 : undefined;
       if (this.hasTwinGuns) {
         // Left gun mirrored and right gun normal: their grips/magazines face OUT,
         // matching the side-by-side AK-47 silhouette rather than overlapping.
@@ -6022,15 +6496,16 @@ export class Game {
           c.save();
           c.translate(CX + ox, y0);
           this.sevenGunPose(c);
-          if (ox < 0) c.scale(-1, 1);
-          drawGun(c, this.weapon.id, 0, 0, this.time, flash, ready, this.snowLoaded);
+          c.scale(ox < 0 ? -GAMEPLAY_GUN_SCALE : GAMEPLAY_GUN_SCALE, GAMEPLAY_GUN_SCALE);
+          drawGun(c, this.weapon.id, 0, 0, this.time, flash, ready, this.snowLoaded, undefined, liveGunFx);
           c.restore();
         }
       } else {
         c.save();
         c.translate(CX, y0);
         this.sevenGunPose(c);
-        drawGun(c, this.weapon.id, 0, 0, this.time, flash, ready, this.snowLoaded);
+        c.scale(GAMEPLAY_GUN_SCALE, GAMEPLAY_GUN_SCALE);
+        drawGun(c, this.weapon.id, 0, 0, this.time, flash, ready, this.snowLoaded, undefined, liveGunFx);
         c.restore();
       }
     } finally {
@@ -6082,22 +6557,24 @@ export class Game {
   private sevenGunPose(c: CanvasRenderingContext2D) {
     const id = this.setSevenId;
     const a = gunState.s7Anim;
-    if (!id || !a || !this.setSevenLive || this.state === 'idle') return;
-    const sway = Math.sin(this.s7State!.time * 1.6) * 1.0;
-    const bob = Math.sin(this.s7State!.time * 2.2) * 1.2;
+    if (!id || !a || !this.setSevenLive || this.state === 'idle' || this.weapon.id === 'ghost') return;
+    const s7t = this.s7State?.time ?? this.time;
+    const sway = Math.sin(s7t * 1.6) * 1.0;
+    const bob = Math.sin(s7t * 2.2) * 1.2;
     c.translate(sway, bob + a.recoil * 14);
     c.rotate(-a.recoil * (RECOIL_ROT[id] ?? 0));
   }
 
   private forestBackdrop: HTMLCanvasElement | null = null;
   private forestBackdropKey = '';
+  private specialOverlayCanvas: HTMLCanvasElement | null = null;
+  private specialOverlayKey = '';
 
   private drawForestBackground(c: CanvasRenderingContext2D, pal: (typeof STYLE_COLORS)[Style], R: number) {
-    // The firework, keris, diamond and bazooka scenes belong to the other
-    // slides those guns came from; slide 3's own shot plays on slide 1's
-    // stage like every other slide-3 gun.
-    const ownScene = !this.setSevenLive;
-    if (this.state !== 'idle' && this.weapon.id === 'firework' && ownScene) {
+    const theme = this.bgTheme ?? 'auto';
+
+    // Explicit player-selected themes always function across every SGA weapon & stage.
+    if (theme === 'skyline') {
       drawFirework8Background(
         c,
         this.getFwState(),
@@ -6109,20 +6586,13 @@ export class Game {
       );
       return;
     }
-    if (this.state !== 'idle' && this.weapon.id === 'yoyo') {
-      drawYoyoSlideBackground(
-        c,
-        this.getYoyoState(),
-        this.dpr,
-        CX,
-        this.targetY - this.bump * 9,
-        R,
-        this.level?.n ?? 1,
-        this.time,
-      );
+    if (theme === 'battlefield') {
+      const bz = this.getBazookaState();
+      bz.time = this.time;
+      bz.drawBackground(c, W, H);
       return;
     }
-    if (this.state !== 'idle' && this.weapon.id === 'keris' && ownScene) {
+    if (theme === 'mystic') {
       drawKerisSlideBackground(
         c,
         this.getKerisState(),
@@ -6136,7 +6606,7 @@ export class Game {
       );
       return;
     }
-    if (this.state !== 'idle' && this.weapon.id === 'diamond' && ownScene) {
+    if (theme === 'crystal') {
       drawDiamondSlideBackground(
         c,
         this.getDiamondState(),
@@ -6149,40 +6619,134 @@ export class Game {
       );
       return;
     }
-    if (this.state !== 'idle' && this.weapon.id === 'bazooka' && ownScene) {
-      this.getBazookaState().drawBackground(c, W, H);
+    if (theme === 'yoyo_neon') {
+      drawYoyoSlideBackground(
+        c,
+        this.getYoyoState(),
+        this.dpr,
+        CX,
+        this.targetY - this.bump * 9,
+        R,
+        this.level?.n ?? 1,
+        this.time,
+      );
       return;
     }
-    // Sky, silhouettes and target lighting do not change each frame. Cache
-    // them at retina resolution; keep the drifting fireflies and grass live.
-    const key = `${this.level.style}:${R}:${this.targetY}:${this.dpr}`;
-    if (key !== this.forestBackdropKey || !this.forestBackdrop) {
-      const backdrop = document.createElement('canvas');
-      const density = Math.ceil(this.dpr);
-      backdrop.width = W * density;
-      backdrop.height = H * density;
-      const bg = backdrop.getContext('2d')!;
-      bg.setTransform(density, 0, 0, density, 0, 0);
-      this.paintForestBackdrop(bg, pal, R);
-      this.forestBackdrop = backdrop;
-      this.forestBackdropKey = key;
+    if (
+      theme === 'morning' ||
+      theme === 'town' ||
+      theme === 'snow' ||
+      theme === 'royal_vault' ||
+      theme === 'cyber_grid' ||
+      theme === 'nebula'
+    ) {
+      drawCustomSgaTheme(c, theme, {
+        w: W,
+        h: H,
+        cx: CX,
+        targetY: this.steadyTargetY,
+        targetR: R,
+        time: this.time,
+        dpr: this.dpr,
+        glow: pal.glow,
+        dust: this.dust,
+      });
+      return;
     }
-    c.drawImage(this.forestBackdrop, 0, 0, W, H);
 
-    // 5. Kunang-Kunang Hutan Emas Melayang (Glowing Fireflies Sesuai Foto 1!)
-    for (const d of this.dust) {
-      const pulse = 0.4 + 0.6 * Math.sin(this.time * 2.5 + d.x);
-      // Soft glow aura
-      c.fillStyle = `rgba(250, 204, 21, ${0.28 * pulse})`;
-      c.beginPath();
-      c.arc(d.x, d.y, d.s * 2.8, 0, TAU);
-      c.fill();
-      // Bright core
-      c.fillStyle = `rgba(254, 240, 138, ${0.9 * pulse})`;
-      c.beginPath();
-      c.arc(d.x, d.y, d.s * 0.9, 0, TAU);
-      c.fill();
+    // In 'auto' mode, the firework, yoyo, keris, diamond and bazooka scenes
+    // belong to the slides those guns came from; in 'forest' mode, always keep
+    // Gun Hit's forest even when equipping ported weapons.
+    if (theme === 'auto') {
+      const ownScene = !this.setSevenLive;
+      if (this.state !== 'idle' && this.weapon.id === 'firework' && ownScene) {
+        drawFirework8Background(
+          c,
+          this.getFwState(),
+          this.dpr,
+          CX,
+          this.targetY - this.bump * 9,
+          R,
+          this.level?.n ?? 1,
+        );
+        return;
+      }
+      if (this.state !== 'idle' && this.weapon.id === 'yoyo') {
+        drawYoyoSlideBackground(
+          c,
+          this.getYoyoState(),
+          this.dpr,
+          CX,
+          this.targetY - this.bump * 9,
+          R,
+          this.level?.n ?? 1,
+          this.time,
+        );
+        return;
+      }
+      if (this.state !== 'idle' && this.weapon.id === 'keris' && ownScene) {
+        drawKerisSlideBackground(
+          c,
+          this.getKerisState(),
+          CX,
+          this.targetY - this.bump * 9,
+          R,
+          this.time,
+          this.level?.boss ?? false,
+          W,
+          H,
+        );
+        return;
+      }
+      if (this.state !== 'idle' && this.weapon.id === 'diamond' && ownScene) {
+        drawDiamondSlideBackground(
+          c,
+          this.getDiamondState(),
+          this.dpr,
+          CX,
+          this.targetY - this.bump * 9,
+          R,
+          this.level?.n ?? 1,
+          this.time,
+        );
+        return;
+      }
+      if (this.state !== 'idle' && this.weapon.id === 'bazooka' && ownScene) {
+        this.getBazookaState().drawBackground(c, W, H);
+        return;
+      }
     }
+
+    // Sky, silhouettes and target lighting do not change each frame. Cache
+    // them at retina resolution using `steadyTargetY` so Boss rise/fall never
+    // reallocates full-screen canvases every frame.
+    const steadyY = this.steadyTargetY;
+    const density = Math.ceil(this.dpr || 1);
+    const key = `${this.level.style}:${R}:${steadyY}:${density}`;
+    if (key !== this.forestBackdropKey || !this.forestBackdrop) {
+      const doc = (globalThis as { document?: Document }).document;
+      if (doc && typeof doc.createElement === 'function') {
+        const backdrop = doc.createElement('canvas');
+        backdrop.width = W * density;
+        backdrop.height = H * density;
+        const bg = backdrop.getContext('2d');
+        if (bg) {
+          bg.setTransform(density, 0, 0, density, 0, 0);
+          this.paintForestBackdrop(bg, pal, R, steadyY);
+          this.forestBackdrop = backdrop;
+          this.forestBackdropKey = key;
+        }
+      }
+    }
+    if (this.forestBackdrop) {
+      c.drawImage(this.forestBackdrop, 0, 0, W, H);
+    } else {
+      this.paintForestBackdrop(c, pal, R, steadyY);
+    }
+
+    // 5. Golden fireflies still pulse individually, but their auras and cores
+    // are batched instead of asking the canvas for 90 separate fills a frame.
+    drawForestFireflies(c, this.dust, this.time);
 
     // 6. Rerumputan Liar 2D di Bagian Bawah Layar (Bottom Grass Blades Sesuai Foto 1!)
     c.fillStyle = '#020507';
@@ -6202,7 +6766,12 @@ export class Game {
     c.fill();
   }
 
-  private paintForestBackdrop(c: CanvasRenderingContext2D, pal: (typeof STYLE_COLORS)[Style], R: number) {
+  private paintForestBackdrop(
+    c: CanvasRenderingContext2D,
+    pal: (typeof STYLE_COLORS)[Style],
+    R: number,
+    glowCenterY = this.steadyTargetY,
+  ) {
     // 1. Gradasi Langit Hutan 2D (+20% lebih cerah khas Knife Hit)
     const bg = c.createLinearGradient(0, 0, 0, H);
     bg.addColorStop(0, pal.bgTop);
@@ -6264,7 +6833,7 @@ export class Game {
     c.fill();
 
     // 4. Ambient Target Glow (Cahaya lembut di sekitar buah / target)
-    const targetGlow = c.createRadialGradient(CX, this.targetY, 20, CX, this.targetY, R * 2.5);
+    const targetGlow = c.createRadialGradient(CX, glowCenterY, 20, CX, glowCenterY, R * 2.5);
     targetGlow.addColorStop(0, pal.glow);
     targetGlow.addColorStop(0.6, pal.glow.replace(/[\d.]+\)$/, '0.06)'));
     targetGlow.addColorStop(1, 'rgba(0,0,0,0)');
@@ -6283,10 +6852,10 @@ export class Game {
   private drawBonusRing(c: CanvasRenderingContext2D, radius: number) {
     c.save();
     c.scale(radius / 196, radius / 196);
-    for (const coin of this.bonusCoins) {
+    for (let i = 0; i < this.bonusCoins.length; i++) {
+      const coin = this.bonusCoins[i];
       if (coin.taken) continue;
-      const x = Math.cos(coin.angle) * coin.radius, y = Math.sin(coin.angle) * coin.radius;
-      drawBonusCoin(c, x, y, 11, this.time, coin.phase, true);
+      drawBonusCoin(c, coin.lx, coin.ly, 11, this.time, coin.phase, true);
     }
     c.restore();
   }
@@ -6297,23 +6866,56 @@ export class Game {
     c.setTransform(k, 0, 0, k, 0, 0);
     const pal = STYLE_COLORS[this.level.style];
     const R = this.level.radius;
+    let busterWheelTransform: DOMMatrix | null = null;
+    let hasBusterWheelPellets = false;
 
-    // Keep Gun Hit's forest, but give each Diamond Breaker round its own lighting.
-    if (this.setTwoLook) drawSetTwoSky(c);
+    // Keep Gun Hit's forest or player-selected theme, while allowing 'auto' mode
+    // to paint Slide 2's night sky when a Set-2 gun is equipped.
+    const autoSetTwoSky = (this.bgTheme ?? 'auto') === 'auto' && this.setTwoLook;
+    if (autoSetTwoSky) drawSetTwoSky(c);
     else this.drawForestBackground(c, pal, R);
     if (isSpecial(this.level.mode)) {
-      const tint = c.createLinearGradient(0, 0, 0, H);
-      const gold = this.level.mode === 'treasure' || this.level.mode === 'bonus';
-      tint.addColorStop(0, gold ? 'rgba(54,24,56,0.62)' : 'rgba(9,32,65,0.58)');
-      tint.addColorStop(1, gold ? 'rgba(44,23,10,0.36)' : 'rgba(10,34,54,0.28)');
-      c.fillStyle = tint; c.fillRect(0, 0, W, H);
-      const halo = c.createRadialGradient(CX, this.targetY, 24, CX, this.targetY, 245);
-      halo.addColorStop(0, gold ? 'rgba(251,191,36,0.26)' : 'rgba(103,232,249,0.24)');
-      halo.addColorStop(1, 'rgba(0,0,0,0)');
-      c.fillStyle = halo; c.fillRect(0, 0, W, H);
+      const warmBg = this.level.mode === 'treasure' || this.level.mode === 'bonus';
+      const ovKey = `${warmBg ? 'white-bonus' : 'white-ice'}:${SPECIAL_CY}`;
+      if (ovKey !== this.specialOverlayKey || !this.specialOverlayCanvas) {
+        const doc = (globalThis as { document?: Document }).document;
+        if (doc && typeof doc.createElement === 'function') {
+          const ov = doc.createElement('canvas');
+          ov.width = W;
+          ov.height = H;
+          const oc = ov.getContext('2d');
+          if (oc) {
+            const tint = oc.createLinearGradient(0, 0, 0, H);
+            tint.addColorStop(0, warmBg ? 'rgba(54,24,56,0.62)' : 'rgba(9,32,65,0.58)');
+            tint.addColorStop(1, warmBg ? 'rgba(44,23,10,0.36)' : 'rgba(10,34,54,0.28)');
+            oc.fillStyle = tint;
+            oc.fillRect(0, 0, W, H);
+            // Soft pure-white radial halo behind the special wheel (never yellow)
+            const halo = oc.createRadialGradient(CX, SPECIAL_CY, 24, CX, SPECIAL_CY, 245);
+            halo.addColorStop(0, 'rgba(255,255,255,0.20)');
+            halo.addColorStop(1, 'rgba(255,255,255,0)');
+            oc.fillStyle = halo;
+            oc.fillRect(0, 0, W, H);
+            this.specialOverlayCanvas = ov;
+            this.specialOverlayKey = ovKey;
+          }
+        }
+      }
+      if (this.specialOverlayCanvas) {
+        c.drawImage(this.specialOverlayCanvas, 0, 0, W, H);
+      } else {
+        const tint = c.createLinearGradient(0, 0, 0, H);
+        tint.addColorStop(0, warmBg ? 'rgba(54,24,56,0.62)' : 'rgba(9,32,65,0.58)');
+        tint.addColorStop(1, warmBg ? 'rgba(44,23,10,0.36)' : 'rgba(10,34,54,0.28)');
+        c.fillStyle = tint; c.fillRect(0, 0, W, H);
+        const halo = c.createRadialGradient(CX, this.targetY, 24, CX, this.targetY, 245);
+        halo.addColorStop(0, 'rgba(255,255,255,0.20)');
+        halo.addColorStop(1, 'rgba(255,255,255,0)');
+        c.fillStyle = halo; c.fillRect(0, 0, W, H);
+      }
     }
-    // Slide 2's 110 twinkling stars ride on top of the sky it just painted.
-    if (this.setTwoLook) drawSetTwoStars(c, this.time);
+    // Slide 2's 110 twinkling stars ride on top of the sky it just painted in 'auto' mode.
+    if (autoSetTwoSky) drawSetTwoStars(c, this.time);
 
     c.save();
     // Slide 9's cinematic punch-zoom: the scene pushes in a touch on its heavy
@@ -6329,14 +6931,43 @@ export class Game {
     // Slide 9's jolt: ±0.35 of its shake amount.
     if (this.nineShake > 0.3) c.translate(rand(-1, 1) * this.nineShake * 0.35, rand(-1, 1) * this.nineShake * 0.35);
     c.translate(0, this.camY);
-    // The per-weapon atmosphere wash slide 2 paints over its sky.
-    if (this.setTwoLook) {
+    // The per-weapon atmosphere wash slide 2 paints over its sky in 'auto' mode.
+    if (autoSetTwoSky) {
       drawSetTwoAtmosphere(c, this.weapon.id, this.time, CX, this.targetY);
     }
 
     // Slide 11's scene light: its muzzles and impacts light the whole scene
     // under the wheel, the way slide 11's own `render()` paints it.
     if (this.state !== 'idle' && this.elevenActive) this.s11State!.drawLight(c);
+
+    // Pure-white Sunburst ALWAYS renders BEHIND the front view of the wheel,
+    // rock, bonus coin ring, treasure chest, and shattering wheel fragments!
+    if (this.state !== 'idle' && isSpecial(this.level.mode)) {
+      drawBehindWheelSunburst(c, CX, this.targetY, R * 1.92, this.time, 0.42);
+    }
+    const clearBurstT = this.stageClearBurstT ?? 0;
+    if (clearBurstT > 0) {
+      const burstMax = this.stageClearBurstMax || 0.9;
+      const u = Math.max(0, Math.min(1, 1 - clearBurstT / burstMax));
+      const fade = 1 - u;
+      const burstR = (this.stageClearBurstBoss ? 255 : 210) * (0.72 + 0.42 * Math.min(1, u * 2.2));
+      drawBehindWheelSunburst(
+        c,
+        CX,
+        this.targetY,
+        burstR,
+        this.time * 1.8,
+        fade * (this.stageClearBurstBoss ? 0.95 : 0.82),
+      );
+      c.save();
+      c.globalCompositeOperation = 'lighter';
+      c.strokeStyle = `rgba(255,255,255,${(fade * 0.55).toFixed(3)})`;
+      c.lineWidth = (this.stageClearBurstBoss ? 4.5 : 3.2) * fade;
+      c.beginPath();
+      c.arc(CX, this.targetY, R * 0.55 + u * (this.stageClearBurstBoss ? 195 : 155), 0, TAU);
+      c.stroke();
+      c.restore();
+    }
 
     // Keep the clean diamond / chest visible through the special-stage celebration.
     if (this.state !== 'idle' && (this.state !== 'clear' || isSpecial(this.level.mode))) {
@@ -6380,6 +7011,10 @@ export class Game {
       // Lapisan target berputar — bos juga berputar pelan (this.rot di update),
       // bukan terkunci diam. Kecepatan boss konstan agar tidak muter liar.
       if (this.level.mode !== 'treasure') c.rotate(this.rot);
+      hasBusterWheelPellets = !this.rock && !this.chest && this.items.some((it) => !!it.busterPellet);
+      if (hasBusterWheelPellets && typeof c.getTransform === 'function') {
+        busterWheelTransform = c.getTransform() ?? null;
+      }
       for (const it of this.items) {
         if (it.type === 'bullet' || it.type === 'old') {
           if (it.hideArt) continue; // slide 9 paints its own entry hole
@@ -6436,20 +7071,22 @@ export class Game {
           const clamp01w = (v: number) => Math.max(0, Math.min(1, v));
           const glowAtW = (gx: number, gy: number, gr: number, gcolor: string, ga: number) => {
             if (ga <= 0.003 || gr <= 0) return;
-            const n = parseInt(gcolor.slice(1), 16);
-            const gr2 = (n >> 16) & 255, gg = (n >> 8) & 255, gb = n & 255;
-            c.save(); c.globalCompositeOperation = 'lighter'; c.globalAlpha = Math.min(1, ga);
-            const grd = c.createRadialGradient(gx, gy, 0, gx, gy, gr);
-            grd.addColorStop(0, `rgba(${gr2},${gg},${gb},1)`);
-            grd.addColorStop(0.4, `rgba(${gr2},${gg},${gb},0.5)`);
-            grd.addColorStop(1, `rgba(${gr2},${gg},${gb},0)`);
-            c.fillStyle = grd; c.beginPath(); c.arc(gx, gy, gr, 0, TAU); c.fill();
+            const alpha = Math.min(1, ga);
+            c.save();
+            c.globalCompositeOperation = 'lighter';
+            c.fillStyle = gcolor;
+            c.globalAlpha = alpha * 0.22;
+            c.beginPath(); c.arc(gx, gy, gr, 0, TAU); c.fill();
+            c.globalAlpha = alpha * 0.48;
+            c.beginPath(); c.arc(gx, gy, gr * 0.56, 0, TAU); c.fill();
+            c.globalAlpha = alpha * 0.85;
+            c.beginPath(); c.arc(gx, gy, gr * 0.24, 0, TAU); c.fill();
             c.restore();
           };
           const rgbaW = (h: string, a: number) => { const n = parseInt(h.slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; };
           let skipWheelProj = false;
           if (it.w === 'xeno') {
-            skipWheelProj = true; // game-3: acid stuck NOT drawn on rim
+            skipWheelProj = true; // the metaball layer paints the stuck acid
           } else if (it.w === 'dora') {
             skipWheelProj = true;
             const pop = 1 + Math.max(0, 0.6 - it.age) * 1.2;
@@ -6540,7 +7177,7 @@ export class Game {
         this.rock.draw(c, R, this.time);
         const sc = R / 196;
         for (const shot of this.rockBullets) this.drawEmbeddedShot(c, shot, shot.x * sc, shot.y * sc, 7);
-        if (this.level.mode === 'bonus') this.drawBonusRing(c, R);
+        if (this.bonusCoins?.length) this.drawBonusRing(c, R);
       } else if (this.chest) {
         c.save();
         c.translate(0, 15);
@@ -6577,11 +7214,25 @@ export class Game {
         }
         if (pins.length > 0) drawSetTwoPins(c, this.weapon.id, this.time, R, pins);
       }
+      // If transform capture is unavailable, still paint the orb over the
+      // face here. Modern canvases paint it after the slide-11 scorch below.
+      if (hasBusterWheelPellets && !busterWheelTransform) this.drawBusterWheelPellets(c, R);
       // Slide #8 Keris & Slide #3 Bazooka rim crater on top of target face
       for (const it of this.items) {
         // Slide 3 / 5 / 4 paint their own rounds: no slide-1 crater under them.
         if (it.hideArt) continue;
-        if (it.type === 'bullet' && it.w === 'keris') {
+        if (it.type === 'bullet' && it.w === 'xeno' && it.acid?.hybrid) {
+          // Under the stuck fluid but *above* the wheel face, so the growing
+          // effect-3 crater is not painted over by the target bitmap.
+          c.save();
+          if (!this.level.boss) { c.beginPath(); c.arc(0, 0, R, 0, TAU); c.clip(); }
+          c.rotate(it.angle - Math.PI / 2);
+          const itemR = this.level.boss ? getExactBossRadius(this.level.style as BossType, it.angle, R) : R;
+          c.translate(0, itemR - 11);
+          if (it.scale) c.scale(it.scale, it.scale);
+          drawXenoCorrosion(c, 0, 0, this.time, it.acid.seed, it.age);
+          c.restore();
+        } else if (it.type === 'bullet' && it.w === 'keris') {
           c.save();
           c.rotate(it.angle - Math.PI / 2);
           const sink = Math.max(0, 1 - it.age * 12) * 6;
@@ -6726,17 +7377,13 @@ export class Game {
       c.restore();
     }
     // Real, textured chunks keep their embedded rounds as they tumble away.
+    // Drop rim is pre-baked into `cell.fallenSprite`, avoiding expensive runtime shadowBlur.
     for (const f of this.fallenCells) {
       c.save();
       c.globalAlpha = Math.min(1, f.life * 3);
       c.translate(f.x, f.y);
       c.rotate(f.rot);
-      c.shadowColor = 'rgba(0,0,0,0.38)';
-      c.shadowBlur = 5;
-      c.shadowOffsetY = 3;
       this.rock?.drawFallenCell(c, f.id, R);
-      c.shadowBlur = 0;
-      c.shadowOffsetY = 0;
       const sc = R / 196;
       for (const shot of f.bullets) {
         this.drawEmbeddedShot(c, shot, (shot.x - f.cx) * sc, (shot.y - f.cy) * sc, 7);
@@ -6781,7 +7428,10 @@ export class Game {
       if (f.kind === 'spike') this.drawSpike(c);
       else if (f.kind === 'coin') this.drawCoin(c, this.time);
       else if (f.kind === 'diamond_chest') this.drawEmbeddedDiamond(c, this.time, 1);
-      else {
+      else if (f.busterPellet) {
+        if (f.scale) c.scale(f.scale, f.scale);
+        drawBusterPelletOrb(c, 0, 0, this.time + f.rot);
+      } else {
         if (f.w === 'firework') {
           gunState.rocketHue = f.hue ?? 340;
           gunState.rocketFlash = 0;
@@ -6800,6 +7450,14 @@ export class Game {
     // under every round, beam and gun (`drawWheel()` opens their `render()`);
     // then slide 7 lays its sights and its channel beam, still under its rounds.
     this.drawLayerWheels(c);
+    if (busterWheelTransform) {
+      // Use the exact transformed wheel frame (including Boss bob/breath and
+      // rotation) so the scorch cannot cover the glowing stuck projectile.
+      c.save();
+      c.setTransform(busterWheelTransform);
+      this.drawBusterWheelPellets(c, R);
+      c.restore();
+    }
     if (this.state !== 'idle') this.drawElevenAim(c);
 
     // projectiles
@@ -6817,7 +7475,11 @@ export class Game {
       if (p.setSeven) {
         p.setSeven.x = p.x;
         p.setSeven.y = p.y;
-        this.drawCarriedRound(c, p, () => p.setSeven!.draw(c));
+        this.drawCarriedRound(c, p, () => {
+          if (wid === 'ironman_hand') drawIronmanCombo(c, p.x, p.y, this.time, () => p.setSeven!.draw(c));
+          else if (wid === 'crystal') drawCrystalEffectTwo(c, p.x, p.y, this.time);
+          else p.setSeven!.draw(c);
+        });
         continue;
       }
       if (p.setSevenPending) continue;
@@ -6843,10 +7505,10 @@ export class Game {
       if (this.weapon.rope) {
         if (wid === 'yoyo') {
           const gunX = p.originX ?? CX;
-          const gunY = GUN_Y + this.recoil * 22 + 24;
+          const gunY = GUN_Y + this.recoil * 22 + 24 * GAMEPLAY_GUN_SCALE;
           drawSlide6String(
             c,
-            { x: gunX - 18, y: gunY + 46 },
+            { x: gunX - 18 * GAMEPLAY_GUN_SCALE, y: gunY + 46 * GAMEPLAY_GUN_SCALE },
             { x: p.x, y: p.y + 15 },
             7,
             4,
@@ -6859,8 +7521,8 @@ export class Game {
           c.strokeStyle = 'rgba(254,243,199,0.9)';
           c.lineWidth = 1.2;
           c.beginPath();
-          c.moveTo((p.originX ?? CX) - 14, GUN_Y + 198 + this.recoil * 22);
-          c.quadraticCurveTo((p.originX ?? CX) + 10, (p.y + GUN_Y) / 2 + 30, p.x, p.y + 40);
+          c.moveTo((p.originX ?? CX) - 14 * GAMEPLAY_GUN_SCALE, GUN_Y + 198 * GAMEPLAY_GUN_SCALE + this.recoil * 22);
+          c.quadraticCurveTo((p.originX ?? CX) + 10 * GAMEPLAY_GUN_SCALE, (p.y + GUN_Y) / 2 + 30, p.x, p.y + 40);
           c.stroke();
         }
       }
@@ -6988,7 +7650,10 @@ export class Game {
       c.restore();
     }
 
-    // ---------------- Distinct, flat boss attack silhouettes ----------------
+    // ---------------- Boss launch muzzle shockwaves & attack projectiles ----------------
+    if (this.bossMuzzleFlashes?.length) {
+      for (const mf of this.bossMuzzleFlashes) drawBossMuzzleFlash(c, mf);
+    }
     for (const bp of this.bossProjs) drawBossProjectile(c, bp, this.time);
 
     // Slide 5's beams, sparks and rounds go under its gun: slide 5 paints the
@@ -7009,6 +7674,14 @@ export class Game {
         ? this.projs.filter((p) => !(p.spawnDelay && p.spawnDelay > 0)).map((p) => ({ x: p.x + Math.sin((p.t ?? 0) * 40) * 1.5, y: p.y }))
         : [];
       this.acidFluid.render(c, W, H, hot);
+      if (this.ownXenoGlob && getGunEffect('xeno') === 'xeno_hybrid') {
+        // Effect 2 still supplies the merged fluid; effect 3's own glassy
+        // glob, bubbles and molecular tracers ride on that same carrier.
+        for (const p of this.projs) {
+          if (p.spawnDelay && p.spawnDelay > 0) continue;
+          drawXenoHybridFlight(c, p.x, p.y, p.t ?? 0);
+        }
+      }
     }
 
     // Real gold pieces leap out of the chest, scatter, fall and bounce, then
@@ -7072,23 +7745,28 @@ export class Game {
         case 'bolt': {
           c.save();
           c.globalCompositeOperation = 'lighter';
-          c.shadowColor = cssColor(p.color);
-          c.shadowBlur = 12;
           c.lineJoin = 'round';
-          for (const [lw, col] of [[p.size * 2.5 * a, cssColor(p.color)], [p.size * 0.8 * a, '#ffffff']] as const) {
-            c.strokeStyle = col;
-            c.lineWidth = lw;
-            c.beginPath();
-            c.moveTo(p.x, p.y);
-            const tx = p.tx ?? p.x;
-            const ty = p.ty ?? p.y;
-            for (let k = 1; k < 7; k++) {
-              const f = k / 7;
-              c.lineTo(p.x + (tx - p.x) * f + rand(-7, 7), p.y + (ty - p.y) * f + rand(-7, 7));
-            }
-            c.lineTo(tx, ty);
-            c.stroke();
+          c.lineCap = 'round';
+          const tx = p.tx ?? p.x;
+          const ty = p.ty ?? p.y;
+          c.beginPath();
+          c.moveTo(p.x, p.y);
+          for (let k = 1; k < 7; k++) {
+            const f = k / 7;
+            c.lineTo(p.x + (tx - p.x) * f + rand(-7, 7), p.y + (ty - p.y) * f + rand(-7, 7));
           }
+          c.lineTo(tx, ty);
+          const boltCol = cssColor(p.color);
+          c.strokeStyle = boltCol;
+          c.globalAlpha = 0.28 * a;
+          c.lineWidth = p.size * 5.2 * a;
+          c.stroke();
+          c.globalAlpha = 1;
+          c.lineWidth = p.size * 2.4 * a;
+          c.stroke();
+          c.strokeStyle = '#ffffff';
+          c.lineWidth = p.size * 0.8 * a;
+          c.stroke();
           c.restore();
           break;
         }
@@ -7096,13 +7774,17 @@ export class Game {
           c.save();
           c.globalCompositeOperation = 'lighter';
           const r = p.size * (0.5 + a * 0.8);
-          const gg = c.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 2);
-          gg.addColorStop(0, `rgba(255,255,255,${a})`);
-          gg.addColorStop(0.3, cssColor(p.color, a * 0.9));
-          gg.addColorStop(1, cssColor(p.color, 0));
-          c.fillStyle = gg;
+          c.fillStyle = cssColor(p.color, a * 0.28);
           c.beginPath();
-          c.arc(p.x, p.y, r * 2, 0, TAU);
+          c.arc(p.x, p.y, r * 1.85, 0, TAU);
+          c.fill();
+          c.fillStyle = cssColor(p.color, a * 0.68);
+          c.beginPath();
+          c.arc(p.x, p.y, r * 1.05, 0, TAU);
+          c.fill();
+          c.fillStyle = `rgba(255,255,255,${a * 0.9})`;
+          c.beginPath();
+          c.arc(p.x, p.y, r * 0.42, 0, TAU);
           c.fill();
           c.restore();
           break;
@@ -7249,18 +7931,13 @@ export class Game {
       this.getBazookaState().drawForeground(c, W, H);
     }
 
-    // dynamic lights (bloom-like)
+    // dynamic lights (bloom-like) — pre-baked radial sprite, zero per-frame gradients
     if (this.lights.length) {
       c.save();
       c.globalCompositeOperation = 'lighter';
       for (const l of this.lights) {
         const a = l.life / l.max;
-        const g = c.createRadialGradient(l.x, l.y, 0, l.x, l.y, l.r);
-        g.addColorStop(0, `rgba(${l.rgb},${0.42 * a})`);
-        g.addColorStop(0.3, `rgba(${l.rgb},${0.16 * a})`);
-        g.addColorStop(1, `rgba(${l.rgb},0)`);
-        c.fillStyle = g;
-        c.fillRect(l.x - l.r, l.y - l.r, l.r * 2, l.r * 2);
+        drawRgbGlowSprite(c, l.x, l.y, l.r, l.r, l.rgb, a);
       }
       c.restore();
     }
@@ -7269,16 +7946,9 @@ export class Game {
     // Slide 3's own screen flash (`flashScreen()`): a flat fill at its strength.
     if (this.s7State) this.s7State.drawFlash(c, W, H);
 
-    // weapon-colored impact tint
+    // weapon-colored impact tint — pre-baked offscreen wash, zero per-frame gradients
     if (this.tintA > 0) {
-      const tg2 = c.createRadialGradient(CX, H / 2, H * 0.2, CX, H / 2, H * 0.75);
-      tg2.addColorStop(0, `rgba(${this.tintRgb},0)`);
-      tg2.addColorStop(1, `rgba(${this.tintRgb},${this.tintA})`);
-      c.save();
-      c.globalCompositeOperation = 'lighter';
-      c.fillStyle = tg2;
-      c.fillRect(0, 0, W, H);
-      c.restore();
+      drawScreenTintWash(c, W, H, this.tintRgb, this.tintA);
     }
 
     // Slide 9's flash: the whole screen, additive, at 0.6 of its strength.
@@ -7290,12 +7960,39 @@ export class Game {
       c.restore();
     }
 
-    // vignette
-    const vg = c.createRadialGradient(CX, H / 2, H * 0.3, CX, H / 2, H * 0.75);
-    vg.addColorStop(0, 'rgba(0,0,0,0)');
-    vg.addColorStop(1, 'rgba(0,0,0,0.55)');
-    c.fillStyle = vg;
-    c.fillRect(0, 0, W, H);
+    // vignette — pre-baked once into an offscreen bitmap (or cached gradient in headless tests)
+    const density = Math.ceil(this.dpr || 1);
+    if (!this.vignetteBackdrop || this.vignetteBackdropDpr !== density) {
+      const doc = (globalThis as { document?: Document }).document;
+      if (doc && typeof doc.createElement === 'function') {
+        const vc = doc.createElement('canvas');
+        vc.width = W * density;
+        vc.height = H * density;
+        const vctx = vc.getContext('2d');
+        if (vctx) {
+          vctx.setTransform(density, 0, 0, density, 0, 0);
+          const vg = vctx.createRadialGradient(CX, H / 2, H * 0.3, CX, H / 2, H * 0.75);
+          vg.addColorStop(0, 'rgba(0,0,0,0)');
+          vg.addColorStop(1, 'rgba(0,0,0,0.55)');
+          vctx.fillStyle = vg;
+          vctx.fillRect(0, 0, W, H);
+          this.vignetteBackdrop = vc;
+          this.vignetteBackdropDpr = density;
+        }
+      }
+    }
+    if (this.vignetteBackdrop) {
+      c.drawImage(this.vignetteBackdrop, 0, 0, W, H);
+    } else {
+      if (!this.vignetteGrad) {
+        const vg = c.createRadialGradient(CX, H / 2, H * 0.3, CX, H / 2, H * 0.75);
+        vg.addColorStop(0, 'rgba(0,0,0,0)');
+        vg.addColorStop(1, 'rgba(0,0,0,0.55)');
+        this.vignetteGrad = vg;
+      }
+      c.fillStyle = this.vignetteGrad;
+      c.fillRect(0, 0, W, H);
+    }
 
     // sniper scope overlay
     if (this.aiming) {
@@ -7404,9 +8101,13 @@ export class Game {
     const coinY = isSpecial(this.level.mode) ? 34 : 44;
     c.strokeText(String(this.coins), W - 46, coinY);
     c.save();
+    if (this.coinPulse > 0.04) {
+      c.fillStyle = `rgba(251,191,36,${Math.min(0.45, this.coinPulse * 0.4)})`;
+      c.beginPath();
+      c.arc(W - 60, coinY, 16 * this.coinPulse, 0, TAU);
+      c.fill();
+    }
     c.fillStyle = '#ffd23f';
-    c.shadowColor = '#fbbf24';
-    c.shadowBlur = 13 * this.coinPulse;
     c.fillText(String(this.coins), W - 46, coinY);
     c.restore();
     c.save();
@@ -7426,36 +8127,39 @@ export class Game {
     c.font = font(isSpecial(this.level.mode) ? 13 : 16);
     c.fillStyle = this.level.mode === 'treasure' || this.level.mode === 'bonus' ? '#fde68a'
       : this.level.mode === 'boulder' ? '#a5f3fc' : this.level.boss ? '#ff5050' : '#ffffff';
-    c.fillText(modeLabel, CX, isSpecial(this.level.mode) ? 20 : 30);
+    c.fillText(modeLabel, CX, isSpecial(this.level.mode) ? 20 : 24);
 
     if (isSpecial(this.level.mode)) {
       c.save();
-      c.fillStyle = 'rgba(5,12,24,0.78)';
+      c.fillStyle = 'rgba(5,12,24,0.72)';
       c.strokeStyle = this.level.mode === 'boulder' ? 'rgba(103,232,249,0.7)' : 'rgba(252,211,77,0.7)';
-      c.lineWidth = 1.5;
-      c.beginPath(); c.roundRect(CX - 62, 39, 124, 31, 12); c.fill(); c.stroke();
-      c.font = font(18);
-      c.fillStyle = this.stageTime < 8 ? '#fb7185' : '#ffffff';
-      c.fillText(`⏱ ${this.stageTime.toFixed(1)}s`, CX, 56);
+      c.lineWidth = 1.4;
+      c.beginPath(); c.roundRect(CX - 118, 30, 236, 24, 11); c.fill(); c.stroke();
       c.font = font(12);
-      c.fillStyle = '#ffffff';
+      const timeStr = `⏱ ${this.stageTime.toFixed(1)}s`;
       if (this.level.mode === 'boulder') {
-        const barX = CX - 105, barY = 102, ratio = 1 - this.level.hp / Math.max(1, this.level.maxHp);
-        c.fillStyle = 'rgba(2,12,25,0.85)';
-        c.beginPath(); c.roundRect(barX - 3, barY - 3, 216, 15, 7); c.fill();
-        c.fillStyle = '#164e63'; c.fillRect(barX, barY, 210, 9);
-        const g = c.createLinearGradient(barX, 0, barX + 210, 0);
-        g.addColorStop(0, '#38bdf8'); g.addColorStop(1, '#a5f3fc');
-        c.fillStyle = g; c.fillRect(barX, barY, 210 * ratio, 9);
-        c.fillStyle = '#d9f9ff';
-        c.fillText(`BATU TERKIKIS ${Math.round(ratio * 100)}%`, CX, 87);
+        const ratio = 1 - this.level.hp / Math.max(1, this.level.maxHp);
+        c.fillStyle = this.stageTime < 8 ? '#fb7185' : '#ffffff';
+        c.textAlign = 'left';
+        c.fillText(timeStr, CX - 108, 42);
+        c.textAlign = 'right';
+        c.fillStyle = '#a5f3fc';
+        c.fillText(`BATU ${Math.round(ratio * 100)}%`, CX + 108, 42);
+        const barX = CX - 26, barY = 39, barW = 64;
+        c.fillStyle = '#164e63'; c.fillRect(barX, barY, barW, 6);
+        c.fillStyle = '#67e8f9'; c.fillRect(barX, barY, barW * ratio, 6);
       } else if (this.level.mode === 'bonus') {
-        c.fillStyle = '#fde68a';
-        c.fillText(`KOIN ${this.bonusCoins.filter(coin => coin.taken).length}/${this.bonusCoins.length} • TEMBAK YANG BERPUTAR`, CX, 88);
+        let taken = 0;
+        for (let ci = 0; ci < this.bonusCoins.length; ci++) {
+          if (this.bonusCoins[ci].taken) taken++;
+        }
+        c.fillStyle = this.stageTime < 8 ? '#fb7185' : '#fde68a';
+        c.fillText(`${timeStr}  •  KOIN ${taken}/${this.bonusCoins.length}`, CX, 42);
       } else {
-        c.fillStyle = '#fde68a';
-        c.fillText(this.treasureBuff === 'double' ? '2 SENJATA AKTIF'
-          : this.treasureBuff ? `BONUS ${this.treasureBuff.toUpperCase()} AKTIF` : 'TEMBAK PETI SEBANYAK MUNGKIN!', CX, 88);
+        const status = this.treasureBuff === 'double' ? '2 SENJATA'
+          : this.treasureBuff ? `BONUS ${this.treasureBuff.toUpperCase()}` : 'BERONDONG PETI!';
+        c.fillStyle = this.stageTime < 8 ? '#fb7185' : '#fde68a';
+        c.fillText(`${timeStr}  •  ${status}`, CX, 42);
       }
       c.restore();
     }
@@ -7510,27 +8214,25 @@ export class Game {
       const idx = (n - 1) % 5;
       for (let i = 0; i < 5; i++) {
         const x = CX - 52 + i * 26;
-        const y = 56;
+        const y = 47;
         const isBoss = i === 4;
-        c.beginPath();
+        if (i === idx) {
+          c.fillStyle = isBoss ? 'rgba(255,59,59,0.28)' : 'rgba(255,255,255,0.26)';
+          c.beginPath();
+          c.arc(x, y, 11.5, 0, TAU);
+          c.fill();
+        }
         if (isBoss) {
-          c.save();
-          c.translate(x, y);
-          c.rotate(Math.PI / 4);
-          c.rect(-6, -6, 12, 12);
-          c.restore();
+          const outerR = i === idx ? 9.6 : 8.4;
+          traceHudStarPath(c, x, y, outerR, outerR * 0.44, 5);
         } else {
+          c.beginPath();
           c.arc(x, y, i === idx ? 7 : 5.5, 0, TAU);
         }
         if (i < idx) c.fillStyle = '#ffd23f';
         else if (i === idx) c.fillStyle = isBoss ? '#ff3b3b' : '#ffffff';
-        else c.fillStyle = isBoss ? 'rgba(255,60,60,0.35)' : 'rgba(255,255,255,0.22)';
-        if (i === idx) {
-          c.shadowColor = c.fillStyle as string;
-          c.shadowBlur = 12;
-        }
+        else c.fillStyle = isBoss ? 'rgba(255,60,60,0.42)' : 'rgba(255,255,255,0.22)';
         c.fill();
-        c.shadowBlur = 0;
       }
     }
 

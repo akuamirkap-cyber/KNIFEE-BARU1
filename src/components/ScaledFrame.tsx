@@ -17,13 +17,11 @@ export default function ScaledFrame({ baseWidth, baseHeight, children }: ScaledF
       if (!containerRef.current) return;
       const { clientWidth, clientHeight } = containerRef.current;
       if (clientWidth > 0 && clientHeight > 0) {
-        // Uniform fit: strictly fit both width and height with small 2px safety margin so no edges touch or get clipped
-        const s = Math.min((clientWidth - 2) / baseWidth, (clientHeight - 2) / baseHeight);
+        // Exact edge-to-edge 9:16 fit for mobile portrait & desktop viewport
+        const s = Math.min(clientWidth / baseWidth, clientHeight / baseHeight);
         setScale(Math.max(0.05, s));
         retry = 0;
       } else if (retry < 60) {
-        // Kontainer sempat 0-size (transisi display:none / layout belum siap).
-        // Jangan biarkan slide blank (opacity 0 selamanya) — coba lagi tiap frame.
         retry += 1;
         raf = requestAnimationFrame(updateScale);
       }
@@ -43,9 +41,9 @@ export default function ScaledFrame({ baseWidth, baseHeight, children }: ScaledF
   const currentScale = scale ?? 1;
 
   return (
-    <div 
-      ref={containerRef} 
-      className="w-full h-full relative overflow-hidden flex items-center justify-center bg-black select-none"
+    <div
+      ref={containerRef}
+      className="w-full h-full relative overflow-hidden flex items-center justify-center bg-[#05060a] select-none"
     >
       <div
         style={{

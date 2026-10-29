@@ -1,10 +1,46 @@
-import { type Ctx, TAU, pick, rand } from './core';
+import { type Ctx, TAU, makeCanvas, pick, rand } from './core';
 import { K, type Particle, type Particles } from './particles';
 import { drawCoin, drawPlayingCard } from './shapes6';
 
 export * from './spawn5';
 
 type Range = [number, number];
+
+interface CoinSprite { canvas: HTMLCanvasElement; x: number; y: number; w: number; h: number; radius: number }
+const fallingCoins = new Map<number, CoinSprite>();
+
+/** Coin face is static; rotation/flip, glow and falling motion remain live. */
+function drawFallingCoin(ctx: Ctx, radius: number, flip: number) {
+  const canCache = typeof document !== 'undefined' && typeof HTMLCanvasElement !== 'undefined'
+    && ctx.canvas instanceof HTMLCanvasElement && Number.isFinite(radius) && radius >= 4.4 && radius <= 6.6
+    && ctx.globalAlpha >= 0.999 && ctx.globalCompositeOperation === 'source-over';
+  let sprite: CoinSprite | undefined;
+  if (canCache) {
+    const r = Math.round(radius * 4) / 4;
+    sprite = fallingCoins.get(r);
+    if (!sprite) {
+      try {
+        const x = Math.floor(-r - 2), y = x;
+        const w = Math.ceil(r + 2) - x, h = w;
+        const density = 4;
+        const canvas = makeCanvas(w * density, h * density);
+        const c = canvas.getContext('2d');
+        if (c) {
+          c.setTransform(density, 0, 0, density, -x * density, -y * density);
+          drawCoin(c, r, 1);
+          sprite = { canvas, x, y, w, h, radius: r };
+          fallingCoins.set(r, sprite); // bounded to eleven radii
+        }
+      } catch { /* Fall back to the original drawing if allocation is denied. */ }
+    }
+  }
+  if (!sprite) { drawCoin(ctx, radius, flip); return; }
+  const scale = radius / sprite.radius;
+  ctx.save();
+  ctx.scale(Math.abs(flip) * 0.92 + 0.08, 1);
+  ctx.drawImage(sprite.canvas, sprite.x * scale, sprite.y * scale, sprite.w * scale, sprite.h * scale);
+  ctx.restore();
+}
 
 export function coins(ps: Particles, x: number, y: number, n: number, ang: number, spread: number, speed: Range) {
   for (let i = 0; i < n; i++) {
@@ -34,7 +70,7 @@ export function coins(ps: Particles, x: number, y: number, n: number, ang: numbe
         c.arc(0, 0, r * 1.9, 0, TAU);
         c.fill();
         c.restore();
-        drawCoin(c, r, Math.cos(p.seed + age * 17));
+        drawFallingCoin(c, r, Math.cos(p.seed + age * 17));
         c.restore();
       },
     });

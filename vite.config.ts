@@ -318,10 +318,6 @@ export default defineConfig(() => {
       rollupOptions: {
         input: {
           main: path.resolve(process.cwd(), 'index.html'),
-          game2: path.resolve(process.cwd(), 'games/game-2/index.html'),
-          game4: path.resolve(process.cwd(), 'games/game-4/index.html'),
-          game6: path.resolve(process.cwd(), 'games/game-6/index.html'),
-          game8: path.resolve(process.cwd(), 'games/game-8/index.html'),
         },
       },
     },

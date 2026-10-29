@@ -9,7 +9,7 @@
  * Slide 1 previously approximated this with a few additive sprites, which is
  * why the acid looked like stacked solid circles instead of liquid.
  */
-import { drawGlow } from './art/glowSprite';
+import { drawGlow, glowSprite } from './art/glowSprite';
 
 const clamp = (v: number, a = 0, b = 1) => Math.max(a, Math.min(b, v));
 const lerp = (a: number, b: number, k: number) => a + (b - a) * k;
@@ -69,6 +69,8 @@ export class AcidFluid {
   private oc: HTMLCanvasElement | null = null;
   private octx: CanvasRenderingContext2D | null = null;
   private out: ImageData | null = null;
+  /** The part of the output canvas painted on the preceding frame. */
+  private outputBounds: { x: number; y: number; w: number; h: number } | null = null;
   private blobs: AcidBlob[] = [];
   private w = 0;
   private h = 0;
@@ -84,7 +86,10 @@ export class AcidFluid {
     if (typeof document === 'undefined') return;
     if (!this.fc || !this.oc) {
       this.fc = document.createElement('canvas');
-      this.fctx = this.fc.getContext('2d');
+      // This is a pixel-readback buffer, not the display canvas. Tell browsers
+      // up front so repeated getImageData calls do not trigger costly GPU
+      // readbacks (or an unpredictable mid-game switch to a software canvas).
+      this.fctx = this.fc.getContext('2d', { willReadFrequently: true });
       this.oc = document.createElement('canvas');
       this.octx = this.oc.getContext('2d');
     }
@@ -99,6 +104,7 @@ export class AcidFluid {
     this.fc!.width = this.oc!.width = this.fw;
     this.fc!.height = this.oc!.height = this.fh;
     this.out = this.octx!.createImageData(this.fw, this.fh);
+    this.outputBounds = null;
   }
 
   begin() {
@@ -125,63 +131,111 @@ export class AcidFluid {
     f.globalCompositeOperation = 'lighter';
     f.clearRect(0, 0, fw, fh);
     const spr = blobSprite();
+    // A shot or a few marks usually cover only a small part of the board.
+    // Read and recolour that union instead of allocating a full-screen
+    // ImageData every frame. The transparent padding keeps the highlight's
+    // preceding pixel and image-smoothing at the edges identical.
+    let left = fw, top = fh, right = 0, bottom = 0;
     for (const b of this.blobs) {
       const r = b.r * 1.6 * s;
       if (r < 0.4) continue;
-      f.drawImage(spr, b.x * s - r, b.y * s - r, r * 2, r * 2);
+      const x = b.x * s, y = b.y * s;
+      // Dying droplets can be far outside the screen. They cannot affect the
+      // field, and must not expand its readback to the whole board.
+      if (x + r < -2 || y + r < -2 || x - r > fw + 2 || y - r > fh + 2) continue;
+      f.drawImage(spr, x - r, y - r, r * 2, r * 2);
+      left = Math.min(left, Math.floor(x - r) - 2);
+      top = Math.min(top, Math.floor(y - r) - 2);
+      right = Math.max(right, Math.ceil(x + r) + 2);
+      bottom = Math.max(bottom, Math.ceil(y + r) + 2);
     }
-    const img = f.getImageData(0, 0, fw, fh);
-    const d = img.data;
-    const o = this.out.data;
-    const T = 92;
-    const inv = 1 / (255 - T);
-    const w4 = fw * 4;
-    for (let i = 0, n = d.length; i < n; i += 4) {
-      const a = d[i + 3];
-      if (a < T) {
-        o[i + 3] = 0;
-        continue;
-      }
-      const v = (a - T) * inv;
-      const aa = i >= w4 ? d[i - w4 + 3] : 0;
-      const hl = clamp((a - aa - 26) / 70);
-      let r: number;
-      let g: number;
-      let b: number;
-      if (v < 0.16) {
-        const k = v / 0.16;
-        r = lerp(48, 128, k);
-        g = lerp(104, 208, k);
-        b = lerp(0, 8, k);
-      } else if (v < 0.6) {
-        const k = (v - 0.16) / 0.44;
-        r = lerp(128, 190, k);
-        g = lerp(208, 255, k);
-        b = lerp(8, 40, k);
-      } else {
-        const k = (v - 0.6) / 0.4;
-        r = lerp(190, 248, k);
-        g = 255;
-        b = lerp(40, 170, k);
-      }
-      const h = hl * 0.75;
-      o[i] = r + (255 - r) * h;
-      o[i + 1] = g + (255 - g) * h;
-      o[i + 2] = b + (255 - b) * h;
-      o[i + 3] = v < 0.08 ? 150 + (v / 0.08) * 105 : 255;
+    left = Math.max(0, left);
+    top = Math.max(0, top);
+    right = Math.min(fw, right);
+    bottom = Math.min(fh, bottom);
+    const width = right - left, height = bottom - top;
+
+    // The output canvas is persistent: remove the old area before painting the
+    // new one, including when all the acid has moved outside the screen.
+    if (this.outputBounds) {
+      const b = this.outputBounds;
+      this.octx.clearRect(b.x, b.y, b.w, b.h);
+      this.outputBounds = null;
     }
-    this.octx.putImageData(this.out, 0, 0);
+    if (width > 0 && height > 0) {
+      const d = f.getImageData(left, top, width, height).data;
+      const o = this.out.data;
+      const T = 92;
+      const inv = 1 / (255 - T);
+      const w4 = width * 4;
+      for (let y = 0; y < height; y++) {
+        let dst = ((top + y) * fw + left) * 4;
+        const end = (y + 1) * w4;
+        for (let i = y * w4; i < end; i += 4, dst += 4) {
+          const a = d[i + 3];
+          if (a < T) {
+            o[dst + 3] = 0;
+            continue;
+          }
+          const v = (a - T) * inv;
+          const aa = i >= w4 ? d[i - w4 + 3] : 0;
+          const hl = clamp((a - aa - 26) / 70);
+          let r: number;
+          let g: number;
+          let b: number;
+          if (v < 0.16) {
+            const k = v / 0.16;
+            r = lerp(48, 128, k);
+            g = lerp(104, 208, k);
+            b = lerp(0, 8, k);
+          } else if (v < 0.6) {
+            const k = (v - 0.16) / 0.44;
+            r = lerp(128, 190, k);
+            g = lerp(208, 255, k);
+            b = lerp(8, 40, k);
+          } else {
+            const k = (v - 0.6) / 0.4;
+            r = lerp(190, 248, k);
+            g = 255;
+            b = lerp(40, 170, k);
+          }
+          const h = hl * 0.75;
+          o[dst] = r + (255 - r) * h;
+          o[dst + 1] = g + (255 - g) * h;
+          o[dst + 2] = b + (255 - b) * h;
+          o[dst + 3] = v < 0.08 ? 150 + (v / 0.08) * 105 : 255;
+        }
+      }
+      this.octx.putImageData(this.out, 0, 0, left, top, width, height);
+      this.outputBounds = { x: left, y: top, w: width, h: height };
+    }
 
     // under-glow so the acid bleeds light onto the wheel and the gun
     let n = 0;
+    // Every halo uses the same sprite and additive blend. Keep their order and
+    // opacity, but avoid a save/restore and blend-mode switch for each blob.
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    let glow: HTMLCanvasElement | null | undefined;
     for (const b of this.blobs) {
       if (b.r < 3) continue;
       if (++n > 160) break;
-      drawGlow(c, b.x, b.y, b.r * 3.2 * this.glowScale, '#7dff00', 0.16 + 0.1 * Math.min(1, b.r / 10));
+      const r = b.r * 3.2 * this.glowScale;
+      const alpha = 0.16 + 0.1 * Math.min(1, b.r / 10);
+      if (glow === undefined) glow = typeof document === 'undefined' ? null : glowSprite('#7dff00');
+      if (glow) {
+        c.globalAlpha = Math.min(1, alpha);
+        c.drawImage(glow, b.x - r, b.y - r, r * 2, r * 2);
+      } else drawGlow(c, b.x, b.y, r, '#7dff00', alpha);
     }
+    c.restore();
     c.save();
     c.imageSmoothingEnabled = true;
-    c.drawImage(this.oc!, 0, 0, W, H);
+    if (width > 0 && height > 0) {
+      // Keep the original transform and subpixel filtering exactly. The
+      // readback and pixel work above are already limited to the fluid.
+      c.drawImage(this.oc!, 0, 0, W, H);
+    }
     c.restore();
 
     // hot inner core of every flying glob

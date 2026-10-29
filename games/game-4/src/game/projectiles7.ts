@@ -1,3 +1,4 @@
+import { drawBreakerCoin } from '../../../../src/games/shared/coinArt';
 import { type Ctx, TAU, drawSprite, glowSprite, makeBolt, pick, rand, randomPoly } from './core';
 import { makeCracks, strokeLines } from './art';
 import { RadialFlash } from './fx4';
@@ -8,7 +9,6 @@ import { GlowLines, GlowSpot, K, Light, Rays } from './particles';
 import { drawFlame4 } from './shapes4';
 import { RAINBOW } from './shapes5';
 import { drawBee } from './shapes4';
-import { drawCoin } from './shapes6';
 import {
   AMETHYST,
   EMERALD,
@@ -16,7 +16,7 @@ import {
   SAPPHIRE,
   drawBlasterBolt,
   drawChargeOrb,
-  drawCross,
+  drawHolyEmblem,
   drawHolyOrb,
   drawIcicle,
   drawQuantumOrb,
@@ -111,7 +111,7 @@ export class HolyShot extends Projectile {
       c.translate(p.x, p.y);
       c.rotate(theta + Math.PI / 2);
       c.globalAlpha = 0.92;
-      drawCross(c, 13);
+      drawHolyEmblem(c, 13);
       c.restore();
     });
     woodCracks(g, theta, 4, [12, 28], '255,225,140', 1.2);
@@ -311,8 +311,7 @@ export class CoinShot extends Projectile {
     drawSprite(ctx, glowSprite('255,210,90'), this.x, this.y, 62, 0.55);
     ctx.restore();
     ctx.save();
-    ctx.translate(this.x, this.y);
-    drawCoin(ctx, 13, Math.cos(this.age * 15));
+    drawBreakerCoin(ctx, this.x, this.y, 13, this.age, 0, 1, true, true);
     ctx.restore();
   }
   hit(theta: number, hx: number, hy: number) {
@@ -1231,11 +1230,13 @@ export class CryoShot extends Projectile {
   constructor(g: Game, x: number, y: number) {
     super(g, x, y, -1000);
   }
-  trail() {
+  trail(dt: number) {
     const ps = this.g.particles;
-    if (Math.random() < 0.7) ps.add({ k: K.SMOKE, x: this.x + rand(-6, 6), y: this.y + rand(24, 60), vx: rand(-20, 20), vy: rand(10, 50), size: 9, size2: 32, life: rand(0.5, 0.9), color: '215,242,255', alpha: 0.4, rot: rand(0, TAU), vrot: rand(-1, 1) });
-    if (Math.random() < 0.5) S.stars(ps, this.x + rand(-8, 8), this.y + rand(10, 60), 1, pick(['200,245,255', '255,255,255', '140,215,255']), [10, 50], [6, 11], Math.PI / 2, 1.4);
-    if (Math.random() < 0.3) S.snowflakes(ps, this.x + rand(-8, 8), this.y + rand(20, 50), 1, Math.PI / 2, 1.4, [10, 50]);
+    for (let i = 0, n = this.cosmeticTicks(dt); i < n; i++) {
+      if (Math.random() < 0.7) ps.add({ k: K.SMOKE, x: this.x + rand(-6, 6), y: this.y + rand(24, 60), vx: rand(-20, 20), vy: rand(10, 50), size: 9, size2: 32, life: rand(0.5, 0.9), color: '215,242,255', alpha: 0.4, rot: rand(0, TAU), vrot: rand(-1, 1) });
+      if (Math.random() < 0.5) S.stars(ps, this.x + rand(-8, 8), this.y + rand(10, 60), 1, pick(['200,245,255', '255,255,255', '140,215,255']), [10, 50], [6, 11], Math.PI / 2, 1.4);
+      if (Math.random() < 0.3) S.snowflakes(ps, this.x + rand(-8, 8), this.y + rand(20, 50), 1, Math.PI / 2, 1.4, [10, 50]);
+    }
   }
   draw(ctx: Ctx) {
     ctx.save();

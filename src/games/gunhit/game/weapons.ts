@@ -1,3 +1,5 @@
+import { RETIRED_WEAPONS } from './retiredWeapons';
+
 export type WeaponId =
   | 'pistol' | 'ak47' | 'plasma' | 'laser' | 'cricket' | 'electro' | 'nail'
   | 'fish' | 'crossbow' | 'bazooka' | 'rpg' | 'freeze' | 'golden' | 'blackhole'
@@ -12,7 +14,7 @@ export type WeaponId =
   | 'unicorn' | 'pencil' | 'sandal' | 'wand'
   | 'coingun' | 'blaster'
   | 'photon_saber'
-  | 'gauntlet_cannon' | 'pulse_rifle' | 'cryo_blaster' | 'hyperdrive' | 'quantum_destabilizer'
+  | 'gauntlet_cannon' | 'ironman_hand' | 'pulse_rifle' | 'cryo_blaster' | 'hyperdrive' | 'quantum_destabilizer'
   | 'xeno' | 'dora' | 'pred'
   | 'longbow' | 'mp5' | 'tesla_rifle' | 'ion_smg' | 'phaser'
   | 'yautja' | 'identity_disc' | 'proton_pack' | 'heat_ray'
@@ -125,7 +127,7 @@ const base = {
 const FIRE = ['#fff3b0', '#ffd23f', '#ff9f1c'];
 const CONF = ['#f43f5e', '#facc15', '#22d3ee', '#a855f7', '#4ade80', '#fb923c'];
 
-export const WEAPONS: Weapon[] = [
+const ALL_WEAPON_DEFINITIONS: Weapon[] = [
   // ======================== ORIGINAL 14 ========================
   { ...base, id: 'pistol', name: 'PISTOL', emoji: '🔫', rarity: 'UMUM', perk: 'SEIMBANG', desc: 'Pistol klasik, seimbang di semua hal.',
     speed: 2700, cooldown: 0.12, shake: 2.5, stick: 17, color: '#ff3030', trail: '255,230,150', sparks: FIRE, casing: '#e0ad40', ejectY: 48, stats: { rate: 3, speed: 3, power: 3 } },
@@ -354,6 +356,9 @@ export const WEAPONS: Weapon[] = [
   { ...base, id: 'gauntlet_cannon', name: 'GAUNTLET CANNON', emoji: '🦾', rarity: 'LEGENDARIS', perk: 'TELAPAK BESI', desc: 'Meriam telapak tangan robotik raksasa! Meluncurkan tinju gauntlet berenergi surya dengan hantaman super kuat, 3 poin.',
     speed: 2200, cooldown: 0.3, points: 3, half: 7.5, stick: 42, energy: true, recoil: 2.3, shake: 11, color: '#ef4444', trail: '251,146,60', trailFx: 'glow',
     sparks: ['#ffffff', '#fef08a', '#f97316', '#ef4444'], previewLen: 196, previewY: 44, stats: { rate: 2, speed: 3, power: 5 } },
+  { ...base, id: 'ironman_hand', name: 'IRONMAN HAND', emoji: '🦾', rarity: 'LEGENDARIS', perk: 'REPULSOR', desc: 'Tangan lapis baja Ironman meluncurkan tinju berenergi dan semburan repulsor, 3 poin!',
+    speed: 2200, cooldown: 0.3, points: 3, half: 7.5, stick: 42, energy: true, recoil: 2.3, shake: 11, color: '#ef4444', trail: '251,146,60', trailFx: 'glow',
+    sparks: ['#ffffff', '#fef08a', '#f97316', '#ef4444'], previewLen: 196, previewY: 44, stats: { rate: 2, speed: 3, power: 5 } },
   { ...base, id: 'pulse_rifle', name: 'PULSE RIFLE', emoji: '⚡', rarity: 'LANGKA', perk: 'TEMBAK LISTRIK', desc: 'Senapan pulsa listrik futuristik! Tembakan listrik cepat dengan kilatan biru elektrik.',
     speed: 3600, cooldown: 0.14, half: 3.2, energy: true, recoil: 0.7, shake: 2.5, color: '#38bdf8', trail: '125,211,252', trailFx: 'spark',
     sparks: ['#ffffff', '#bae6fd', '#38bdf8'], previewLen: 250, previewScale: 0.82, previewY: 46, stats: { rate: 4, speed: 5, power: 3 } },
@@ -445,6 +450,9 @@ export const WEAPONS: Weapon[] = [
     speed: 5200, cooldown: 1.15, points: 3, half: 5, energy: true, beam: true, burn: true, burnText: '🔥 TERBAKAR!', recoil: 1.3, shake: 7, color: '#ff4d4d', trail: '255,77,77', trailFx: 'fire',
     sparks: ['#ffffff', '#fca5a5', '#ef4444'], previewLen: 220, previewY: 36, stats: { rate: 1, speed: 5, power: 5 } },
 ];
+
+/** Only this filtered roster is playable or used for gifts and unlocks. */
+export const WEAPONS: Weapon[] = ALL_WEAPON_DEFINITIONS.filter(w => !RETIRED_WEAPONS.has(w.id));
 
 export const RARITY_COLOR: Record<Rarity, string> = {
   UMUM: '#9ca3af',

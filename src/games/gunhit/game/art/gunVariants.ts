@@ -1,4 +1,6 @@
 import type { WeaponId } from '../weapons';
+import { RETIRED_WEAPONS } from '../retiredWeapons';
+import { savedValues } from '../safeStorage';
 import { SET_SEVEN_BY_SLIDE1_ID, SET_SEVEN_SETS } from '../setSevenArt';
 import { SET_NINE_NEW_WEAPONS, isNineNewWeapon } from '../setNineArt';
 import { SET_ELEVEN_BY_SLIDE1_ID, SET_ELEVEN_NEW_IDS, SET_ELEVEN_NEW_WEAPONS } from '../setElevenArt';
@@ -15,7 +17,7 @@ export const FIXED_CLASSIC_WEAPONS = [] as const satisfies readonly WeaponId[];
 export type FixedClassicWeapon = (typeof FIXED_CLASSIC_WEAPONS)[number];
 
 /** Only guns with an actual design choice appear in the DESAIN tab. */
-export const EDITABLE_WEAPONS = [
+const ALL_EDITABLE_WEAPON_IDS = [
   'dragon', 'diamond', 'rainbow', 'meteor', 'golden',
   'moonbeam', 'chicken', 'honey', 'cricket', 'fish',
   'electro', 'blackhole', 'slingshot', 'blowgun', 'shotgun',
@@ -27,7 +29,7 @@ export const EDITABLE_WEAPONS = [
   'shark', 'ghost', 'ufo', 'rpg', 'bazooka',
   'freeze', 'railgun', 'magnet', 'shrink', 'grow',
   'pirate', 'card', 'holy', 'unicorn', 'obliterator',
-  'coingun', 'photon_saber', 'gauntlet_cannon', 'ruby', 'emerald',
+  'coingun', 'photon_saber', 'gauntlet_cannon', 'ironman_hand', 'ruby', 'emerald',
   'sapphire', 'crystal', 'beerifle', 'buster', 'pulse_rifle',
   'cryo_blaster', 'hyperdrive', 'quantum_destabilizer', 'blaster',
   // Slide 3's PLASMA GUN and LASER GUN (both had only their classic card).
@@ -46,6 +48,10 @@ export const EDITABLE_WEAPONS = [
   'prism_lance', 'nano_swarm',
 ] as const satisfies readonly WeaponId[];
 
+// Keep the internal id union for shared imported code, but never expose retired
+// weapons in the design picker or exports. Existing order is preserved.
+export const EDITABLE_WEAPONS = ALL_EDITABLE_WEAPON_IDS.filter(id => !RETIRED_WEAPONS.has(id));
+
 /**
  * Slide-6 (`games/game-2` / Weapon Wheel Hit) weapons. Slide 6 is the original
  * `Weapon Wheel Hit`, and its three beam weapons share their name with guns
@@ -62,7 +68,7 @@ export function isSetSixDesignWeapon(id: WeaponId | 'old'): id is SetSixDesignWe
 /**
  * Slide-7 SET 1 weapons that exist on slide 1 under the same name. Their
  * newest design is the real slide-7 artwork (`setOneArt.drawSetOneGun`), so
- * they get an extra "Set 1" design card that is selected by default.
+ * they get an extra "Set 1" design card alongside their requested defaults.
  */
 export const SET_ONE_DESIGN_WEAPONS = [
   'golden', 'blackhole', 'slingshot', 'blowgun', 'shotgun', 'soaker',
@@ -74,8 +80,8 @@ export function isSetOneDesignWeapon(id: WeaponId | 'old'): id is SetOneDesignWe
 }
 /**
  * Slide-7 SET 2..5 weapons. Their newest design is slide 7's own artwork
- * (`setSevenArt.drawSetSevenGun`), which becomes the default; the slide-1
- * silhouette they had before stays pickable as its own card.
+ * (`setSevenArt.drawSetSevenGun`); the slide-1 silhouette they had before
+ * stays pickable as its own card, regardless of the requested default.
  */
 export const SET_SEVEN_DESIGN_WEAPONS = [
   'snowball', 'sniper', 'flamethrower', 'bubble', 'bamboo',
@@ -101,8 +107,8 @@ export function isSetSevenDesignWeapon(id: WeaponId | 'old'): id is SetSevenDesi
 
 /**
  * Slide-9 (`games/game-6`) weapons. Their newest design is slide 9's own
- * artwork (`setNineArt.drawSetNineGun`), which becomes the default; whatever
- * the gun looked like before stays pickable on its own card. The nine guns
+ * artwork (`setNineArt.drawSetNineGun`); whatever the gun looked like before
+ * stays pickable on its own card, regardless of the requested default. The nine guns
  * slide 1 never had (`longbow`, `mp5`, `tesla_rifle`, `ion_smg`, `phaser`,
  * `yautja`, `identity_disc`, `proton_pack`, `heat_ray`) only have this card.
  */
@@ -120,16 +126,34 @@ export function isSetNineDesignWeapon(id: WeaponId | 'old'): id is SetNineDesign
 
 /**
  * Slide-11 (`games/game-8`) weapons. Slide 11 is the newest layer, so its own
- * artwork and shot are the default for the seventeen guns it updates, and the
- * only card for the ten guns it adds. Everything older stays pickable.
+ * artwork and shot are selectable for the guns it updates, and the only card
+ * for the ten guns it adds. PISTOL, AK-47 and SNIPER keep their explicitly
+ * requested defaults instead; PISTOL has no Slide 5 design card.
  */
 export const SET_ELEVEN_DESIGN_WEAPONS = [
-  ...new Set([...Object.keys(SET_ELEVEN_BY_SLIDE1_ID), ...SET_ELEVEN_NEW_IDS]),
+  ...new Set(
+    [...Object.keys(SET_ELEVEN_BY_SLIDE1_ID), ...SET_ELEVEN_NEW_IDS].filter(
+      (id) => id !== 'pistol',
+    ),
+  ),
 ] as readonly WeaponId[];
 export type SetElevenDesignWeapon = (typeof SET_ELEVEN_DESIGN_WEAPONS)[number];
 
 export function isSetElevenDesignWeapon(id: WeaponId | 'old'): id is SetElevenDesignWeapon {
   return (SET_ELEVEN_DESIGN_WEAPONS as readonly string[]).includes(id);
+}
+
+/**
+ * Guns that gain Slide 11's ("Slide 5") shot effect card. PISTOL keeps its
+ * Slide 5 shot effect option even though its Slide 5 weapon design is removed.
+ */
+export const SET_ELEVEN_EFFECT_WEAPONS = [
+  ...new Set([...Object.keys(SET_ELEVEN_BY_SLIDE1_ID), ...SET_ELEVEN_NEW_IDS, 'gauntlet_cannon'].filter(id => id !== 'photon_saber')),
+] as readonly WeaponId[];
+export type SetElevenEffectWeapon = (typeof SET_ELEVEN_EFFECT_WEAPONS)[number];
+
+export function isSetElevenEffectWeapon(id: WeaponId | 'old'): id is SetElevenEffectWeapon {
+  return (SET_ELEVEN_EFFECT_WEAPONS as readonly string[]).includes(id);
 }
 
 /**
@@ -177,7 +201,7 @@ export function isElevenOnlyWeapon(id: WeaponId | 'old'): boolean {
 // No gun is limited to two cards any more: BLACK HOLE gained the slide-7 staff
 // as a third silhouette, and the SET 1 guns gained their own card.
 export const TWO_CARD_WEAPONS = [] as const satisfies readonly WeaponId[];
-export type EditableWeapon = (typeof EDITABLE_WEAPONS)[number];
+export type EditableWeapon = (typeof ALL_EDITABLE_WEAPON_IDS)[number];
 /** Guns whose previous/current/latest renderers are three distinct designs. */
 const NO_LATEST_DESIGN = [
   'honey', 'cricket', 'fish', 'electro', 'slingshot',
@@ -189,7 +213,7 @@ const NO_LATEST_DESIGN = [
   'paintball', 'wand', 'shark', 'ghost', 'ufo',
   'rpg', 'bazooka', 'freeze', 'railgun', 'magnet',
   'shrink', 'grow', 'pirate', 'card', 'holy',
-  'unicorn', 'obliterator', 'coingun', 'photon_saber', 'gauntlet_cannon',
+  'unicorn', 'obliterator', 'coingun', 'photon_saber', 'gauntlet_cannon', 'ironman_hand',
   'ruby', 'emerald', 'sapphire', 'crystal', 'beerifle',
   'buster', 'pulse_rifle', 'cryo_blaster', 'hyperdrive', 'quantum_destabilizer',
   'blaster',
@@ -216,7 +240,7 @@ export const NO_SEPARATE_ORIGINAL = [
   'ghost', 'ufo', 'rpg', 'bazooka', 'freeze',
   'railgun', 'magnet', 'shrink', 'grow', 'pirate',
   'card', 'holy', 'unicorn', 'obliterator', 'coingun',
-  'photon_saber', 'gauntlet_cannon', 'ruby', 'emerald', 'sapphire',
+  'photon_saber', 'gauntlet_cannon', 'ironman_hand', 'ruby', 'emerald', 'sapphire',
   'crystal', 'beerifle', 'buster', 'pulse_rifle', 'cryo_blaster',
   'hyperdrive', 'quantum_destabilizer', 'blaster',
   'pistol', 'ak47', 'pred', 'longbow', 'mp5', 'tesla_rifle', 'ion_smg',
@@ -265,7 +289,7 @@ export const SET_NINE_VARIANT: { id: GunVariant; label: string } = { id: 'set9',
 export const SET_ELEVEN_VARIANT: { id: GunVariant; label: string } = { id: 'set11', label: 'Slide 5' };
 /** The slide-6 design card: slide 6's own artwork for the three guns it shares. */
 export const SET_SIX_VARIANT: { id: GunVariant; label: string } = { id: 'set6', label: 'Slide 2' };
-export type GunEffect = 'original' | 'new' | 'set2' | 'set6' | 'set7' | 'set9' | 'set11';
+export type GunEffect = 'original' | 'new' | 'set2' | 'set6' | 'set7' | 'set9' | 'set11' | 'xeno_hybrid' | 'ironman_combo';
 export const GUN_EFFECTS: readonly { id: GunEffect; label: string }[] = [
   { id: 'original', label: 'Sebelumnya' },
   { id: 'new', label: 'Baru' },
@@ -407,6 +431,7 @@ function withSixCard<T extends { id: string }>(cards: readonly T[], card: T): T[
 }
 
 export function getGunVariantOptions(id: VariantWeapon): readonly { id: GunVariant; label: string }[] {
+  if (RETIRED_WEAPONS.has(id)) return [];
   const cards = isSetTwoDesignWeapon(id)
     ? [...getGunVariantOptionsBeforeSetTwo(id), SET_TWO_VARIANT]
     : getGunVariantOptionsBeforeSetTwo(id);
@@ -435,6 +460,9 @@ function getGunVariantOptionsBeforeSetTwo(id: VariantWeapon) {
 }
 
 export function getGunEffectOptions(id: VariantWeapon): readonly { id: GunEffect; label: string }[] {
+  if (RETIRED_WEAPONS.has(id)) return [];
+  if (id === 'ironman_hand') return [{ id: 'ironman_combo', label: 'Gabungan Efek 2 + 4' }];
+  if (id === 'xeno') return [...getGunEffectOptionsBeforeSetTwo(id), { id: 'xeno_hybrid', label: 'Efek 4' }];
   const cards = isSetTwoEffectWeapon(id) && !isFixedClassicGun(id)
     ? [...getGunEffectOptionsBeforeSetTwo(id), SET_TWO_EFFECT]
     : getGunEffectOptionsBeforeSetTwo(id);
@@ -443,7 +471,7 @@ export function getGunEffectOptions(id: VariantWeapon): readonly { id: GunEffect
 
 /** The shot cards a gun had before slide 2 was exported. */
 function getGunEffectOptionsBeforeSetTwo(id: VariantWeapon) {
-  if (isSetElevenDesignWeapon(id)) {
+  if (isSetElevenEffectWeapon(id)) {
     if (isElevenOnlyWeapon(id)) return [SET_ELEVEN_EFFECT];
     return [...getGunEffectOptionsBeforeEleven(id), SET_ELEVEN_EFFECT];
   }
@@ -489,13 +517,12 @@ function getGunEffectOptionsBase(id: VariantWeapon) {
     return [GUN_EFFECTS[0], SET_ONE_EFFECT];
   }
   // Slide 7's own shot is a third card for SET 2..5: the two slide-1 effects
-  // stay pickable, and slide 7 is the newest (and the default).
+  // stay pickable, and the requested factory default is chosen separately.
   if (isSetSevenDesignWeapon(id)) return [...GUN_EFFECTS, setSevenEffect(id)];
   return GUN_EFFECTS;
 }
 
-// User-requested loadouts. A new save key makes these take effect even for a
-// player whose earlier choices were stored in v1; further picks persist in v2.
+// Factory loadouts not superseded by the more recent requested presets below.
 const DEFAULT_DESIGNS: Record<EditableWeapon, GunVariant> = {
   dragon: 'set11', diamond: 'set7', rainbow: 'set7', meteor: 'set7', golden: 'set1',
   moonbeam: 'set7', chicken: 'set7', honey: 'set7', cricket: 'set7', fish: 'set7',
@@ -508,14 +535,13 @@ const DEFAULT_DESIGNS: Record<EditableWeapon, GunVariant> = {
   shark: 'set7', ghost: 'set7', ufo: 'set7', rpg: 'set7', bazooka: 'set7',
   freeze: 'set7', railgun: 'set11', magnet: 'set7', shrink: 'set7', grow: 'set7',
   pirate: 'set7', card: 'set7', holy: 'set7', unicorn: 'set7', obliterator: 'set7',
-  coingun: 'set7', photon_saber: 'set11', gauntlet_cannon: 'set11', ruby: 'set7', emerald: 'set7',
+  coingun: 'set7', photon_saber: 'set11', gauntlet_cannon: 'original', ironman_hand: 'set11', ruby: 'set7', emerald: 'set7',
   sapphire: 'set7', crystal: 'set7', beerifle: 'set7', buster: 'set7', pulse_rifle: 'set7',
   cryo_blaster: 'set7', hyperdrive: 'set7', quantum_destabilizer: 'set7', blaster: 'set7',
   // Slide 3's PLASMA GUN and LASER GUN are their newest design (user request).
   plasma: 'set7', laser: 'set7',
-  // Slide 9: its own artwork is the newest design of the eight guns it updates,
-  // and the only design of the nine guns it added.
-  pistol: 'set11', ak47: 'set11', pred: 'set11',
+  // PISTOL uses Slide 01's classic pistol design ('original') by default.
+  pistol: 'original', ak47: 'set11', pred: 'set11',
   longbow: 'set11', mp5: 'set11', tesla_rifle: 'set11', ion_smg: 'set11', phaser: 'set11',
   yautja: 'set9', identity_disc: 'set11', proton_pack: 'set11', heat_ray: 'set11',
   // Slide 11 is the newest layer: its own art/shot is the default for the
@@ -546,14 +572,13 @@ const DEFAULT_EFFECTS: Record<EditableWeapon, GunEffect> = {
   shark: 'set7', ghost: 'set7', ufo: 'set7', rpg: 'set7', bazooka: 'set7',
   freeze: 'set7', railgun: 'set11', magnet: 'set7', shrink: 'set7', grow: 'set7',
   pirate: 'set7', card: 'set7', holy: 'set7', unicorn: 'set7', obliterator: 'set7',
-  coingun: 'set7', photon_saber: 'set11', gauntlet_cannon: 'set11', ruby: 'set7', emerald: 'set7',
+  coingun: 'set7', photon_saber: 'set9', gauntlet_cannon: 'set7', ironman_hand: 'ironman_combo', ruby: 'set7', emerald: 'set7',
   sapphire: 'set7', crystal: 'set7', beerifle: 'set7', buster: 'set7', pulse_rifle: 'set7',
   cryo_blaster: 'set7', hyperdrive: 'set7', quantum_destabilizer: 'set7', blaster: 'set7',
-  // …and slide 3's own shot is theirs too.
+  // Baseline shot cards; the requested LASER override is applied below.
   plasma: 'set7', laser: 'set7',
-  // Slide 9: its own artwork is the newest design of the eight guns it updates,
-  // and the only design of the nine guns it added.
-  pistol: 'set11', ak47: 'set11', pred: 'set11',
+  // PISTOL uses Slide 4's shot effect ('set9') by default while keeping Slide 5 selectable.
+  pistol: 'set9', ak47: 'set11', pred: 'set11',
   longbow: 'set11', mp5: 'set11', tesla_rifle: 'set11', ion_smg: 'set11', phaser: 'set11',
   yautja: 'set9', identity_disc: 'set11', proton_pack: 'set11', heat_ray: 'set11',
   // Slide 11's own shot is the newest effect of all of them.
@@ -570,6 +595,53 @@ const DEFAULT_EFFECTS: Record<EditableWeapon, GunEffect> = {
 };
 
 
+export interface MarkedWeaponDefault {
+  variant: GunVariant;
+  effect: GunEffect;
+}
+
+// The 30 combinations exported by the player. IDs refer to the existing cards;
+// their order, labels, projectile mechanics and other weapons remain unchanged.
+const REQUESTED_DEFAULT_PRESETS = {
+  ak47: { variant: 'original', effect: 'set11' },
+  crossbow: { variant: 'original', effect: 'set7' },
+  laser: { variant: 'set7', effect: 'original' },
+  fish: { variant: 'current', effect: 'set7' },
+  rpg: { variant: 'original', effect: 'set7' },
+  cricket: { variant: 'current', effect: 'new' },
+  bazooka: { variant: 'set7', effect: 'set7' },
+  freeze: { variant: 'original', effect: 'set7' },
+  blackhole: { variant: 'set1', effect: 'new' },
+  slingshot: { variant: 'original', effect: 'new' },
+  blowgun: { variant: 'set1', effect: 'new' },
+  shotgun: { variant: 'original', effect: 'original' },
+  soaker: { variant: 'set1', effect: 'set2' },
+  snowball: { variant: 'set7', effect: 'set7' },
+  sniper: { variant: 'original', effect: 'set9' },
+  flamethrower: { variant: 'original', effect: 'set7' },
+  bubble: { variant: 'original', effect: 'set7' },
+  bamboo: { variant: 'original', effect: 'set7' },
+  banana: { variant: 'original', effect: 'new' },
+  harpoon: { variant: 'set7', effect: 'set7' },
+  chicken: { variant: 'set7', effect: 'set7' },
+  confetti: { variant: 'set7', effect: 'set7' },
+  seed: { variant: 'original', effect: 'set7' },
+  pizza: { variant: 'original', effect: 'set7' },
+  minigun: { variant: 'set7', effect: 'new' },
+  railgun: { variant: 'set11', effect: 'set7' },
+  magnet: { variant: 'original', effect: 'set7' },
+  shrink: { variant: 'set7', effect: 'set7' },
+  pirate: { variant: 'original', effect: 'set7' },
+  card: { variant: 'set7', effect: 'set7' },
+} as const satisfies Partial<Record<EditableWeapon, MarkedWeaponDefault>>;
+
+const requestedDefaultEntries = Object.entries(REQUESTED_DEFAULT_PRESETS) as
+  [EditableWeapon, MarkedWeaponDefault][];
+for (const [id, preset] of requestedDefaultEntries) {
+  DEFAULT_DESIGNS[id] = preset.variant;
+  DEFAULT_EFFECTS[id] = preset.effect;
+}
+
 function readChoices(key: string): Record<string, unknown> | null {
   try {
     const raw = globalThis.localStorage?.getItem(key);
@@ -582,26 +654,19 @@ function readChoices(key: string): Record<string, unknown> | null {
 
 const DESIGN_KEY = 'gunhit:gun-designs:v3';
 const EFFECT_KEY = 'gunhit:shot-effects:v3';
+const PISTOL_LOADOUT_KEY = 'gunhit:pistol-loadout:v2';
+// Apply this 30-weapon revision once, including profiles upgraded from v1.
+const DEFAULTS_REVISION_KEY = 'gunhit:requested-defaults:v2';
+const GAUNTLET_REVISION_KEY = 'gunhit:gauntlet-ironman:v1';
 const saved: Partial<Record<EditableWeapon, GunVariant>> = {};
 const effects: Partial<Record<EditableWeapon, GunEffect>> = {};
 
-const designsOnDisk = readChoices(DESIGN_KEY);
-const effectsOnDisk = readChoices(EFFECT_KEY);
-for (const id of EDITABLE_WEAPONS) {
-  const design = designsOnDisk?.[id];
-  if (getGunVariantOptions(id).some(option => option.id === design)) saved[id] = design as GunVariant;
-  const effect = effectsOnDisk?.[id];
-  if (getGunEffectOptions(id).some(option => option.id === effect)) effects[id] = effect as GunEffect;
-}
-// Rubber Chicken wasn't changed by this request: preserve its v1 choices
-// when migrating, but supersede the old saves for the newly specified guns.
-if (!designsOnDisk) {
-  const chicken = readChoices('gunhit:gun-designs:v1')?.chicken;
-  if (getGunVariantOptions('chicken').some(option => option.id === chicken)) saved.chicken = chicken as GunVariant;
-}
-if (!effectsOnDisk) {
-  const chicken = readChoices('gunhit:shot-effects:v1')?.chicken;
-  if (getGunEffectOptions('chicken').some(option => option.id === chicken)) effects.chicken = chicken as GunEffect;
+function hasPistolCustomSave(): boolean {
+  try {
+    return globalThis.localStorage?.getItem(PISTOL_LOADOUT_KEY) === '1';
+  } catch {
+    return false;
+  }
 }
 
 /** Defaults change only the silhouette, never weapon stats or mechanics. */
@@ -613,7 +678,10 @@ export function getGunVariant(id: WeaponId): GunVariant {
 export function setGunVariant(id: EditableWeapon, variant: GunVariant): void {
   if (!getGunVariantOptions(id).some(option => option.id === variant)) return;
   saved[id] = variant;
-  try { globalThis.localStorage?.setItem(DESIGN_KEY, JSON.stringify(saved)); }
+  try {
+    globalThis.localStorage?.setItem(DESIGN_KEY, JSON.stringify(saved));
+    if (id === 'pistol') globalThis.localStorage?.setItem(PISTOL_LOADOUT_KEY, '1');
+  }
   catch { /* Continue using this session's choice if storage is unavailable. */ }
 }
 
@@ -624,7 +692,291 @@ export function getGunEffect(id: WeaponId | 'old'): GunEffect {
 }
 
 export function setGunEffect(id: EditableWeapon, effect: GunEffect): void {
+  if (!getGunEffectOptions(id).some(option => option.id === effect)) return;
   effects[id] = effect;
-  try { globalThis.localStorage?.setItem(EFFECT_KEY, JSON.stringify(effects)); }
+  try {
+    globalThis.localStorage?.setItem(EFFECT_KEY, JSON.stringify(effects));
+    if (id === 'pistol') globalThis.localStorage?.setItem(PISTOL_LOADOUT_KEY, '1');
+  }
   catch { /* Continue using this session's choice if storage is unavailable. */ }
+}
+
+/** Deduplicated editable weapons in canonical order (EDITABLE_WEAPONS keeps its legacy length). */
+export const UNIQUE_EDITABLE_WEAPONS: readonly EditableWeapon[] = [...new Set(EDITABLE_WEAPONS)];
+
+export type DefaultExportScope = 'marked_or_changed' | 'marked_only' | 'all';
+
+export interface WeaponDefaultExportEntry {
+  id: EditableWeapon;
+  name: string;
+  skinNo: number;
+  skinTotal: number;
+  skinId: GunVariant;
+  skinLabel: string;
+  effectNo: number;
+  effectTotal: number;
+  effectId: GunEffect;
+  effectLabel: string;
+  marked: boolean;
+  changedFromFactory: boolean;
+}
+
+const DEFAULT_PRESETS_KEY = 'gunhit:default-presets:v1';
+const markedDefaults: Partial<Record<EditableWeapon, MarkedWeaponDefault>> = {};
+
+function persistMarkedDefaults(): void {
+  try {
+    globalThis.localStorage?.setItem(DEFAULT_PRESETS_KEY, JSON.stringify(markedDefaults));
+  } catch { /* Continue using in-memory defaults if storage is unavailable. */ }
+}
+
+function getEffectOptionsForVariant(id: EditableWeapon, variant: GunVariant): readonly { id: GunEffect; label: string }[] {
+  if (id === 'blackhole') {
+    return variant === 'set1' ? [GUN_EFFECTS[0], SET_ONE_EFFECT] : GUN_EFFECTS;
+  }
+  return getGunEffectOptions(id);
+}
+
+/**
+ * Module imports happen before the app's storage-readiness gate. In restricted
+ * embeds the storage shim may still be restoring IndexedDB; never migrate or
+ * overwrite those keys until that restoration has completed.
+ */
+function restoreSavedLoadouts(): void {
+  for (const key of Object.keys(saved) as EditableWeapon[]) delete saved[key];
+  for (const key of Object.keys(effects) as EditableWeapon[]) delete effects[key];
+  for (const key of Object.keys(markedDefaults) as EditableWeapon[]) delete markedDefaults[key];
+  const designsOnDisk = readChoices(DESIGN_KEY);
+  const effectsOnDisk = readChoices(EFFECT_KEY);
+  const keepSavedPistol = hasPistolCustomSave();
+  let applyGauntletDefault = true;
+  try { applyGauntletDefault = globalThis.localStorage?.getItem(GAUNTLET_REVISION_KEY) !== '1'; }
+  catch { /* Storage denied: use the requested default in memory. */ }
+  let applyRequestedDefaults = true;
+  try {
+    applyRequestedDefaults = globalThis.localStorage?.getItem(DEFAULTS_REVISION_KEY) !== '1';
+  } catch { /* Storage denied: use the requested choices in memory. */ }
+  for (const id of EDITABLE_WEAPONS) {
+    if (id === 'pistol' && !keepSavedPistol) continue;
+    if (id === 'gauntlet_cannon' && applyGauntletDefault) continue;
+    // Discard only these 30 older selections during the one-time migration.
+    if (applyRequestedDefaults && Object.hasOwn(REQUESTED_DEFAULT_PRESETS, id)) continue;
+    const design = designsOnDisk?.[id];
+    if (getGunVariantOptions(id).some(option => option.id === design)) saved[id] = design as GunVariant;
+    const effect = effectsOnDisk?.[id];
+    if (getGunEffectOptions(id).some(option => option.id === effect)) effects[id] = effect as GunEffect;
+  }
+
+  const presetsOnDisk = readChoices(DEFAULT_PRESETS_KEY);
+  if (presetsOnDisk) {
+    for (const id of UNIQUE_EDITABLE_WEAPONS) {
+      const raw = presetsOnDisk[id];
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+      const rec = raw as { variant?: unknown; effect?: unknown };
+      // The deleted Photon effect cannot remain equipped or pinned; keep the
+      // marked skin and move only that obsolete effect to the last valid card.
+      if (id === 'photon_saber' && rec.effect === 'set11') rec.effect = 'set9';
+      const variantOpts = getGunVariantOptions(id);
+      if (!variantOpts.some(o => o.id === rec.variant)) continue;
+      const chosenVariant = rec.variant as GunVariant;
+      const effectOpts = getEffectOptionsForVariant(id, chosenVariant);
+      if (!effectOpts.some(o => o.id === rec.effect)) continue;
+      markedDefaults[id] = { variant: chosenVariant, effect: rec.effect as GunEffect };
+    }
+  }
+
+  if (applyGauntletDefault) {
+    markedDefaults.gauntlet_cannon = { variant: 'original', effect: 'set7' };
+  }
+
+  if (applyRequestedDefaults) {
+    // Seed these as marked presets too, preserving any marks on other weapons.
+    // A later unmark/clear or selection change persists normally. Complete all
+    // writes before the revision marker so an interrupted migration can retry.
+    for (const [id, preset] of requestedDefaultEntries) {
+      markedDefaults[id] = { ...preset };
+    }
+    try {
+      const store = globalThis.localStorage;
+      if (store) {
+        store.setItem(DESIGN_KEY, JSON.stringify(saved));
+        store.setItem(EFFECT_KEY, JSON.stringify(effects));
+        store.setItem(DEFAULT_PRESETS_KEY, JSON.stringify(markedDefaults));
+        store.setItem(DEFAULTS_REVISION_KEY, '1');
+      }
+    } catch { /* The in-memory defaults still work when storage is denied. */ }
+  }
+  if (applyGauntletDefault) {
+    try {
+      const store = globalThis.localStorage;
+      if (store) {
+        store.setItem(DESIGN_KEY, JSON.stringify(saved));
+        store.setItem(EFFECT_KEY, JSON.stringify(effects));
+        store.setItem(DEFAULT_PRESETS_KEY, JSON.stringify(markedDefaults));
+        store.setItem(GAUNTLET_REVISION_KEY, '1');
+      }
+    } catch { /* Keep the in-memory default if storage is unavailable. */ }
+  }
+}
+
+if (savedValues.isReady()) restoreSavedLoadouts();
+else savedValues.subscribe(restoreSavedLoadouts);
+
+export function getGunSkinAndEffectPosition(
+  id: EditableWeapon,
+  variant: GunVariant = getGunVariant(id),
+  effect: GunEffect = getGunEffect(id),
+): {
+  skinNo: number;
+  skinTotal: number;
+  skinId: GunVariant;
+  skinLabel: string;
+  effectNo: number;
+  effectTotal: number;
+  effectId: GunEffect;
+  effectLabel: string;
+} {
+  const designs = getGunVariantOptions(id);
+  const skinIdx = Math.max(0, designs.findIndex(o => o.id === variant));
+  const resolvedSkin = designs[skinIdx] ?? designs[0];
+  const effectList = getEffectOptionsForVariant(id, resolvedSkin.id);
+  const effIdx = Math.max(0, effectList.findIndex(o => o.id === effect));
+  const resolvedEff = effectList[effIdx] ?? effectList[0];
+  return {
+    skinNo: skinIdx + 1,
+    skinTotal: designs.length,
+    skinId: resolvedSkin.id,
+    skinLabel: resolvedSkin.label,
+    effectNo: effIdx + 1,
+    effectTotal: effectList.length,
+    effectId: resolvedEff.id,
+    effectLabel: resolvedEff.label,
+  };
+}
+
+/**
+ * Mark a weapon's skin + shot effect combination as its user-pinned default
+ * (independent per weapon) and immediately equip both choices on that weapon.
+ */
+export function markGunDefault(
+  id: EditableWeapon,
+  variant: GunVariant = getGunVariant(id),
+  effect: GunEffect = getGunEffect(id),
+): MarkedWeaponDefault | null {
+  const designs = getGunVariantOptions(id);
+  if (!designs.some(o => o.id === variant)) return null;
+  const effectList = getEffectOptionsForVariant(id, variant);
+  const validEffect = effectList.some(o => o.id === effect)
+    ? effect
+    : (effectList[0]?.id ?? effect);
+  setGunVariant(id, variant);
+  setGunEffect(id, validEffect);
+  const entry: MarkedWeaponDefault = { variant, effect: validEffect };
+  markedDefaults[id] = entry;
+  persistMarkedDefaults();
+  return entry;
+}
+
+export function unmarkGunDefault(id: EditableWeapon): void {
+  delete markedDefaults[id];
+  persistMarkedDefaults();
+}
+
+export function clearAllMarkedGunDefaults(): void {
+  for (const key of Object.keys(markedDefaults) as EditableWeapon[]) {
+    delete markedDefaults[key];
+  }
+  persistMarkedDefaults();
+}
+
+export function getMarkedGunDefault(id: WeaponId): MarkedWeaponDefault | null {
+  return canChooseGunDesign(id) ? (markedDefaults[id] ?? null) : null;
+}
+
+export function isGunDefaultMarked(id: WeaponId): boolean {
+  return getMarkedGunDefault(id) !== null;
+}
+
+export function isCurrentSelectionMarkedDefault(id: WeaponId): boolean {
+  if (!canChooseGunDesign(id)) return false;
+  const marked = markedDefaults[id];
+  if (!marked) return false;
+  return marked.variant === getGunVariant(id) && marked.effect === getGunEffect(id);
+}
+
+export function isGunModifiedFromFactory(id: WeaponId): boolean {
+  if (!canChooseGunDesign(id)) return false;
+  return getGunVariant(id) !== DEFAULT_DESIGNS[id] || getGunEffect(id) !== DEFAULT_EFFECTS[id];
+}
+
+export function getMarkedGunDefaultCount(): number {
+  return Object.keys(markedDefaults).length;
+}
+
+export function getWeaponDefaultExportEntries(
+  scope: DefaultExportScope = 'marked_or_changed',
+  catalog?: readonly { id: WeaponId; name: string }[],
+): WeaponDefaultExportEntry[] {
+  const seen = new Set<EditableWeapon>();
+  const ordered: { id: EditableWeapon; name: string }[] = [];
+  if (catalog && catalog.length > 0) {
+    for (const item of catalog) {
+      if (!canChooseGunDesign(item.id) || seen.has(item.id)) continue;
+      seen.add(item.id);
+      ordered.push({ id: item.id, name: item.name });
+    }
+  }
+  for (const id of UNIQUE_EDITABLE_WEAPONS) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    ordered.push({ id, name: id });
+  }
+
+  const out: WeaponDefaultExportEntry[] = [];
+  for (const { id, name } of ordered) {
+    const marked = markedDefaults[id];
+    const isMarked = !!marked;
+    const chosenVariant = marked ? marked.variant : getGunVariant(id);
+    const chosenEffect = marked ? marked.effect : getGunEffect(id);
+    const changed = chosenVariant !== DEFAULT_DESIGNS[id] || chosenEffect !== DEFAULT_EFFECTS[id];
+
+    if (scope === 'marked_only' && !isMarked) continue;
+    if (scope === 'marked_or_changed' && !isMarked && !changed) continue;
+
+    const pos = getGunSkinAndEffectPosition(id, chosenVariant, chosenEffect);
+    out.push({
+      id,
+      name,
+      ...pos,
+      marked: isMarked,
+      changedFromFactory: changed,
+    });
+  }
+  return out;
+}
+
+export function formatWeaponDefaultsExport(
+  scope: DefaultExportScope = 'marked_or_changed',
+  catalog?: readonly { id: WeaponId; name: string }[],
+): string {
+  const entries = getWeaponDefaultExportEntries(scope, catalog);
+  const scopeLabel =
+    scope === 'marked_only' ? 'hanya ★ ditandai'
+      : scope === 'marked_or_changed' ? 'ditandai / diubah'
+      : 'semua senjata';
+  const header = [
+    `# SGA DEFAULT WEAPON CONFIG (${entries.length} senjata · mode: ${scopeLabel})`,
+    '# Format: id | Nama | skin=No/Total(id:Label) | efek=No/Total(id:Label) | status',
+  ];
+  if (entries.length === 0) {
+    return [
+      ...header,
+      '# (Belum ada senjata yang ditandai default atau diubah. Tandai ★ DEFAULT pada senjata atau pilih tab SEMUA SENJATA.)',
+    ].join('\n');
+  }
+  const lines = entries.map((e) => {
+    const status = e.marked ? '★DEFAULT' : e.changedFromFactory ? 'DIUBAH' : 'BAWAAN';
+    return `${e.id} | ${e.name} | skin=${e.skinNo}/${e.skinTotal}(${e.skinId}:${e.skinLabel}) | efek=${e.effectNo}/${e.effectTotal}(${e.effectId}:${e.effectLabel}) | ${status}`;
+  });
+  return [...header, ...lines].join('\n');
 }

@@ -1,3 +1,4 @@
+import { drawSpiritMote } from '../../../../src/games/shared/spiritArt';
 import { type Ctx, TAU, drawSprite, glowSprite, pick, rand, randomPoly, starSprite } from './core';
 import { K, type Particle, type Particles } from './particles';
 import { type PaintCol, RAINBOW } from './shapes5';
@@ -132,12 +133,12 @@ export function moonDust(ps: Particles, x: number, y: number, n: number, ang: nu
   }
 }
 
-/** spooky cyan wisps */
+/** Floating white/cyan sheet-spirits, replacing the old head-and-tail wisps. */
 export function ghostWisps(ps: Particles, x: number, y: number, n: number, ang: number, spread: number, speed: Range) {
   for (let i = 0; i < n; i++) {
     const a = ang + rand(-spread, spread);
     const sp = rand(speed[0], speed[1]);
-    const s = rand(0.8, 1.4);
+    const size = rand(9, 15);
     ps.add({
       k: K.CUSTOM,
       x: x + rand(-4, 4),
@@ -149,23 +150,14 @@ export function ghostWisps(ps: Particles, x: number, y: number, n: number, ang: 
       seed: rand(0, 100),
       life: rand(0.8, 1.5),
       draw: (c: Ctx, p: Particle) => {
-        const t = p.life / p.max;
+        const fade = Math.min(1, p.life / p.max * 2);
         const age = p.max - p.life;
-        const ang2 = Math.atan2(p.vy, p.vx);
+        const px = p.x + Math.sin(p.seed + age * 5) * 2;
         c.save();
-        c.translate(p.x + Math.sin(p.seed + age * 7) * 3, p.y);
         c.globalCompositeOperation = 'lighter';
-        c.globalAlpha = Math.min(1, t * 2);
-        drawSprite(c, glowSprite('110,255,240'), 0, 0, 24 * s, 0.7);
-        c.rotate(ang2);
-        c.beginPath();
-        c.moveTo(3 * s, 0);
-        c.quadraticCurveTo(0, -3.2 * s, -16 * s, -0.6);
-        c.quadraticCurveTo(-8 * s, 0.4, -16 * s, 1.4);
-        c.quadraticCurveTo(0, 3.2 * s, 3 * s, 0);
-        c.fillStyle = 'rgba(220,255,250,0.92)';
-        c.fill();
+        drawSprite(c, glowSprite('150,255,248'), px, p.y, size * 2.1, 0.25 * fade);
         c.restore();
+        drawSpiritMote(c, px, p.y, size, p.seed + age * 4, fade * 0.9);
       },
     });
   }

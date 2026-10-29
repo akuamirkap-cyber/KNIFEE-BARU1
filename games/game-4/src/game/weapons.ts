@@ -1185,6 +1185,8 @@ export interface StuckItem {
 }
 
 export interface WeaponAnim {
+  /** Optional mirrored saber swing for the Gun Hit integration. */
+  saberSide?: -1 | 1;
   fireT: number;
   recoil: number;
   recoilV: number;

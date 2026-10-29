@@ -98,7 +98,7 @@ test('holding the trigger on a slide-11 auto-fire gun never fails stage 1 on its
   // Stage 1 has nothing to hit but the bare wheel. These guns used to fail it
   // on the first burst: a round that had just landed was handed back as a new
   // shot, and its carrier spawned under the wheel straight into that bullet.
-  for (const weapon of ['ak47', 'mp5', 'ion_smg', 'helix_pulsar']) {
+  for (const weapon of ['ak47', 'mp5', 'ion_smg']) {
     for (const seed of [1, 2, 3]) {
       seeded(seed, () => {
         const game = stage(weapon);
@@ -116,7 +116,7 @@ test('holding the trigger on a slide-11 auto-fire gun never fails stage 1 on its
 });
 
 test('the equipped slide-11 gun aims with slide 11’s own weapon from the first frame', () => {
-  for (const weapon of ['railgun', 'pred', 'orbital_beacon', 'heat_ray']) {
+  for (const weapon of ['railgun', 'orbital_beacon', 'heat_ray']) {
     const game = stage(weapon);
     game.update(DT);
     assert.equal(game.s11State?.raw?.weapon.id, setElevenIdFor(weapon as never),
@@ -157,22 +157,7 @@ function landOne(game: Live, max = 90) {
   return game.stuck > before;
 }
 
-test('the chrono rifle’s stasis stops slide 1’s wheel, as slide 11’s does', () => {
-  seeded(7, () => {
-    const game = stage('chrono_rifle') as Live;
-    let r0 = game.rot;
-    for (let i = 0; i < 30; i++) game.update(DT);
-    const free = Math.abs(game.rot - r0);
-    assert.ok(free > 0.05, 'the wheel turns before the shot');
-    assert.ok(landOne(game), 'the chrono round lands');
-    for (let i = 0; i < 20; i++) game.update(DT);
-    assert.ok((game.s11State?.raw?.wheel.freeze ?? 0) > 0.9, 'slide 11’s stasis field is up');
-    r0 = game.rot;
-    for (let i = 0; i < 30; i++) game.update(DT);
-    const frozen = Math.abs(game.rot - r0);
-    assert.ok(frozen < free * 0.1, `the frozen wheel all but stops (${frozen.toFixed(3)} vs ${free.toFixed(3)} rad)`);
-  });
-});
+
 
 test('a slide-11 hit moves the wheel with slide 11’s reaction, not slide 1’s bump', () => {
   seeded(3, () => {
@@ -200,7 +185,7 @@ test('slide-11 hits are voiced by slide 11 alone', async () => {
   // gauntlet's hits) live in a table that holds the functions themselves.
   const { HIT_SFX } = await import('../src/games/gunhit/game/Game.ts');
   const table = HIT_SFX as Record<string, (() => void) | undefined>;
-  for (const weapon of ['railgun', 'photon_saber', 'gauntlet_cannon']) {
+  for (const weapon of ['railgun', 'gauntlet_cannon']) {
     const own = table[weapon];
     assert.ok(own, `${weapon} has a slide-1 hit voice`);
     let voiced = 0;
@@ -307,11 +292,7 @@ test('slide 11’s sniper and bow fire the moment the trigger goes down, without
   const buster = stage('mega_buster') as Feel;
   buster.press();
   assert.equal(buster.charging, true, 'the Mega Buster still charges while held');
-  const caster = stage('pred') as Feel;
-  caster.press();
-  assert.equal(caster.charging, false, 'the caster does not charge on slide 1');
-  caster.update(DT);
-  assert.equal(caster.projs.length, 0, 'nor fire on the press');
+
 });
 
 test('a slide-11 heat ray keeps the burn’s points but none of slide 1’s fire look', () => {

@@ -1,18 +1,20 @@
 import type { BossType } from './bossRoster';
+import { processBossPixels } from './bossAssetPixels';
 
 interface ProcessedBoss {
-  canvas: HTMLCanvasElement;
+  canvas: HTMLCanvasElement | ImageBitmap;
   radii: number[]; // 360 angular profile radii normalized to base radius
 }
 
 const cache: Partial<Record<BossType, ProcessedBoss>> = {};
-const listeners: (() => void)[] = [];
+const listeners = new Set<() => void>();
 
 export function onBossAssetsLoaded(fn: () => void) {
-  listeners.push(fn);
+  listeners.add(fn);
   if (Object.keys(cache).length > 0) {
     fn();
   }
+  return () => { listeners.delete(fn); };
 }
 
 const BOSS_SRCS: Record<BossType, string> = {
@@ -22,165 +24,100 @@ const BOSS_SRCS: Record<BossType, string> = {
   pirate: '/bosses/pirate_lord_flat.png',
 };
 
-// 100% Guaranteed White-Box Remover:
-// 1. Removes all white/off-white/grey sticker background pixels (lum > 165 and low saturation).
-// 2. Also runs BFS from all edges.
-// 3. Removes outer border corners.
+/** Install one completed asset and notify only currently mounted games. */
+function publish(type: BossType, canvas: HTMLCanvasElement | ImageBitmap, radii: number[]) {
+  cache[type] = { canvas, radii };
+  listeners.forEach((cb) => cb());
+}
+
+/** Exact synchronous fallback for browsers without worker canvas support. */
 function processBossImage(img: HTMLImageElement, type: BossType) {
   const w = img.naturalWidth || 512;
   const h = img.naturalHeight || 512;
-
-  const temp = document.createElement('canvas');
-  temp.width = w;
-  temp.height = h;
-  const ctx = temp.getContext('2d');
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
   if (!ctx) return;
-
   ctx.drawImage(img, 0, 0, w, h);
-  const imgData = ctx.getImageData(0, 0, w, h);
-  const data = imgData.data;
+  const pixels = ctx.getImageData(0, 0, w, h);
+  const radii = processBossPixels(pixels.data, w, h);
+  ctx.putImageData(pixels, 0, 0);
+  publish(type, canvas, radii);
+}
 
-  // 1. First pass: Any pixel that is white, near-white, light grey (sticker background)
-  // Character colors are deep cyan, dark navy, red eyes, gold horns, etc. (high saturation or dark).
-  // The sticker background is light/white with very low saturation.
-  for (let i = 0; i < data.length; i += 4) {
-    const r = data[i];
-    const g = data[i + 1];
-    const b = data[i + 2];
-    const a = data[i + 3];
+let worker: Worker | null = null;
+const pending = new Map<BossType, HTMLImageElement>();
 
-    if (a < 20) {
-      data[i + 3] = 0;
-      continue;
-    }
-
-    const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-    const maxCh = Math.max(r, g, b);
-    const minCh = Math.min(r, g, b);
-    const sat = maxCh === 0 ? 0 : (maxCh - minCh) / maxCh;
-
-    // Remove white sticker paper background (anything light with low saturation)
-    if (lum > 160 && sat < 0.4) {
-      data[i + 3] = 0;
-    } else if (r > 200 && g > 200 && b > 200) {
-      data[i + 3] = 0;
-    } else if (r < 25 && g < 25 && b < 25) {
-      // Also remove pure black corners if any
-      data[i + 3] = 0;
-    }
+/** Terminate when the last image is ready so the helper does not linger. */
+function stopWorkerWhenIdle() {
+  if (pending.size === 0 && worker) {
+    worker.terminate();
+    worker = null;
   }
+}
 
-  // 2. Second pass: BFS flood fill from all 4 borders to clear any connected remnants
-  const visited = new Uint8Array(w * h);
-  const queue: number[] = [];
+/** If a worker is unsupported or fails, retain the old synchronous renderer. */
+function failWorker() {
+  worker?.terminate();
+  worker = null;
+  const retry = Array.from(pending.entries());
+  pending.clear();
+  for (const [type, img] of retry) processBossImage(img, type);
+}
 
-  const pushIfEdge = (x: number, y: number) => {
-    if (x < 0 || x >= w || y < 0 || y >= h) return;
-    const p = y * w + x;
-    if (visited[p]) return;
-    visited[p] = 1;
-    // If not transparent yet, check if it's border background
-    const idx = p * 4;
-    if (data[idx + 3] > 0) {
-      const r = data[idx];
-      const g = data[idx + 1];
-      const b = data[idx + 2];
-      const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-      if (lum > 130) {
-        queue.push(p);
+function getWorker(): Worker | null {
+  if (worker) return worker;
+  if (typeof Worker === 'undefined' || typeof OffscreenCanvas === 'undefined'
+    || typeof createImageBitmap !== 'function') return null;
+  try {
+    const active = new Worker(new URL('./bossAssetWorker.ts', import.meta.url), { type: 'module' });
+    active.onmessage = (event: MessageEvent<{ type: BossType; bitmap?: ImageBitmap; radii?: number[] }>) => {
+      const { type, bitmap, radii } = event.data;
+      const img = pending.get(type);
+      if (!img) { bitmap?.close(); return; }
+      pending.delete(type);
+      if (bitmap && radii?.length === 360) publish(type, bitmap, radii);
+      else {
+        bitmap?.close();
+        processBossImage(img, type);
       }
-    }
-  };
-
-  for (let x = 0; x < w; x++) {
-    pushIfEdge(x, 0);
-    pushIfEdge(x, 1);
-    pushIfEdge(x, h - 2);
-    pushIfEdge(x, h - 1);
+      stopWorkerWhenIdle();
+    };
+    active.onerror = () => { if (worker === active) failWorker(); };
+    worker = active;
+    return active;
+  } catch {
+    return null;
   }
-  for (let y = 0; y < h; y++) {
-    pushIfEdge(0, y);
-    pushIfEdge(1, y);
-    pushIfEdge(w - 2, y);
-    pushIfEdge(w - 1, y);
-  }
+}
 
-  while (queue.length > 0) {
-    const p = queue.pop()!;
-    data[p * 4 + 3] = 0; // Wipe alpha!
-
-    const x = p % w;
-    const y = Math.floor(p / w);
-
-    const neighbors = [
-      y * w + (x + 1),
-      y * w + (x - 1),
-      (y + 1) * w + x,
-      (y - 1) * w + x,
-    ];
-
-    for (const np of neighbors) {
-      if (np >= 0 && np < w * h && !visited[np]) {
-        visited[np] = 1;
-        const nIdx = np * 4;
-        if (data[nIdx + 3] > 0) {
-          const r = data[nIdx];
-          const g = data[nIdx + 1];
-          const b = data[nIdx + 2];
-          const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-          if (lum > 130) {
-            queue.push(np);
-          }
-        }
+/** Decode on the browser's image pipeline; perform the large pixel scan off the frame thread. */
+function queueBossImage(img: HTMLImageElement, type: BossType) {
+  const active = getWorker();
+  if (!active) { processBossImage(img, type); return; }
+  pending.set(type, img);
+  try {
+    void createImageBitmap(img).then((bitmap) => {
+      if (worker !== active || pending.get(type) !== img) { bitmap.close(); return; }
+      try { active.postMessage({ type, bitmap }, [bitmap]); }
+      catch {
+        bitmap.close();
+        pending.delete(type);
+        processBossImage(img, type);
+        stopWorkerWhenIdle();
       }
-    }
+    }).catch(() => {
+      if (pending.get(type) !== img) return;
+      pending.delete(type);
+      processBossImage(img, type);
+      stopWorkerWhenIdle();
+    });
+  } catch {
+    pending.delete(type);
+    processBossImage(img, type);
+    stopWorkerWhenIdle();
   }
-
-  ctx.putImageData(imgData, 0, 0);
-
-  // 3. Scan exact radial contour of the character across all 360 degrees
-  const cx = w / 2;
-  const cy = h / 2;
-  const maxSearchR = Math.min(cx, cy);
-  const radii: number[] = new Array(360).fill(0.72);
-
-  for (let deg = 0; deg < 360; deg++) {
-    const rad = (deg * Math.PI) / 180;
-    const cos = Math.cos(rad);
-    const sin = Math.sin(rad);
-
-    let outerR = maxSearchR * 0.55;
-    for (let r = Math.floor(maxSearchR * 0.95); r >= Math.floor(maxSearchR * 0.2); r--) {
-      const px = Math.round(cx + cos * r);
-      const py = Math.round(cy + sin * r);
-      if (px >= 0 && px < w && py >= 0 && py < h) {
-        const a = data[(py * w + px) * 4 + 3];
-        if (a > 60) {
-          outerR = r;
-          break;
-        }
-      }
-    }
-    radii[deg] = outerR / maxSearchR;
-  }
-
-  // Smooth profile
-  const smoothed: number[] = new Array(360);
-  for (let deg = 0; deg < 360; deg++) {
-    let sum = 0;
-    for (let k = -3; k <= 3; k++) {
-      const idx = (deg + k + 360) % 360;
-      sum += radii[idx];
-    }
-    smoothed[deg] = sum / 7;
-  }
-
-  cache[type] = {
-    canvas: temp,
-    radii: smoothed,
-  };
-
-  listeners.forEach((cb) => cb());
 }
 
 export function loadAllBosses() {
@@ -188,10 +125,8 @@ export function loadAllBosses() {
   (Object.keys(BOSS_SRCS) as BossType[]).forEach((type) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
+    img.onload = () => { queueBossImage(img, type); };
     img.src = BOSS_SRCS[type];
-    img.onload = () => {
-      processBossImage(img, type);
-    };
   });
 }
 

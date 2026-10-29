@@ -1,4 +1,4 @@
-import { type Ctx, TAU, drawSprite, glowSprite, lin, mulberry32, polyPath, roundRect, starSprite } from './core';
+import { type Ctx, TAU, drawSprite, glowSprite, lin, makeCanvas, mulberry32, polyPath, roundRect, starSprite } from './core';
 import { drawFlameShape, drawSnowflake } from './shapes2';
 import { drawWeapon3 } from './weaponArt3';
 import type { WeaponAnim, WeaponId } from './weapons';
@@ -37,7 +37,36 @@ export function drawWeapon2(ctx: Ctx, id: WeaponId, a: WeaponAnim, time: number)
 }
 
 // ───────────────────────── SNOWBALL CANNON ─────────────────────────
+let snowBallSprite: HTMLCanvasElement | undefined;
+function getSnowBallSprite(ctx: Ctx): HTMLCanvasElement | null {
+  if (typeof document === 'undefined' || typeof HTMLCanvasElement === 'undefined'
+    || !(ctx.canvas instanceof HTMLCanvasElement)) return null;
+  if (snowBallSprite) return snowBallSprite;
+  try {
+    // One high-resolution gradient serves every snow lump and the moving
+    // balls in the hopper; their positions and recoil remain live.
+    const radius = 16, pad = 2, density = 3;
+    const canvas = makeCanvas((radius + pad) * 2 * density, (radius + pad) * 2 * density);
+    const c = canvas.getContext('2d');
+    if (!c) return null;
+    c.setTransform(density, 0, 0, density, (radius + pad) * density, (radius + pad) * density);
+    snowBallVector(c, 0, 0, radius);
+    snowBallSprite = canvas;
+  } catch {
+    return null;
+  }
+  return snowBallSprite ?? null;
+}
+
 function snowBall(ctx: Ctx, x: number, y: number, r: number) {
+  const sprite = getSnowBallSprite(ctx);
+  if (sprite && r > 0) {
+    const half = r * 18 / 16;
+    ctx.drawImage(sprite, x - half, y - half, half * 2, half * 2);
+  } else snowBallVector(ctx, x, y, r);
+}
+
+function snowBallVector(ctx: Ctx, x: number, y: number, r: number) {
   const g = ctx.createRadialGradient(x - r * 0.3, y - r * 0.35, r * 0.1, x, y, r * 1.1);
   g.addColorStop(0, '#ffffff');
   g.addColorStop(0.55, '#e6f1ff');

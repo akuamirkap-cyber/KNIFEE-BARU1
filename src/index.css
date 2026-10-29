@@ -3,9 +3,13 @@
 html, body, #root {
   margin: 0;
   height: 100%;
+  height: 100dvh;
   width: 100%;
+  overflow: hidden;
   background: #05060a;
   overscroll-behavior: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
   font-family: 'Inter', system-ui, sans-serif;
 }
 
@@ -84,9 +88,15 @@ html, body, #root {
   bottom: -40%;
   left: -48%;
   width: 42%;
-  transform: skewX(-22deg);
+  opacity: 0;
+  transform: translate3d(-170%, 0, 0) skewX(-22deg);
   background: linear-gradient(100deg, transparent 4%, rgba(255,255,255,.16) 32%, rgba(255,255,255,.78) 48%, rgba(255,255,255,.2) 62%, transparent 96%);
+}
+.gunhit-sga button[data-gloss="cta"]::after,
+.gunhit-sga button:not([data-gloss="off"]):hover::after,
+.gunhit-sga button:not([data-gloss="off"]):focus-visible::after {
   animation: sga-gloss-sweep 3.4s ease-in-out infinite;
+  will-change: transform, opacity;
 }
 .gunhit-sga button:not([data-gloss="off"]):hover {
   filter: brightness(1.14) saturate(1.12);
@@ -111,6 +121,93 @@ html, body, #root {
   50% { transform: scale(1.05); box-shadow: 0 0 0 14px rgba(255, 196, 0, 0); }
 }
 .pulse-btn { animation: pulse-btn 1.6s ease-in-out infinite; }
+
+/* Start these only once the SANS curtain has lifted. The waiting pose is
+   explicit rather than a paused animation: resuming from an inactive tab or
+   replaying the intro reliably starts a fresh, visible entrance. Wrappers keep
+   button hover/press transforms and the weapon's sunburst independent. */
+@keyframes gunhit-weapon-rise {
+  0% { opacity: 0; transform: translate3d(0, 175%, 0) scale(.94); }
+  12% { opacity: .85; }
+  24% { opacity: 1; }
+  80% { opacity: 1; transform: translate3d(0, -1.5%, 0) scale(1.01); }
+  100% { opacity: 1; transform: none; }
+}
+@keyframes gunhit-menu-button-in {
+  0% { opacity: 0; transform: translate3d(0, 30px, 0) scale(.9); }
+  70% { opacity: 1; transform: translate3d(0, -3px, 0) scale(1.025); }
+  100% { opacity: 1; transform: none; }
+}
+@keyframes gunhit-menu-icon-in {
+  0% { opacity: 0; transform: translate3d(0, -20px, 0) scale(.84); }
+  70% { opacity: 1; transform: translate3d(0, 2px, 0) scale(1.025); }
+  100% { opacity: 1; transform: none; }
+}
+@keyframes gunhit-menu-title-in {
+  0% { opacity: 0; transform: translate3d(0, -30px, 0) scale(.94); }
+  70% { opacity: 1; transform: translate3d(0, 2px, 0) scale(1.015); }
+  100% { opacity: 1; transform: none; }
+}
+@keyframes gunhit-menu-play-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.025); }
+}
+.gunhit-menu.slide-paused { pointer-events: none; }
+.gunhit-menu .menu-weapon-entrance {
+  opacity: 0; transform: translate3d(0, 175%, 0) scale(.94);
+}
+.gunhit-menu .menu-action-entrance {
+  opacity: 0; transform: translate3d(0, 30px, 0) scale(.9);
+}
+.gunhit-menu .menu-icon-entrance {
+  opacity: 0; transform: translate3d(0, -20px, 0) scale(.84);
+}
+.gunhit-menu .menu-title-entrance,
+.gunhit-menu .menu-currency-entrance {
+  opacity: 0; transform: translate3d(0, -30px, 0) scale(.94);
+}
+.gunhit-menu.menu-ready .menu-weapon-entrance {
+  opacity: 1; transform: none;
+  animation: gunhit-weapon-rise 1450ms cubic-bezier(.25,.46,.45,.94) 80ms backwards;
+}
+.gunhit-menu.menu-ready .menu-action-entrance {
+  opacity: 1; transform: none;
+  animation: gunhit-menu-button-in 680ms cubic-bezier(.2,.8,.2,1) backwards;
+}
+.gunhit-menu.menu-ready .menu-icon-entrance {
+  opacity: 1; transform: none;
+  animation: gunhit-menu-icon-in 680ms cubic-bezier(.2,.8,.2,1) backwards;
+}
+.gunhit-menu.menu-ready .menu-title-entrance,
+.gunhit-menu.menu-ready .menu-currency-entrance {
+  opacity: 1; transform: none;
+  animation: gunhit-menu-title-in 700ms cubic-bezier(.2,.8,.2,1) backwards;
+}
+.gunhit-menu .menu-actions > :nth-child(1) { animation-delay: 220ms; }
+.gunhit-menu .menu-actions > :nth-child(2) { animation-delay: 300ms; }
+.gunhit-menu .menu-icon-bar > :nth-child(1) { animation-delay: 260ms; }
+.gunhit-menu .menu-icon-bar > :nth-child(2) { animation-delay: 320ms; }
+.gunhit-menu .menu-icon-bar > :nth-child(3) { animation-delay: 380ms; }
+.gunhit-menu .menu-icon-bar > :nth-child(4) { animation-delay: 440ms; }
+.gunhit-menu.menu-ready .menu-currency-entrance { animation-delay: 120ms; }
+/* A gentle transform-only pulse avoids repainting a large animated shadow. */
+.gunhit-menu .pulse-btn { animation: gunhit-menu-play-breathe 2.8s ease-in-out 1s infinite; }
+.gunhit-menu .pulse-btn:active { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .gunhit-menu .menu-weapon-entrance,
+  .gunhit-menu .menu-action-entrance,
+  .gunhit-menu .menu-icon-entrance,
+  .gunhit-menu .menu-title-entrance,
+  .gunhit-menu .menu-currency-entrance { opacity: 1; transform: none; }
+  .gunhit-menu.menu-ready .menu-weapon-entrance,
+  .gunhit-menu.menu-ready .menu-action-entrance,
+  .gunhit-menu.menu-ready .menu-icon-entrance,
+  .gunhit-menu.menu-ready .menu-title-entrance,
+  .gunhit-menu.menu-ready .menu-currency-entrance,
+  .gunhit-menu .pulse-btn,
+  .gunhit-menu .shine-sweep { animation: none; }
+  .gunhit-menu .shine-sweep { opacity: 0; }
+}
 
 @keyframes float-y {
   0%, 100% { transform: translateY(0); }
@@ -558,19 +655,20 @@ html, body, #root {
   position: absolute;
   left: 50%;
   top: 50%;
-  transform: translate(-50%, -50%);
+  transform: translate3d(-50%, -50%, 0);
   border-radius: 50%;
   pointer-events: none;
-  filter: blur(24px);
+  backface-visibility: hidden;
 }
 
 .sunburst-rays {
   position: absolute;
   left: 50%;
   top: 50%;
-  transform: translate(-50%, -50%);
+  transform: translate3d(-50%, -50%, 0);
   pointer-events: none;
-  mix-blend-mode: screen;
+  will-change: transform;
+  backface-visibility: hidden;
   animation: spinCenter 32s linear infinite;
 }
 
@@ -578,22 +676,21 @@ html, body, #root {
   position: absolute;
   left: 50%;
   top: 50%;
-  transform: translate(-50%, -50%);
+  transform: translate3d(-50%, -50%, 0);
   border-radius: 50%;
   pointer-events: none;
-  mix-blend-mode: screen;
-  filter: blur(10px);
+  backface-visibility: hidden;
 }
 
 .sunburst-hot {
   position: absolute;
   left: 50%;
   top: 50%;
-  transform: translate(-50%, -50%);
+  transform: translate3d(-50%, -50%, 0);
   border-radius: 50%;
   pointer-events: none;
-  mix-blend-mode: screen;
-  filter: blur(5px);
+  will-change: transform, opacity;
+  backface-visibility: hidden;
   animation: glarePulse 2.6s ease-in-out infinite;
 }
 
@@ -667,3 +764,46 @@ html, body, #root {
 }
 
 .diamond-reveal { animation: diamondRewardReveal 2.1s cubic-bezier(.2,.8,.2,1) both; }
+
+/* SANS STUDIO — Juicy Squeeze 2D Game Intro + Mochi Garden Audio (from 2d-game-intro-animation (1).zip) */
+.font-studio {
+  font-family: 'Fredoka', sans-serif;
+}
+
+.studio-red-stage {
+  background: radial-gradient(
+    circle at 50% 46%,
+    #FF2E2E 0%,
+    #F11E1E 54%,
+    #DC1414 100%
+  );
+}
+
+.studio-red-flat {
+  background: #F11E1E;
+}
+
+input[type='range'].juicy-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgba(255, 255, 255, 0.22);
+  height: 6px;
+  border-radius: 999px;
+  outline: none;
+}
+
+input[type='range'].juicy-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+input[type='range'].juicy-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.25);
+}

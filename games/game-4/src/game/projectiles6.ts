@@ -77,11 +77,13 @@ export class FishShot extends Projectile {
   constructor(g: Game, x: number, y: number) {
     super(g, x, y, -880);
   }
-  trail() {
+  trail(dt: number) {
     const ps = this.g.particles;
-    S.droplets(ps, this.x + rand(-8, 8), this.y + rand(24, 60), 1, Math.PI / 2, 1.3, [40, 170], [1.2, 2.8], '170,225,255', 600);
-    if (Math.random() < 0.5) ps.add({ k: K.SMOKE, x: this.x + rand(-8, 8), y: this.y + rand(30, 60), vx: rand(-20, 20), vy: rand(10, 50), size: 8, size2: 26, life: 0.5, color: '230,244,255', alpha: 0.4, rot: rand(0, TAU) });
-    if (Math.random() < 0.14) S.miniBubble(ps, this.x + rand(-10, 10), this.y + 40, rand(-20, 20), rand(10, 40), rand(2.4, 4.6), rand(0.4, 0.7));
+    for (let tick = 0, n = this.cosmeticTicks(dt); tick < n; tick++) {
+      S.droplets(ps, this.x + rand(-8, 8), this.y + rand(24, 60), 1, Math.PI / 2, 1.3, [40, 170], [1.2, 2.8], '170,225,255', 600);
+      if (Math.random() < 0.5) ps.add({ k: K.SMOKE, x: this.x + rand(-8, 8), y: this.y + rand(30, 60), vx: rand(-20, 20), vy: rand(10, 50), size: 8, size2: 26, life: 0.5, color: '230,244,255', alpha: 0.4, rot: rand(0, TAU) });
+      if (Math.random() < 0.14) S.miniBubble(ps, this.x + rand(-10, 10), this.y + 40, rand(-20, 20), rand(10, 40), rand(2.4, 4.6), rand(0.4, 0.7));
+    }
   }
   draw(ctx: Ctx) {
     ctx.save();
@@ -509,17 +511,22 @@ export class FreezeBeam extends Projectile {
     }
     const top = this.oy;
     const bot = this.endY;
+    const ticks = this.cosmeticTicks(dt);
     if (this.age < this.life - 0.1 && top - bot > 10) {
-      for (let i = 0; i < 2; i++) {
-        const yy = rand(bot, top);
-        ps.add({ k: K.STAR, add: true, x: this.ox + rand(-9, 9), y: yy, vx: rand(-30, 30), vy: rand(-20, 40), size: rand(7, 14), life: rand(0.3, 0.6), color: pick(['210,246,255', '150,225,255', '255,255,255']), drag: 2 });
+      for (let tick = 0; tick < ticks; tick++) {
+        for (let i = 0; i < 2; i++) {
+          const yy = rand(bot, top);
+          ps.add({ k: K.STAR, add: true, x: this.ox + rand(-9, 9), y: yy, vx: rand(-30, 30), vy: rand(-20, 40), size: rand(7, 14), life: rand(0.3, 0.6), color: pick(['210,246,255', '150,225,255', '255,255,255']), drag: 2 });
+        }
+        if (Math.random() < 0.5) S.snowflakes(ps, this.ox + rand(-10, 10), rand(bot, top), 1, Math.PI / 2, 1.5, [10, 60]);
+        if (Math.random() < 0.4) ps.add({ k: K.SMOKE, x: this.ox + rand(-8, 8), y: rand(bot, top), vx: rand(-20, 20), vy: rand(0, 30), size: 10, size2: 34, life: rand(0.5, 0.9), color: '200,238,255', alpha: 0.3, rot: rand(0, TAU) });
       }
-      if (Math.random() < 0.5) S.snowflakes(ps, this.ox + rand(-10, 10), rand(bot, top), 1, Math.PI / 2, 1.5, [10, 60]);
-      if (Math.random() < 0.4) ps.add({ k: K.SMOKE, x: this.ox + rand(-8, 8), y: rand(bot, top), vx: rand(-20, 20), vy: rand(0, 30), size: 10, size2: 34, life: rand(0.5, 0.9), color: '200,238,255', alpha: 0.3, rot: rand(0, TAU) });
     }
     if (this.mode === 'hit' && !g.wheelGone && this.age < this.life - 0.1) {
-      S.sparks(ps, this.ox, bot, 1, Math.PI / 2, 1.5, [100, 340], '200,240,255', 1.3);
-      if (Math.random() < dt * 30) S.snowChunks(ps, this.ox, bot, 1, Math.PI / 2, 1.5, [60, 220]);
+      for (let tick = 0; tick < ticks; tick++) {
+        S.sparks(ps, this.ox, bot, 1, Math.PI / 2, 1.5, [100, 340], '200,240,255', 1.3);
+        if (Math.random() < 0.5) S.snowChunks(ps, this.ox, bot, 1, Math.PI / 2, 1.5, [60, 220]);
+      }
     }
     if (this.age > this.life) this.alive = false;
   }
@@ -812,11 +819,13 @@ export class MagnetShot extends Projectile {
   constructor(g: Game, x: number, y: number) {
     super(g, x, y, -840);
   }
-  trail() {
+  trail(dt: number) {
     const ps = this.g.particles;
-    S.filings(ps, this.x, this.y + 30, 2, this, 1700, 60);
-    if (Math.random() < 0.4) S.sparks(ps, this.x + rand(-14, 14), this.y + rand(0, 20), 1, rand(0, TAU), 0.3, [60, 200], pick(['255,110,110', '130,170,255']), 1.3, 0, 0.03);
-    if (Math.random() < 0.4) ps.add({ k: K.GLOW, add: true, x: this.x + rand(-12, 12), y: this.y + rand(0, 26), vx: rand(-10, 10), vy: rand(20, 60), size: rand(12, 20), size2: 3, color: pick(['255,80,80', '100,150,255']), life: 0.3, alpha: 0.5 });
+    for (let i = 0, n = this.cosmeticTicks(dt); i < n; i++) {
+      S.filings(ps, this.x, this.y + 30, 2, this, 1700, 60);
+      if (Math.random() < 0.4) S.sparks(ps, this.x + rand(-14, 14), this.y + rand(0, 20), 1, rand(0, TAU), 0.3, [60, 200], pick(['255,110,110', '130,170,255']), 1.3, 0, 0.03);
+      if (Math.random() < 0.4) ps.add({ k: K.GLOW, add: true, x: this.x + rand(-12, 12), y: this.y + rand(0, 26), vx: rand(-10, 10), vy: rand(20, 60), size: rand(12, 20), size2: 3, color: pick(['255,80,80', '100,150,255']), life: 0.3, alpha: 0.5 });
+    }
   }
   draw(ctx: Ctx) {
     ctx.save();
@@ -909,14 +918,16 @@ export class SizeShot extends Projectile {
     this.grow = grow;
     this.weapon = grow ? 'grow' : 'shrink';
   }
-  trail() {
+  trail(dt: number) {
     this.r = this.grow ? 6 + Math.min(this.age * 20, 12) : 16 - Math.min(this.age * 14, 9);
     this.tip = this.r;
     const ps = this.g.particles;
     const pal = this.grow ? GROW_PAL : SHRINK_PAL;
-    if (Math.random() < 0.7) S.sparks(ps, this.x + rand(-9, 9), this.y + rand(6, 36), 1, Math.PI / 2, 1.3, [30, 140], pal.rgb, 1.4, 0, 0.03);
-    if (Math.random() < 0.4) ps.add({ k: K.STAR, add: true, x: this.x + rand(-10, 10), y: this.y + rand(4, 36), vx: rand(-20, 20), vy: rand(0, 50), size: rand(6, 11), life: 0.4, color: pal.rgb, drag: 2 });
-    if (Math.random() < 0.15) S.plusMinus(ps, this.x + rand(-10, 10), this.y + rand(10, 40), 1, this.grow ? '+' : '-', pal.rgb, [10, 40]);
+    for (let i = 0, n = this.cosmeticTicks(dt); i < n; i++) {
+      if (Math.random() < 0.7) S.sparks(ps, this.x + rand(-9, 9), this.y + rand(6, 36), 1, Math.PI / 2, 1.3, [30, 140], pal.rgb, 1.4, 0, 0.03);
+      if (Math.random() < 0.4) ps.add({ k: K.STAR, add: true, x: this.x + rand(-10, 10), y: this.y + rand(4, 36), vx: rand(-20, 20), vy: rand(0, 50), size: rand(6, 11), life: 0.4, color: pal.rgb, drag: 2 });
+      if (Math.random() < 0.15) S.plusMinus(ps, this.x + rand(-10, 10), this.y + rand(10, 40), 1, this.grow ? '+' : '-', pal.rgb, [10, 40]);
+    }
   }
   draw(ctx: Ctx) {
     const pal = this.grow ? GROW_PAL : SHRINK_PAL;
@@ -1021,9 +1032,11 @@ export class PirateShot extends Projectile {
   trail(dt: number) {
     this.rot += dt * 5;
     const ps = this.g.particles;
-    ps.add({ k: K.SMOKE, x: this.x + rand(-6, 6), y: this.y + rand(14, 30), vx: rand(-24, 24), vy: rand(10, 50), size: 14, size2: 46, life: rand(0.9, 1.4), color: '120,116,112', alpha: 0.5, rot: rand(0, TAU), vrot: rand(-1, 1) });
-    if (Math.random() < 0.7) S.sparks(ps, this.x + rand(-6, 6), this.y + 8, 1, Math.PI / 2, 1.2, [60, 220], '255,210,120', 1.4, 300, 0.03);
-    if (Math.random() < 0.4) ps.add({ k: K.EMBER, add: true, x: this.x + rand(-6, 6), y: this.y + rand(8, 24), vx: rand(-40, 40), vy: rand(20, 90), size: 1.8, life: 0.5, color: '255,170,60', g: 200 });
+    for (let i = 0, n = this.cosmeticTicks(dt); i < n; i++) {
+      ps.add({ k: K.SMOKE, x: this.x + rand(-6, 6), y: this.y + rand(14, 30), vx: rand(-24, 24), vy: rand(10, 50), size: 14, size2: 46, life: rand(0.9, 1.4), color: '120,116,112', alpha: 0.5, rot: rand(0, TAU), vrot: rand(-1, 1) });
+      if (Math.random() < 0.7) S.sparks(ps, this.x + rand(-6, 6), this.y + 8, 1, Math.PI / 2, 1.2, [60, 220], '255,210,120', 1.4, 300, 0.03);
+      if (Math.random() < 0.4) ps.add({ k: K.EMBER, add: true, x: this.x + rand(-6, 6), y: this.y + rand(8, 24), vx: rand(-40, 40), vy: rand(20, 90), size: 1.8, life: 0.5, color: '255,170,60', g: 200 });
+    }
   }
   draw(ctx: Ctx) {
     ctx.save();
@@ -1087,11 +1100,13 @@ export class CardShot extends Projectile {
     super(g, x, y, -1350);
     this.suit = suit % 4;
   }
-  trail() {
+  trail(dt: number) {
     const ps = this.g.particles;
-    if (Math.random() < 0.7) ps.add({ k: K.STAR, add: true, x: this.x + rand(-10, 10), y: this.y + rand(10, 50), vx: rand(-30, 30), vy: rand(10, 70), size: rand(7, 12), life: rand(0.3, 0.55), color: pick(['255,230,150', '255,255,255', '255,160,180']), drag: 2 });
-    if (Math.random() < 0.2) S.cards(ps, this.x + rand(-6, 6), this.y + rand(20, 40), 1, Math.PI / 2, 1, [20, 80], 0.45);
-    if (Math.random() < 0.4) ps.add({ k: K.SMOKE, x: this.x + rand(-4, 4), y: this.y + rand(16, 34), vx: rand(-12, 12), vy: rand(10, 40), size: 7, size2: 22, life: 0.4, color: '255,245,240', alpha: 0.25, rot: rand(0, TAU) });
+    for (let i = 0, n = this.cosmeticTicks(dt); i < n; i++) {
+      if (Math.random() < 0.7) ps.add({ k: K.STAR, add: true, x: this.x + rand(-10, 10), y: this.y + rand(10, 50), vx: rand(-30, 30), vy: rand(10, 70), size: rand(7, 12), life: rand(0.3, 0.55), color: pick(['255,230,150', '255,255,255', '255,160,180']), drag: 2 });
+      if (Math.random() < 0.2) S.cards(ps, this.x + rand(-6, 6), this.y + rand(20, 40), 1, Math.PI / 2, 1, [20, 80], 0.45);
+      if (Math.random() < 0.4) ps.add({ k: K.SMOKE, x: this.x + rand(-4, 4), y: this.y + rand(16, 34), vx: rand(-12, 12), vy: rand(10, 40), size: 7, size2: 22, life: 0.4, color: '255,245,240', alpha: 0.25, rot: rand(0, TAU) });
+    }
   }
   draw(ctx: Ctx) {
     const f = Math.abs(Math.cos(this.age * 11));

@@ -1,4 +1,4 @@
-import { type Ctx, TAU, pick, rand } from './core';
+import { type Ctx, TAU, makeCanvas, pick, rand } from './core';
 import { K, type Particle, type Particles } from './particles';
 import { CONF_HEX, drawFeather, drawLeaf } from './shapes3';
 
@@ -18,7 +18,8 @@ export function confetti(ps: Particles, x: number, y: number, n: number, ang: nu
     const w = rand(size[0], size[1]);
     const h = w * rand(0.4, 0.7);
     const dot = Math.random() < 0.18;
-    ps.add({
+    const paper = { kind: 'confetti' as const, color: col, w, h, dot, paint: null as Particle['draw'] };
+    const particle = ps.add({
       k: K.CUSTOM,
       x: x + rand(-4, 4),
       y: y + rand(-4, 4),
@@ -30,6 +31,9 @@ export function confetti(ps: Particles, x: number, y: number, n: number, ang: nu
       vrot: rand(-12, 12),
       seed: rand(0, 100),
       life: rand(life[0], life[1]),
+      // Keep the original draw callback for fallback, but expose its geometry
+      // so adjacent pieces can share paths without dropping any paper.
+      data: paper,
       draw: (c: Ctx, p: Particle) => {
         const t = p.life / p.max;
         const age = p.max - p.life;
@@ -56,6 +60,9 @@ export function confetti(ps: Particles, x: number, y: number, n: number, ang: nu
         c.restore();
       },
     });
+    // Only this exact callback may use the equivalent batched path. If a
+    // caller replaces it, Particles must execute their custom drawing instead.
+    paper.paint = particle.draw;
   }
 }
 
@@ -146,6 +153,48 @@ export function feathers(ps: Particles, x: number, y: number, n: number, ang: nu
   }
 }
 
+interface LeafSprite { canvas: HTMLCanvasElement; x: number; y: number; w: number; h: number; length: number }
+const fallingLeaves = new Map<string, LeafSprite>();
+
+/**
+ * The leaf's shaded shape is static; its flutter, spin and fall stay live.
+ * Cache only opaque leaves: during the fade the separate translucent outline
+ * and vein still use the original vector path, preserving their overlap.
+ */
+function drawFallingLeaf(ctx: Ctx, length: number, dark: boolean) {
+  let sprite: LeafSprite | undefined;
+  const canCache = typeof document !== 'undefined' && typeof HTMLCanvasElement !== 'undefined'
+    && ctx.canvas instanceof HTMLCanvasElement && Number.isFinite(length) && length >= 7 && length <= 13
+    && ctx.globalAlpha >= 0.999 && ctx.lineCap === 'butt' && ctx.lineJoin === 'miter';
+  if (canCache) {
+    const l = Math.round(length * 2) / 2;
+    const key = `${l}:${dark ? 1 : 0}`;
+    sprite = fallingLeaves.get(key);
+    if (!sprite) {
+      try {
+        const width = l * 0.42;
+        const x = -2, y = Math.floor(-width - 2);
+        const w = Math.ceil(l + 2) - x, h = Math.ceil(width + 2) - y;
+        const density = 3;
+        const canvas = makeCanvas(w * density, h * density);
+        const c = canvas.getContext('2d');
+        if (c) {
+          c.setTransform(density, 0, 0, density, -x * density, -y * density);
+          if (dark) drawLeaf(c, l, width, '#5cc34a', '#1d6b2c');
+          else drawLeaf(c, l, width);
+          sprite = { canvas, x, y, w, h, length: l };
+          fallingLeaves.set(key, sprite); // at most 26 size/colour pairs
+        }
+      } catch { /* Continue drawing the vector when canvas allocation is denied. */ }
+    }
+  }
+  if (sprite) {
+    const scale = length / sprite.length;
+    ctx.drawImage(sprite.canvas, sprite.x * scale, sprite.y * scale, sprite.w * scale, sprite.h * scale);
+  } else if (dark) drawLeaf(ctx, length, length * 0.42, '#5cc34a', '#1d6b2c');
+  else drawLeaf(ctx, length, length * 0.42);
+}
+
 export function leaves(ps: Particles, x: number, y: number, n: number, ang: number, spread: number, speed: Range) {
   for (let i = 0; i < n; i++) {
     const a = ang + rand(-spread, spread);
@@ -172,8 +221,7 @@ export function leaves(ps: Particles, x: number, y: number, n: number, ang: numb
         c.rotate(p.rot);
         c.scale(1, 0.35 + 0.65 * Math.abs(Math.cos(p.seed + age * 8)));
         c.globalAlpha = Math.min(1, t * 2.5);
-        if (dark) drawLeaf(c, L, L * 0.42, '#5cc34a', '#1d6b2c');
-        else drawLeaf(c, L, L * 0.42);
+        drawFallingLeaf(c, L, dark);
         c.restore();
       },
     });

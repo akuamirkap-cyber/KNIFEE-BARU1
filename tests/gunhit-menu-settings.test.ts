@@ -27,7 +27,8 @@ test('Gun Hit menu uses PERFECT SHOT branding and keeps special-stage picks in S
   assert.match(menu, /from-\[#ff9a38\].*to-\[#a91435\]/s);
   assert.match(menu, /from-\[#b7ff73\].*to-\[#006b39\]/s);
   assert.doesNotMatch(menu, /🍎|\{getWeapon\(weapon\)\.name\}/);
-  assert.match(app, /const pw = 312;\s+const ph = 273;/);
+  assert.match(app, /const pw = 337;\s+const ph = 295;/);
+  assert.match(menu, /width:\s*'min\(337px,\s*90vw\)',\s*height:\s*'min\(295px,\s*78vw\)'/);
   assert.match(app, /SETTINGS sits immediately to the right of READY!/);
   const bottomBar = app.slice(app.indexOf('{/* Bottom Icon Bar */}'), app.indexOf("{screen === 'menu' && settingsOpen && ("));
   assert.doesNotMatch(bottomBar, /data-gloss="off"/);
@@ -53,12 +54,32 @@ test('menu gun preview shifts left 8 percent (to 1 percent) to center with its s
   assert.doesNotMatch(previewArea.slice(0, previewArea.indexOf('<canvas')), /translate-x-\[1%\]/);
 });
 
-test('menu theme choices default to forest and can switch to morning, town and snow', () => {
+test('menu & game theme choices default to forest and expose all SGA background themes', () => {
   const themes = readFileSync(path.join(process.cwd(), 'src/games/gunhit/components/MenuEnvironment.tsx'), 'utf8');
-  assert.match(app, /saved === 'morning' \|\| saved === 'town' \|\| saved === 'snow' \? saved : 'forest'/);
-  assert.match(app, /TEMA LATAR MENU/);
-  for (const theme of ['forest', 'morning', 'town', 'snow']) assert.ok(app.includes(`id: '${theme}'`));
+  const bgThemes = readFileSync(path.join(process.cwd(), 'src/games/gunhit/game/backgroundThemes.ts'), 'utf8');
+  assert.match(bgThemes, /DEFAULT_SGA_BG_THEME:\s*SgaBackgroundTheme\s*=\s*'forest'/);
+  assert.match(app, /TEMA LATAR MENU & GAME/);
+  assert.match(app, /gameRef\.current\?\.setBackgroundTheme\(menuTheme\)/);
+  for (const theme of [
+    'forest',
+    'morning',
+    'town',
+    'snow',
+    'skyline',
+    'battlefield',
+    'mystic',
+    'crystal',
+    'yoyo_neon',
+    'royal_vault',
+    'cyber_grid',
+    'nebula',
+    'auto',
+  ]) {
+    assert.ok(bgThemes.includes(`id: '${theme}'`), `backgroundThemes includes ${theme}`);
+  }
   assert.match(themes, /data-menu-environment="morning"/);
   assert.match(themes, /data-menu-environment="town"/);
   assert.match(themes, /data-menu-environment="snow"/);
+  assert.match(themes, /data-menu-environment="skyline"/);
+  assert.match(themes, /data-menu-environment="nebula"/);
 });

@@ -7,7 +7,7 @@ import {
   RUBY,
   SAPPHIRE,
   drawChargeOrb,
-  drawCross,
+  drawHolyEmblem,
   drawCrystalCluster,
   drawGem,
   drawQuantumOrb,
@@ -126,7 +126,7 @@ function drawHoly(ctx: Ctx, a: WeaponAnim, time: number) {
   }
   ctx.save();
   ctx.translate(0, 78);
-  drawCross(ctx, 11);
+  drawHolyEmblem(ctx, 11);
   ctx.restore();
   ctx.save();
   ctx.translate(0, 146);
@@ -459,7 +459,8 @@ function drawCoinGun(ctx: Ctx, a: WeaponAnim, time: number) {
 
 // ───────────────────────── PHOTON SABER ─────────────────────────
 function drawSaber(ctx: Ctx, a: WeaponAnim, time: number) {
-  const swing = a.fireT < 0.22 ? -0.85 * Math.pow(1 - a.fireT / 0.22, 2) : 0;
+  const side = a.saberSide ?? 1;
+  const swing = a.fireT < 0.22 ? side * -0.85 * Math.pow(1 - a.fireT / 0.22, 2) : 0;
   const hot = a.fireT < 0.5 ? 1 - a.fireT / 0.5 : 0;
   const fl = 0.9 + 0.1 * Math.sin(time * 38);
   const bladeAt = (ang: number, alpha: number) => {
@@ -487,7 +488,7 @@ function drawSaber(ctx: Ctx, a: WeaponAnim, time: number) {
   };
   ctx.save();
   ctx.scale(0.92, 0.92);
-  if (swing !== 0) for (let k = 4; k >= 1; k--) bladeAt(swing - k * 0.1, 0.14 * (5 - k));
+  if (swing !== 0) for (let k = 4; k >= 1; k--) bladeAt(swing - side * k * 0.1, 0.14 * (5 - k));
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
   ctx.translate(0, 100);

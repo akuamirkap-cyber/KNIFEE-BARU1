@@ -195,7 +195,7 @@ test('every gun × effect combination is audible in the real game', async () => 
       if (p.voices > 0 && p.peak < 0.3) quiet.push(`${w.id}:${opt.id} (${p.peak.toFixed(2)})`);
     }
   }
-  assert.ok(combos >= 260, `expected ~265 gun/effect combinations, saw ${combos}`);
+  assert.ok(combos >= 250, `expected at least 250 playable gun/effect combinations, saw ${combos}`);
   assert.deepEqual(silent, [], `silent combinations: ${silent.join(', ')}`);
   assert.deepEqual(quiet, [], `combinations too quiet to hear: ${quiet.join(', ')}`);
   // …and the arsenal stays one instrument: no gun three times louder than the
@@ -243,18 +243,22 @@ test('the quietest ported sounds stay in the same band as the rest', async () =>
 
 test('slide 11 has its own voice for every one of its guns', () => {
   const e = elevenEngine();
-  // The six guns that used to fall through to the generic two-voice default.
-  for (const id of ['tripod', 'ironman', 'mega-buster', 'dragon-breath', 'proton-pack', 'phaser']) {
-    audio.reset();
-    e.playFire(id);
-    assert.ok(audio.probe.voices >= 3, `${id} still plays the generic default`);
-    assert.ok(audio.probe.peak >= 0.3, `${id} is too quiet (${audio.probe.peak.toFixed(2)})`);
-  }
-  // …and the three rare guns that were authored barely above a murmur.
-  for (const id of ['helix-pulsar', 'prism-lance', 'nano-swarm']) {
-    audio.reset();
-    e.playFire(id);
-    assert.ok(audio.probe.peak >= 0.3, `${id} is too quiet (${audio.probe.peak.toFixed(2)})`);
+  try {
+    // The six guns that used to fall through to the generic two-voice default.
+    for (const id of ['tripod', 'ironman', 'mega-buster', 'dragon-breath', 'proton-pack', 'phaser']) {
+      audio.reset();
+      e.playFire(id);
+      assert.ok(audio.probe.voices >= 3, `${id} still plays the generic default`);
+      assert.ok(audio.probe.peak >= 0.3, `${id} is too quiet (${audio.probe.peak.toFixed(2)})`);
+    }
+    // …and the three rare guns that were authored barely above a murmur.
+    for (const id of ['helix-pulsar', 'prism-lance', 'nano-swarm']) {
+      audio.reset();
+      e.playFire(id);
+      assert.ok(audio.probe.peak >= 0.3, `${id} is too quiet (${audio.probe.peak.toFixed(2)})`);
+    }
+  } finally {
+    e.stopAll();
   }
 });
 

@@ -23,6 +23,7 @@ import {
 } from '../game/weapons';
 import { drawGunCentered } from '../game/art/drawCentered';
 import { getGunMetrics } from '../game/art/metrics';
+import { getSavedSgaSpeed } from '../game/gameSpeed';
 
 type BoxState = 'drop' | 'ready' | 'charging' | 'open';
 const TAPS = 3;
@@ -82,7 +83,7 @@ function GunRevealCanvas({ id, silhouette }: { id: WeaponId; silhouette: boolean
     let raf = 0;
     const start = performance.now();
     const loop = (now: number) => {
-      const t = (now - start) / 1000;
+      const t = ((now - start) / 1000) * getSavedSgaSpeed();
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, W, H);
       const span = Math.max(getGunMetrics(id).span, 130);
@@ -140,13 +141,14 @@ export const BossGiftBoxModal = ({ bossName, stage, currentWeaponId, onClaim }: 
 
   useEffect(() => {
     if (!active || state !== 'drop') return;
+    const spd = getSavedSgaSpeed();
     boxSfx.whoosh();
     const a = setTimeout(() => {
       boxSfx.thud();
       vibrate(12);
-      shakeEl(wrapRef.current, 3, 220);
-    }, 560);
-    const b = setTimeout(() => setState('ready'), 1000);
+      shakeEl(wrapRef.current, 3, Math.round(220 / spd));
+    }, Math.round(560 / spd));
+    const b = setTimeout(() => setState('ready'), Math.round(1000 / spd));
     return () => {
       clearTimeout(a);
       clearTimeout(b);
@@ -155,11 +157,12 @@ export const BossGiftBoxModal = ({ bossName, stage, currentWeaponId, onClaim }: 
 
   const tap = useCallback(() => {
     if (state !== 'ready') return;
+    const spd = getSavedSgaSpeed();
     const n = taps + 1;
     setTaps(n);
     boxSfx.tap(n);
     vibrate(8);
-    shakeEl(wrapRef.current, 2 + n, 160);
+    shakeEl(wrapRef.current, 2 + n, Math.round(160 / spd));
     punchRef.current?.animate(
       [
         { transform: 'scale(1)' },
@@ -167,7 +170,7 @@ export const BossGiftBoxModal = ({ bossName, stage, currentWeaponId, onClaim }: 
         { transform: 'scale(.96,1.05)' },
         { transform: 'scale(1)' },
       ],
-      { duration: 280, easing: 'cubic-bezier(.3,.8,.4,1.3)' },
+      { duration: Math.round(280 / spd), easing: 'cubic-bezier(.3,.8,.4,1.3)' },
     );
     if (n >= TAPS) {
       setState('charging');
@@ -176,12 +179,12 @@ export const BossGiftBoxModal = ({ bossName, stage, currentWeaponId, onClaim }: 
         setState('open');
         boxSfx.open();
         vibrate(20);
-        shakeEl(wrapRef.current, 5, 350);
-      }, 900);
+        shakeEl(wrapRef.current, 5, Math.round(350 / spd));
+      }, Math.round(900 / spd));
       setTimeout(() => {
         setShowInfo(true);
         boxSfx.reveal();
-      }, 2400);
+      }, Math.round(2400 / spd));
     }
   }, [state, taps]);
 

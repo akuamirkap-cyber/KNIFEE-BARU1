@@ -1,4 +1,4 @@
-import { TAU, metal, rng, roundRect, withAlpha } from './core';
+import { TAU, drawNineRadial, metal, rng, roundRect, withAlpha } from './core';
 
 export { metal, roundRect };
 
@@ -31,16 +31,41 @@ export const T = {
   alien: ['#c9d3c0', '#7d8a77', '#3b4637', '#10150e'],
 } as const satisfies Record<string, Tone>;
 
+const artGradCache = new WeakMap<CanvasRenderingContext2D, Map<string, CanvasGradient>>();
+
+function cachedVGrad(
+  ctx: CanvasRenderingContext2D,
+  key: string,
+  y0: number,
+  y1: number,
+  build: (g: CanvasGradient) => void,
+): CanvasGradient {
+  let map = artGradCache.get(ctx);
+  if (!map) {
+    map = new Map();
+    artGradCache.set(ctx, map);
+  }
+  let g = map.get(key);
+  if (!g) {
+    g = ctx.createLinearGradient(0, y0, 0, y1);
+    build(g);
+    if (map.size > 768) map.clear();
+    map.set(key, g);
+  }
+  return g;
+}
+
 /** vertical "cylinder" gradient with a bounce light along the bottom edge */
 export function cyl(ctx: CanvasRenderingContext2D, y0: number, y1: number, tone: Tone) {
-  const g = ctx.createLinearGradient(0, y0, 0, y1);
-  g.addColorStop(0, tone[0]);
-  g.addColorStop(0.2, tone[1]);
-  g.addColorStop(0.55, tone[2]);
-  g.addColorStop(0.86, tone[3]);
-  g.addColorStop(0.96, tone[2]);
-  g.addColorStop(1, tone[3]);
-  return g;
+  const key = `c|${y0.toFixed(2)}|${y1.toFixed(2)}|${tone[0]}|${tone[3]}`;
+  return cachedVGrad(ctx, key, y0, y1, (g) => {
+    g.addColorStop(0, tone[0]);
+    g.addColorStop(0.2, tone[1]);
+    g.addColorStop(0.55, tone[2]);
+    g.addColorStop(0.86, tone[3]);
+    g.addColorStop(0.96, tone[2]);
+    g.addColorStop(1, tone[3]);
+  });
 }
 
 export interface ShapeOpt {
@@ -67,16 +92,30 @@ export function shape(
   const h = Math.max(1, y1 - y0);
   const hi = o.hi ?? 0.34;
   if (hi > 0) {
-    const g = ctx.createLinearGradient(0, y0, 0, y0 + h * 0.4);
-    g.addColorStop(0, `rgba(255,255,255,${hi})`);
-    g.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = g;
+    const hiEnd = y0 + h * 0.4;
+    ctx.fillStyle = cachedVGrad(
+      ctx,
+      `h|${y0.toFixed(2)}|${hiEnd.toFixed(2)}|${hi}`,
+      y0,
+      hiEnd,
+      (g) => {
+        g.addColorStop(0, `rgba(255,255,255,${hi})`);
+        g.addColorStop(1, 'rgba(255,255,255,0)');
+      },
+    );
     ctx.fillRect(-2000, y0, 4000, h * 0.42);
   }
-  const g2 = ctx.createLinearGradient(0, y1 - h * 0.28, 0, y1);
-  g2.addColorStop(0, 'rgba(0,0,0,0)');
-  g2.addColorStop(1, 'rgba(0,0,0,0.38)');
-  ctx.fillStyle = g2;
+  const shStart = y1 - h * 0.28;
+  ctx.fillStyle = cachedVGrad(
+    ctx,
+    `s|${shStart.toFixed(2)}|${y1.toFixed(2)}`,
+    shStart,
+    y1,
+    (g2) => {
+      g2.addColorStop(0, 'rgba(0,0,0,0)');
+      g2.addColorStop(1, 'rgba(0,0,0,0.38)');
+    },
+  );
   ctx.fillRect(-2000, y1 - h * 0.3, 4000, h * 0.3);
   if (o.brush) {
     ctx.strokeStyle = 'rgba(255,255,255,0.075)';
@@ -175,14 +214,7 @@ export function emissive(ctx: CanvasRenderingContext2D, x: number, y: number, r:
   if (r <= 0 || a <= 0) return;
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
-  const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-  g.addColorStop(0, withAlpha('#ffffff', 0.95 * a));
-  g.addColorStop(0.3, withAlpha(color, 0.8 * a));
-  g.addColorStop(1, withAlpha(color, 0));
-  ctx.fillStyle = g;
-  ctx.beginPath();
-  ctx.arc(x, y, r, 0, TAU);
-  ctx.fill();
+  drawNineRadial(ctx, x, y, r, '#ffffff', color, a, 0.3, 0.95, 0.8);
   ctx.restore();
 }
 
@@ -338,11 +370,22 @@ export function ribbon(
 }
 
 export const spec = (ctx: CanvasRenderingContext2D, x0: number, y: number, x1: number, a = 0.5, lw = 1.2) => {
-  const g = ctx.createLinearGradient(x0, 0, x1, 0);
-  g.addColorStop(0, 'rgba(255,255,255,0)');
-  g.addColorStop(0.2, `rgba(255,255,255,${a})`);
-  g.addColorStop(0.8, `rgba(255,255,255,${a})`);
-  g.addColorStop(1, 'rgba(255,255,255,0)');
+  let map = artGradCache.get(ctx);
+  if (!map) {
+    map = new Map();
+    artGradCache.set(ctx, map);
+  }
+  const key = `sp|${x0.toFixed(2)}|${x1.toFixed(2)}|${a}`;
+  let g = map.get(key);
+  if (!g) {
+    g = ctx.createLinearGradient(x0, 0, x1, 0);
+    g.addColorStop(0, 'rgba(255,255,255,0)');
+    g.addColorStop(0.2, `rgba(255,255,255,${a})`);
+    g.addColorStop(0.8, `rgba(255,255,255,${a})`);
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    if (map.size > 768) map.clear();
+    map.set(key, g);
+  }
   ctx.strokeStyle = g;
   ctx.lineWidth = lw;
   ctx.beginPath();

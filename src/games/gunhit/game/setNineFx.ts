@@ -47,14 +47,53 @@ const NO_HOOKS: NineHooks = {
  */
 export const NINE_BEAM_SPEED = 9500;
 
+let nineVolume = 1;
+
 /** Slide 9's muted switch, so slide 1's UI can silence the ported guns too. */
 export function setNineMuted(muted: boolean) {
   nineAudio.muted = muted;
+  if (nineAudio.master) nineAudio.master.gain.value = muted ? 0 : 0.92 * nineVolume;
+}
+
+export function setNineVolume(v: number) {
+  nineVolume = Math.max(0, Math.min(1, v));
+  if (nineAudio.master) nineAudio.master.gain.value = nineAudio.muted ? 0 : 0.92 * nineVolume;
 }
 
 /** Slide 9's current mute state, so a temporary silence can be undone. */
 export function nineMuted(): boolean {
   return nineAudio.muted;
+}
+
+const STATIC_HOLE_WEAPONS = new Set(['beretta92', 'ak47', 'mp5', 'rifle']);
+const cooledMarkSprites = new WeakMap<Mark, HTMLCanvasElement | null>();
+
+function getCooledMarkSprite(m: Mark, time: number): HTMLCanvasElement | null {
+  const existing = cooledMarkSprites.get(m);
+  if (existing !== undefined) return existing;
+  if (typeof document === 'undefined' || typeof HTMLCanvasElement === 'undefined') {
+    cooledMarkSprites.set(m, null);
+    return null;
+  }
+  const cv = document.createElement('canvas');
+  if (!(cv instanceof HTMLCanvasElement)) {
+    cooledMarkSprites.set(m, null);
+    return null;
+  }
+  const S = 40;
+  const scale = 2;
+  cv.width = S * scale;
+  cv.height = S * scale;
+  const c = cv.getContext('2d');
+  if (!c) {
+    cooledMarkSprites.set(m, null);
+    return null;
+  }
+  c.scale(scale, scale);
+  c.translate(S * 0.5, S * 0.5);
+  m.weapon.drawMark(c, m, time);
+  cooledMarkSprites.set(m, cv);
+  return cv;
 }
 
 /** Slide 9's audio graph may only start after a user gesture. */
@@ -523,7 +562,13 @@ export class SetNineFx implements GameAPI {
       ctx.save();
       ctx.rotate(m.a);
       ctx.translate(m.r || radius, 0);
-      m.weapon.drawMark(ctx, m, this.time);
+      if (m.age > 0.76 && STATIC_HOLE_WEAPONS.has(m.weapon.id)) {
+        const sp = getCooledMarkSprite(m, this.time);
+        if (sp) ctx.drawImage(sp, -20, -20, 40, 40);
+        else m.weapon.drawMark(ctx, m, this.time);
+      } else {
+        m.weapon.drawMark(ctx, m, this.time);
+      }
       ctx.restore();
     }
     ctx.restore();

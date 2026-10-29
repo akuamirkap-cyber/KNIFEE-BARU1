@@ -5,6 +5,7 @@ import { renderBossHead } from '../game/bossRenderer';
 import { getBossDef, type BossType } from '../game/bossRoster';
 import { useSlideActive } from '../../shared/SlideActivity';
 import { Burst } from '../../knife-hit/components/Effects';
+import { getSavedSgaSpeed } from '../game/gameSpeed';
 
 interface BossDefeatedModalProps {
   bossName: string;
@@ -64,7 +65,7 @@ export const BossDefeatedModal = ({
     const reveal = window.setTimeout(() => {
       setVisibleXp(xpProgress);
       sfx.coin();
-    }, 180);
+    }, Math.round(180 / getSavedSgaSpeed()));
     return () => window.clearTimeout(reveal);
   }, [active, xpBefore, xpProgress]);
 
@@ -72,7 +73,7 @@ export const BossDefeatedModal = ({
     if (!active) return;
     sfx.boss();
     sfx4.match();
-    const timer = window.setTimeout(() => continueRef.current(), 3400);
+    const timer = window.setTimeout(() => continueRef.current(), Math.round(3400 / getSavedSgaSpeed()));
     return () => window.clearTimeout(timer);
   }, [active, stage]);
 

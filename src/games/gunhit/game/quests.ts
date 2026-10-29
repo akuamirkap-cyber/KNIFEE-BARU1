@@ -62,7 +62,7 @@ export const QUESTS: Quest[] = [
   skill('s-coin2k', 'Tukang Koin', 'Kumpulkan 2.000 koin', '🪙', 2000, 400, s => s.totalCoinsCollected),
   skill('s-coin10k', 'Sultan Koin', 'Kumpulkan 10.000 koin', '💎', 10000, 1200, s => s.totalCoinsCollected),
   skill('s-shots200', 'Tangan Dewa', 'Tembakkan 200 peluru total', '🌟', 200, 800, s => s.shotsFired),
-  skill('s-playerlevel5', 'Naik Level', 'Capai player level 5', '📈', 5, 1000, s => s.highestPlayerLevel, 'buster'),
+  skill('s-playerlevel5', 'Naik Level', 'Capai player level 5', '📈', 5, 1000, s => s.highestPlayerLevel, 'mega_buster'),
 ];
 
 export interface AchievementMilestone {

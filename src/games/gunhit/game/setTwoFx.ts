@@ -33,6 +33,43 @@ const PL = 46;
 /** Slide 2 wheel radius; only the ported `drawDebris` wedge branch reads it. */
 const R = 100;
 
+/** The little water bubbles repeat the same three layers at many sizes. */
+interface BubbleSprite { canvas: HTMLCanvasElement; half: number }
+const BUBBLE_SPRITE_SCALE = 2;
+const bubbleSprites = new Map<number, BubbleSprite>();
+
+function bubbleSprite(ctx: CanvasRenderingContext2D, radius: number): BubbleSprite | null {
+  // Eighth-pixel radius steps are subpixel at phone size and bound the cache.
+  if (!Number.isFinite(radius) || radius <= 0 || radius > 16
+    || typeof document === 'undefined' || typeof HTMLCanvasElement === 'undefined'
+    || !(ctx.canvas instanceof HTMLCanvasElement)) return null;
+  const key = Math.max(1, Math.round(radius * 8));
+  const cached = bubbleSprites.get(key);
+  if (cached) return cached;
+  try {
+    const canvas = document.createElement('canvas');
+    if (!(canvas instanceof HTMLCanvasElement)) return null;
+    const r = key / 8;
+    const half = Math.ceil((r + 1.5) * BUBBLE_SPRITE_SCALE) / BUBBLE_SPRITE_SCALE;
+    canvas.width = Math.ceil(half * 2 * BUBBLE_SPRITE_SCALE);
+    canvas.height = canvas.width;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.scale(BUBBLE_SPRITE_SCALE, BUBBLE_SPRITE_SCALE);
+    ctx.translate(half, half);
+    ctx.strokeStyle = 'rgba(180,230,255,1)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.stroke();
+    ctx.fillStyle = 'rgba(220,245,255,0.35)';
+    ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,1)';
+    ctx.beginPath(); ctx.arc(-r * 0.32, -r * 0.32, Math.max(0.6, r * 0.22), 0, TAU); ctx.fill();
+    const sprite = { canvas, half };
+    bubbleSprites.set(key, sprite);
+    return sprite;
+  } catch { return null; /* Non-browser contexts keep the vector rendering. */ }
+}
+
 /** Slide 2 `BubbleFx`. */
 export interface TwoBubble { x: number; y: number; vx: number; vy: number; life: number; max: number; r: number }
 
@@ -53,7 +90,37 @@ export interface TwoSkyRocket {
 }
 
 /** One slide-2 round in flight. */
-export interface TwoRound { hue: number; seed: number; age: number; open: number }
+export interface TwoRound {
+  hue: number; seed: number; age: number; open: number;
+  /** Fractional world-time trail ticks and previous position; purely cosmetic. */
+  trailCarry?: number; trailX?: number; trailY?: number;
+}
+
+/**
+ * Slide 2 authored its trail at 60 Hz. Advance motion/age each update, but
+ * emit only the same number of particles per world second at any refresh rate.
+ * Cap catch-up after a suspended tab and spread low-refresh emissions along the
+ * travelled segment; neither the carrier nor its collision is changed.
+ */
+export function advanceTwoRoundTrail(
+  fx: Pick<SetTwoFx, 'trail'>, id: TwoWeapon, x: number, y: number, round: TwoRound, dt: number,
+) {
+  if (!Number.isFinite(dt) || dt <= 0) return;
+  const previousAge = round.age;
+  const endAge = previousAge + dt;
+  const previousX = round.trailX ?? x;
+  const previousY = round.trailY ?? y;
+  const carry = (round.trailCarry ?? 0) + Math.min(dt, 0.1) * 60;
+  const ticks = Math.min(6, Math.floor(carry + 1e-8));
+  round.trailCarry = Math.max(0, carry - ticks);
+  round.trailX = x; round.trailY = y;
+  for (let i = 1; i <= ticks; i++) {
+    const f = i / ticks;
+    round.age = previousAge + dt * f;
+    fx.trail(id, previousX + (x - previousX) * f, previousY + (y - previousY) * f, round);
+  }
+  round.age = endAge;
+}
 
 /** The two things only the live game can do. */
 export interface TwoHost {
@@ -1537,23 +1604,29 @@ export class SetTwoFx extends Slide2Fx {
   /** Slide 2 `drawBubbles()`. */
   drawBubbles(c: CanvasRenderingContext2D) {
     const ctx = c;
+    ctx.save();
+    const inheritedAlpha = ctx.globalAlpha;
     for (const b of this.bubbles) {
       const k = Math.max(0, b.life / b.max);
       const a = Math.min(1, k * 2) * 0.8;
-      ctx.strokeStyle = `rgba(180,230,255,${a})`;
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      ctx.arc(b.x, b.y, b.r, 0, TAU);
-      ctx.stroke();
-      ctx.fillStyle = `rgba(220,245,255,${a * 0.35})`;
-      ctx.beginPath();
-      ctx.arc(b.x, b.y, b.r, 0, TAU);
-      ctx.fill();
-      ctx.fillStyle = `rgba(255,255,255,${a})`;
-      ctx.beginPath();
-      ctx.arc(b.x - b.r * 0.32, b.y - b.r * 0.32, Math.max(0.6, b.r * 0.22), 0, TAU);
-      ctx.fill();
+      const sprite = bubbleSprite(ctx, b.r);
+      if (sprite) {
+        ctx.globalAlpha = inheritedAlpha * a;
+        const { canvas, half } = sprite;
+        ctx.drawImage(canvas, b.x - half, b.y - half, half * 2, half * 2);
+      } else {
+        // Canvas-less tools and restricted browsers retain the original art.
+        ctx.globalAlpha = inheritedAlpha;
+        ctx.strokeStyle = `rgba(180,230,255,${a})`;
+        ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, TAU); ctx.stroke();
+        ctx.fillStyle = `rgba(220,245,255,${a * 0.35})`;
+        ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, TAU); ctx.fill();
+        ctx.fillStyle = `rgba(255,255,255,${a})`;
+        ctx.beginPath(); ctx.arc(b.x - b.r * 0.32, b.y - b.r * 0.32, Math.max(0.6, b.r * 0.22), 0, TAU); ctx.fill();
+      }
     }
+    ctx.restore();
   }
 
   /** Slide 2 `drawDebris()`, minus the wheel wedges slide 1 breaks itself. */

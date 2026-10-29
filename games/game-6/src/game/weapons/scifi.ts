@@ -304,7 +304,9 @@ export const phaser: Weapon = {
 function drawSword(ctx: Ctx, s: WeaponDrawState) {
   const pulse = 0.5 + 0.5 * Math.sin(s.t * 9);
   const rec = s.recoil;
-  const ang = -0.28 + 0.66 * rec * rec;
+  const side = s.saberSide ?? 1;
+  // Keep the resting stance fixed; only the animated stroke changes direction.
+  const ang = -0.28 + side * 0.66 * rec * rec;
   const x0 = 34,
     x1 = 208;
 
@@ -378,7 +380,7 @@ function drawSword(ctx: Ctx, s: WeaponDrawState) {
     for (let g = 3; g >= 1; g--) {
       ctx.save();
       ctx.translate(30, -12);
-      ctx.rotate(-g * 0.22 * rec);
+      ctx.rotate(-side * g * 0.22 * rec);
       ctx.translate(-30, 12);
       blade(0.17 * rec);
       ctx.restore();

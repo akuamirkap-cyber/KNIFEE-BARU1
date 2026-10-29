@@ -3,6 +3,8 @@ import { drawGun, drawProjectile, getWeapon, RARITY_COLOR, WEAPONS, type WeaponI
 import { hasSlide6Update, hasSlide7Update, hasSlide9Update, hasSlide11Update } from '../game/art/gunVariants';
 import { gunState } from '../game/art/kit';
 import { fitInkBoxQuarterTurn, getGunInkBox } from '../game/art/metrics';
+import { getSavedSgaSpeed } from '../game/gameSpeed';
+import { getFast2DContext, getOptimalCanvasDpr } from '../utils/mobilePerf';
 
 const PW = 300;
 const PH = 115;
@@ -13,17 +15,18 @@ function Preview({ id }: { id: WeaponId }) {
   useEffect(() => {
     const w = getWeapon(id);
     const cv = ref.current!;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
-    cv.width = PW * dpr;
-    cv.height = PH * dpr;
-    const c = cv.getContext('2d')!;
+    const dpr = getOptimalCanvasDpr(2);
+    cv.width = Math.round(PW * dpr);
+    cv.height = Math.round(PH * dpr);
+    const c = getFast2DContext(cv) ?? cv.getContext('2d')!;
     let raf = 0;
     let fireT = 0;
     const start = performance.now();
     let last = start;
     const loop = (now: number) => {
-      const t = (now - start) / 1000;
-      const dt = Math.min(0.05, (now - last) / 1000);
+      const spd = getSavedSgaSpeed();
+      const t = ((now - start) / 1000) * spd;
+      const dt = Math.min(0.05, (now - last) / 1000) * spd;
       last = now;
       fireT -= dt;
       if (fireT < -1.4) fireT = 0.07;

@@ -4,6 +4,7 @@ import {
   GOLD, TAU, add, clamp, drawGlow, easeOut, metalBox, norm, pick, rand, rgba, rr, vgrad,
 } from '../util';
 import { ironWeapon, tripodWeapon } from './scifi';
+import { drawBusterPellet } from './busterPellet';
 
 type C = CanvasRenderingContext2D;
 
@@ -397,12 +398,16 @@ function drawXeno(ctx: C, _g: Game, s: WeaponState) {
   ctx.restore();
 }
 
-function glob(ctx: C, p: { x: number; y: number; age: number }) {
+export function drawXenoAcidGlob(ctx: C, p: { x: number; y: number; age: number }, opacity = 1) {
+  // Reusable visual only: the caller still owns the single real projectile.
+  ctx.save();
+  const alpha = ctx.globalAlpha * Math.max(0, Math.min(1, opacity));
   const r = 11 + Math.sin(p.age * 30) * 1.1;
   const len = 58;
   add(ctx);
-  drawGlow(ctx, p.x, p.y + 8, r * 3.4, ACID, 0.42);
+  drawGlow(ctx, p.x, p.y + 8, r * 3.4, ACID, 0.42 * alpha);
   norm(ctx);
+  ctx.globalAlpha = alpha;
   const sw = Math.sin(p.age * 24) * 2;
   const tg = ctx.createLinearGradient(0, p.y, 0, p.y + len);
   tg.addColorStop(0, 'rgba(160,242,44,.95)'); tg.addColorStop(1, 'rgba(110,210,30,0)');
@@ -425,6 +430,7 @@ function glob(ctx: C, p: { x: number; y: number; age: number }) {
     ctx.strokeStyle = 'rgba(20,80,8,.7)'; ctx.lineWidth = 0.8; ctx.stroke();
     ctx.fillStyle = 'rgba(255,255,255,.8)'; ctx.beginPath(); ctx.arc(p.x + ox - dr * 0.3, p.y + oy - dr * 0.3, dr * 0.3, 0, TAU); ctx.fill();
   }
+  ctx.restore();
 }
 
 function acidSplat(g: Game, hx: number, hy: number) {
@@ -516,7 +522,7 @@ export const xenoWeapon: Weapon = {
         if (Math.random() < dt * 50) gm.spawn({ type: 'dot', x: p.x + rand(-6, 6), y: p.y + rand(8, 40), vx: rand(-40, 40), vy: rand(30, 120), ay: 500, size: rand(1.2, 2.6), size1: 0.8, life: rand(0.3, 0.6), pal: ['#eaff7a', '#8be82a'] });
         if (Math.random() < dt * 30) gm.spawn({ type: 'glow', x: p.x, y: p.y + 12, size: rand(5, 9), size1: 0, life: 0.3, pal: ['#c6ff3a', '#2c7a0e'], alpha: 0.5 });
       },
-      draw: (ctx, _g, p) => glob(ctx, p),
+      draw: (ctx, _g, p) => drawXenoAcidGlob(ctx, p),
       onHit: (gm, hx, hy) => {
         const n = gm.normalAt(hx, hy);
         gm.hit(hx, hy, { power: 1.3, count: 1, chips: 8, kick: 0.9, shake: 3, flash: 0.3, dust: false });
@@ -634,20 +640,6 @@ function drawBuster(ctx: C, _g: Game, s: WeaponState) {
   ctx.restore();
 }
 
-function pellet(ctx: C, p: { x: number; y: number; age: number }) {
-  add(ctx);
-  drawGlow(ctx, p.x, p.y, 26, '#ffe27a', 0.5);
-  const sg = ctx.createLinearGradient(0, p.y, 0, p.y + 40);
-  sg.addColorStop(0, 'rgba(255,240,150,.85)'); sg.addColorStop(1, 'rgba(255,200,60,0)');
-  ctx.strokeStyle = sg; ctx.lineWidth = 6; ctx.lineCap = 'round';
-  ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x, p.y + 40); ctx.stroke();
-  norm(ctx);
-  const g = ctx.createRadialGradient(p.x - 2, p.y - 2, 1, p.x, p.y, 7.5);
-  g.addColorStop(0, '#ffffff'); g.addColorStop(0.45, '#fff2a0'); g.addColorStop(1, '#f2a81e');
-  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(p.x, p.y, 7, 0, TAU); ctx.fill();
-  ctx.strokeStyle = 'rgba(110,50,0,.6)'; ctx.lineWidth = 1.2; ctx.stroke();
-}
-
 function plasmaBall(ctx: C, p: { x: number; y: number; age: number }, r: number, big: boolean) {
   add(ctx);
   drawGlow(ctx, p.x, p.y, r * 3.6, '#2a8bff', 0.45);
@@ -713,19 +705,47 @@ export const busterWeapon: Weapon = {
     const lv = c >= 1.2 ? 2 : c >= 0.45 ? 1 : 0;
     s.data.lv = 0;
     if (lv === 0) {
-      g.muzzleFlash(m.x, m.y, { size: 24, color: '#ffe27a', core: '#ffffff', spikes: 4, spread: 0.5, life: 0.05 });
-      g.ring(m.x, m.y, 3, 22, '#fff2a0', 0.14, 2, 0.6);
-      g.light('#ffe27a', 0.2);
+      // The Plasma Gun's energy flash, but immediate: no plasma charge delay
+      // may change the Mega Buster's original tap or firing speed.
+      g.muzzleFlash(m.x, m.y, { size: 48, color: '#ffe04a', core: '#ffffff', spikes: 9, spread: 1.0, life: 0.12 });
+      g.ring(m.x, m.y, 5, 90, '#ffe465', 0.4, 6, 0.45);
+      g.ring(m.x, m.y, 3, 44, '#ffffff', 0.22, 3, 0.45);
+      g.light('#ffe27a', 0.35);
       g.addProj({
         x: m.x, y: m.y, vx: 0, vy: -2700,
-        draw: (ctx, _g, p) => pellet(ctx, p),
+        draw: (ctx, _g, p) => drawBusterPellet(ctx, p),
+        update: (gm, dt, p) => {
+          // Small golden motes trail the tap shot at a fixed world-time rate,
+          // not once per display frame on high-refresh phones.
+          const d = (p.data ??= {});
+          d.busterTrail = (d.busterTrail ?? 0) + Math.min(dt, 0.1);
+          const n = Math.min(3, Math.floor(d.busterTrail / 0.045));
+          d.busterTrail -= n * 0.045;
+          for (let i = 0; i < n; i++) gm.spawn({
+            type: 'glow', x: p.x + rand(-4, 4), y: p.y + rand(6, 20),
+            vx: rand(-20, 20), vy: rand(10, 50), size: rand(9, 15), size1: 1.5,
+            life: rand(0.25, 0.4), pal: ['#fff7ba', '#ffd52a'], alpha: 0.7,
+          });
+        },
         onHit: (gm, hx, hy) => {
           const n = gm.normalAt(hx, hy);
           gm.hit(hx, hy, { power: 0.55, chips: 3, dust: false });
           gm.addEmbed(hx, hy, { kind: 'scorch', color: '#222', glow: '#ffe27a', size: 0.5, cracks: 2, cool: 0.8 });
-          starburst(gm, hx, hy, 26, '#ffe27a', 0.24, 8);
-          gm.burst(hx, hy, { n: 8, type: 'cube', ang: n, spread: 1.4, speed: [120, 400], life: [0.2, 0.5], size: [1.2, 2.4], size1: 0, pal: ['#ffffff', '#ffe27a'], vr: 10 });
-          gm.ring(hx, hy, 3, 20, '#fff2a0', 0.2, 2, 0.45);
+          // Gun Hit hosts the actual Plasma Gun impact (rings, rays, lightning
+          // and sparks) in yellow, without scoring a second hit. The standalone
+          // engine still gets a matching golden burst when no host is installed.
+          if (!gm.busterPlasmaImpact?.(hx, hy)) {
+            gm.glow(hx, hy, 135, '#ffd52a', 0.45, 0.95);
+            gm.ring(hx, hy, 6, 140, '#ffe241', 0.45, 8);
+            gm.ring(hx, hy, 4, 84, '#ffffff', 0.28, 3.5);
+            gm.ring(hx, hy, 3, 54, '#d39b0a', 0.24, 5);
+            starburst(gm, hx, hy, 100, '#ffe25a', 0.4, 12);
+            gm.burst(hx, hy, { n: 40, ang: n, spread: 1.6, speed: [220, 680], life: [0.25, 0.65], size: [1.2, 2.2], pal: ['#fff5ae', '#ffe16a'], len: 0.03, ay: 900, drag: 2.2 });
+            for (let i = 0; i < 4; i++) {
+              const a = n + rand(-1.3, 1.3), d = rand(46, 90);
+              gm.lightning(hx, hy, hx + Math.cos(a) * d, hy + Math.sin(a) * d, { color: '#ffe886', life: 0.22, width: 1.3, jag: 8 });
+            }
+          }
         },
       });
     } else if (lv === 1) {

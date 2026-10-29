@@ -7,7 +7,7 @@
  * `Game` (update + render) and writes the frames out, so an effect can be
  * eyeballed without opening the game.
  */
-import { createCanvas, type Canvas } from '@napi-rs/canvas';
+import { Canvas as NapiCanvas, createCanvas, type Canvas } from '@napi-rs/canvas';
 import { mkdirSync, writeFileSync } from 'node:fs';
 
 const W = 420;
@@ -23,6 +23,9 @@ g.window = Object.assign(g.window ?? {}, {
   devicePixelRatio: 1,
   innerWidth: W, innerHeight: H,
 });
+// Let the browser-only sprite caches and fast Canvas2D path run in this real
+// Skia canvas too, so these frames show what the browser actually renders.
+g.HTMLCanvasElement = NapiCanvas;
 g.document = {
   createElement: (tag: string) => (tag === 'canvas' ? createCanvas(64, 64) : { style: {} }),
   addEventListener: () => undefined,
@@ -74,7 +77,8 @@ for (let f = 0; f < frames; f++) {
   game.stuck = 0;
   game.ammoLeft = game.level.ammo;
   if (game.items.length > 10) game.items.splice(0, game.items.length - 10);
-  if (game.s7?.stuck?.length > 10) game.s7.stuck.splice(0, game.s7.stuck.length - 10);
+  // Read the optional state without creating a slide-3 layer for every gun.
+  if (game.s7State?.stuck?.length > 10) game.s7State.stuck.splice(0, game.s7State.stuck.length - 10);
   if (process.env.IDLE !== '1' && game.cooldown <= 0) game.shoot();
   game.update(DT);
   game.render();

@@ -12,12 +12,19 @@
 import { sfx as slide7Sfx } from '../../../../games/game-4/src/game/audio';
 
 class SetOneAudio {
+  private volume = 1;
   muted = false;
 
+  private syncVolume() {
+    const m = (slide7Sfx as unknown as { master?: GainNode | null }).master;
+    if (m) m.gain.value = this.muted ? 0 : 0.8 * this.volume;
+  }
+
   unlock() {
-    if (this.muted) return;
+    if (this.muted || this.volume <= 0) return;
     try {
       slide7Sfx.ensure();
+      this.syncVolume();
     } catch {
       /* Audio may be blocked before the first gesture. */
     }
@@ -26,12 +33,20 @@ class SetOneAudio {
   setMuted(m: boolean) {
     this.muted = m;
     slide7Sfx.muted = m;
+    this.syncVolume();
+  }
+
+  setVolume(v: number) {
+    this.volume = Math.max(0, Math.min(1, v));
+    this.syncVolume();
   }
 
   /** Plays a slide-7 sound id exactly as slide 7 would. */
   play(name: string) {
-    if (this.muted) return;
+    if (this.muted || this.volume <= 0) return;
     try {
+      slide7Sfx.ensure();
+      this.syncVolume();
       slide7Sfx.play(name);
     } catch {
       /* Never break a frame for audio. */
