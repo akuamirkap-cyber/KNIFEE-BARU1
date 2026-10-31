@@ -1606,7 +1606,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
               <div className="pointer-events-none absolute inset-0" style={{ background: 'linear-gradient(180deg, rgba(3,7,10,.42) 0%, rgba(3,7,10,.12) 13%, transparent 28%, transparent 76%, rgba(1,5,8,.54) 100%), radial-gradient(ellipse at 50% 46%, transparent 52%, rgba(0,0,0,.24) 100%)' }} />
             </div>
 
-            <div {...planMotion('in-shake', 800 + 560 * 0.78, 380, 'absolute inset-0', undefined, 'out-fade', 0, 220)}>
+            <div {...planMotion('in-shake', 800 + 560 * 0.78, 380, 'absolute inset-0', undefined, '', 0, 0)}>
               <div className="relative flex h-full flex-col">
               {/* SGA coin and diamond artwork stays intact, positioned like Perfect Shot's HUD. */}
               <div className="relative z-10 flex shrink-0 items-center justify-end gap-3 px-5 pt-4">
