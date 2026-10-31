@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Game, GUN_Y, GAMEPLAY_GUN_SCALE, H, makeLevel, initialGameplayWheelCenterY } from './game/Game';
 import { savedValues, storage } from './game/safeStorage';
 import { setMasterVolume, setMuted, sfx } from './game/audio';
@@ -28,6 +28,10 @@ import { BossGiftBoxModal } from './components/BossGiftBoxModal';
 import StarBuffModal from './components/StarBuffModal';
 import { QuestMap as PerfectShotQuestMap } from '../perfect-shot/components/QuestMap';
 import type { StageBase } from '../perfect-shot/quest/data';
+import { levelConfig, type TargetKind } from '../perfect-shot/play/levels';
+import type { FlatName } from '../perfect-shot/ui/FlatIcons';
+import type { HeadKind } from '../perfect-shot/play/HeadArt';
+import { WheelArtBridge } from './components/WheelArtBridge';
 import MenuEnvironment, { type MenuEnvironmentTheme } from './components/MenuEnvironment';
 import { SGA_SPEED_OPTIONS, formatSgaSpeed, getSavedSgaSpeed } from './game/gameSpeed';
 import { useSgaGameSpeed } from './utils/useSgaGameSpeed';
@@ -253,6 +257,24 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   const weaponPivotRef = useRef<HTMLDivElement>(null);
   const gameShellRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Game | null>(null);
+  // Game B's wheel artwork, rasterised on demand and handed to the engine so
+  // every stage shows exactly the wheel the reference game shows.
+  const wheelArtCache = useRef(new Map<string, HTMLImageElement>());
+  const [wheelArtJobs, setWheelArtJobs] = useState<
+    { key: string; kind: TargetKind; icon?: FlatName; head?: HeadKind }[]
+  >([]);
+  const wheelArtKeyFor = useCallback((level: number) => {
+    const c = levelConfig(level);
+    return `${c.target}|${c.head ?? ''}`;
+  }, []);
+  const requestWheelArt = useCallback((level: number) => {
+    const c = levelConfig(level);
+    const key = `${c.target}|${c.head ?? ''}`;
+    if (wheelArtCache.current.has(key)) return;
+    setWheelArtJobs((jobs) =>
+      jobs.some((job) => job.key === key) ? jobs : [...jobs, { key, kind: c.target, icon: c.icon, head: c.head }],
+    );
+  }, []);
 
   const [screen, setScreen] = useState<Screen>('menu');
   const screenRef = useRef<Screen>(screen);
@@ -729,6 +751,11 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     g.setGameSpeed(getSavedSgaSpeed());
     g.setBackgroundTheme(getSavedSgaBgTheme());
     gameRef.current = g;
+    g.setWheelArtSource({
+      keyFor: wheelArtKeyFor,
+      get: (key) => wheelArtCache.current.get(key) ?? null,
+      request: requestWheelArt,
+    });
     return () => {
       document.removeEventListener('visibilitychange', onVisChange);
       window.removeEventListener('pagehide', flushShotsToStorage);
@@ -736,7 +763,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       gameRef.current = null;
       flushShotsToStorage();
     };
-  }, []);
+  }, [requestWheelArt, wheelArtKeyFor]);
 
   useEffect(() => {
     if (screen !== 'playing' || questOpen) {
@@ -1464,6 +1491,21 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
         }
       }}
     >
+      {wheelArtJobs.length > 0 && (
+        <WheelArtBridge
+          key={wheelArtJobs[0].key}
+          kind={wheelArtJobs[0].kind}
+          icon={wheelArtJobs[0].icon}
+          head={wheelArtJobs[0].head}
+          onReady={(_kind, image) => {
+            const job = wheelArtJobs[0];
+            if (!job) return;
+            wheelArtCache.current.set(job.key, image);
+            gameRef.current?.setWheelArt(job.key, image);
+            setWheelArtJobs((jobs) => (jobs[0]?.key === job.key ? jobs.slice(1) : jobs));
+          }}
+        />
+      )}
       {onExit && (
         <button
           onClick={onExit}

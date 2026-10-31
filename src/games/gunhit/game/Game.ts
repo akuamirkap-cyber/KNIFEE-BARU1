@@ -197,6 +197,17 @@ export function gameplayGunEntryOffset(age: number): number {
   return GAMEPLAY_GUN_ENTRY_DISTANCE * remaining * remaining * remaining;
 }
 
+/**
+ * Game A shows Game B's wheel artwork verbatim: the React side rasterises
+ * `TargetArt` for the stage and hands the image over through this source.
+ */
+export type WheelArtSource = {
+  /** Cache key for a stage (kind + boss head), e.g. `orange|`. */
+  keyFor: (level: number) => string;
+  get: (key: string) => HTMLImageElement | null;
+  request: (level: number) => void;
+};
+
 export type PerfectShotWheelEntry = {
   offsetY: number;
   scaleX: number;
@@ -883,6 +894,10 @@ export class Game {
   private wheelEntryT = 0;
   private wheelBurstT = 0;
   private wheelScale = 1;
+  private wheelArtSource: WheelArtSource | null = null;
+  private wheelArtCache = new Map<string, HTMLImageElement>();
+  private wheelArtKey = '';
+  private wheelImage: HTMLImageElement | null = null;
   private gunEntryDelayT = 0;
   private gunEntryRate = 1;
   private stateT = 0;
@@ -1812,6 +1827,32 @@ export class Game {
     this.gunEntryT = reducedMotion || weaponHandoff ? GAMEPLAY_GUN_ENTRY_DURATION : 0;
   }
 
+  /** Wire the Game B artwork source (the React side owns `TargetArt`). */
+  setWheelArtSource(source: WheelArtSource | null) {
+    this.wheelArtSource = source;
+    this.syncWheelArt(true);
+  }
+
+  /** A rasterised Game B wheel arrived for `key`. */
+  setWheelArt(key: string, image: HTMLImageElement) {
+    this.wheelArtCache.set(key, image);
+    if (key !== this.wheelArtKey) return; // another stage is on screen
+    this.wheelImage = image;
+    this.buildFace();
+  }
+
+  private syncWheelArt(request: boolean) {
+    const source = this.wheelArtSource;
+    if (!source) return;
+    const key = source.keyFor(this.level.n);
+    const image = source.get(key) ?? this.wheelArtCache.get(key) ?? null;
+    const changed = key !== this.wheelArtKey || image !== this.wheelImage;
+    this.wheelArtKey = key;
+    this.wheelImage = image;
+    if (!image && request) source.request(this.level.n);
+    if (changed) this.buildFace();
+  }
+
   start() { this.startRun(1); }
 
   /** Start an existing SGA level directly from the level map without changing its stage rules. */
@@ -2107,6 +2148,7 @@ export class Game {
       this.bossHpRed = this.bossMaxHp;
     }
     if (!isSpecial(this.level.mode)) this.buildFace();
+    this.syncWheelArt(true);
     sfx.start();
     if (this.level.boss) sfx.boss();
   }
@@ -2166,7 +2208,10 @@ export class Game {
     const c = cv.getContext('2d')!;
     c.scale(S, S);
     c.translate(R + pad, R + pad);
-    drawFace(c, R, this.level.style);
+    // Game B's own wheel artwork wins whenever it has been rasterised; the
+    // canvas faces below stay as the instant fallback for the first frames.
+    if (this.wheelImage) c.drawImage(this.wheelImage, -R, -R, R * 2, R * 2);
+    else drawFace(c, R, this.level.style);
     this.face = cv;
     this.faceCtx = c;
     this.faceR = R;
