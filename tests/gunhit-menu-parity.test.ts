@@ -5,6 +5,7 @@ import path from 'node:path';
 
 const read = (file: string) => readFileSync(path.join(process.cwd(), file), 'utf8');
 const app = read('src/games/gunhit/App.tsx');
+const game = read('src/games/gunhit/game/Game.ts');
 const settings = read('src/games/gunhit/components/SgaSettingsPanel.tsx');
 const questModal = read('src/games/gunhit/components/QuestModal.tsx');
 const overlay = read('src/games/perfect-shot/components/TransitionOverlay.tsx');
@@ -25,10 +26,18 @@ test('SGA menu wheel drops in its own layer at full reference strength, then pop
   assert.doesNotMatch(app, /rgba\(200,240,240,\.13\)/);
 });
 
-test('scope transition frames the real stage target and waits for the SGA wheel to land', () => {
+test('scope transition frames the real stage target and lets the wheel drop after the lens opens', () => {
   assert.match(app, /const lens = stageConfig\.radius \+ 14/);
-  assert.match(app, /const wheelSettleMs = Math\.round\(1\.1 \* gameSpeed \* 0\.42 \* 1000 \+ 90\)/);
-  assert.match(app, /const hold = Math\.max\(PLAY_SCOPE\.hold, wheelSettleMs\)/);
+  // The wheel entrance is no longer burned behind the closed lens: the reveal
+  // starts first and only then does the Perfect Shot drop begin.
+  assert.match(app, /const hold = PLAY_SCOPE\.hold/);
+  assert.match(app, /const wheelEntryDelay = hold \/ 1000/);
+  assert.match(app, /startAtLevel\(level, wantsWeaponFlight, gunEntryDelay, true, wheelEntryDelay\)/);
+  assert.match(app, /startSpecialStage\(specialMode, gunEntryDelay, true, wheelEntryDelay\)/);
+  assert.match(game, /this\.wheelEntryDelayT = this\.synchronizedEntrance \? Math\.max\(0, wheelEntryDelay\) \* this\.pace : 0/);
+  assert.match(game, /perfectShotWheelEntry\(this\.introT - this\.wheelEntryDelayT, this\.pace, this\.level\.radius\)/);
+  assert.match(game, /perfectShotWheelEntry\(wheelEntryT, this\.pace, R\)/);
+  assert.doesNotMatch(app, /wheelSettleMs/);
   assert.match(app, /y: \(initialGameplayWheelCenterY\(stageConfig\.boss, Boolean\(specialMode\)\) \/ H\) \* 100/);
   assert.match(app, /variant="scope" lens=\{playTransition\.lens\}/);
   // The shared overlay keeps a CSS-variable lens radius so Perfect Shot is untouched.

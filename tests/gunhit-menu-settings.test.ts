@@ -109,7 +109,7 @@ test('SGA uses Perfect Shot UI, page-transition and ambient audio with a separat
   assert.match(app, /to: \{ x: gameCenterX - flightMassX, y: gameCenterY - flightMassY, w: toW, h: toH \}/);
   assert.match(app, /<SgaWeaponFlight key=\{weaponFlight\.id\} flight=\{weaponFlight\} \/>/);
   const game = readFileSync(path.join(process.cwd(), 'src/games/gunhit/game/Game.ts'), 'utf8');
-  assert.match(game, /startAtLevel\(level: number, weaponHandoff = false, weaponEntryDelay = 0, synchronizedEntrance = false\)/);
+  assert.match(game, /startAtLevel\(level: number, weaponHandoff = false, weaponEntryDelay = 0, synchronizedEntrance = false, wheelEntryDelay = 0\)/);
   assert.match(app, /studioSfx\.playExit\(0\)/);
   assert.match(app, /studioSfx\.questEnter\(timing\.swapAt \/ 1000, QUEST_IN\)/);
   assert.match(app, /studioSfx\.achEnter\(timing\.swapAt \/ 1000, ACH_IN/);

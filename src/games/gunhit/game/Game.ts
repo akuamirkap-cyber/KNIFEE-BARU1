@@ -880,6 +880,8 @@ export class Game {
   private synchronizedEntrance = false;
   private wheelEntryRate = 9;
   private wheelEntryDuration = 1.1;
+  /** Real seconds the wheel waits before it drops in (the scope cover). */
+  private wheelEntryDelayT = 0;
   private wheelScale = 1;
   private gunEntryDelayT = 0;
   private gunEntryRate = 1;
@@ -1776,7 +1778,14 @@ export class Game {
     }
   }
 
-  private startRun(level: number, forcedMode?: LevelMode, weaponHandoff = false, weaponEntryDelay = 0, synchronizedEntrance = false) {
+  private startRun(
+    level: number,
+    forcedMode?: LevelMode,
+    weaponHandoff = false,
+    weaponEntryDelay = 0,
+    synchronizedEntrance = false,
+    wheelEntryDelay = 0,
+  ) {
     sfx.unlock();
     // Slide 7's own AudioContext can only start after a user gesture as well.
     setOneSfx.unlock();
@@ -1791,7 +1800,12 @@ export class Game {
     this.loadLevel(level, forcedMode);
     const reducedMotion = !!this.motionPreference?.matches;
     this.synchronizedEntrance = synchronizedEntrance && !reducedMotion;
-    this.introDuration = this.synchronizedEntrance ? 1.35 * this.pace : 0.5;
+    // Perfect Shot's target only starts dropping once the scope has opened, so the
+    // same entrance is held back by the cover time instead of playing unseen.
+    this.wheelEntryDelayT = this.synchronizedEntrance ? Math.max(0, wheelEntryDelay) * this.pace : 0;
+    this.introDuration = this.synchronizedEntrance
+      ? Math.max(1.35, Math.max(0, wheelEntryDelay) + 1.16) * this.pace
+      : 0.5;
     this.wheelEntryRate = this.synchronizedEntrance ? 3.8 : 9;
     this.wheelEntryDuration = this.synchronizedEntrance ? 1.1 * this.pace : 1.1;
     this.gunEntryDelayT = reducedMotion ? 0 : Math.max(0, weaponEntryDelay) * this.pace;
@@ -1802,13 +1816,13 @@ export class Game {
   start() { this.startRun(1); }
 
   /** Start an existing SGA level directly from the level map without changing its stage rules. */
-  startAtLevel(level: number, weaponHandoff = false, weaponEntryDelay = 0, synchronizedEntrance = false) {
-    this.startRun(Math.max(1, Math.floor(level)), undefined, weaponHandoff, weaponEntryDelay, synchronizedEntrance);
+  startAtLevel(level: number, weaponHandoff = false, weaponEntryDelay = 0, synchronizedEntrance = false, wheelEntryDelay = 0) {
+    this.startRun(Math.max(1, Math.floor(level)), undefined, weaponHandoff, weaponEntryDelay, synchronizedEntrance, wheelEntryDelay);
   }
 
   /** Menu shortcuts enter the same real, playable levels as the Arcade progression. */
-  startSpecialStage(mode: 'boulder' | SpecialMode, weaponEntryDelay = 0, synchronizedEntrance = false) {
-    this.startRun(4, mode, false, weaponEntryDelay, synchronizedEntrance);
+  startSpecialStage(mode: 'boulder' | SpecialMode, weaponEntryDelay = 0, synchronizedEntrance = false, wheelEntryDelay = 0) {
+    this.startRun(4, mode, false, weaponEntryDelay, synchronizedEntrance, wheelEntryDelay);
   }
 
   toIdle() {
@@ -1817,6 +1831,7 @@ export class Game {
     this.gunEntryDelayT = 0;
     this.gunEntryRate = 1;
     this.synchronizedEntrance = false;
+    this.wheelEntryDelayT = 0;
     this.introDuration = 0.5;
     this.wheelEntryRate = 9;
     this.wheelEntryDuration = 1.1;
@@ -1987,6 +2002,7 @@ export class Game {
     this.gunEntryDelayT = 0;
     this.gunEntryRate = 1;
     this.synchronizedEntrance = false;
+    this.wheelEntryDelayT = 0;
     this.introDuration = 0.5;
     this.wheelEntryRate = 9;
     this.wheelEntryDuration = 1.1;
@@ -2054,6 +2070,9 @@ export class Game {
     this.state = 'intro';
     this.introT = 0;
     this.introFxT = 0;
+    // A fresh wheel always drops in immediately; only the first stage of a run can
+    // wait for the scope cover (startRun re-applies wheelEntryDelayT right after).
+    this.wheelEntryDelayT = 0;
     this.wheelScale = 0.15;
     this.bannerT = 1.8;
     this.timeScale = 1;
@@ -5525,10 +5544,10 @@ export class Game {
       }
     }
 
-    if (this.synchronizedEntrance && this.introFxT < 1.75 * this.pace) this.introFxT += dt;
+    if (this.synchronizedEntrance && this.introFxT < this.wheelEntryDelayT + 1.75 * this.pace) this.introFxT += dt;
     if (this.synchronizedEntrance && this.state === 'intro') {
       this.introT += dt;
-      this.wheelScale = perfectShotWheelEntry(this.introT, this.pace, this.level.radius).scaleY;
+      this.wheelScale = perfectShotWheelEntry(this.introT - this.wheelEntryDelayT, this.pace, this.level.radius).scaleY;
       if (this.introT >= this.introDuration) this.state = 'play';
     } else {
       this.wheelScale += (1 - this.wheelScale) * Math.min(1, dt * this.wheelEntryRate);
@@ -7260,11 +7279,13 @@ export class Game {
 
     // While the synchronized Play entrance is running, the wheel artwork and
     // its rays share one center/transform just like Perfect Shot's target art.
+    const wheelEntryT = this.introT - this.wheelEntryDelayT;
+    const burstT = this.introFxT - this.wheelEntryDelayT;
     const wheelEntry = this.synchronizedEntrance && this.state === 'intro'
-      ? perfectShotWheelEntry(this.introT, this.pace, R)
+      ? perfectShotWheelEntry(wheelEntryT, this.pace, R)
       : RESTING_WHEEL_ENTRY;
-    const wheelEntryBurst = this.synchronizedEntrance && this.introFxT < 1.75 * this.pace
-      ? perfectShotWheelBurst(this.introFxT, this.pace)
+    const wheelEntryBurst = this.synchronizedEntrance && burstT > 0 && burstT < 1.75 * this.pace
+      ? perfectShotWheelBurst(burstT, this.pace)
       : NO_WHEEL_BURST;
     // Pure-white Sunburst ALWAYS renders BEHIND the front view of the wheel,
     // rock, bonus coin ring, treasure chest, and shattering wheel fragments!

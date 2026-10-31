@@ -1079,11 +1079,11 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     const stageConfig = makeLevel(level, specialMode);
     const lead = fromMenu || fromSettings ? PLAY_SCOPE.menuLead : fromMap ? PLAY_SCOPE.questLead : PLAY_SCOPE.otherLead;
     const mountAt = lead + PLAY_SCOPE.cover;
-    // The wheel drops in with Perfect Shot's entrance curve (42% of 1.1s, scaled
-    // by the SGA speed preset). Keep the lens closed until it has actually landed,
-    // otherwise the crosshair opens on empty space above the target.
-    const wheelSettleMs = Math.round(1.1 * gameSpeed * 0.42 * 1000 + 90);
-    const hold = Math.max(PLAY_SCOPE.hold, wheelSettleMs);
+    // The rival wheel plays Perfect Shot's own drop -> squash -> pop entrance, but
+    // it starts the moment the lens opens (never behind the closed cover), so the
+    // hold only covers the shared ready beat.
+    const hold = PLAY_SCOPE.hold;
+    const wheelEntryDelay = hold / 1000;
     // Keep the filled WAAPI flight visible through reveal, matching Perfect Shot;
     // it is cleared alongside the scope after the in-game gun is fully exposed.
     const revealAt = mountAt + hold;
@@ -1125,8 +1125,8 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       setMenuDeparture(null);
       setTransitioning(false);
       setTransitionStep(0);
-      if (specialMode) gameRef.current?.startSpecialStage(specialMode, gunEntryDelay, true);
-      else gameRef.current?.startAtLevel(level, wantsWeaponFlight, gunEntryDelay, true);
+      if (specialMode) gameRef.current?.startSpecialStage(specialMode, gunEntryDelay, true, wheelEntryDelay);
+      else gameRef.current?.startAtLevel(level, wantsWeaponFlight, gunEntryDelay, true, wheelEntryDelay);
       setScreen('playing');
     });
     deferPageClose(revealAt, () => setPlayTransition((current) => current ? { ...current, phase: 'reveal' } : current));

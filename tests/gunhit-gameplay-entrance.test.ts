@@ -134,6 +134,28 @@ test('shared Play entrance times the wheel reveal, gun handoff and gameplay-read
   } finally { game.destroy(); }
 });
 
+test('the rival wheel keeps its Perfect Shot drop visible: it starts only after the scope cover', () => {
+  const game = new Game(canvas(), events as never) as Live;
+  try {
+    game.setGameSpeed(1);
+    game.startAtLevel(1, false, 0, true, 0.6);
+    assert.equal(game.wheelEntryDelayT, 0.6, 'the first wheel waits for the lens to open');
+    assert.ok(near(game.introDuration, 1.76), 'the intro covers the delay plus the full 1.1s entrance');
+    game.update(0.3);
+    assert.equal(game.wheelScale, 0.5, 'nothing moves while the cover is still shut');
+    game.update(0.3 + 0.06 + 1.1 * 0.42 + 1e-6);
+    assert.ok(game.wheelScale > 0.8, 'the wheel lands as the reveal opens, on the reference 42% frame');
+    for (let i = 0; i < 20; i++) game.update(0.05);
+    assert.equal(game.state, 'play', 'input unlocks once the entrance is over');
+
+    // Later stages have no cover in front of them, so the drop plays immediately.
+    game.loadLevel(2);
+    assert.equal(game.wheelEntryDelayT, 0, 'ordinary next stages never wait for a cover');
+    game.update(0.06 + 1.1 * 0.42 + 1e-6);
+    assert.ok(game.wheelScale > 0.8, 'a fresh wheel lands without any wait');
+  } finally { game.destroy(); }
+});
+
 test('entry replays for new runs, keeps stage transitions stable, and never delays the first accepted shot', () => {
   const game = new Game(canvas(), events as never) as Live;
   try {
