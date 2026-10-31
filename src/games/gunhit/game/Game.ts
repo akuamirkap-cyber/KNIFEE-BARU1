@@ -221,17 +221,19 @@ export function perfectShotWheelBurst(elapsed: number, pace = 1): PerfectShotWhe
   const safePace = Number.isFinite(pace) && pace > 0 ? pace : 1;
   const t = elapsed - 0.06 * safePace;
   const duration = 1.1 * safePace;
-  const flashAge = t - duration * 0.72;
-  const flashDuration = 0.56 * safePace;
+  // The warm flash + shockwaves now belong to the landing: they fire at 42%,
+  // the frame the wheel touches down and goes straight into the pop blast.
+  const flashAge = t - duration * 0.42;
+  const flashDuration = 0.52 * safePace;
   const flashProgress = Math.max(0, Math.min(1, flashAge / flashDuration));
   const flashEase = [0, 0, 0.58, 1] as const; // CSS ease-out used by Perfect Shot's shFlash.
   const flashOpacity = flashAge < 0 ? 0 : flashProgress < 0.18
     ? bezierProgress(flashProgress / 0.18, ...flashEase)
     : 1 - bezierProgress((flashProgress - 0.18) / 0.82, ...flashEase);
   const shockEase = [0.1, 0.7, 0.3, 1] as const;
-  const waves = ([0.74, 0.8] as const).map((start) => {
+  const waves = ([0.47, 0.55] as const).map((start) => {
     const age = t - duration * start;
-    const waveDuration = 0.8 * safePace;
+    const waveDuration = 0.72 * safePace;
     const progress = Math.max(0, Math.min(1, age / waveDuration));
     const opacity = age < 0 || age >= waveDuration ? 0 : progress < 0.06
       ? bezierProgress(progress / 0.06, ...shockEase)
@@ -290,35 +292,32 @@ export function perfectShotWheelEntry(elapsed: number, pace = 1, radius = 106): 
     return from.value + (to.value - from.value) * u;
   };
   const dropEase = [0.55, 0, 1, 0.45] as const;
-  const landEase = [0, 0.55, 0.45, 1] as const;
-  const easeIn = [0.42, 0, 1, 1] as const;
-  const popEase = [0.2, 0.9, 0.3, 1] as const;
+  const blastEase = [0.2, 0.9, 0.3, 1] as const;
+  const settleEase = [0.45, 0, 0.55, 1] as const;
+  const outEase = [0.42, 0, 0.58, 1] as const;
+  // Drop 0-42%, then the pop blast fires the instant the wheel lands (peak 56%),
+  // exactly like Game B's gpTargetIn — no bounce, no pause.
   const y = sample([
-    { at: 0, value: -3.2, ease: dropEase }, { at: 42, value: 0, ease: landEase },
-    { at: 52, value: -0.16, ease: easeIn }, { at: 60, value: 0, ease: easeIn },
-    { at: 68, value: 0, ease: popEase }, { at: 80, value: 0 },
-    { at: 90, value: 0 }, { at: 100, value: 0 },
+    { at: 0, value: -3.2, ease: dropEase }, { at: 42, value: 0 },
+    { at: 100, value: 0 },
   ]);
   const sx = sample([
-    { at: 0, value: 0.5, ease: dropEase }, { at: 42, value: 1.14, ease: landEase },
-    { at: 52, value: 0.96, ease: easeIn }, { at: 60, value: 1, ease: easeIn },
-    { at: 68, value: 0.72, ease: popEase }, { at: 80, value: 1.32 },
-    { at: 90, value: 0.94 }, { at: 100, value: 1 },
+    { at: 0, value: 0.5, ease: dropEase }, { at: 42, value: 1.14, ease: blastEase },
+    { at: 56, value: 1.32, ease: settleEase }, { at: 68, value: 0.94, ease: outEase },
+    { at: 80, value: 1.04 }, { at: 88, value: 1 }, { at: 100, value: 1 },
   ]);
   const sy = sample([
-    { at: 0, value: 0.5, ease: dropEase }, { at: 42, value: 0.84, ease: landEase },
-    { at: 52, value: 1.05, ease: easeIn }, { at: 60, value: 1, ease: easeIn },
-    { at: 68, value: 0.72, ease: popEase }, { at: 80, value: 1.32 },
-    { at: 90, value: 0.94 }, { at: 100, value: 1 },
+    { at: 0, value: 0.5, ease: dropEase }, { at: 42, value: 0.84, ease: blastEase },
+    { at: 56, value: 1.32, ease: settleEase }, { at: 68, value: 0.94, ease: outEase },
+    { at: 80, value: 1.04 }, { at: 88, value: 1 }, { at: 100, value: 1 },
   ]);
   const opacity = sample([
     { at: 0, value: 0, ease: dropEase }, { at: 10, value: 1 }, { at: 100, value: 1 },
   ]);
   const brightness = sample([
-    { at: 0, value: 1 }, { at: 42, value: 1, ease: landEase },
-    { at: 52, value: 1, ease: easeIn }, { at: 60, value: 1, ease: easeIn },
-    { at: 68, value: 1.3, ease: popEase },
-    { at: 80, value: 2.4 }, { at: 90, value: 1.1 }, { at: 100, value: 1 },
+    { at: 0, value: 1 }, { at: 42, value: 1, ease: blastEase },
+    { at: 56, value: 2.4, ease: settleEase }, { at: 68, value: 1.1, ease: outEase },
+    { at: 80, value: 1 }, { at: 100, value: 1 },
   ]);
   return { offsetY: y * radius, scaleX: sx, scaleY: sy, opacity, brightness };
 }

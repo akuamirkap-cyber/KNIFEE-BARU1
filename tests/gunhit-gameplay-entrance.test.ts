@@ -85,25 +85,26 @@ test('Perfect Shot wheel intro drops, squashes, pops and lands on the original a
   assert.ok(almost(landed.offsetY, 0));
   assert.ok(almost(landed.scaleX, 1.14));
   assert.ok(almost(landed.scaleY, 0.84), 'the impact compresses the wheel vertically');
-  const rebound = perfectShotWheelEntry(0.06 + 1.1 * 0.52, 1, 106);
-  assert.ok(almost(rebound.offsetY, -0.16 * 106), 'the rebound matches the reference -8% of the wheel diameter');
-  assert.ok(almost(rebound.scaleX, 0.96) && almost(rebound.scaleY, 1.05));
-  const blast = perfectShotWheelEntry(0.06 + 1.1 * 0.8, 1, 106);
+  // No rebound and no pause any more: the squash rolls straight into the blast.
+  const midBlast = perfectShotWheelEntry(0.06 + 1.1 * 0.5, 1, 106);
+  assert.ok(midBlast.scaleX > 1.2 && midBlast.brightness > 1.5, 'the blast is already running half-way to its peak');
+  const blast = perfectShotWheelEntry(0.06 + 1.1 * 0.56, 1, 106);
   assert.ok(almost(blast.scaleX, 1.32));
   assert.ok(almost(blast.scaleY, 1.32));
   assert.ok(almost(blast.brightness, 2.4));
-  assert.equal(perfectShotWheelEntry(1.2, 1, 106).scaleX, 1, 'the wheel rests at the original Perfect Shot timing');
+  assert.equal(blast.offsetY, 0, 'the wheel never leaves the ground during the blast');
+  assert.equal(perfectShotWheelEntry(1.2, 1, 106).scaleX, 1, 'the wheel rests after the blast');
 });
 
 test('scope origin follows the exact SGA wheel center and the arrival gets the timed warm landing burst', () => {
   assert.equal(initialGameplayWheelCenterY(false, false), 184);
   assert.equal(initialGameplayWheelCenterY(true, false), 220);
   assert.equal(initialGameplayWheelCenterY(false, true), 184);
-  const before = perfectShotWheelBurst(0.8, 1);
+  const before = perfectShotWheelBurst(0.3, 1);
   assert.equal(before.flashOpacity, 0);
   assert.ok(before.waves.every((wave) => wave.opacity === 0));
-  const impact = perfectShotWheelBurst(0.06 + 1.1 * 0.8, 1);
-  assert.ok(impact.flashOpacity > 0.8, 'the warm flash peaks during the target pop');
+  const impact = perfectShotWheelBurst(0.06 + 1.1 * 0.5, 1);
+  assert.ok(impact.flashOpacity > 0.8, 'the warm flash fires on the landing frame');
   assert.equal(impact.waves.length, 2, 'both expanding rings from the Perfect Shot entrance are present');
   assert.ok(impact.waves.some((wave) => wave.opacity > 0.8), 'a shockwave accompanies the target pop');
   assert.ok(impact.waves.every((wave) => wave.scale >= 0.2 && wave.scale <= 2.6));
@@ -168,8 +169,8 @@ test('every wheel plays the full Perfect Shot drop, even when the stage was not 
       'the wheel starts off-screen at the reference scale, never popped in at full size');
     game.update(0.06 + 1.1 * 0.42 - 0.1 + 1e-6);
     assert.ok(game.wheelScale > 0.8, 'it still lands on the reference 42% frame');
-    game.update(1.1 * 0.38);
-    assert.ok(game.wheelScale >= 1.3, 'and the pop-blast frame still fires');
+    game.update(1.1 * 0.14);
+    assert.ok(game.wheelScale >= 1.3, 'and the pop-blast peak still fires right after landing');
     game.update(1);
     assert.equal(game.wheelScale, 1, 'the wheel settles at its resting size');
 

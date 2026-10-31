@@ -129,11 +129,11 @@ export const knifeVariant = (n: number, i: number) => (n + i) % 3;
 /* ---------------- timeline (ms) ---------------- */
 export const PLAY_IN = {
   hud: { d: 0, dur: 460 },
-  target: { d: 60, dur: 1100, land: 0.42, pop: 0.8 }, // lands inside the scope lens, pops as it opens
+  target: { d: 60, dur: 1100, land: 0.42, pop: 0.56 }, // lands inside the scope lens, pops as it opens
   gun: { d: 0, dur: 560 },
   ammo: (i: number) => ({ d: 200 + i * 34, dur: 300 }),
   level: { d: 1050 },
   ready: 1350,
 };
-export const NEXT_IN = { target: { d: 0, dur: 1300, land: 0.42, pop: 0.8 }, level: { d: 1150 }, ready: 1350 };
+export const NEXT_IN = { target: { d: 0, dur: 1300, land: 0.42, pop: 0.56 }, level: { d: 1150 }, ready: 1350 };
 export const PLAY_OUT = { total: 460 };

@@ -1699,7 +1699,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                           style={{
                             left: 'calc(50% + var(--weapon-pivot-x, 0px))',
                             top: 'calc(50% + var(--weapon-pivot-y, 0px))',
-                            '--pop-delay': `${(gunTiming('combo').inD + gunTiming('combo').inDur * 0.74) * menuPlan.k}ms`,
+                            '--pop-delay': `${(gunTiming('combo').inD + gunTiming('combo').inDur * 0.48) * menuPlan.k}ms`,
                             '--pop-dur': `${gunTiming('combo').inDur * 0.26 * menuPlan.k}ms`,
                           } as CSSProperties}
                         >

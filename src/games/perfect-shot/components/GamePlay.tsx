@@ -436,15 +436,15 @@ export function GamePlay({ leaving, stage, seamless = false, handoff = false, en
             <div key={`pop${run}`} className="pointer-events-none absolute inset-0">
               <span
                 className="rays-shock absolute left-1/2 top-1/2 h-full w-full rounded-full"
-                style={v({ borderStyle: "solid", borderColor: L.boss ? "#ff6b6b" : "#fff3b0", boxShadow: `0 0 26px ${L.boss ? "#ff4d4d" : "#ffd27a"}`, "--sd": `${tIn.d + tIn.dur * 0.74}ms` })}
+                style={v({ borderStyle: "solid", borderColor: L.boss ? "#ff6b6b" : "#fff3b0", boxShadow: `0 0 26px ${L.boss ? "#ff4d4d" : "#ffd27a"}`, "--sd": `${tIn.d + tIn.dur * 0.5}ms` })}
               />
               <span
                 className="rays-shock absolute left-1/2 top-1/2 h-full w-full rounded-full"
-                style={v({ borderStyle: "solid", borderColor: "#ffffff", "--sd": `${tIn.d + tIn.dur * 0.8}ms` })}
+                style={v({ borderStyle: "solid", borderColor: "#ffffff", "--sd": `${tIn.d + tIn.dur * 0.56}ms` })}
               />
               <div
                 className="a sh-flash absolute left-1/2 top-1/2 -ml-[60%] -mt-[60%] h-[120%] w-[120%] rounded-full"
-                style={v({ "--d": `${tIn.d + tIn.dur * 0.72}ms`, "--dur": "560ms", background: "radial-gradient(circle, rgba(255,255,255,.95), rgba(255,240,200,.45) 35%, transparent 70%)" })}
+                style={v({ "--d": `${tIn.d + tIn.dur * 0.47}ms`, "--dur": "560ms", background: "radial-gradient(circle, rgba(255,255,255,.95), rgba(255,240,200,.45) 35%, transparent 70%)" })}
               />
             </div>
           )}

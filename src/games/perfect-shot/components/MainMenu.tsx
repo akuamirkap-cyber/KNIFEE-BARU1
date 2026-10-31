@@ -246,7 +246,7 @@ export function MainMenu({ leaving, ready, coins, gems, plan, onNavigate, reward
                   aria-hidden="true"
                   className="menu-pop-burst left-1/2 top-1/2"
                   style={{
-                    "--pop-delay": `${(gunTiming("combo").inD + gunTiming("combo").inDur * 0.74) * k}ms`,
+                    "--pop-delay": `${(gunTiming("combo").inD + gunTiming("combo").inDur * 0.48) * k}ms`,
                     "--pop-dur": `${gunTiming("combo").inDur * 0.26 * k}ms`,
                   } as CSSProperties}
                 >
