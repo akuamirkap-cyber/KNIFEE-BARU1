@@ -122,93 +122,6 @@ html, body, #root {
 }
 .pulse-btn { animation: pulse-btn 1.6s ease-in-out infinite; }
 
-/* Start these only once the SANS curtain has lifted. The waiting pose is
-   explicit rather than a paused animation: resuming from an inactive tab or
-   replaying the intro reliably starts a fresh, visible entrance. Wrappers keep
-   button hover/press transforms and the weapon's sunburst independent. */
-@keyframes gunhit-weapon-rise {
-  0% { opacity: 0; transform: translate3d(0, 175%, 0) scale(.94); }
-  12% { opacity: .85; }
-  24% { opacity: 1; }
-  80% { opacity: 1; transform: translate3d(0, -1.5%, 0) scale(1.01); }
-  100% { opacity: 1; transform: none; }
-}
-@keyframes gunhit-menu-button-in {
-  0% { opacity: 0; transform: translate3d(0, 30px, 0) scale(.9); }
-  70% { opacity: 1; transform: translate3d(0, -3px, 0) scale(1.025); }
-  100% { opacity: 1; transform: none; }
-}
-@keyframes gunhit-menu-icon-in {
-  0% { opacity: 0; transform: translate3d(0, -20px, 0) scale(.84); }
-  70% { opacity: 1; transform: translate3d(0, 2px, 0) scale(1.025); }
-  100% { opacity: 1; transform: none; }
-}
-@keyframes gunhit-menu-title-in {
-  0% { opacity: 0; transform: translate3d(0, -30px, 0) scale(.94); }
-  70% { opacity: 1; transform: translate3d(0, 2px, 0) scale(1.015); }
-  100% { opacity: 1; transform: none; }
-}
-@keyframes gunhit-menu-play-breathe {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.025); }
-}
-.gunhit-menu.slide-paused { pointer-events: none; }
-.gunhit-menu .menu-weapon-entrance {
-  opacity: 0; transform: translate3d(0, 175%, 0) scale(.94);
-}
-.gunhit-menu .menu-action-entrance {
-  opacity: 0; transform: translate3d(0, 30px, 0) scale(.9);
-}
-.gunhit-menu .menu-icon-entrance {
-  opacity: 0; transform: translate3d(0, -20px, 0) scale(.84);
-}
-.gunhit-menu .menu-title-entrance,
-.gunhit-menu .menu-currency-entrance {
-  opacity: 0; transform: translate3d(0, -30px, 0) scale(.94);
-}
-.gunhit-menu.menu-ready .menu-weapon-entrance {
-  opacity: 1; transform: none;
-  animation: gunhit-weapon-rise 1450ms cubic-bezier(.25,.46,.45,.94) 80ms backwards;
-}
-.gunhit-menu.menu-ready .menu-action-entrance {
-  opacity: 1; transform: none;
-  animation: gunhit-menu-button-in 680ms cubic-bezier(.2,.8,.2,1) backwards;
-}
-.gunhit-menu.menu-ready .menu-icon-entrance {
-  opacity: 1; transform: none;
-  animation: gunhit-menu-icon-in 680ms cubic-bezier(.2,.8,.2,1) backwards;
-}
-.gunhit-menu.menu-ready .menu-title-entrance,
-.gunhit-menu.menu-ready .menu-currency-entrance {
-  opacity: 1; transform: none;
-  animation: gunhit-menu-title-in 700ms cubic-bezier(.2,.8,.2,1) backwards;
-}
-.gunhit-menu .menu-actions > :nth-child(1) { animation-delay: 220ms; }
-.gunhit-menu .menu-actions > :nth-child(2) { animation-delay: 300ms; }
-.gunhit-menu .menu-icon-bar > :nth-child(1) { animation-delay: 260ms; }
-.gunhit-menu .menu-icon-bar > :nth-child(2) { animation-delay: 320ms; }
-.gunhit-menu .menu-icon-bar > :nth-child(3) { animation-delay: 380ms; }
-.gunhit-menu .menu-icon-bar > :nth-child(4) { animation-delay: 440ms; }
-.gunhit-menu.menu-ready .menu-currency-entrance { animation-delay: 120ms; }
-/* A gentle transform-only pulse avoids repainting a large animated shadow. */
-.gunhit-menu .pulse-btn { animation: gunhit-menu-play-breathe 2.8s ease-in-out 1s infinite; }
-.gunhit-menu .pulse-btn:active { animation: none; }
-@media (prefers-reduced-motion: reduce) {
-  .gunhit-menu .menu-weapon-entrance,
-  .gunhit-menu .menu-action-entrance,
-  .gunhit-menu .menu-icon-entrance,
-  .gunhit-menu .menu-title-entrance,
-  .gunhit-menu .menu-currency-entrance { opacity: 1; transform: none; }
-  .gunhit-menu.menu-ready .menu-weapon-entrance,
-  .gunhit-menu.menu-ready .menu-action-entrance,
-  .gunhit-menu.menu-ready .menu-icon-entrance,
-  .gunhit-menu.menu-ready .menu-title-entrance,
-  .gunhit-menu.menu-ready .menu-currency-entrance,
-  .gunhit-menu .pulse-btn,
-  .gunhit-menu .shine-sweep { animation: none; }
-  .gunhit-menu .shine-sweep { opacity: 0; }
-}
-
 @keyframes float-y {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-6px); }
@@ -806,4 +719,48 @@ input[type='range'].juicy-slider::-webkit-slider-thumb {
 
 input[type='range'].juicy-slider::-webkit-slider-thumb:hover {
   transform: scale(1.25);
+}
+
+/* SGA Armory palette helpers; motion classes/timelines are shared with Perfect Shot. */
+.font-arsenal-title { font-family: 'Russo One', 'Lilita One', system-ui, sans-serif; }
+.arsenal-armory-open, .arsenal-armory-closing { isolation: isolate; }
+.arsenal-armory-closing { pointer-events: none; }
+.arsenal-firefly { opacity: .7; box-shadow: 0 0 7px 2px rgba(190,170,255,.45); animation: arsenalFirefly 6s ease-in-out infinite alternate; }
+@keyframes arsenalFirefly { from { transform: translate3d(-5px,4px,0) scale(.75); opacity: .35; } to { transform: translate3d(8px,-12px,0) scale(1.15); opacity: .9; } }
+.arsenal-scroll-area { scrollbar-width: thin; scrollbar-color: rgba(192,132,252,.75) rgba(15,8,28,.55); overscroll-behavior: contain; }
+.arsenal-scroll-area::-webkit-scrollbar { width: 5px; }
+.arsenal-scroll-area::-webkit-scrollbar-track { background: rgba(15,8,28,.55); border-radius: 999px; }
+.arsenal-scroll-area::-webkit-scrollbar-thumb { background: linear-gradient(180deg,#e879f9,#7c3aed); border-radius: 999px; }
+
+/* SGA + Perfect Shot: paired portrait game frames, swipeable on small screens. */
+.game-pair {
+  display: flex;
+  width: 100%;
+  flex: 1 1 0%;
+  min-height: 0;
+  align-items: center;
+  justify-content: flex-start;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+.game-pair::-webkit-scrollbar { display: none; }
+.game-pane {
+  display: flex;
+  height: 100%;
+  min-width: 0;
+  flex: 0 0 100%;
+  align-items: center;
+  justify-content: center;
+  scroll-snap-align: center;
+  scroll-snap-stop: always;
+}
+@media (min-width: 800px) {
+  .game-pair { justify-content: center; gap: 16px; }
+  .game-pane {
+    width: min(420px, calc((100% - 16px) / 2));
+    flex: 0 0 min(420px, calc((100% - 16px) / 2));
+  }
 }

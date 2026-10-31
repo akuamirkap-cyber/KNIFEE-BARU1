@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { Game } from './game/Game';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { Game, GUN_Y, GAMEPLAY_GUN_SCALE, H, makeLevel, initialGameplayWheelCenterY } from './game/Game';
 import { savedValues, storage } from './game/safeStorage';
 import { setMasterVolume, setMuted, sfx } from './game/audio';
 import type { BossType } from './game/bossRoster';
@@ -12,26 +12,115 @@ import { Burst, Dust, Flare, Shockwave, SparkleField, SunburstFX } from '../knif
 import { gunSunburstColor } from './game/sunburstPalette';
 import { drawGunCentered } from './game/art/drawCentered';
 import { getGunMetrics } from './game/art/metrics';
+import { gunState } from './game/art/kit';
 import { juicyAudio } from '../../utils/juicyAudio';
 import DiamondSprite from '../shared/DiamondSprite';
 import CoinSprite from '../shared/CoinSprite';
 import { MILESTONES, QUESTS, type Quest, type QuestState } from './game/quests';
-import { GUN_HIT_MAP_MAX_LEVEL } from './game/stageMap';
+import { GUN_HIT_MAP_MAX_LEVEL, getGunHitMapNodeTheme, getGunHitMapStage } from './game/stageMap';
 import Arsenal from './components/Arsenal';
 import QuestModal from './components/QuestModal';
-import LeaderboardModal from './components/LeaderboardModal';
+import SgaSettingsPanel from './components/SgaSettingsPanel';
+import SgaWeaponFlight, { type SgaWeaponFlightData } from './components/SgaWeaponFlight';
+import { Leaderboard as PerfectShotLeaderboard } from '../perfect-shot/components/Leaderboard';
 import { BossDefeatedModal } from './components/BossDefeatedModal';
 import { BossGiftBoxModal } from './components/BossGiftBoxModal';
 import StarBuffModal from './components/StarBuffModal';
-import LevelMap from './components/LevelMap';
+import { QuestMap as PerfectShotQuestMap } from '../perfect-shot/components/QuestMap';
+import type { StageBase } from '../perfect-shot/quest/data';
 import MenuEnvironment, { type MenuEnvironmentTheme } from './components/MenuEnvironment';
 import { SGA_SPEED_OPTIONS, formatSgaSpeed, getSavedSgaSpeed } from './game/gameSpeed';
 import { useSgaGameSpeed } from './utils/useSgaGameSpeed';
 import { SGA_BG_THEMES, getSavedSgaBgTheme } from './game/backgroundThemes';
 import { useSgaBgTheme } from './utils/useSgaBgTheme';
 import { getFast2DContext, getOptimalCanvasDpr } from './utils/mobilePerf';
+import { TransitionOverlay, type OverlayPhase, type OverlayVariant } from '../perfect-shot/components/TransitionOverlay';
+import { sfx as studioSfx } from '../perfect-shot/audio/sfx';
+import { useSound as useStudioSound } from '../perfect-shot/audio/useSound';
+import { ARMORY_SHUTTER, SHOP_IN, SHOP_OUT } from '../perfect-shot/shop/timeline';
+import { PLAY_IN, PLAY_OUT } from '../perfect-shot/play/levels';
+import { QUEST_IN, QUEST_OUT } from '../perfect-shot/quest/data';
+import { ACH_IN, ACH_OUT } from '../perfect-shot/ach/data';
+import { LB_IN, LB_OUT } from '../perfect-shot/rank/data';
+import { GameIcon, NavFrame, type IconName } from '../perfect-shot/ui/GameIcons';
+import { useSettings as usePerfectShotSettings } from '../perfect-shot/theme/themes';
+import { animClass, animStore, getSharedMenuPlan, gunTiming, resolvePlan, subscribeMenuPlan, TL, WHEEL, useAnimCfg, type Plan, type StyleId } from '../perfect-shot/anim/presets';
+import { OVERLAY_RATE } from '../perfect-shot/anim/speed';
 
 type Screen = 'menu' | 'playing' | 'over';
+type MenuPageTransition = { phase: OverlayPhase; variant: OverlayVariant; label: string; rate: number } | null;
+type MenuDeparture = 'gun' | 'quest' | 'ready' | 'ranks' | 'play' | null;
+type MenuTransitionTiming = { lead: number; cover: number; hold: number; reveal: number; swapAt: number; finishAt: number; rate: number };
+const PLAY_SCOPE = { menuLead: 180, questLead: 260, otherLead: 460, cover: 620, hold: 600, reveal: 680 };
+const MENU_EXIT_K = 0.78;
+const PAGE_OVERLAYS: Partial<Record<OverlayVariant, { cover: number; hold: number; reveal: number }>> = {
+  shutter: ARMORY_SHUTTER,
+  cloud: { cover: 600, hold: 400, reveal: 820 },
+  wrap: { cover: 640, hold: 560, reveal: 820 },
+  podium: { cover: 600, hold: 520, reveal: 700 },
+  fade: { cover: 200, hold: 60, reveal: 260 },
+};
+
+const SGA_MENU_NAV: { id: 'gun' | 'ranks' | 'ready' | 'setting'; label: string; icon: IconName; highlight?: boolean }[] = [
+  { id: 'gun', label: 'GUN', icon: 'gun' },
+  { id: 'ranks', label: 'RANKS', icon: 'ranks' },
+  { id: 'ready', label: 'READY!', icon: 'gift', highlight: true },
+  { id: 'setting', label: 'SETTING', icon: 'gear' },
+];
+
+const SGA_QUEST_STAGES: StageBase[] = Array.from({ length: GUN_HIT_MAP_MAX_LEVEL }, (_, index) => {
+  const n = index + 1;
+  const type = getGunHitMapStage(n);
+  const node = getGunHitMapNodeTheme(n);
+  return {
+    n,
+    type,
+    name: node.label,
+    icon: (type === 'boss' ? 'swords' : type === 'special' ? 'star' : 'target') as StageBase['icon'],
+  };
+});
+
+const menuMotion = (animation: string, delay: number, duration: number, extra = '') => ({
+  className: `a ${animation} menu-motion ${extra}`,
+  style: { '--d': `${delay}ms`, '--dur': `${duration}ms` } as CSSProperties,
+});
+
+function MusicAmbientControl({ enabled, onToggle }: { enabled: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={enabled}
+      onClick={onToggle}
+      className="mt-2.5 flex w-full items-center justify-between rounded-xl border border-white/10 bg-black/15 px-3 py-2 text-left transition hover:bg-white/10 active:scale-[0.99]"
+    >
+      <span className="flex items-center gap-2">
+        <span aria-hidden="true">🎵</span>
+        <span>
+          <span className="block text-[11px] font-black">MUSIK & AMBIENCE</span>
+          <span className="block text-[9px] text-white/55">Suasana lembut ala Perfect Shot</span>
+        </span>
+      </span>
+      <span className={`rounded-full px-2.5 py-1 text-[9px] font-black ${enabled ? 'bg-emerald-400/20 text-emerald-200' : 'bg-white/10 text-white/60'}`}>
+        {enabled ? 'AKTIF' : 'MATI'}
+      </span>
+    </button>
+  );
+}
+
+function MenuBullet() {
+  return (
+    <div className="relative h-[18px] w-[58px] drop-shadow-[0_0_8px_rgba(255,220,140,.75)]">
+      <div className="b3d-case absolute left-[3px] top-0 h-full w-[58%] overflow-hidden rounded-l-[3px] shadow-[inset_0_0_0_1px_rgba(70,40,0,.55)]" />
+      <div className="absolute -left-[1px] -top-[1px] h-[20px] w-[6px] rounded-[2px] bg-gradient-to-b from-[#fff2b0] via-[#d49a2a] to-[#5a3505] shadow-[inset_0_0_0_1px_rgba(60,30,0,.6)]" />
+      <div className="b3d-band absolute left-1/2 top-0 h-full w-[7%]" />
+      <div className="b3d-tip absolute left-[56%] top-[1px] h-[16px] w-[44%] overflow-hidden shadow-[inset_0_0_0_1px_rgba(70,25,5,.55)]" style={{ borderRadius: '0 75% 75% 0 / 0 50% 50% 0' }}>
+        <span className="b3d-glint absolute inset-x-0 h-[3px] bg-white/80 blur-[0.5px]" />
+      </div>
+      <div className="pointer-events-none absolute left-[5%] right-[12%] top-[20%] h-[2px] rounded-full bg-white/85" />
+      <div className="pointer-events-none absolute bottom-[12%] left-[5%] right-[16%] h-[2px] rounded-full bg-black/35" />
+    </div>
+  );
+}
 
 const LS = {
   best: 'gunhit_best',
@@ -134,28 +223,65 @@ function useSavedValuesReady(): boolean {
   return ready;
 }
 
-export default function App({ onExit }: { onExit?: () => void }) {
+export default function App({ onExit, introReady = true }: { onExit?: () => void; introReady?: boolean }) {
   const ready = useSavedValuesReady();
   // Same shell the game paints, so the wait never flashes white.
-  if (!ready) return <div className="h-full w-full bg-[#0b1418]" aria-busy="true" />;
-  return <GunHitGame onExit={onExit} />;
+  if (!ready) {
+    return (
+      <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-[#0b1418] text-slate-300" aria-busy="true" role="status">
+        <span className="h-7 w-7 animate-spin rounded-full border-2 border-slate-700 border-t-sky-400" />
+        <span className="text-[10px] font-semibold tracking-[0.14em]">MEMULIHKAN PROGRES</span>
+      </div>
+    );
+  }
+  return <GunHitGame onExit={onExit} introReady={introReady} />;
 }
 
-function GunHitGame({ onExit }: { onExit?: () => void }) {
+function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: boolean }) {
   const active = useSlideActive();
+  const perfectShotIconSet = usePerfectShotSettings().icons;
+  const psAnimationConfig = useAnimCfg();
+  const studioSound = useStudioSound();
+  const [menuPlan, setMenuPlan] = useState<Plan>(() => getSharedMenuPlan() ?? resolvePlan(psAnimationConfig));
+  const menuPlanRef = useRef(menuPlan);
+  menuPlanRef.current = menuPlan;
+  const studioVolumeRef = useRef<number | null>(null);
+  const [menuReady, setMenuReady] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
+  const weaponPivotRef = useRef<HTMLDivElement>(null);
+  const gameShellRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Game | null>(null);
 
   const [screen, setScreen] = useState<Screen>('menu');
   const screenRef = useRef<Screen>(screen);
   screenRef.current = screen;
   const [mapOpen, setMapOpen] = useState(false);
+  const [mapLeaving, setMapLeaving] = useState(false);
+  const [questLeaving, setQuestLeaving] = useState(false);
+  const [leaderboardLeaving, setLeaderboardLeaving] = useState(false);
+  const [menuPageTransition, setMenuPageTransition] = useState<MenuPageTransition>(null);
+  const [menuDeparture, setMenuDeparture] = useState<MenuDeparture>(null);
+  const menuPageTransitionBusyRef = useRef(false);
+  const menuPageTransitionTimersRef = useRef<number[]>([]);
+  const [playTransition, setPlayTransition] = useState<{ phase: OverlayPhase; label: string; origin: { x: number; y: number } } | null>(null);
+  const [playMenuExiting, setPlayMenuExiting] = useState(false);
+  const [weaponFlight, setWeaponFlight] = useState<SgaWeaponFlightData | null>(null);
+  const playTransitionBusyRef = useRef(false);
+  const pageExitTimersRef = useRef<number[]>([]);
   const startingLevelRef = useRef(1);
   const [transitioning, setTransitioning] = useState(false);
   const [transText, setTransText] = useState('READY?');
   const [transitionStep, setTransitionStep] = useState<0 | 1 | 2>(0);
+
+  useEffect(() => () => pageExitTimersRef.current.forEach((timer) => window.clearTimeout(timer)), []);
+  useEffect(() => () => menuPageTransitionTimersRef.current.forEach((timer) => window.clearTimeout(timer)), []);
+  useEffect(() => {
+    const shared = getSharedMenuPlan();
+    if (shared) setMenuPlan(shared);
+    return subscribeMenuPlan(setMenuPlan);
+  }, []);
 
   const [result, setResult] = useState({ score: 0, level: 1, coins: 0, newBest: false });
   const [displayScore, setDisplayScore] = useState(0);
@@ -188,10 +314,88 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
   const [gameSpeed, setGameSpeed] = useSgaGameSpeed();
   const [menuTheme, setMenuTheme] = useSgaBgTheme();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsClosing, setSettingsClosing] = useState(false);
   const [inGameSettingsOpen, setInGameSettingsOpen] = useState(false);
   const [arsenalOpen, setArsenalOpen] = useState(false);
+  const [menuReturnKey, setMenuReturnKey] = useState(0);
   const [questOpen, setQuestOpen] = useState(false);
   const [leaderboardOpen, setLeaderboardOpen] = useState(false);
+
+  const beginMenuPageTransition = (
+    variant: OverlayVariant,
+    label: string,
+    lead: number,
+    onSwap: () => void,
+    departure: MenuDeparture = null,
+  ): MenuTransitionTiming | null => {
+    const base = PAGE_OVERLAYS[variant];
+    if (!base || menuPageTransitionBusyRef.current) return null;
+    menuPageTransitionBusyRef.current = true;
+    menuPageTransitionTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+    menuPageTransitionTimersRef.current = [];
+
+    const rate = variant === 'fade' ? 1 : OVERLAY_RATE;
+    const cover = Math.round(base.cover / rate);
+    const hold = Math.round(base.hold / rate);
+    const reveal = Math.round(base.reveal / rate);
+    const swapAt = lead + cover + hold;
+    const transition = { variant, label, rate };
+    const schedule = (delay: number, callback: () => void) => {
+      menuPageTransitionTimersRef.current.push(window.setTimeout(callback, delay));
+    };
+
+    setMenuPageTransition(null);
+    setMenuDeparture(departure);
+    schedule(lead, () => setMenuPageTransition({ ...transition, phase: 'cover' }));
+    schedule(swapAt, () => {
+      onSwap();
+      setMenuDeparture(null);
+      setMenuPageTransition({ ...transition, phase: 'reveal' });
+    });
+    schedule(swapAt + reveal, () => {
+      setMenuPageTransition(null);
+      setMenuDeparture(null);
+      menuPageTransitionBusyRef.current = false;
+      menuPageTransitionTimersRef.current = [];
+    });
+
+    return { lead, cover, hold, reveal, swapAt, finishAt: swapAt + reveal, rate };
+  };
+
+  const menuPageLead = () => Math.max(300, 380 * menuPlanRef.current.k);
+  const freshMenuPlan = () => getSharedMenuPlan() ?? resolvePlan(animStore.get(), menuPlanRef.current);
+
+  const startArsenalTransition = (opening: boolean) => {
+    const nextPlan = opening ? null : freshMenuPlan();
+    const timing = beginMenuPageTransition(
+      'shutter',
+      'ARMORY',
+      opening ? menuPageLead() : SHOP_OUT.total,
+      () => {
+        if (opening) setArsenalOpen(true);
+        else {
+          setArsenalOpen(false);
+          if (nextPlan) setMenuPlan(nextPlan);
+          setMenuReturnKey((key) => key + 1);
+        }
+      },
+      opening ? 'gun' : null,
+    );
+    if (!timing) return;
+
+    const k = timing.rate;
+    if (opening) {
+      studioSfx.menuExit('gun', 0, { ...menuPlanRef.current, k: menuPlanRef.current.k * 0.6 });
+      studioSfx.shutterClose(timing.lead / 1000, (timing.cover * 0.8) / 1000, k);
+      studioSfx.shutterOpen(timing.swapAt / 1000, k);
+      studioSfx.shopEnter(timing.swapAt / 1000, SHOP_IN);
+    } else {
+      studioSfx.shopExit(0);
+      studioSfx.shutterClose(timing.lead / 1000, (timing.cover * 0.8) / 1000, k);
+      studioSfx.shutterOpen(timing.swapAt / 1000, k);
+      if (nextPlan) studioSfx.menuEnter(timing.swapAt / 1000, nextPlan);
+    }
+  };
 
   // Boss Defeated celebration modal state (Screenshot 2)
   const [bossDefeatedData, setBossDefeatedData] = useState<{
@@ -289,7 +493,6 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
     if (changed) {
       const current = questStateRef.current;
       saveQuests({ ...current, weaponEquips: current.weaponEquips + 1 });
-      sfx.click();
     }
     sfx.unlock();
   };
@@ -411,6 +614,8 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
         }, true);
         setResult({ score, level, coins: runCoins, newBest });
         setDisplayScore(0);
+        studioSfx.playExit(0);
+        studioSfx.subEnter(0.18);
         setScreen('over');
       },
       onStarHit: (treasure) => {
@@ -556,6 +761,32 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
   }, [menuTheme]);
 
   useEffect(() => {
+    const onSansIntroComplete = (event: Event) => {
+      if (screenRef.current !== 'menu') return;
+      const replay = Boolean((event as CustomEvent<{ replay?: boolean }>).detail?.replay);
+      const nextPlan = getSharedMenuPlan() ?? resolvePlan(animStore.get(), menuPlanRef.current);
+      if (replay) {
+        setMenuPlan(nextPlan);
+        setMenuReturnKey((key) => key + 1);
+      }
+      if (studioSfx.ctx?.state === 'running') studioSfx.menuEnter(0.03, nextPlan);
+    };
+    window.addEventListener('sans-intro-complete', onSansIntroComplete);
+    return () => window.removeEventListener('sans-intro-complete', onSansIntroComplete);
+  }, []);
+
+  // Match Perfect Shot's input lock during the 1.7s menu arrival sequence.
+  useEffect(() => {
+    if (screen !== 'menu' || mapOpen || questOpen || leaderboardOpen || arsenalOpen || !introReady) {
+      setMenuReady(false);
+      return;
+    }
+    setMenuReady(false);
+    const readyTimer = window.setTimeout(() => setMenuReady(true), 1700 * menuPlan.k);
+    return () => window.clearTimeout(readyTimer);
+  }, [screen, menuReturnKey, mapOpen, questOpen, leaderboardOpen, arsenalOpen, introReady, menuPlan.k, menuPlan.gun]);
+
+  useEffect(() => {
     if (!diamondToast) return;
     const timer = window.setTimeout(() => setDiamondToast(null), Math.round(1800 / gameSpeed));
     return () => window.clearTimeout(timer);
@@ -631,14 +862,12 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
     const ctx = getFast2DContext(cv);
     if (!ctx) return;
 
-    let raf = 0;
-    const start = performance.now();
     const curW = getWeapon(weapon);
-    const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
 
-    const loop = (now: number) => {
-      // Let the entrance finish before any optional weapon-fire demonstration.
-      const t = reducedMotion?.matches ? 0 : Math.max(0, (now - start) / 1000 - 1) * getSavedSgaSpeed();
+    const drawStill = () => {
+      // Keep SGA's exact weapon art still in the showcase. The menu's shared
+      // entrance and float motion animate the canvas; synthetic firing flashes
+      // are reserved for the gameplay/Arsenal previews, not the title screen.
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, pw, ph);
 
@@ -659,25 +888,60 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
       const sc = (ph * 0.78) / span;
       ctx.scale(sc, sc);
 
-      // drawGunCentered puts the geometric mass center EXACTLY at (0, 0)!
-      drawGunCentered(ctx, curW.id, t, 0, true, undefined, true);
+      // Render from a clean rested pose, not a stale live-game recoil/glow state.
+      // Restore every shared field so this one-frame menu paint cannot perturb gameplay.
+      const previousGunState = { ...gunState };
+      try {
+        Object.assign(gunState, {
+          sinceShot: 9, reloadT: 0, charge: 0, spin: 0, spinAngle: 0, shots: 0,
+          bigShot: 0, fireworkTube: 0, rocketHue: 340, rocketFlash: 0,
+          yoyoHue: 0, yoyoFlash: 0, yoyoSpin: 0, diamondFlash: 0, diamondSeed: 0,
+          bazookaHue: 45, bazookaSeed: 1.7, bazookaFlash: 0, bazookaBite: 0.6,
+          jaw: 0, glow: 0, servo: 0, heat: 0, tint: '244,63,94',
+          inPreview: false, ammoRatio: 1, s7Anim: null, s9State: null, s9Live: false,
+          sixState: null, sixLive: false, elevenState: null, elevenLive: false,
+          elevenStage: false, nineStage: false, twoState: null, twoLive: false,
+          ghostSide: 1, saberSide: 1,
+        });
+        // drawGunCentered puts the geometric mass center EXACTLY at (0, 0)!
+        drawGunCentered(ctx, curW.id, 0, 0, true, undefined, false);
+      } finally {
+        Object.assign(gunState, previousGunState);
+      }
       ctx.restore();
-
-      if (active && !reducedMotion?.matches) raf = requestAnimationFrame(loop);
     };
 
-    // Redraw once on a preference change, then resume frames only if needed.
-    const onMotionChange = () => {
-      cancelAnimationFrame(raf);
-      loop(performance.now());
-    };
-    reducedMotion?.addEventListener?.('change', onMotionChange);
-    loop(start); // a still preview even before this slide has focus
-    return () => {
-      cancelAnimationFrame(raf);
-      reducedMotion?.removeEventListener?.('change', onMotionChange);
-    };
-  }, [screen, weapon, active, arsenalOpen, questOpen, leaderboardOpen, mapOpen, settingsOpen]);
+    drawStill();
+    // Center the aura on the visible weapon ink, not just on the large preview canvas.
+    // This also compensates for weapon-specific renderer offsets in the screenshot the user flagged.
+    try {
+      const pixels = ctx.getImageData(0, 0, cv.width, cv.height).data;
+      let weight = 0;
+      let pivotX = 0;
+      let pivotY = 0;
+      for (let y = 0; y < cv.height; y++) {
+        for (let x = 0; x < cv.width; x++) {
+          const alpha = pixels[(y * cv.width + x) * 4 + 3];
+          if (alpha < 160) continue; // ignore the soft ground shadow and the glow fringe
+          weight += alpha;
+          pivotX += (x + 0.5) * alpha;
+          pivotY += (y + 0.5) * alpha;
+        }
+      }
+      if (weight > 0 && weaponPivotRef.current) {
+        const cssScaleX = (cv.offsetWidth || pw) / pw;
+        const cssScaleY = (cv.offsetHeight || ph) / ph;
+        const centerX = pivotX / weight / dpr;
+        const centerY = pivotY / weight / dpr;
+        const offsetX = `${(centerX - pw / 2) * cssScaleX}px`;
+        const offsetY = `${(centerY - ph / 2) * cssScaleY}px`;
+        weaponPivotRef.current.style.setProperty('--weapon-pivot-x', offsetX);
+        weaponPivotRef.current.style.setProperty('--weapon-pivot-y', offsetY);
+      }
+    } catch {
+      // Some low-end canvas contexts disable readback; fall back to the shared frame center.
+    }
+  }, [screen, weapon, arsenalOpen, questOpen, leaderboardOpen, mapOpen, settingsOpen]);
 
   // Roll up score only while the slide is active; pause at the current number.
   useEffect(() => {
@@ -714,16 +978,263 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
     return () => clearTimeout(timer);
   }, [transitionStep, active, gameSpeed]);
 
-  const beginStage = (level: number) => {
-    startingLevelRef.current = level;
-    setMapOpen(false);
-    setTransitioning(false);
-    setTransitionStep(0);
-    gameRef.current?.startAtLevel(level);
-    setScreen('playing');
+  const captureMenuWeaponFlight = (): boolean => {
+    const source = previewCanvasRef.current;
+    const shell = gameShellRef.current;
+    if (!source || !shell || !shell.clientWidth || !shell.clientHeight) return false;
+    try {
+      const shellRect = shell.getBoundingClientRect();
+      const sourceRect = source.getBoundingClientRect();
+      // Crop the actual weapon ink (not the large transparent menu canvas), then
+      // scale that same artwork to the live game's renderer scale for a seamless handoff.
+      let cropX = 0;
+      let cropY = 0;
+      let cropW = source.width;
+      let cropH = source.height;
+      let massX = source.width / 2;
+      let massY = source.height / 2;
+      let massWeight = 0;
+      const sourceContext = source.getContext('2d');
+      if (sourceContext && source.width && source.height) {
+        const { data } = sourceContext.getImageData(0, 0, source.width, source.height);
+        let left = source.width;
+        let top = source.height;
+        let right = -1;
+        let bottom = -1;
+        let weightedX = 0;
+        let weightedY = 0;
+        for (let y = 0; y < source.height; y++) {
+          for (let x = 0; x < source.width; x++) {
+            const alpha = data[(y * source.width + x) * 4 + 3];
+            if (alpha <= 160) continue; // exclude the soft ground shadow and glow fringe
+            if (x < left) left = x;
+            if (x > right) right = x;
+            if (y < top) top = y;
+            if (y > bottom) bottom = y;
+            massWeight += alpha;
+            weightedX += (x + 0.5) * alpha;
+            weightedY += (y + 0.5) * alpha;
+          }
+        }
+        if (right >= left && bottom >= top) {
+          const pad = Math.max(4, Math.round(Math.min(source.width, source.height) * 0.012));
+          cropX = Math.max(0, left - pad);
+          cropY = Math.max(0, top - pad);
+          cropW = Math.min(source.width, right + pad + 1) - cropX;
+          cropH = Math.min(source.height, bottom + pad + 1) - cropY;
+          massX = weightedX / massWeight;
+          massY = weightedY / massWeight;
+        }
+      }
+      const cropCanvas = document.createElement('canvas');
+      cropCanvas.width = cropW;
+      cropCanvas.height = cropH;
+      const cropContext = cropCanvas.getContext('2d');
+      if (!cropContext) return false;
+      cropContext.drawImage(source, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+      const image = cropCanvas.toDataURL('image/png');
+      const dpr = source.width / 337;
+      const sourceScaleX = source.width / sourceRect.width;
+      const sourceScaleY = source.height / sourceRect.height;
+      const metric = getGunMetrics(weapon);
+      const previewScale = (295 * 0.78) / Math.max(metric.span, 130);
+      const gameScaleX = shell.clientWidth / 420;
+      const gameScaleY = shell.clientHeight / 760;
+      const toW = (cropW / dpr / previewScale) * GAMEPLAY_GUN_SCALE * gameScaleX;
+      const toH = (cropH / dpr / previewScale) * GAMEPLAY_GUN_SCALE * gameScaleY;
+      // `drawGun` uses muzzle-space coordinates; use the weapon's measured mass
+      // center so the final frame lands exactly over the live canvas artwork.
+      const gameCenterX = (210 + metric.centerOffsetX * GAMEPLAY_GUN_SCALE) * gameScaleX;
+      const gameCenterY = (GUN_Y + metric.centerOffsetY * GAMEPLAY_GUN_SCALE) * gameScaleY;
+      const flightMassX = ((massX - cropX) / dpr / previewScale) * GAMEPLAY_GUN_SCALE * gameScaleX;
+      const flightMassY = ((massY - cropY) / dpr / previewScale) * GAMEPLAY_GUN_SCALE * gameScaleY;
+      setWeaponFlight({
+        id: Date.now(),
+        image,
+        from: {
+          x: sourceRect.left - shellRect.left + cropX / sourceScaleX,
+          y: sourceRect.top - shellRect.top + cropY / sourceScaleY,
+          w: cropW / sourceScaleX,
+          h: cropH / sourceScaleY,
+        },
+        to: { x: gameCenterX - flightMassX, y: gameCenterY - flightMassY, w: toW, h: toH },
+      });
+      return true;
+    } catch {
+      // If canvas capture is restricted, the gameplay gun uses its normal rise-in instead.
+      return false;
+    }
+  };
+
+  const beginStage = (level: number, specialMode?: 'boulder' | 'bonus' | 'treasure', fromSettings = false) => {
+    if (playTransitionBusyRef.current || (mapOpen && mapLeaving)) return;
+    playTransitionBusyRef.current = true;
+    const fromMap = mapOpen;
+    const fromMenu = screenRef.current === 'menu' && !fromMap && !settingsOpen && !fromSettings;
+    const wantsWeaponFlight = fromMenu && captureMenuWeaponFlight();
+    if (fromMenu) {
+      setPlayMenuExiting(true);
+      setMenuDeparture('play');
+    }
+    const lead = fromMenu || fromSettings ? PLAY_SCOPE.menuLead : fromMap ? PLAY_SCOPE.questLead : PLAY_SCOPE.otherLead;
+    const mountAt = lead + PLAY_SCOPE.cover;
+    // Keep the filled WAAPI flight visible through reveal, matching Perfect Shot;
+    // it is cleared alongside the scope after the in-game gun is fully exposed.
+    const revealAt = mountAt + PLAY_SCOPE.hold;
+    const finishAt = revealAt + PLAY_SCOPE.reveal;
+    const stageConfig = makeLevel(level, specialMode);
+    const gunEntryDelay = fromMap || fromSettings ? PLAY_SCOPE.hold / 1000 : 0;
+    const origin = {
+      x: 50,
+      y: (initialGameplayWheelCenterY(stageConfig.boss, Boolean(specialMode)) / H) * 100,
+    };
+    const label = `STAGE ${level} · ${stageConfig.name.toUpperCase()}`;
+
+    if (fromMap) {
+      setMapLeaving(true);
+      studioSfx.questExit(0);
+    } else if (fromMenu) {
+      studioSfx.menuExit('play', 0, { ...menuPlanRef.current, k: menuPlanRef.current.k * 0.6 });
+    } else if (screenRef.current === 'over') {
+      studioSfx.playExit(0);
+    }
+
+    studioSfx.scopeAim(lead / 1000);
+    studioSfx.scopeOpen(revealAt / 1000);
+    studioSfx.playEnter(mountAt / 1000, PLAY_IN, stageConfig.boss, stageConfig.ammo, {
+      gun: !fromMenu,
+      offset: PLAY_SCOPE.hold,
+    });
+
+    deferPageClose(lead, () => setPlayTransition({ phase: 'cover', label, origin }));
+    deferPageClose(mountAt, () => {
+      startingLevelRef.current = level;
+      setMapOpen(false);
+      setMapLeaving(false);
+      setSettingsOpen(false);
+      setInGameSettingsOpen(false);
+      setPlayMenuExiting(false);
+      setMenuDeparture(null);
+      setTransitioning(false);
+      setTransitionStep(0);
+      if (specialMode) gameRef.current?.startSpecialStage(specialMode, gunEntryDelay, true);
+      else gameRef.current?.startAtLevel(level, wantsWeaponFlight, gunEntryDelay, true);
+      setScreen('playing');
+    });
+    deferPageClose(revealAt, () => setPlayTransition((current) => current ? { ...current, phase: 'reveal' } : current));
+    deferPageClose(finishAt, () => {
+      setPlayTransition(null);
+      setWeaponFlight(null);
+      playTransitionBusyRef.current = false;
+      pageExitTimersRef.current = [];
+    });
   };
 
   const play = () => beginStage(1);
+
+  const deferPageClose = (duration: number, close: () => void) => {
+    const timer = window.setTimeout(close, duration);
+    pageExitTimersRef.current.push(timer);
+  };
+
+  const openLevelMap = () => {
+    const timing = beginMenuPageTransition('cloud', 'QUEST', menuPageLead(), () => setMapOpen(true), 'quest');
+    if (!timing) return;
+    setMapLeaving(false);
+    studioSfx.menuExit('quest', 0, { ...menuPlanRef.current, k: menuPlanRef.current.k * 0.6 });
+    studioSfx.cloudClose(timing.lead / 1000, timing.rate);
+    studioSfx.cloudOpen(timing.swapAt / 1000, timing.rate);
+    studioSfx.questEnter(timing.swapAt / 1000, QUEST_IN);
+  };
+
+  const closeLevelMap = () => {
+    if (mapLeaving) return;
+    const nextPlan = freshMenuPlan();
+    const timing = beginMenuPageTransition('cloud', 'QUEST', QUEST_OUT.total, () => {
+      setMapOpen(false);
+      setMapLeaving(false);
+      setMenuPlan(nextPlan);
+      setMenuReturnKey((key) => key + 1);
+    });
+    if (!timing) return;
+    setMapLeaving(true);
+    studioSfx.questExit(0);
+    studioSfx.cloudClose(timing.lead / 1000, timing.rate);
+    studioSfx.cloudOpen(timing.swapAt / 1000, timing.rate);
+    studioSfx.menuEnter(timing.swapAt / 1000, nextPlan);
+  };
+
+  const openQuestPage = () => {
+    const timing = beginMenuPageTransition('wrap', 'ACHIEVEMENT', menuPageLead(), () => setQuestOpen(true), 'ready');
+    if (!timing) return;
+    setQuestLeaving(false);
+    studioSfx.menuExit('ready', 0, { ...menuPlanRef.current, k: menuPlanRef.current.k * 0.6 });
+    studioSfx.wrapClose(timing.lead / 1000, timing.rate);
+    studioSfx.wrapOpen(timing.swapAt / 1000, timing.rate);
+    studioSfx.achEnter(timing.swapAt / 1000, ACH_IN, readyQuestRewardCount);
+  };
+
+  const closeQuestPage = () => {
+    if (questLeaving) return;
+    const nextPlan = freshMenuPlan();
+    const timing = beginMenuPageTransition('wrap', 'ACHIEVEMENT', ACH_OUT.total, () => {
+      setQuestOpen(false);
+      setQuestLeaving(false);
+      setMenuPlan(nextPlan);
+      setMenuReturnKey((key) => key + 1);
+    });
+    if (!timing) return;
+    setQuestLeaving(true);
+    studioSfx.achExit(0);
+    studioSfx.wrapClose(timing.lead / 1000, timing.rate);
+    studioSfx.wrapOpen(timing.swapAt / 1000, timing.rate);
+    studioSfx.menuEnter(timing.swapAt / 1000, nextPlan);
+  };
+
+  const openLeaderboardPage = () => {
+    const timing = beginMenuPageTransition('podium', 'PERINGKAT', menuPageLead(), () => setLeaderboardOpen(true), 'ranks');
+    if (!timing) return;
+    setLeaderboardLeaving(false);
+    studioSfx.menuExit('ranks', 0, { ...menuPlanRef.current, k: menuPlanRef.current.k * 0.6 });
+    studioSfx.podiumClose(timing.lead / 1000, timing.rate);
+    studioSfx.podiumOpen(timing.swapAt / 1000, timing.rate);
+    studioSfx.lbEnter(timing.swapAt / 1000, LB_IN);
+  };
+
+  const closeLeaderboardPage = () => {
+    if (leaderboardLeaving) return;
+    const nextPlan = freshMenuPlan();
+    const timing = beginMenuPageTransition('podium', 'PERINGKAT', LB_OUT.total, () => {
+      setLeaderboardOpen(false);
+      setLeaderboardLeaving(false);
+      setMenuPlan(nextPlan);
+      setMenuReturnKey((key) => key + 1);
+    });
+    if (!timing) return;
+    setLeaderboardLeaving(true);
+    studioSfx.lbExit(0);
+    studioSfx.podiumClose(timing.lead / 1000, timing.rate);
+    studioSfx.podiumOpen(timing.swapAt / 1000, timing.rate);
+    studioSfx.menuEnter(timing.swapAt / 1000, nextPlan);
+  };
+
+  const openSettingsPage = () => {
+    studioSfx.confirm();
+    studioSfx.whoosh(0.02, 0.32, 300, 2400, 0.12);
+    setSettingsClosing(false);
+    setSettingsOpen(true);
+  };
+
+  const closeSettingsPage = () => {
+    if (settingsClosing) return;
+    setSettingsClosing(true);
+    studioSfx.back(0);
+    studioSfx.whoosh(0, 0.26, 2400, 400, 0.1);
+    deferPageClose(380, () => {
+      setSettingsOpen(false);
+      setSettingsClosing(false);
+    });
+  };
 
   const handleContinueAfterBoss = () => {
     setBonusAfterBoss({ stage: bossDefeatedData?.level ?? 5, bossName: bossDefeatedData?.name ?? 'BOSS' });
@@ -756,10 +1267,31 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
   };
 
   const startSpecial = (stage: 'boulder' | 'bonus' | 'treasure') => {
+    studioSfx.subExit(0);
     setSettingsOpen(false);
     setInGameSettingsOpen(false);
-    gameRef.current?.startSpecialStage(stage);
-    setScreen('playing');
+    beginStage(4, stage, true);
+  };
+
+  const syncStudioVolume = (volume = soundVolume) => {
+    if (studioVolumeRef.current === volume) return;
+    studioSfx.setVolume(volume);
+    studioVolumeRef.current = volume;
+  };
+
+  const unlockStudioAudio = (playTap = false) => {
+    studioSfx.init();
+    syncStudioVolume();
+    if (studioSfx.getState().music) studioSfx.startMusic();
+    if (playTap) studioSfx.tap();
+  };
+
+  const toggleBackgroundMusic = () => {
+    studioSfx.init();
+    syncStudioVolume();
+    const enabled = !studioSfx.getState().music;
+    studioSfx.setMusic(enabled);
+    studioSfx.toggle(enabled);
   };
 
   const toggleMute = () => {
@@ -773,48 +1305,133 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
     setMuted(m);
     setMutedState(m);
     juicyAudio.enabled = !m;
-    if (!m) sfx.click();
+    studioSfx.init();
+    syncStudioVolume(!m && soundVolume <= 0 ? 1 : soundVolume);
+    if (m) {
+      studioSfx.toggle(false);
+      studioSfx.setSfx(false);
+    } else {
+      studioSfx.setSfx(true);
+      studioSfx.toggle(true);
+    }
   };
 
-  const changeSoundVolume = (nextVol: number, playTick = false) => {
+  const changeSoundVolume = (nextVol: number) => {
     const clamped = Math.max(0, Math.min(1, Math.round(nextVol * 100) / 100));
     setSoundVolumeState(clamped);
     storage.setItem(LS.volume, String(clamped));
     setMasterVolume(clamped);
+    studioSfx.setVolume(clamped);
+    studioVolumeRef.current = clamped;
     juicyAudio.volume = 0.7 * clamped;
     if (clamped <= 0) {
+      studioSfx.setSfx(false);
       if (!muted) {
         setMuted(true);
         setMutedState(true);
         juicyAudio.enabled = false;
       }
     } else {
+      studioSfx.setSfx(true);
       if (muted) {
         setMuted(false);
         setMutedState(false);
         juicyAudio.enabled = true;
       }
-      if (playTick) sfx.click();
+    }
+  };
+
+  const toggleEffects = () => {
+    const enabled = !studioSfx.getState().sfx || muted || soundVolume <= 0;
+    studioSfx.init();
+    if (enabled) {
+      if (soundVolume <= 0) changeSoundVolume(1);
+      setMuted(false);
+      setMutedState(false);
+      juicyAudio.enabled = true;
+      studioSfx.setSfx(true);
+      studioSfx.toggle(true);
+    } else {
+      setMuted(true);
+      setMutedState(true);
+      juicyAudio.enabled = false;
+      studioSfx.setSfx(false);
+      studioSfx.toggle(false);
     }
   };
 
   const goToMainMenuFromPlay = () => {
+    const nextPlan = freshMenuPlan();
+    const timing = beginMenuPageTransition('fade', 'MENU', PLAY_OUT.total, () => {
+      setInGameSettingsOpen(false);
+      gameRef.current?.toIdle();
+      setMenuPlan(nextPlan);
+      setMenuReturnKey((key) => key + 1);
+      setScreen('menu');
+    });
+    if (!timing) return;
+    studioSfx.playExit(0);
+    studioSfx.whoosh(timing.lead / 1000, 0.3, 2400, 400, 0.1);
+    studioSfx.menuEnter(timing.swapAt / 1000, nextPlan);
     saveQuests(questStateRef.current, true);
-    setInGameSettingsOpen(false);
-    gameRef.current?.toIdle();
-    setScreen('menu');
   };
 
   const chooseMenuTheme = (theme: MenuEnvironmentTheme) => {
     setMenuTheme(theme);
   };
+  const ownedWeaponCount = ownedWeaponIds().length;
+  const readyQuestRewardCount = QUESTS.filter((quest) =>
+    !questState.claimed.includes(quest.id) && Math.min(quest.progress(questState, ownedWeaponCount), quest.target) >= quest.target,
+  ).length;
+  const planMotion = (
+    animation: string,
+    delay: number,
+    duration: number,
+    extra = '',
+    sx?: number,
+    exitAnimation = 'out-fade',
+    exitDelay = 0,
+    exitDuration = 380,
+  ) => {
+    const leaving = menuDeparture !== null;
+    const motion = menuMotion(
+      leaving ? exitAnimation : animation,
+      (leaving ? exitDelay * MENU_EXIT_K : delay) * menuPlan.k,
+      (leaving ? exitDuration * MENU_EXIT_K : duration) * menuPlan.k,
+      extra,
+    );
+    return sx === undefined ? motion : { ...motion, style: { ...motion.style, '--sx': sx } as CSSProperties };
+  };
+  const planStyleMotion = (
+    style: StyleId,
+    timeline: { inD: number; inDur: number; outD: number; outDur: number },
+    classic: [string, string],
+    extra = '',
+    sx?: number,
+  ) => {
+    const leaving = menuDeparture !== null;
+    const motion = menuMotion(
+      animClass(style, leaving ? 'out' : 'in', classic),
+      (leaving ? timeline.outD * MENU_EXIT_K : timeline.inD) * menuPlan.k,
+      (leaving ? timeline.outDur * MENU_EXIT_K : timeline.inDur) * menuPlan.k,
+      extra,
+    );
+    return sx === undefined ? motion : { ...motion, style: { ...motion.style, '--sx': sx } as CSSProperties };
+  };
 
   return (
     <div
       className="gunhit-sga font-game flex h-full w-full select-none items-center justify-center bg-[#071318] relative"
-      onClickCapture={(e) => {
-        if ((e.target as HTMLElement | null)?.closest('button, [role="button"]')) {
-          sfx.click();
+      onPointerOverCapture={(event) => {
+        if (event.pointerType !== 'mouse') return;
+        const target = event.target as Element | null;
+        const control = target?.closest('button, [role="button"], input[type="range"]');
+        const previous = (event.relatedTarget as Element | null)?.closest?.('button, [role="button"], input[type="range"]');
+        if (control && control !== previous) studioSfx.hover();
+      }}
+      onClickCapture={(event) => {
+        if ((event.target as HTMLElement | null)?.closest('button, [role="button"], input[type="range"]')) {
+          unlockStudioAudio(true);
         }
       }}
     >
@@ -830,7 +1447,7 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
           <span>Pilih Game Lain</span>
         </button>
       )}
-      <div className="relative overflow-hidden shadow-[0_0_80px_rgba(0,0,0,0.9)] w-[420px] h-[760px] flex-shrink-0">
+      <div ref={gameShellRef} className="relative overflow-hidden shadow-[0_0_80px_rgba(0,0,0,0.9)] w-[420px] h-[760px] flex-shrink-0">
         {/* Canvas Engine (zero permanent translucent DOM overlays during gameplay so desynchronized:true scans out directly) */}
         <canvas ref={canvasRef} className="block touch-none w-[420px] h-[760px]" />
         {diamondToast && (
@@ -892,7 +1509,7 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => {
               e.stopPropagation();
-              sfx.click();
+              studioSfx.subEnter(0.03);
               setInGameSettingsOpen(true);
             }}
             aria-label="Pengaturan permainan"
@@ -938,8 +1555,9 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
         {/* -------------------------------------------------------------
             MAIN MENU: EXACT MATCHING SCREENSHOT 1 KNIFE HIT LAYOUT!
            ------------------------------------------------------------- */}
-        {screen === 'menu' && !mapOpen && (
-          <div className={`gunhit-menu ${active ? 'menu-ready' : 'slide-paused'} absolute inset-0 z-20 flex flex-col justify-between py-4 px-4 text-white isolate`} data-menu-theme={menuTheme}>
+        {screen === 'menu' && !mapOpen && !questOpen && !leaderboardOpen && !arsenalOpen && (
+          <div key={menuReturnKey} className={`gunhit-menu absolute inset-0 z-20 overflow-hidden text-white isolate ${active && introReady ? '' : 'slide-paused'} ${menuReady && introReady && !menuDeparture && !settingsOpen ? '' : 'pointer-events-none'} ${playMenuExiting && !menuDeparture ? 'sga-play-exit' : ''}`} data-menu-theme={menuTheme}>
+            {/* Preserve the existing SGA menu world, stars, particles and theme lighting. */}
             <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden" aria-hidden="true">
               <MenuEnvironment theme={menuTheme} />
               <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_46%,rgba(125,211,252,.08),transparent_68%)]" />
@@ -947,330 +1565,204 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
                 <Dust count={14} />
                 <SparkleField count={10} spread={1.45} />
               </div>
-            </div>
-            {/* Currency counters */}
-            <div className="menu-currency-entrance flex items-center justify-end">
-              <div className="flex items-center gap-1.5 text-lg font-bold font-game text-amber-300 drop-shadow">
-                <span className="font-mono text-xl font-black tracking-tight">{totalCoins}</span>
-                <CoinSprite size={25} className="drop-shadow-[0_0_5px_rgba(255,210,80,.7)]" />
-                <span className="ml-2 flex items-center border-l border-white/20 pl-2 text-base font-black text-cyan-100"><DiamondSprite size={24} fillRatio={0.92} /> {diamonds}</span>
-              </div>
+              {/* Keep SGA's selectable world art, with the right game's darker top/bottom framing. */}
+              <div className="pointer-events-none absolute inset-0" style={{ background: 'linear-gradient(180deg, rgba(3,7,10,.42) 0%, rgba(3,7,10,.12) 13%, transparent 28%, transparent 76%, rgba(1,5,8,.54) 100%), radial-gradient(ellipse at 50% 46%, transparent 52%, rgba(0,0,0,.24) 100%)' }} />
             </div>
 
-            {/* Title Section */}
-            <div className="menu-title-entrance flex flex-col items-center text-center -mt-1">
-              <div className="relative flex flex-col items-center">
-                {/* PERFECT word */}
-                <div className="text-5xl sm:text-7xl font-black tracking-[0.12em] text-[#4ade80] drop-shadow-[0_6px_0_#15803d] font-game transform -rotate-1 leading-none">
-                  PERFECT
+            <div {...planMotion('in-shake', 800 + 560 * 0.78, 380, 'absolute inset-0', undefined, 'out-fade', 0, 220)}>
+              <div className="relative flex h-full flex-col">
+              {/* SGA coin and diamond artwork stays intact, positioned like Perfect Shot's HUD. */}
+              <div className="relative z-10 flex shrink-0 items-center justify-end gap-3 px-5 pt-4">
+                <div {...planMotion('in-down', 150, 700, 'font-title flex items-center gap-1.5 text-xl text-amber-300 drop-shadow', undefined, 'out-up', 0, 480)}>
+                  <span className="font-title tabular-nums font-black tracking-tight">{totalCoins}</span>
+                  <CoinSprite size={25} className="drop-shadow-[0_0_5px_rgba(255,210,80,.7)]" />
                 </div>
-
-                {/* Curved blade slice line with sword/gun */}
-                <div className="relative -my-1.5 h-6 w-64 flex items-center justify-center">
-                  <div className="h-2 w-full rounded-full bg-white shadow-[0_0_12px_#ffffff]" />
-                  <span className="absolute right-2 text-xl transform rotate-12 drop-shadow">🗡️</span>
-                </div>
-
-                {/* SHOT word */}
-                <div className="text-5xl sm:text-7xl font-black tracking-[0.12em] text-[#fde047] drop-shadow-[0_6px_0_#a16207] font-game transform rotate-1 leading-none">
-                  SHOT
+                <div {...planMotion('in-fade', 250, 700, 'h-8 w-px bg-white/20', undefined, 'out-fade', 0, 480)} />
+                <div {...planMotion('in-down', 250, 700, 'font-title flex items-center gap-1 text-lg text-white drop-shadow', undefined, 'out-up', 60, 480)}>
+                  <DiamondSprite size={24} fillRatio={0.92} />
+                  {diamonds}
                 </div>
               </div>
 
-              {/* Subtitle: STAGE {bestLevel} ◆ SCORE {best} */}
-              <div className="mt-2 flex items-center gap-2.5 text-xs sm:text-sm font-black tracking-[0.2em] text-white font-game drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
-                <span>STAGE {bestLevel}</span>
-                <span className="text-amber-300 text-base">◆</span>
-                <span>SCORE {best}</span>
-              </div>
-            </div>
+              {/* Perfect Shot's two-line title, type, bullet slash and staggered impact. */}
+              <div className="relative z-10 mt-1 flex shrink-0 flex-col items-center text-center">
+                <div className="relative flex flex-col items-center">
+                  {!menuDeparture && <div className="mm-halo pointer-events-none absolute left-1/2 top-[46%] h-[180px] w-[360px] -translate-x-1/2 -translate-y-1/2 rounded-full" style={{ animationDelay: `${2600 * menuPlan.k}ms` }} />}
+                  <h1 className="font-title relative flex text-[min(15vw,72px)] leading-none tracking-wide text-[#3fdc72]">
+                    {!menuDeparture && <span aria-hidden className="mm-shine pointer-events-none absolute inset-0 z-10 flex" style={{ animationDelay: `${2800 * menuPlan.k}ms` }}>PERFECT</span>}
+                    {'PERFECT'.split('').map((letter, i) => (
+                      <span key={`${letter}-${i}`} className={planStyleMotion(menuPlan.title[i], TL.letter(i), ['in-letter', 'out-letter'], 'inline-block', i < 3 ? -1 : 1).className} style={{ ...planStyleMotion(menuPlan.title[i], TL.letter(i), ['in-letter', 'out-letter'], 'inline-block', i < 3 ? -1 : 1).style, textShadow: '0 2px 0 #23a34e, 0 4px 0 #1d8a42, 0 6px 0 #166f35, 0 8px 0 #0f5427, 0 14px 18px rgba(0,0,0,.55)' } as CSSProperties}>{letter}</span>
+                    ))}
+                  </h1>
 
-            {/* Upright gun with a layered, rarity-aware Sunburst FX Lab halo (-10% size: 337x295). */}
-            <div className="flex flex-col items-center justify-center my-auto">
-              <div className="relative" style={{ width: 'min(337px, 90vw)', height: 'min(295px, 78vw)' }}>
-                <div className="pointer-events-none absolute inset-0" aria-hidden="true">
-                  <SunburstFX size={430} color={gunSunburstColor(getWeapon(weapon).rarity)} intensity={0.34} speed={32 / gameSpeed} core={false} stars={false} />
+                  <div className="relative mt-1 h-3 w-[68%]">
+                    <div {...planMotion('in-slash', 800, 560, 'absolute inset-0', undefined, 'out-slash', 120, 380)} style={{ ...planMotion('in-slash', 800, 560, 'absolute inset-0', undefined, 'out-slash', 120, 380).style, filter: 'drop-shadow(0 0 5px rgba(255,255,255,.9)) drop-shadow(0 0 14px rgba(180,255,220,.6))' } as CSSProperties}>
+                      <div className="absolute inset-y-[1px] left-0 right-0" style={{ clipPath: 'polygon(0 50%, 100% 0, 100% 100%)', background: 'linear-gradient(90deg,rgba(255,255,255,0),rgba(255,255,255,.18) 25%,rgba(255,255,255,.7) 68%,#fff 100%)' }} />
+                      <div className="absolute left-[35%] right-0 top-1/2 h-[3px] -translate-y-1/2" style={{ clipPath: 'polygon(0 50%,100% 0,100% 100%)', background: 'linear-gradient(90deg,rgba(255,255,255,0),#fffbe6 80%)' }} />
+                    </div>
+                    <div {...planMotion('in-bullet', 800, 560, 'absolute top-1/2 z-10', undefined, 'out-bullet', 110, 460)} style={{ ...planMotion('in-bullet', 800, 560, 'absolute top-1/2 z-10', undefined, 'out-bullet', 110, 460).style, left: '92%' } as CSSProperties}>
+                      <MenuBullet />
+                    </div>
+                  </div>
+
+                  <h2 className="font-title relative -mt-1 flex text-[min(18vw,86px)] leading-none tracking-wider text-[#ffd23f]">
+                    {!menuDeparture && <span aria-hidden className="mm-shine pointer-events-none absolute inset-0 z-10 flex" style={{ animationDelay: `${3000 * menuPlan.k}ms` }}>SHOT</span>}
+                    {'SHOT'.split('').map((letter, i) => (
+                      <span key={`${letter}-${i}`} className={planStyleMotion(menuPlan.title[7 + i], TL.shot(i), ['in-slam', 'out-blast'], 'inline-block', i < 2 ? -1 : 1).className} style={{ ...planStyleMotion(menuPlan.title[7 + i], TL.shot(i), ['in-slam', 'out-blast'], 'inline-block', i < 2 ? -1 : 1).style, textShadow: '0 2px 0 #f0a81c, 0 4px 0 #e0901a, 0 6px 0 #c47414, 0 8px 0 #9c5a10, 0 14px 18px rgba(0,0,0,.55)' } as CSSProperties}>{letter}</span>
+                    ))}
+                  </h2>
                 </div>
-                <div className="menu-weapon-entrance relative z-10 h-full w-full">
-                  <canvas
-                    ref={previewCanvasRef}
-                    style={{ width: '100%', height: '100%' }}
-                    className="relative z-10 block translate-x-[1%] cursor-pointer hover:scale-105 transition-transform"
-                    role="button"
-                    tabIndex={0}
-                    aria-label="Buka koleksi senjata"
-                    onClick={() => setArsenalOpen(true)}
-                    onKeyDown={(event) => {
+
+                <div {...planMotion('in-up', 1250, 600, 'relative z-10', undefined, 'out-fade', 80, 300)}>
+                  <p className="font-title mt-2 flex items-center gap-3 text-base tracking-[0.12em] text-white drop-shadow-[0_2px_0_rgba(0,0,0,.5)]">
+                    STAGE {bestLevel} <span className="inline-block h-2.5 w-2.5 rotate-45 bg-amber-400" /> SCORE {best}
+                  </p>
+                </div>
+              </div>
+
+              {/* Rays are in the same float/rotation frame as the rendered weapon, so their pivot cannot drift. */}
+              <div className="relative flex min-h-0 flex-1 items-center justify-center">
+                <div {...(menuDeparture === 'play'
+                  ? { className: 'relative z-10 h-[min(295px,54vh)] w-[min(337px,90vw)] max-w-full opacity-0', style: {} as CSSProperties }
+                  : planStyleMotion(menuPlan.gun, gunTiming(menuPlan.gun), ['in-gun', 'out-spin'], 'relative z-10 h-[min(295px,54vh)] w-[min(337px,90vw)] max-w-full', 1))}>
+                  <div className="shadow-pulse absolute bottom-[12%] left-1/2 h-8 w-40 -translate-x-1/2 rounded-[50%] bg-black/60 blur-sm" />
+                  {!menuDeparture && <div className="mm-pedestal pointer-events-none absolute bottom-[7%] left-1/2 h-12 w-56 -translate-x-1/2" style={{ animationDelay: `${3400 * menuPlan.k}ms` }}>
+                    <span className="absolute inset-0 rounded-[50%] border-2 border-[#a5f3fc]/60 shadow-[0_0_18px_rgba(165,243,252,.55),inset_0_0_14px_rgba(165,243,252,.35)]" />
+                    <svg viewBox="0 0 224 48" className="absolute inset-0 h-full w-full overflow-visible">
+                      <ellipse cx="112" cy="24" rx="96" ry="18" fill="none" stroke="rgba(255,255,255,.4)" strokeWidth="2" strokeDasharray="8 10" className="mm-dash" />
+                      <circle r="4" fill="#fff" style={{ filter: 'drop-shadow(0 0 5px rgba(165,243,252,1))' }}><animateMotion dur="5s" repeatCount="indefinite" path="M224 24 A112 24 0 1 1 0 24 A112 24 0 1 1 224 24" /></circle>
+                    </svg>
+                  </div>}
+                  {!menuDeparture && [18, 42, 64, 82].map((x, i) => <span key={x} className="mm-mote pointer-events-none absolute bottom-[14%] h-1.5 w-1.5 rounded-full bg-[#e0fbff]" style={{ left: `${x}%`, animationDelay: `${(3400 + i * 700) * menuPlan.k}ms` }} />)}
+                  <div className="float relative h-full w-full" data-menu-gun>
+                    <div ref={weaponPivotRef} className="pointer-events-none absolute inset-0" aria-hidden="true">
+                      <SunburstFX size={390} color={gunSunburstColor(getWeapon(weapon).rarity)} intensity={0.16} speed={24 / gameSpeed} core={false} stars={false} style={{ left: 'calc(50% + var(--weapon-pivot-x, 0px))', top: 'calc(50% + var(--weapon-pivot-y, 0px))' }} />
+                      {!menuDeparture && menuPlan.gun === 'combo' && (
+                        <div
+                          aria-hidden="true"
+                          className="menu-pop-burst -translate-x-1/2 -translate-y-1/2"
+                          style={{
+                            left: 'calc(50% + var(--weapon-pivot-x, 0px))',
+                            top: 'calc(50% + var(--weapon-pivot-y, 0px))',
+                            '--pop-delay': `${(gunTiming('combo').inD + gunTiming('combo').inDur * 0.74) * menuPlan.k}ms`,
+                            '--pop-dur': `${gunTiming('combo').inDur * 0.26 * menuPlan.k}ms`,
+                          } as CSSProperties}
+                        >
+                          {Array.from({ length: 12 }, (_, i) => (
+                            <span key={i} className="menu-pop-ray" style={{ '--ray-angle': `${i * 30}deg` } as CSSProperties} />
+                          ))}
+                        </div>
+                      )}
+                      <div className="absolute left-1/2 top-1/2 h-[min(300px,64vw)] w-[min(300px,64vw)] -translate-x-1/2 -translate-y-1/2" style={{ left: 'calc(50% + var(--weapon-pivot-x, 0px))', top: 'calc(50% + var(--weapon-pivot-y, 0px))' }}>
+                        {/* Centering stays on the static anchor; raysDrop animates only the inner layer. */}
+                        <div {...planMotion('rays-drop', WHEEL.d, WHEEL.dur, 'h-full w-full', undefined, 'out-rays', 100, 500)}>
+                          <div className="spin-slow h-full w-full rounded-full" style={{ background: 'repeating-conic-gradient(from 0deg,rgba(200,240,240,.13) 0deg 7deg,transparent 7deg 22deg)', WebkitMask: 'radial-gradient(circle,#000 0%,rgba(0,0,0,.6) 35%,transparent 70%)', mask: 'radial-gradient(circle,#000 0%,rgba(0,0,0,.6) 35%,transparent 70%)' }} />
+                        </div>
+                      </div>
+                    </div>
+                    <canvas ref={previewCanvasRef} style={{ width: 'min(337px, 90vw)', height: 'min(295px, 54vh)' }} className="block cursor-pointer drop-shadow-[0_10px_20px_rgba(0,0,0,.5)] transition-transform hover:scale-105" role="button" tabIndex={0} aria-label="Buka koleksi senjata" onClick={() => startArsenalTransition(true)} onKeyDown={(event) => {
                       if (event.key === 'Enter' || event.key === ' ') {
                         event.preventDefault();
-                        sfx.click();
-                        setArsenalOpen(true);
+                        unlockStudioAudio(true);
+                        startArsenalTransition(true);
                       }
-                    }}
-                  />
+                    }} />
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Two Main Action Buttons */}
-            <div className="menu-actions relative z-10 flex w-full items-center justify-center gap-3 mb-2">
-              {/* CHALLENGES Button */}
-              <div className="menu-action-entrance flex flex-1">
-                <button
-                  onClick={() => setMapOpen(true)}
-                  data-gloss="off"
-                  className="relative flex-1 flex items-center justify-center gap-2 overflow-hidden rounded-2xl border border-white/30 border-b-[6px] border-b-[#68121d] bg-gradient-to-b from-[#ff9a38] via-[#f04422] to-[#a91435] py-3 px-2 text-sm sm:text-base font-black font-game text-white drop-shadow-[0_2px_2px_rgba(40,0,0,.7)] shadow-[0_14px_32px_rgba(240,55,34,0.58)] transition active:translate-y-1 active:border-b-2 hover:brightness-110 hover:saturate-125"
-                >
-                  <span className="pointer-events-none absolute inset-x-3 top-1 h-[34%] rounded-xl bg-white/18" />
-                  <span className="shine-sweep pointer-events-none absolute inset-y-0 left-0 w-1/4 bg-gradient-to-r from-transparent via-white/70 to-transparent" />
-                  <span className="relative z-10 text-xl">🗺️</span>
-                  <span className="relative z-10">QUEST</span>
-                </button>
+              {/* Perfect Shot's glossy paired controls, wired to SGA actions. */}
+              <div className="relative z-10 flex shrink-0 justify-center gap-3 px-6">
+                <div {...planStyleMotion(menuPlan.buttons[0], TL.buttons(0), ['in-left', 'out-left'], 'w-[42%] max-w-[158px]', -1)}>
+                  <button type="button" data-gloss="off" onClick={openLevelMap} className="press shine font-ui relative flex h-[54px] w-full items-center justify-center gap-1.5 rounded-2xl bg-gradient-to-b from-[#ff6a3d] to-[#e0331e] text-[20px] text-white shadow-[0_5px_0_#9c1f12,0_10px_18px_rgba(0,0,0,.4)]" style={{ '--shd': '2.4s' } as CSSProperties}>
+                    <span className="absolute inset-x-3 top-1.5 h-5 rounded-xl bg-white/25" />
+                    <GameIcon name="quest" set={perfectShotIconSet} mono={{ fill: '#fff', line: '#8f1d10' }} className="relative h-6 w-6" />
+                    <span className="relative drop-shadow-[0_2px_0_rgba(0,0,0,.3)]">QUEST</span>
+                  </button>
+                </div>
+                <div {...planStyleMotion(menuPlan.buttons[1], TL.buttons(1), ['in-right', 'out-right'], 'w-[42%] max-w-[158px]', 1)}>
+                  <button type="button" data-gloss="off" onClick={play} className="press shine mm-breathe font-ui relative flex h-[54px] w-full items-center justify-center gap-1.5 rounded-2xl bg-gradient-to-b from-[#4cef6a] to-[#18b93a] text-[24px] text-white shadow-[0_5px_0_#0c7a22,0_10px_18px_rgba(0,0,0,.4)]">
+                    <span className="absolute inset-x-3 top-1.5 h-5 rounded-xl bg-white/30" />
+                    <span className="relative drop-shadow-[0_2px_0_rgba(0,0,0,.3)]">PLAY</span>
+                    <GameIcon name="play" set={perfectShotIconSet} mono={{ fill: '#fff', line: '#0c6a22' }} className="relative h-7 w-7" />
+                  </button>
+                </div>
               </div>
 
-              {/* PLAY Button */}
-              <div className="menu-action-entrance flex flex-1">
-                <button
-                  onClick={play}
-                  data-gloss="off"
-                  className="pulse-btn relative flex-1 flex items-center justify-center gap-2 overflow-hidden rounded-2xl border border-white/35 border-b-[6px] border-b-[#064324] bg-gradient-to-b from-[#b7ff73] via-[#15cf62] to-[#006b39] py-3 px-2 text-xl font-black font-game text-white drop-shadow-[0_2px_2px_rgba(0,35,18,.75)] shadow-[0_14px_32px_rgba(0,215,95,.55)] transition active:translate-y-1 active:border-b-2 hover:brightness-110 hover:saturate-125"
-                >
-                  <span className="pointer-events-none absolute inset-x-3 top-1 h-[34%] rounded-xl bg-white/18" />
-                  <span className="shine-sweep pointer-events-none absolute inset-y-0 left-0 w-1/4 bg-gradient-to-r from-transparent via-white/70 to-transparent" />
-                  <span className="relative z-10">PLAY</span>
-                  <span className="relative z-10 text-xl font-black">▶</span>
-                </button>
-              </div>
-            </div>
+              <div {...planMotion('in-line', 1500, 600, 'relative z-10 mx-auto my-4 h-px w-[70%] bg-gradient-to-r from-transparent via-white/20 to-transparent', undefined, 'out-line', 40, 380)} />
 
-            {/* Bottom Icon Bar */}
-            <div className="menu-icon-bar relative z-10 flex items-center justify-around border-t-2 border-white/15 pt-2 pb-1 text-white/95">
-              {/* GUN button */}
-              <div className="menu-icon-entrance">
-                <button
-                  onClick={() => setArsenalOpen(true)}
-                  className="flex flex-col items-center gap-1 rounded-2xl transition hover:-translate-y-1 hover:text-white active:scale-95"
-                >
-                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/20 bg-gradient-to-br from-white/20 to-white/[0.04] text-2xl shadow-xl transition-colors">
-                    🔫
+              {/* Right game's four framed vector icons, retaining SGA menu destinations. */}
+              <div className={`relative z-30 grid shrink-0 grid-cols-4 px-6 pb-5 ${perfectShotIconSet === 'flat' ? 'gap-5' : 'gap-3'}`}>
+                {SGA_MENU_NAV.map((item, i) => (
+                  <div key={item.id} {...planStyleMotion(menuPlan.nav[i], TL.nav(i), ['in-pop', 'out-down'], 'flex justify-center', i < 2 ? -1 : 1)}>
+                    <button type="button" data-gloss="off" onClick={() => {
+                      if (item.id === 'gun') startArsenalTransition(true);
+                      else if (item.id === 'ranks') openLeaderboardPage();
+                      else if (item.id === 'ready') openQuestPage();
+                      else openSettingsPage();
+                    }} className="press flex w-full flex-col items-center gap-1.5">
+                      <span className={`relative w-full ${perfectShotIconSet === 'flat' ? 'max-w-[50px]' : 'max-w-[66px]'}`}>
+                        <NavFrame set={perfectShotIconSet} name={item.icon} active={!!item.highlight}>
+                          <span className={`block h-full w-full ${item.highlight ? 'bounce-soft' : ''}`}>
+                            <GameIcon name={item.icon} set={perfectShotIconSet} className="h-full w-full drop-shadow-[0_3px_2px_rgba(0,0,0,.45)]" />
+                          </span>
+                        </NavFrame>
+                        {item.id === 'ready' && readyQuestRewardCount > 0 && (
+                          <span className="font-title absolute -right-1.5 -top-1 grid h-6 min-w-6 place-items-center rounded-full bg-[#ef4444] px-1 text-[12px] text-white shadow-[0_2px_0_#7f1d1d] ring-2 ring-white">
+                            {readyQuestRewardCount}
+                          </span>
+                        )}
+                      </span>
+                      <span className={`font-title tracking-wide drop-shadow-[0_2px_0_rgba(0,0,0,.6)] ${perfectShotIconSet === 'flat' ? 'text-[10.5px]' : 'text-sm'} ${perfectShotIconSet === 'flat' ? 'text-[#8fd0f2]' : item.highlight ? 'text-yellow-300' : 'text-white'}`}>
+                        {item.label}
+                      </span>
+                    </button>
                   </div>
-                  <span className="text-xs font-black tracking-widest font-game drop-shadow">GUN</span>
-                </button>
+                ))}
               </div>
-
-              {/* LEADERBOARD button */}
-              <div className="menu-icon-entrance">
-                <button
-                  onClick={() => setLeaderboardOpen(true)}
-                  className="flex flex-col items-center gap-1 rounded-2xl transition hover:-translate-y-1 hover:text-white active:scale-95"
-                >
-                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/20 bg-gradient-to-br from-white/20 to-white/[0.04] text-2xl shadow-xl transition-colors">
-                    🏆
-                  </div>
-                  <span className="text-xs font-black tracking-widest font-game drop-shadow">RANKS</span>
-                </button>
-              </div>
-
-              {/* REWARD / MISI button */}
-              <div className="menu-icon-entrance">
-                <button
-                  onClick={() => setQuestOpen(true)}
-                  className="flex flex-col items-center gap-1 rounded-2xl transition hover:-translate-y-1 hover:text-white active:scale-95"
-                >
-                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/20 bg-gradient-to-br from-white/20 to-white/[0.04] text-2xl shadow-xl transition-colors">
-                    🎁
-                  </div>
-                  <span className="text-xs font-black tracking-widest font-game text-yellow-300 drop-shadow">READY!</span>
-                </button>
-              </div>
-
-              {/* SETTINGS sits immediately to the right of READY! */}
-              <div className="menu-icon-entrance">
-                <button
-                  onClick={() => setSettingsOpen(true)}
-                  className="flex flex-col items-center gap-1 rounded-2xl transition hover:-translate-y-1 hover:text-white active:scale-95"
-                  aria-label="Buka pengaturan"
-                >
-                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/20 bg-gradient-to-br from-white/20 to-white/[0.04] text-2xl shadow-xl transition-colors">
-                    ⚙️
-                  </div>
-                  <span className="text-[10px] font-black tracking-widest font-game drop-shadow">SETTING</span>
-                </button>
               </div>
             </div>
           </div>
         )}
 
         {screen === 'menu' && settingsOpen && (
-          <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
-            <section role="dialog" aria-modal="true" aria-labelledby="gunhit-settings-title" className="w-full max-w-sm max-h-[720px] overflow-y-auto thin-scroll rounded-3xl border border-cyan-200/25 bg-gradient-to-b from-[#132c34] to-[#08151d] p-4 text-white shadow-[0_24px_70px_rgba(0,0,0,.7)]">
-              <div className="mb-3 flex items-start justify-between gap-3">
-                <div>
-                  <h2 id="gunhit-settings-title" className="text-xl font-black tracking-widest text-cyan-100">PENGATURAN</h2>
-                  <p className="mt-1 text-[10px] font-bold tracking-wider text-white/55">AUDIO, KECEPATAN & STAGE SPESIAL</p>
-                </div>
-                <button onClick={() => setSettingsOpen(false)} aria-label="Tutup pengaturan" className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/15 bg-white/10 text-xl text-white/80 hover:bg-white/20">×</button>
-              </div>
-
-              <div className="mb-2.5 rounded-2xl border border-white/15 bg-white/[0.06] p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <button
-                    type="button"
-                    onClick={toggleMute}
-                    className="flex flex-1 items-center gap-3 text-left transition active:scale-[0.99]"
-                  >
-                    <span className="text-xl">{muted || soundVolume <= 0 ? '🔇' : '🔊'}</span>
-                    <span>
-                      <span className="block text-sm font-black">SUARA</span>
-                      <span className="block text-[10px] text-white/55">Efek dan musik permainan</span>
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={toggleMute}
-                    className={`rounded-full px-2.5 py-1 text-[10px] font-black ${muted || soundVolume <= 0 ? 'bg-white/10 text-white/65' : 'bg-emerald-400/20 text-emerald-200'}`}
-                  >
-                    {muted || soundVolume <= 0 ? 'MATI' : `${Math.round(soundVolume * 100)}%`}
-                  </button>
-                </div>
-                <div className="mt-2.5 flex items-center gap-2">
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    step={5}
-                    aria-label="Volume suara"
-                    value={muted ? 0 : Math.round(soundVolume * 100)}
-                    onChange={(e) => changeSoundVolume(Number(e.target.value) / 100)}
-                    onPointerUp={() => {
-                      if (!muted && soundVolume > 0) sfx.click();
-                    }}
-                    className="h-2 flex-1 cursor-pointer accent-emerald-400"
-                  />
-                </div>
-                <div className="mt-2 grid grid-cols-5 gap-1">
-                  {[0, 0.25, 0.5, 0.75, 1].map((preset) => {
-                    const activePreset = (muted ? 0 : Math.round(soundVolume * 100)) === Math.round(preset * 100);
-                    return (
-                      <button
-                        key={preset}
-                        type="button"
-                        onClick={() => changeSoundVolume(preset, preset > 0)}
-                        className={`rounded-lg border py-1 text-[9.5px] font-black transition active:scale-95 ${
-                          activePreset
-                            ? 'border-emerald-300 bg-emerald-400/25 text-emerald-100'
-                            : 'border-white/10 bg-white/[0.04] text-white/70 hover:bg-white/10'
-                        }`}
-                      >
-                        {preset === 0 ? 'MATI' : `${Math.round(preset * 100)}%`}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => {
-                  if (!muted) {
-                    juicyAudio.enabled = true;
-                    if (juicyAudio.volume === 0) juicyAudio.volume = 0.7;
-                    void juicyAudio.unlock();
-                  }
-                  setSettingsOpen(false);
-                  window.dispatchEvent(new CustomEvent('sans-replay-intro'));
-                }}
-                className="mb-3 flex w-full items-center justify-between rounded-2xl border border-red-400/40 bg-[#F11E1E]/20 px-4 py-2.5 text-left transition hover:bg-[#F11E1E]/30 active:scale-[0.99]"
-              >
-                <span className="flex items-center gap-3">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#F11E1E] font-studio text-sm font-bold text-white shadow">
-                    S
-                  </span>
-                  <span>
-                    <span className="block text-sm font-black text-white">INTRO SANS STUDIO</span>
-                    <span className="block text-[10px] text-red-100/75">Putar ulang animasi pembuka SGA</span>
-                  </span>
-                </span>
-                <span className="rounded-full bg-[#F11E1E] px-2.5 py-1 text-[10px] font-black text-white shadow">
-                  PUTAR
-                </span>
-              </button>
-
-              <div className="mb-3.5">
-                <div className="text-center text-[11px] font-black tracking-[0.18em] text-amber-200">⚡ KECEPATAN GAME (SGA)</div>
-                <div className="mt-1.5 grid grid-cols-4 gap-1.5">
-                  {SGA_SPEED_OPTIONS.map((spd) => (
-                    <button
-                      key={spd}
-                      type="button"
-                      aria-pressed={gameSpeed === spd}
-                      onClick={() => setGameSpeed(spd)}
-                      className={`rounded-xl border px-1 py-2 text-center transition active:scale-95 ${
-                        gameSpeed === spd
-                          ? 'border-amber-300/90 bg-amber-400/25 text-amber-200 shadow-[0_0_14px_rgba(251,191,36,.3)]'
-                          : 'border-white/10 bg-white/[.04] text-white/80 hover:bg-white/10'
-                      }`}
-                    >
-                      <span className="block text-xs font-black tracking-wide">{formatSgaSpeed(spd)}</span>
-                      <span className="mt-0.5 block text-[8px] font-bold tracking-wider text-white/60">
-                        {spd === 1 ? 'NORMAL' : 'TURBO'}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="mb-3.5">
-                <div className="text-center text-[11px] font-black tracking-[0.18em] text-cyan-100">TEMA LATAR MENU & GAME</div>
-                <p className="mt-0.5 text-center text-[9px] font-semibold text-white/55">
-                  {SGA_BG_THEMES.find((t) => t.id === menuTheme)?.desc ?? 'Berlaku di menu utama & di dalam game SGA'}
-                </p>
-                <div className="mt-2 grid grid-cols-4 gap-1.5">
-                  {SGA_BG_THEMES.map((theme) => (
-                    <button
-                      key={theme.id}
-                      type="button"
-                      aria-pressed={menuTheme === theme.id}
-                      onClick={() => chooseMenuTheme(theme.id)}
-                      className={`relative overflow-hidden rounded-xl border px-1 py-2 text-center transition active:scale-95 ${menuTheme === theme.id ? 'border-cyan-200/90 ring-1 ring-cyan-300/60 shadow-[0_0_16px_rgba(103,232,249,.35)]' : 'border-white/15 hover:border-white/35'}`}
-                      style={{ background: theme.swatch }}
-                    >
-                      <span className="pointer-events-none absolute inset-0 bg-black/25" />
-                      <span className="relative z-10 block text-base leading-none drop-shadow">{theme.icon}</span>
-                      <span className="relative z-10 mt-1 block text-[8px] font-black tracking-wider text-white drop-shadow">{theme.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="mb-2 text-center text-xs font-black tracking-[0.18em] text-amber-100">PILIH STAGE SPESIAL</div>
-              <p className="mb-3 text-center text-[10px] leading-relaxed text-white/55">Pilih stage untuk langsung dimainkan.</p>
-              <div className="grid grid-cols-3 gap-2">
-                <button onClick={() => startSpecial('boulder')} className="rounded-2xl border border-cyan-300/40 bg-cyan-400/10 px-1.5 py-3 text-center transition hover:bg-cyan-400/25 active:scale-95">
-                  <span className="flex justify-center"><DiamondSprite size={27} /></span>
-                  <span className="mt-1 block text-[10px] font-black text-cyan-100">BATU</span>
-                  <span className="block text-[9px] text-cyan-100/60">Level 3</span>
-                </button>
-                <button onClick={() => startSpecial('bonus')} className="rounded-2xl border border-amber-300/40 bg-amber-400/10 px-1.5 py-3 text-center transition hover:bg-amber-400/25 active:scale-95">
-                  <span className="block text-xl leading-none">🪙</span>
-                  <span className="mt-1 block text-[10px] font-black text-amber-100">BONUS</span>
-                  <span className="block text-[9px] text-amber-100/60">Level 4</span>
-                </button>
-                <button onClick={() => startSpecial('treasure')} className="rounded-2xl border border-pink-300/40 bg-pink-400/10 px-1.5 py-3 text-center transition hover:bg-pink-400/25 active:scale-95">
-                  <span className="block text-xl leading-none">🧰</span>
-                  <span className="mt-1 block text-[9px] font-black leading-tight text-pink-100">HARTA KARUN</span>
-                  <span className="block text-[9px] text-pink-100/60">Level 6</span>
-                </button>
-              </div>
-            </section>
-          </div>
+          <SgaSettingsPanel
+            closing={settingsClosing}
+            muted={muted}
+            volume={soundVolume}
+            sfxEnabled={studioSound.sfx}
+            musicEnabled={studioSound.music}
+            speed={gameSpeed}
+            speedOptions={SGA_SPEED_OPTIONS}
+            themes={SGA_BG_THEMES}
+            theme={menuTheme}
+            onClose={closeSettingsPage}
+            onMute={toggleMute}
+            onSfx={toggleEffects}
+            onMusic={toggleBackgroundMusic}
+            onVolume={changeSoundVolume}
+            onSpeed={setGameSpeed}
+            onTheme={chooseMenuTheme}
+            onReplayIntro={() => {
+              if (!muted) {
+                juicyAudio.enabled = true;
+                if (juicyAudio.volume === 0) juicyAudio.volume = 0.7;
+                void juicyAudio.unlock();
+              }
+              closeSettingsPage();
+              window.dispatchEvent(new CustomEvent('sans-replay-intro'));
+            }}
+            onSpecial={startSpecial}
+            formatSpeed={formatSgaSpeed}
+          />
         )}
 
         {screen === 'menu' && mapOpen && (
-          <LevelMap
-            bestLevel={bestLevel}
-            onBack={() => setMapOpen(false)}
-            onStart={beginStage}
+          <PerfectShotQuestMap
+            leaving={mapLeaving}
+            progress={{ stage: Math.max(1, Math.min(GUN_HIT_MAP_MAX_LEVEL, bestLevel)), stages: SGA_QUEST_STAGES }}
+            onBack={closeLevelMap}
+            onPlay={(_event, level) => beginStage(level)}
           />
         )}
 
@@ -1278,7 +1770,7 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
         {screen === 'playing' && inGameSettingsOpen && (
           <div
             onPointerDown={(e) => e.stopPropagation()}
-            className="absolute inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
+            className="absolute inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-[2px]"
           >
             <section
               role="dialog"
@@ -1289,14 +1781,14 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
               <div className="mb-3 flex items-start justify-between gap-3">
                 <div>
                   <div className="text-[10px] font-black tracking-[0.22em] text-amber-300">⏸ PERMAINAN DIJEDA</div>
-                  <h2 id="gunhit-ingame-settings-title" className="mt-0.5 text-xl font-black tracking-widest text-cyan-100">
+                  <h2 id="gunhit-ingame-settings-title" className="mt-0.5 font-title text-[20px] leading-none tracking-wide text-white">
                     PENGATURAN
                   </h2>
                 </div>
                 <button
                   type="button"
                   onClick={() => {
-                    sfx.click();
+                    studioSfx.subExit(0);
                     setInGameSettingsOpen(false);
                   }}
                   aria-label="Tutup pengaturan permainan"
@@ -1340,9 +1832,6 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
                     aria-label="Volume suara saat bermain"
                     value={muted ? 0 : Math.round(soundVolume * 100)}
                     onChange={(e) => changeSoundVolume(Number(e.target.value) / 100)}
-                    onPointerUp={() => {
-                      if (!muted && soundVolume > 0) sfx.click();
-                    }}
                     className="h-2 flex-1 cursor-pointer accent-emerald-400"
                   />
                 </div>
@@ -1354,7 +1843,7 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
                       <button
                         key={preset}
                         type="button"
-                        onClick={() => changeSoundVolume(preset, preset > 0)}
+                        onClick={() => changeSoundVolume(preset)}
                         className={`rounded-lg border py-1 text-[9.5px] font-black transition active:scale-95 ${
                           activePreset
                             ? 'border-emerald-300 bg-emerald-400/25 text-emerald-100'
@@ -1366,6 +1855,7 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
                     );
                   })}
                 </div>
+                <MusicAmbientControl enabled={studioSound.music} onToggle={toggleBackgroundMusic} />
               </div>
 
               {/* Game Speed Selector */}
@@ -1381,8 +1871,7 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
                       aria-pressed={gameSpeed === spd}
                       onClick={() => {
                         setGameSpeed(spd);
-                        sfx.click();
-                      }}
+                          }}
                       className={`rounded-xl border px-1 py-2 text-center transition active:scale-95 ${
                         gameSpeed === spd
                           ? 'border-amber-300/90 bg-amber-400/25 text-amber-200 shadow-[0_0_14px_rgba(251,191,36,.3)]'
@@ -1403,7 +1892,7 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
                 <button
                   type="button"
                   onClick={() => {
-                    sfx.click();
+                    studioSfx.subExit(0);
                     setInGameSettingsOpen(false);
                   }}
                   className="w-full rounded-2xl border border-emerald-200/40 border-b-4 border-b-emerald-800 bg-gradient-to-b from-[#22c55e] via-[#16a34a] to-[#15803d] py-3 text-base font-black tracking-wider text-white shadow-[0_10px_24px_rgba(34,197,94,0.45)] transition hover:brightness-110 active:translate-y-0.5"
@@ -1413,7 +1902,6 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
                 <button
                   type="button"
                   onClick={() => {
-                    sfx.click();
                     goToMainMenuFromPlay();
                   }}
                   className="w-full rounded-2xl border border-white/20 bg-white/10 py-2.5 text-sm font-black tracking-wider text-white/95 transition hover:bg-white/20 active:scale-[0.98]"
@@ -1434,7 +1922,7 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
             onBuyRare={buyRareWeapon}
             onUnlockAll={unlockAllAffordableWeapons}
             onPick={chooseWeapon}
-            onClose={() => setArsenalOpen(false)}
+            onClose={() => startArsenalTransition(false)}
           />
         )}
 
@@ -1442,18 +1930,20 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
           <QuestModal
             state={questState}
             ownedCount={ownedWeaponIds().length}
+            coins={totalCoins}
+            diamonds={diamonds}
             onClaim={handleClaimQuest}
             onClaimMilestone={handleClaimMilestone}
-            onClose={() => setQuestOpen(false)}
+            onClose={closeQuestPage}
+            leaving={questLeaving}
           />
         )}
 
         {screen === 'menu' && leaderboardOpen && (
-          <LeaderboardModal
-            bestScore={best}
-            bestLevel={bestLevel}
-            totalCoins={totalCoins}
-            onClose={() => setLeaderboardOpen(false)}
+          <PerfectShotLeaderboard
+            leaving={leaderboardLeaving}
+            stats={{ stage: bestLevel, score: best, coins: totalCoins }}
+            onBack={closeLeaderboardPage}
           />
         )}
 
@@ -1543,10 +2033,7 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
               </button>
 
               <button
-                onClick={() => {
-                  gameRef.current?.toIdle();
-                  setScreen('menu');
-                }}
+                onClick={goToMainMenuFromPlay}
                 className="mt-3 w-full rounded-2xl border-2 border-white/20 bg-white/15 py-3.5 text-base sm:text-lg font-black text-white transition hover:bg-white/25 active:scale-95 font-game shadow-lg"
               >
                 🏠 MENU UTAMA
@@ -1554,6 +2041,19 @@ function GunHitGame({ onExit }: { onExit?: () => void }) {
             </div>
           </div>
         )}
+        {menuPageTransition && (
+          <TransitionOverlay
+            phase={menuPageTransition.phase}
+            origin={{ x: 50, y: 50 }}
+            label={menuPageTransition.label}
+            variant={menuPageTransition.variant}
+            rate={menuPageTransition.rate}
+          />
+        )}
+        {playTransition && (
+          <TransitionOverlay phase={playTransition.phase} origin={playTransition.origin} label={playTransition.label} variant="scope" />
+        )}
+        {weaponFlight && <SgaWeaponFlight key={weaponFlight.id} flight={weaponFlight} />}
       </div>
     </div>
   );

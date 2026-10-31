@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { Download, LockKeyhole } from 'lucide-react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { Check, Coins, Crosshair, Crown, Download, Flame, Gem, LockKeyhole, MoreHorizontal, Palette, Shield, Skull, Star, Zap } from 'lucide-react';
 import DiamondSprite from '../../shared/DiamondSprite';
 import { WEAPONS, getWeapon, RARITY_COLOR, type WeaponId, type Weapon } from '../game/weapons';
 import { BOSS_ROSTER, type BossProfile } from '../game/bossRoster';
@@ -37,6 +37,8 @@ import {
 } from '../game/art/gunVariants';
 import GunVariantPicker from './GunVariantPicker';
 import DefaultExportModal from './DefaultExportModal';
+import { SHOP_IN, SHOP_OUT } from '../../perfect-shot/shop/timeline';
+import '../../perfect-shot/index.css';
 
 type Tab = 'ALL' | 'DESAIN' | 'EPIC' | 'LANGKA' | 'LEGENDARIS' | 'UMUM' | 'BOSS';
 
@@ -178,6 +180,11 @@ function SpotlightGun({ weapon, variant }: { weapon: Weapon; variant: GunVariant
   );
 }
 
+function RarityIconForWeapon({ rarity }: { rarity: Weapon['rarity'] }) {
+  const Icon = rarity === 'UMUM' ? Shield : rarity === 'LANGKA' ? Gem : rarity === 'EPIC' ? Zap : Flame;
+  return <Icon className="h-3 w-3" />;
+}
+
 function BossAttackPreview({ boss }: { boss: BossProfile }) {
   const active = useSlideActive();
   const ref = useRef<HTMLCanvasElement>(null);
@@ -242,8 +249,12 @@ export default function Arsenal({
   onClose,
 }: ArsenalProps) {
   const [tab, setTab] = useState<Tab>('ALL');
-  const [page, setPage] = useState(0);
+  const [grid, setGrid] = useState<{ phase: 'in' | 'out'; key: number }>({ phase: 'in', key: 0 });
+  const gridBusyRef = useRef(false);
+  const gridTimerRef = useRef<number | undefined>(undefined);
   const [selectedGunId, setSelectedGunId] = useState<WeaponId>(current);
+  const [heroKey, setHeroKey] = useState(0);
+  const [leaving, setLeaving] = useState(false);
   const [useRandom, setUseRandom] = useState(false);
   const [ownedRare, setOwnedRare] = useState<string[]>(() => {
     try {
@@ -253,12 +264,71 @@ export default function Arsenal({
   });
   const [editingDesign, setEditingDesign] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showTools, setShowTools] = useState(false);
   const [, setDesignRevision] = useState(0);
   const [selectedBoss, setSelectedBoss] = useState<BossProfile>(BOSS_ROSTER[0]);
   const [bulkUnlockMessage, setBulkUnlockMessage] = useState('');
   const gridRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { if (gridRef.current) gridRef.current.scrollTop = 0; }, [page, tab]);
+  useEffect(() => { if (gridRef.current) gridRef.current.scrollTop = 0; }, [tab]);
+
+  useEffect(() => () => {
+    if (gridTimerRef.current !== undefined) window.clearTimeout(gridTimerRef.current);
+  }, []);
+
+  const requestClose = () => {
+    if (leaving) return;
+    setLeaving(true);
+    // Let the parent coordinate the steel shutter with SHOP_OUT's last frame.
+    onClose();
+  };
+  const A = (inCls: string, entering: { d: number; dur: number }, outCls: string, exiting: { d: number; dur: number }, extra = '') => ({
+    className: `a ${leaving ? outCls : inCls} ${extra}`,
+    style: {
+      '--d': `${leaving ? exiting.d : entering.d}ms`,
+      '--dur': `${leaving ? exiting.dur : entering.dur}ms`,
+    } as CSSProperties,
+  });
+  const changeTab = (next: Tab) => {
+    if (next === tab || gridBusyRef.current || leaving) return;
+    gridBusyRef.current = true;
+    sfx.unlock();
+    setGrid((current) => ({ ...current, phase: 'out' }));
+    gridTimerRef.current = window.setTimeout(() => {
+      setTab(next);
+      setGrid((current) => ({ phase: 'in', key: current.key + 1 }));
+      gridTimerRef.current = window.setTimeout(() => { gridBusyRef.current = false; }, 450);
+    }, 280);
+  };
+
+  const cardMotion = (i: number) => {
+    const col = i % 3;
+    const k = Math.min(i, 11);
+    const vars = {
+      '--cx': `${(1 - col) * 105}%`,
+      '--cr': `${(col - 1) * -24}deg`,
+      '--ox': `${(col - 1) * 60}%`,
+      '--or': `${(col - 1) * 30 + (i < 3 ? -10 : 10)}deg`,
+    };
+    if (leaving) {
+      if (i > 8) return { className: 'a out-fade', style: { ...vars, '--d': '0ms', '--dur': '250ms' } as CSSProperties };
+      const t = SHOP_OUT.card(Math.min(5, i));
+      return { className: 'a sh-card-out', style: { ...vars, '--d': `${t.d}ms`, '--dur': `${t.dur}ms` } as CSSProperties };
+    }
+    if (grid.phase === 'out') {
+      return { className: 'a sh-card-flipout', style: { ...vars, '--d': `${k * 15}ms`, '--dur': '240ms' } as CSSProperties };
+    }
+    if (grid.key === 0) {
+      if (i > 8) {
+        const t = SHOP_IN.card(9);
+        return { className: 'a in-fade', style: { ...vars, '--d': `${t.d}ms`, '--dur': '500ms' } as CSSProperties };
+      }
+      const t = SHOP_IN.card(i);
+      return { className: 'a sh-card-in', style: { ...vars, '--d': `${t.d}ms`, '--dur': `${t.dur}ms` } as CSSProperties };
+    }
+    if (i > 11) return { className: 'a in-fade', style: { ...vars, '--d': '300ms', '--dur': '400ms' } as CSSProperties };
+    return { className: 'a sh-card-in', style: { ...vars, '--d': `${k * 45}ms`, '--dur': '520ms' } as CSSProperties };
+  };
 
   // Cheat key C menulis langsung ke localStorage; sinkron ulang koleksi
   // LANGKA supaya gembok hilang seketika meski Arsenal sedang terbuka.
@@ -272,7 +342,7 @@ export default function Arsenal({
 
   useEffect(() => {
     const handleSpace = (event: KeyboardEvent) => {
-      if (event.code !== 'Space') return;
+      if (leaving || event.code !== 'Space') return;
       // Consume Space only while Arsenal is mounted, so it never leaks into gameplay fire.
       event.preventDefault();
       event.stopPropagation();
@@ -298,7 +368,7 @@ export default function Arsenal({
     };
     window.addEventListener('keydown', handleSpace, true);
     return () => window.removeEventListener('keydown', handleSpace, true);
-  }, [onUnlockAll, ownedRare]);
+  }, [onUnlockAll, ownedRare, leaving]);
 
   const selectedGun = getWeapon(selectedGunId);
   const selectedVariant = getGunVariant(selectedGunId);
@@ -312,8 +382,6 @@ export default function Arsenal({
   const selectedPos = canChooseGunDesign(selectedGunId)
     ? getGunSkinAndEffectPosition(selectedGunId, selectedVariant, getGunEffect(selectedGunId))
     : null;
-  const selectedIsCurrentDefault = isCurrentSelectionMarkedDefault(selectedGunId);
-  const selectedHasMarkedDefault = isGunDefaultMarked(selectedGunId);
 
   const stepEditableWeapon = (delta: -1 | 1) => {
     if (!stepIds.length) return;
@@ -322,6 +390,7 @@ export default function Arsenal({
     const nextId = stepIds[nextIdx];
     const nextWeapon = getWeapon(nextId);
     setSelectedGunId(nextId);
+    setHeroKey((key) => key + 1);
     if (!isLocked(nextWeapon)) onPick(nextId);
     sfx.unlock();
   };
@@ -337,31 +406,12 @@ export default function Arsenal({
     return true;
   });
 
-  // 6 item per halaman (grid 3 kolom x 2 baris) agar 100% pas tanpa kartu yang terpotong di bawah & tanpa scrollbar putih!
-  const PAGE_SIZE = 6;
-  const totalPages = Math.max(1, Math.ceil(filteredWeapons.length / PAGE_SIZE));
-  const safePage = Math.min(page, totalPages - 1);
-  const currentPageWeapons = filteredWeapons.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
   const unlockedCount = WEAPONS.filter((w) => !isLocked(w)).length;
   const unlockPercent = Math.round((unlockedCount / Math.max(1, WEAPONS.length)) * 100);
-  const wheelLockRef = useRef(0);
-
-  const handleGridWheel = (e: React.WheelEvent<HTMLDivElement>) => {
-    if (Math.abs(e.deltaY) < 12) return;
-    const now = performance.now();
-    if (now - wheelLockRef.current < 160) return;
-    wheelLockRef.current = now;
-    if (e.deltaY > 0 && safePage < totalPages - 1) {
-      setPage(safePage + 1);
-      sfx.unlock();
-    } else if (e.deltaY < 0 && safePage > 0) {
-      setPage(safePage - 1);
-      sfx.unlock();
-    }
-  };
 
   const handleSelectGun = (w: Weapon) => {
     setSelectedGunId(w.id);
+    setHeroKey((key) => key + 1);
     if (isLocked(w)) return;
     onPick(w.id);
     sfx.unlock();
@@ -378,551 +428,172 @@ export default function Arsenal({
     }
   };
 
-  const rarityCardTheme = (rarity: Weapon['rarity'], locked: boolean) => {
-    if (locked) {
-      return 'border-cyan-400/25 bg-gradient-to-b from-slate-900/90 via-slate-950/95 to-[#060913]';
-    }
-    switch (rarity) {
-      case 'LEGENDARIS':
-        return 'border-amber-400/55 bg-gradient-to-b from-[#45260b] via-[#281506] to-[#160b03] shadow-[inset_0_1px_14px_rgba(245,158,11,0.25)] hover:border-amber-300/80';
-      case 'EPIC':
-        return 'border-purple-400/50 bg-gradient-to-b from-[#361761] via-[#220e42] to-[#130726] shadow-[inset_0_1px_14px_rgba(168,85,247,0.25)] hover:border-purple-300/80';
-      case 'LANGKA':
-        return 'border-blue-400/50 bg-gradient-to-b from-[#162f5e] via-[#0f2042] to-[#091329] shadow-[inset_0_1px_14px_rgba(59,130,246,0.22)] hover:border-blue-300/80';
-      default:
-        return 'border-slate-400/35 bg-gradient-to-b from-[#252b3d] via-[#191d2b] to-[#10131d] shadow-[inset_0_1px_10px_rgba(148,163,184,0.14)] hover:border-slate-300/65';
-    }
-  };
+  const RarityIcon = selectedGun.rarity === 'UMUM' ? Shield : selectedGun.rarity === 'LANGKA' ? Gem : selectedGun.rarity === 'EPIC' ? Zap : Flame;
+  const rarityLabel = (rarity: Weapon['rarity']) => rarity === 'LANGKA' ? 'RARE' : rarity === 'LEGENDARIS' ? 'LEGEND' : rarity;
+  const tabItems = [
+    { id: 'ALL' as Tab, label: 'ALL', Icon: Crown, color: '#fde68a' },
+    { id: 'UMUM' as Tab, label: 'UMUM', Icon: Shield, color: '#cbd5e1' },
+    { id: 'LANGKA' as Tab, label: 'RARE', Icon: Gem, color: '#7dd3fc' },
+    { id: 'EPIC' as Tab, label: 'EPIC', Icon: Zap, color: '#d8b4fe' },
+    { id: 'LEGENDARIS' as Tab, label: 'LEGEND', Icon: Flame, color: '#fdba74' },
+    { id: 'DESAIN' as Tab, label: 'SKIN', Icon: Palette, color: '#f9a8d4' },
+    { id: 'BOSS' as Tab, label: 'BOSS', Icon: Skull, color: '#fca5a5' },
+  ];
+  const panelTitle = tab === 'ALL' ? 'SEMUA SENJATA'
+    : tab === 'DESAIN' ? 'CUSTOM SKINS'
+    : tab === 'EPIC' ? 'SENJATA EPIC'
+    : tab === 'LANGKA' ? 'SENJATA RARE'
+    : tab === 'LEGENDARIS' ? 'SENJATA LEGEND'
+    : tab === 'UMUM' ? 'SENJATA UMUM'
+    : 'BOSS';
 
   return (
-    <div className="pop-in absolute inset-0 z-50 flex flex-col justify-between bg-gradient-to-b from-[#140b2d] via-[#0d0620] to-[#080314] px-3.5 pb-2.5 pt-2.5 text-white font-game select-none backdrop-blur-md">
-      {/* Background Starfield & Mountain Silhouettes */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden opacity-35">
-        <div className="absolute left-8 top-16 h-1 w-1 rounded-full bg-white shadow-[0_0_6px_#fff]" />
-        <div className="absolute right-12 top-28 h-1.5 w-1.5 rounded-full bg-cyan-200 shadow-[0_0_8px_#38bdf8]" />
-        <div className="absolute left-1/4 top-48 h-1 w-1 rounded-full bg-yellow-200" />
-        <div className="absolute right-1/4 top-72 h-1.5 w-1.5 rounded-full bg-fuchsia-300" />
-        <div className="absolute -bottom-16 -left-10 -right-10 h-48 rounded-t-[50%] bg-[#05010c]/90 border-t border-purple-900/30" />
+    <div aria-hidden={leaving} className={`absolute inset-0 z-50 flex min-h-0 flex-col overflow-hidden px-3 pb-2.5 pt-3 font-game text-white select-none ${leaving ? 'arsenal-armory-closing pointer-events-none' : 'arsenal-armory-open'}`}>
+      {/* Armory's purple night-sky palette and soft fireflies. */}
+      <div {...A('sh-bg-in', SHOP_IN.bg, 'out-bg', SHOP_OUT.bg, 'pointer-events-none absolute inset-0 overflow-hidden')} aria-hidden="true">
+        <div className="absolute inset-0 bg-[linear-gradient(180deg,#2b1f4d_0%,#1d1238_45%,#140b29_100%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_75%_32%_at_50%_18%,rgba(214,205,255,.34),rgba(120,100,200,.12)_52%,transparent_78%)]" />
+        <div {...A('sh-spot-in', SHOP_IN.spot, 'out-fade', { d: 60, dur: 300 }, 'pointer-events-none absolute left-1/2 top-0 h-[46%] w-[86%] -translate-x-1/2 origin-top')}>
+          <div className="h-full w-full" style={{ background: 'linear-gradient(180deg,rgba(255,255,255,.22),rgba(255,255,255,0) 85%)', clipPath: 'polygon(38% 0,62% 0,100% 100%,0 100%)', filter: 'blur(6px)' }} />
+        </div>
+        {Array.from({ length: 14 }).map((_, i) => (
+          <span key={i} className="arsenal-firefly absolute rounded-full"
+            style={{ left: `${(i * 37) % 100}%`, top: `${(i * 23) % 62}%`, width: 3 + (i % 3), height: 3 + (i % 3), animationDelay: `${-i * 0.63}s`, background: i % 4 === 0 ? '#7dd3fc' : '#c4b5fd' }} />
+        ))}
       </div>
 
-      {/* TOP BAR */}
-      <div className="relative z-10 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5">
-          {/* Solid Yellow Knife Hit Back Arrow */}
-          <button
-            onClick={onClose}
-            className="flex h-10 w-10 items-center justify-center rounded-xl border border-yellow-300/25 bg-white/5 transition active:scale-90 hover:bg-white/10 drop-shadow-[0_4px_8px_rgba(0,0,0,0.5)]"
-            aria-label="Kembali"
-          >
-            <svg viewBox="0 0 32 32" className="h-7 w-7 fill-[#facc15] filter drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
-              <path d="M 12 6 L 2 16 L 12 26 L 12 21 L 28 21 L 28 11 L 12 11 Z" />
-            </svg>
-          </button>
-
-          <a
-            href={`${import.meta.env.BASE_URL}gun-hit-sga-weapons-svg.zip`}
-            download="gun-hit-sga-weapons-svg.zip"
-            target="_blank"
-            rel="noopener"
-            title={`Unduh seluruh ${WEAPONS.length} senjata sebagai SVG vektor dalam satu ZIP`}
-            aria-label={`Unduh seluruh ${WEAPONS.length} senjata sebagai SVG vektor dalam satu ZIP`}
-            className="flex h-8 items-center gap-1 rounded-xl border border-cyan-300/35 bg-cyan-950/60 px-2 text-[9px] font-black text-cyan-100 shadow-md backdrop-blur-sm transition hover:bg-cyan-900/70 active:scale-95"
-          >
-            <Download className="h-3.5 w-3.5 text-cyan-300" />
-            SVG ZIP
-          </a>
-
-          <button
-            type="button"
-            onClick={() => {
-              setShowExportModal(true);
-              sfx.unlock();
-            }}
-            aria-label="Export data default senjata massal"
-            title="Export data pilihan skin & efek default massal untuk dicopas ke chat"
-            className="flex h-8 items-center gap-1 rounded-xl border border-amber-300/55 bg-gradient-to-b from-amber-400/25 to-amber-600/25 px-2 text-[9px] font-black text-amber-200 shadow-md backdrop-blur-sm transition hover:border-amber-200 hover:bg-amber-400/35 active:scale-95"
-          >
-            <span>📋 EXPORT{exportableCount > 0 ? ` (${exportableCount})` : ''}</span>
-          </button>
-        </div>
-
-        {/* Currency Pill with + */}
-        <div className="flex items-center gap-2 rounded-full border border-purple-400/35 bg-[#190d30]/95 py-1 pl-3 pr-1.5 shadow-[0_4px_16px_rgba(0,0,0,0.6)]">
-          <span className="text-lg filter drop-shadow">🍎</span>
-          <span className="font-mono text-lg font-black text-white drop-shadow">{totalCoins}</span>
-          <span className="ml-0.5 flex items-center gap-1 border-l border-white/15 pl-2 font-mono text-base font-black text-cyan-100"><DiamondSprite size={19} /> {diamonds}</span>
-          <button
-            onClick={() => sfx.coin()}
-            className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-b from-[#6366f1] to-[#4338ca] text-sm font-black text-white shadow transition hover:scale-105 active:scale-95"
-          >
-            +
-          </button>
-        </div>
-      </div>
-
-      {/* TOP SPOTLIGHT */}
-      <div className="relative z-10 flex flex-col items-center">
-        {/* UNIFIED CONTROL ROW: USE ALL & RARITY/STATUS BADGE */}
-        <div className="w-full flex items-center justify-between px-1 pt-1 text-xs font-bold">
-          <button
-            type="button"
-            onClick={handleRandomToggle}
-            className="flex items-center gap-2 rounded-full border border-white/15 bg-[#1b0e33]/85 px-2.5 py-1 shadow-md transition hover:border-purple-300/40"
-          >
-            <span className="text-[9.5px] tracking-wider text-white/90 font-black">USE ALL</span>
-            <div className={`flex h-5 w-9 items-center rounded-full p-0.5 transition-colors ${useRandom ? 'bg-[#9333ea]' : 'bg-white/20'}`}>
-              <div className={`h-4 w-4 rounded-full bg-white shadow-md transform transition-transform ${useRandom ? 'translate-x-4' : 'translate-x-0'}`} />
-            </div>
-          </button>
-
-          <div className="flex items-center gap-1.5">
-            <span
-              className="rounded-full px-2.5 py-0.5 text-[9.5px] font-black text-black shadow-sm tracking-wide"
-              style={{ background: RARITY_COLOR[selectedGun.rarity] }}
-            >
-              {selectedGun.rarity === 'LANGKA' ? 'RARE' : selectedGun.rarity === 'LEGENDARIS' ? 'LEGEND' : selectedGun.rarity}
-            </span>
-            <div className={`flex items-center gap-1 rounded-full px-2.5 py-0.5 border text-[9.5px] font-black shadow-md ${selectedLocked ? 'border-cyan-300/50 bg-slate-900 text-cyan-100' : 'border-emerald-300/45 bg-gradient-to-r from-emerald-600 to-teal-600 text-white'}`}>
-              {selectedLocked ? <><LockKeyhole className="h-3 w-3" /> TERKUNCI</> : '✓ TERBUKA'}
-            </div>
+      {/* Header: same yellow back button, title/progress and coin + gem wallet. */}
+      <header {...A('in-down', SHOP_IN.top(0), 'out-up', SHOP_OUT.top(0), 'relative z-20 flex shrink-0 items-center gap-2.5')}>
+        <button onClick={requestClose} disabled={leaving} aria-label="Kembali" className="press grid h-11 w-11 shrink-0 place-items-center rounded-2xl border-2 border-[#7a4b00] bg-gradient-to-b from-[#ffe27a] to-[#f59e0b] shadow-[0_4px_0_#7a4b00,inset_0_2px_0_rgba(255,255,255,.5)]">
+          <svg viewBox="0 0 24 24" className="h-7 w-7"><path d="M11 4 L3 12 L11 20 V15 H21 V9 H11 Z" fill="#fff" stroke="#7a4b00" strokeWidth="1.8" strokeLinejoin="round" /></svg>
+        </button>
+        <div className="min-w-0 flex-1">
+          <div className="font-arsenal-title truncate text-[22px] leading-none text-white [text-shadow:0_2px_0_#2a1650,0_0_14px_rgba(192,132,252,.55)]">ARMORY</div>
+          <div className="mt-1 flex items-center gap-1 text-[10px] tracking-wide text-[#c4b5fd]">
+            <Crosshair className="h-3.5 w-3.5 shrink-0" />
+            <span className="font-arsenal-title whitespace-nowrap">{unlockedCount}/{WEAPONS.length} TERBUKA</span>
+            <span className="h-1 w-10 overflow-hidden rounded-full bg-black/50"><span className="block h-full rounded-full bg-gradient-to-r from-[#c084fc] to-[#f0abfc]" style={{ width: `${unlockPercent}%` }} /></span>
+            <button type="button" aria-label="Alat Arsenal" title="Alat Arsenal" onClick={() => setShowTools((open) => !open)} className="press grid h-5 w-5 shrink-0 place-items-center rounded-full bg-white/10 text-white/75"><MoreHorizontal className="h-4 w-4" /></button>
           </div>
         </div>
-
-        {/* The same layered FX Lab sunburst used by Knife Boss, recolored per rarity. */}
-        <div className="relative -my-3.5 flex items-center justify-center">
-          <div className="pointer-events-none absolute inset-0" aria-hidden="true">
-            <SunburstFX size={450} color={gunSunburstColor(selectedGun.rarity)} intensity={0.85} speed={30} stars={false} />
-          </div>
-          <div className={`relative z-10 ${selectedLocked ? 'opacity-35 grayscale' : ''}`}><SpotlightGun weapon={selectedGun} variant={selectedVariant} />{selectedLocked && <div className="absolute inset-0 flex items-center justify-center"><LockKeyhole className="h-14 w-14 rounded-2xl border-2 border-cyan-100/80 bg-slate-950/90 p-3 text-cyan-100 shadow-[0_0_28px_rgba(34,211,238,0.7)]" /></div>}</div>
+        <div className="flex h-9 shrink-0 items-center gap-1.5 rounded-full border-2 border-white/10 bg-black/45 pl-2 pr-1 text-white shadow-inner">
+          <span className="grid h-6 w-6 place-items-center rounded-full border border-amber-200/60 bg-gradient-to-b from-yellow-300 to-amber-500 text-amber-950 shadow"><Coins className="h-4 w-4" /></span>
+          <span className="min-w-[24px] text-[13px] font-black">{totalCoins}</span>
+          <span className="h-5 w-px bg-white/20" />
+          <DiamondSprite size={17} />
+          <span className="min-w-[16px] text-[13px] font-black">{diamonds}</span>
+          <button onClick={() => sfx.coin()} aria-label="Tambah mata uang" className="press grid h-8 w-8 place-items-center rounded-full bg-gradient-to-b from-[#7c6cff] to-[#4b3bd6] text-lg leading-none shadow-[0_2px_0_#2a1f8a]">+</button>
         </div>
+        {showTools && <div className="a in-pop absolute right-0 top-[calc(100%+6px)] z-[90] w-48 rounded-xl border border-[#c084fc]/45 bg-[#1e1338]/95 p-2 shadow-[0_12px_28px_rgba(0,0,0,.65)] backdrop-blur">
+          <div className="font-arsenal-title mb-1 px-1 text-[9px] text-white/55">ARSENAL · TOOLS</div>
+          <button type="button" onClick={() => { handleRandomToggle(); setShowTools(false); }} className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-[10px] font-bold text-white/90 hover:bg-white/10">USE ALL <span className={`flex h-4 w-7 items-center rounded-full p-0.5 ${useRandom ? 'bg-fuchsia-600' : 'bg-white/20'}`}><span className={`h-3 w-3 rounded-full bg-white transition-transform ${useRandom ? 'translate-x-3' : ''}`} /></span></button>
+          <a href={`${import.meta.env.BASE_URL}gun-hit-sga-weapons-svg.zip`} download="gun-hit-sga-weapons-svg.zip" target="_blank" rel="noopener" onClick={() => setShowTools(false)} className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-[10px] font-bold text-cyan-100 hover:bg-white/10"><Download className="h-3.5 w-3.5" /> SVG ZIP · {WEAPONS.length}</a>
+          <button type="button" onClick={() => { setShowExportModal(true); setShowTools(false); sfx.unlock(); }} className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[10px] font-bold text-amber-100 hover:bg-white/10">↗ EXPORT{exportableCount > 0 ? ` · ${exportableCount}` : ''}</button>
+          <div className="mt-1 border-t border-white/10 px-2 pt-1.5 text-[8px] leading-snug text-white/45">SPACE · borong senjata RARE, 500 diamond per senjata</div>
+        </div>}
+      </header>
 
-        {/* Active Gun Name & Perk Pill (Elevated z-20 so weapon never overlaps text!) */}
-        <div className="relative z-20 -mt-2 flex items-center gap-2 rounded-full border border-white/15 bg-[#120726]/90 px-3.5 py-1 shadow-[0_6px_18px_rgba(0,0,0,0.75)] backdrop-blur-md">
-          <span className="text-lg font-black tracking-wide text-yellow-300 drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] font-game leading-none">
-            {selectedGun.name}
-          </span>
-          <span className="rounded-full bg-yellow-400/20 px-2 py-0.5 text-[8.5px] font-black tracking-wider text-yellow-200 border border-yellow-400/45 leading-none">
-            {selectedGun.perk}
-          </span>
-          {(hasSlide11Update(selectedGun.id) || hasSlide9Update(selectedGun.id) || hasSlide6Update(selectedGun.id) || hasSlide7Update(selectedGun.id)) && (
-            <span
-              className="shrink-0 rounded-full border border-emerald-200/80 bg-gradient-to-r from-emerald-400 to-green-500 px-1.5 py-0.5 text-[7.5px] font-black tracking-widest text-[#052e16] leading-none shadow-[0_0_10px_rgba(52,211,153,0.8)]"
-              title={hasSlide11Update(selectedGun.id)
-                ? 'Senjata ini dapat pembaharuan: desain & efek asli slide 5'
-                : hasSlide6Update(selectedGun.id)
-                ? 'Senjata ini dapat pembaharuan: desain & efek asli slide 2'
-                : hasSlide9Update(selectedGun.id)
-                ? 'Senjata ini dapat pembaharuan: desain & efek asli slide 4'
-                : `Senjata ini dapat pembaharuan: desain & efek asli slide 3 (SET ${slide7UpdateSet(selectedGun.id)})`}
-            >
-              NEW
-            </span>
-          )}
+      {/* SGA artwork remains the hero: original gun renderer + SGA SunburstFX. */}
+      <section className="relative z-10 flex mt-1 h-[clamp(120px,20vh,185px)] shrink-0 flex-col items-center justify-center">
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-full bg-[radial-gradient(ellipse_at_50%_42%,rgba(255,255,255,.22),rgba(196,181,253,.10)_34%,transparent_70%)]" />
+        <div {...A('in-rays', SHOP_IN.rays, 'out-rays', { d: 80, dur: 500 }, 'pointer-events-none absolute inset-0 flex items-center justify-center')} aria-hidden="true">
+          <SunburstFX size={450} color={gunSunburstColor(selectedGun.rarity)} intensity={0.85} speed={30} stars={false} />
         </div>
-        {selectedLocked && (
-          <div className="relative z-20 mt-1 flex flex-col items-center gap-0.5">
-            <button type="button" onClick={() => {
-              if (diamonds < 500) { sfx.coin(); return; }
-              if (onBuyRare(selectedGun.id)) setOwnedRare((ids) => ids.includes(selectedGun.id) ? ids : [...ids, selectedGun.id]);
-            }} className={`rounded-xl border px-3.5 py-1 text-[10.5px] font-black shadow-lg transition active:scale-95 ${diamonds >= 500 ? 'border-cyan-100 bg-gradient-to-r from-cyan-500 to-blue-600 text-white hover:brightness-110' : 'border-white/20 bg-slate-900/90 text-white/55'}`}>
-              <LockKeyhole className="inline h-3 w-3" /> BELI · 500 <DiamondSprite size={16} className="inline align-middle" /> {diamonds < 500 ? `(kurang ${500 - diamonds})` : ''}
-            </button>
-          </div>
-        )}
+        <div className="pointer-events-none absolute bottom-[4%] left-1/2 h-5 w-48 -translate-x-1/2 rounded-[50%] border-2 border-[#c084fc]/45 bg-gradient-to-b from-[#3b2a66] to-[#1a1033] shadow-[0_0_24px_rgba(168,85,247,.38)]" />
+        <div key={`${selectedGunId}-${heroKey}`} {...A(heroKey === 0 ? 'sh-hero-in' : 'sh-hero-swap', heroKey === 0 ? SHOP_IN.hero : { d: 120, dur: 620 }, 'sh-hero-out', SHOP_OUT.hero, `relative z-10 ${selectedLocked ? 'opacity-35 grayscale' : ''}`)}>
+          <div className={selectedLocked ? 'opacity-35 grayscale' : ''}><SpotlightGun weapon={selectedGun} variant={selectedVariant} /></div>
+          {selectedLocked && <div className="absolute inset-0 grid place-items-center"><LockKeyhole className="h-14 w-14 rounded-2xl border-2 border-cyan-100/80 bg-slate-950/90 p-3 text-cyan-100 shadow-[0_0_28px_rgba(34,211,238,.7)]" /></div>}
+        </div>
+      </section>
+
+      <div className="relative z-20 mt-1.5 flex min-h-[42px] shrink-0 items-center justify-center gap-2">
+        <div {...A('in-slam', SHOP_IN.plate, 'out-up', SHOP_OUT.plate, 'flex max-w-[82%] items-center gap-2 rounded-2xl border-2 border-[#ffd23f]/30 bg-gradient-to-b from-[#2a1d48] to-[#140b26] px-4 py-2 shadow-[0_6px_16px_rgba(0,0,0,.5),inset_0_1px_0_rgba(255,255,255,.12)]')}>
+          <span className="font-arsenal-title truncate text-[24px] leading-none text-[#ffd23f] [text-shadow:0_2px_0_#9c5a10,0_0_12px_rgba(255,210,63,.35)]">{selectedGun.name.toUpperCase()}</span>
+          <span className="font-arsenal-title flex shrink-0 items-center gap-1 rounded-md bg-white/10 px-2 py-1 text-[12px] leading-none text-white/90"><RarityIcon className="h-3 w-3" />{rarityLabel(selectedGun.rarity)}</span>
+        </div>
         {canChooseGunDesign(selectedGunId) && selectedPos && (
-          <div className="relative z-20 mt-1 flex items-center gap-1.5">
-            <button type="button" onClick={() => setEditingDesign(true)}
-              aria-label={`Bandingkan desain ${selectedGun.name}`}
-              className="rounded-xl border border-amber-200/70 bg-[#342354] px-2.5 py-0.5 text-[9.5px] font-black text-amber-200 shadow-[0_0_12px_rgba(250,204,21,0.22)] transition hover:bg-[#4d3475] active:scale-95">
-              ✦ PILIH DESAIN · SKIN #{selectedPos.skinNo}/{selectedPos.skinTotal} · EFEK #{selectedPos.effectNo}/{selectedPos.effectTotal} ▸
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (selectedIsCurrentDefault) {
-                  unmarkGunDefault(selectedGunId);
-                } else {
-                  markGunDefault(selectedGunId, selectedVariant, getGunEffect(selectedGunId));
-                }
-                setDesignRevision((n) => n + 1);
-                sfx.coin();
-              }}
-              aria-label={`Tandai ${selectedGun.name} sebagai default`}
-              title="Tandai kombinasi skin & efek saat ini sebagai default senjata ini"
-              className={`rounded-xl border px-2 py-0.5 text-[9.5px] font-black shadow transition active:scale-95 ${
-                selectedIsCurrentDefault
-                  ? 'border-emerald-200 bg-gradient-to-b from-emerald-400 to-green-600 text-[#052e16]'
-                  : selectedHasMarkedDefault
-                  ? 'border-amber-200 bg-amber-500/30 text-amber-100 hover:bg-amber-500/45'
-                  : 'border-emerald-300/45 bg-[#16313a] text-emerald-200 hover:bg-[#1f4450]'
-              }`}
-            >
-              {selectedIsCurrentDefault ? '★ DEFAULT ✓' : '★ DEFAULT'}
-            </button>
-          </div>
+          <button {...A('in-pop', SHOP_IN.pill, 'out-up', { d: 30, dur: 360 }, 'press relative grid h-10 w-10 shrink-0 place-items-center rounded-2xl border-2 border-[#c084fc]/60 bg-gradient-to-b from-[#7c3aed] to-[#4c1d95] text-white shadow-[0_4px_0_#2e1065]')} type="button" onClick={() => setEditingDesign(true)} aria-label={`Bandingkan desain ${selectedGun.name}`} title="Ganti desain dan efek"><Palette className="h-5 w-5" /><span className="font-arsenal-title absolute -bottom-1.5 -right-1.5 rounded-full bg-[#fbbf24] px-1.5 py-[1px] text-[8px] leading-none text-[#4a2a00] ring-2 ring-[#140b26]">{selectedPos.skinNo}/{selectedPos.skinTotal}</span></button>
         )}
       </div>
 
-      {/* TABS ROW: LOGICAL RARITY ORDER + CLEAR MICRO LABELS */}
-      <div className="relative z-10 flex flex-col mt-1">
-        <div className="grid grid-cols-7 gap-1 px-1">
-          {[
-            { id: 'ALL', icon: '👑', label: 'ALL' },
-            { id: 'UMUM', icon: '🛡️', label: 'UMUM' },
-            { id: 'LANGKA', icon: '💎', label: 'RARE' },
-            { id: 'EPIC', icon: '⚡', label: 'EPIC' },
-            { id: 'LEGENDARIS', icon: '🔥', label: 'LEGEND' },
-            { id: 'DESAIN', icon: '🎨', label: 'SKIN' },
-            { id: 'BOSS', icon: '👹', label: 'BOSS' },
-          ].map((t) => {
-            const active = tab === t.id;
-            return (
-              <button
-                key={t.id}
-                aria-label={t.label}
-                onClick={() => {
-                  setTab(t.id as Tab);
-                  setPage(0);
-                  sfx.unlock();
-                }}
-                className={`flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-t-xl transition-all ${
-                  active
-                    ? 'bg-gradient-to-b from-[#9333ea] to-[#6b21a8] text-white shadow-lg border-t-2 border-x-2 border-purple-200/70 pb-2 z-20 -mb-0.5'
-                    : 'bg-[#231242]/80 text-white/55 hover:text-white/90 hover:bg-[#2e1854] border-t border-x border-purple-500/25'
-                }`}
-              >
-                <span className="text-base leading-none filter drop-shadow">{t.icon}</span>
-                <span className={`text-[7.5px] font-black tracking-wider leading-none ${active ? 'text-yellow-200' : 'text-white/60'}`}>
-                  {t.label}
-                </span>
-              </button>
-            );
-          })}
+      {selectedLocked && (
+        <div {...A('in-pop', SHOP_IN.pill, 'out-up', { d: 30, dur: 360 }, 'relative z-20 mt-1 flex shrink-0 justify-center')}>
+          <button type="button" onClick={() => {
+            if (diamonds < 500) { sfx.coin(); return; }
+            if (onBuyRare(selectedGun.id)) setOwnedRare((ids) => ids.includes(selectedGun.id) ? ids : [...ids, selectedGun.id]);
+          }} className={`rounded-xl border px-3 py-1 text-[9px] font-black shadow-lg transition active:scale-95 ${diamonds >= 500 ? 'border-cyan-100 bg-gradient-to-r from-cyan-500 to-blue-600 text-white' : 'border-white/20 bg-slate-900/90 text-white/55'}`}><LockKeyhole className="mr-1 inline h-3 w-3" /> BELI · 500 <DiamondSprite size={14} className="inline align-middle" /> {diamonds < 500 ? `(kurang ${500 - diamonds})` : ''}</button>
         </div>
+      )}
 
-        <div className="bg-gradient-to-r from-[#581c87] via-[#7e22ce] to-[#581c87] py-1 px-3 flex items-center justify-between text-[10px] font-black tracking-widest text-white shadow-md uppercase border-t border-purple-300/45 rounded-t-sm">
-          <span>
-            {tab === 'ALL'
-              ? 'ALL WEAPONS'
-              : tab === 'DESAIN'
-              ? `${editableCatalogIds.length} CUSTOM SKINS`
-              : tab === 'EPIC'
-              ? 'EPIC ARSENAL'
-              : tab === 'LANGKA'
-              ? 'RARE COLLECTION'
-              : tab === 'LEGENDARIS'
-              ? 'LEGENDARY WEAPONS'
-              : tab === 'UMUM'
-              ? 'CLASSIC WEAPONS'
-              : 'CARTOON BOSS HEADS'}
-          </span>
-          {tab !== 'BOSS' && (
-            <span className="rounded-md bg-black/35 px-2 py-0.5 text-[9px] font-mono text-purple-100">
-              {filteredWeapons.length} ITEM
-            </span>
-          )}
-        </div>
-      </div>
+      {/* The seven icon tabs mirror Perfect Shot; SGA's filtering and catalog stay intact. */}
+      <nav className="relative z-20 mt-3 grid shrink-0 grid-cols-7 gap-1" aria-label="Kategori senjata">
+        {tabItems.map(({ id, label, Icon, color }, i) => {
+          const active = tab === id;
+          return <div key={id} {...A('in-pop', SHOP_IN.tab(i), 'out-down', SHOP_OUT.tab(i))}><button type="button" aria-pressed={active} onClick={() => changeTab(id)} className={`press flex w-full flex-col items-center gap-0.5 rounded-t-xl border-x-2 border-t-2 px-0.5 pt-1.5 pb-1 transition-all duration-300 ${active ? '-translate-y-1 border-[#f0abfc]/70 bg-gradient-to-b from-[#c026d3] to-[#7e22ce] shadow-[0_-4px_14px_rgba(192,38,211,.45)]' : 'border-white/10 bg-gradient-to-b from-[#3a2d5c] to-[#271c42]'}`}>
+            <Icon className={`h-5 w-5 ${active ? 'scale-110 text-white' : ''}`} style={active ? undefined : { color }} />
+            <span className={`font-arsenal-title text-[10px] leading-none ${active ? 'text-white' : 'text-white/70'}`}>{label}</span>
+          </button></div>;
+        })}
+      </nav>
 
-      {/* -------------------------------------------------------------
-          MAIN GRID: 6 KARTU PER HALAMAN (3x2 PAS TANPA KARTU TERPOTONG
-          DI BAWAH & TANPA SCROLLBAR PUTIH!) + WARNA KARTU SESUAI RARITY
-         ------------------------------------------------------------- */}
-      <div className="relative z-10 flex-1 min-h-0 bg-[#110622]/95 px-2.5 pt-2 pb-2 border-x border-b border-purple-500/35 shadow-2xl flex flex-col justify-between rounded-b-2xl">
-        <div role="status" className="mb-1.5 shrink-0 flex items-center justify-center gap-1.5 rounded-lg border border-cyan-400/25 bg-cyan-950/40 px-2.5 py-1 text-center text-[8.5px] font-black tracking-wide leading-tight text-cyan-100/90">
-          <DiamondSprite size={13} />
-          <span>{bulkUnlockMessage || 'TEKAN SPACE: BORONG SENJATA RARE (500 DIAMOND / SENJATA)'}</span>
+      {/* Scrollable catalog panel, replacing the old six-weapons-per-page carousel. */}
+      <section {...A('sh-panel-in', SHOP_IN.panel, 'sh-panel-out', SHOP_OUT.panel, 'relative z-10 flex min-h-0 flex-1 flex-col overflow-hidden rounded-b-2xl rounded-tr-2xl border-2 border-[#7e22ce]/80 bg-gradient-to-b from-[#1e1338] to-[#140c27] shadow-[0_10px_30px_rgba(0,0,0,.5)]')}>
+        <div className="flex shrink-0 items-center justify-between bg-gradient-to-r from-[#5b21b6] to-[#3b1a6e] px-3 py-2">
+          <span key={tab} {...A('in-left', { d: 0, dur: 450 }, 'out-fade', { d: 0, dur: 200 }, 'font-arsenal-title text-[15px] text-white')}>{panelTitle}</span>
+          {tab !== 'BOSS' && <span className="font-arsenal-title rounded-lg bg-black/40 px-2 py-1 text-[11px] text-white/85">{filteredWeapons.length} ITEM</span>}
         </div>
         {tab !== 'BOSS' ? (
-          <>
-            <div
-              ref={gridRef}
-              onWheel={handleGridWheel}
-              aria-label="Senjata, gulir untuk melihat semua"
-              className="grid grid-cols-3 grid-rows-2 gap-2.5 flex-1 min-h-0 overflow-y-auto overflow-x-hidden [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden p-0.5 items-center justify-items-center"
-            >
-              {currentPageWeapons.map((w) => {
+          <div ref={gridRef} aria-label="Senjata, gulir untuk melihat semua" className="arsenal-scroll-area relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-2.5 pb-5 pt-2.5">
+            {bulkUnlockMessage && <div role="status" className="a in-down absolute inset-x-3 top-3 z-30 rounded-lg border border-emerald-300/40 bg-[#123324]/95 px-2 py-1.5 text-center text-[9px] font-bold text-emerald-100 shadow-lg">{bulkUnlockMessage}</div>}
+            <div key={grid.key} className="grid grid-cols-3 items-start gap-2.5">
+              {filteredWeapons.map((w, index) => {
                 const isSelected = selectedGunId === w.id;
                 const locked = isLocked(w);
                 const rc = RARITY_COLOR[w.rarity];
-                const rarityLabel =
-                  w.rarity === 'LEGENDARIS'
-                    ? 'LEGEND'
-                    : w.rarity === 'LANGKA'
-                    ? 'RARE'
-                    : w.rarity === 'EPIC'
-                    ? 'EPIC'
-                    : 'UMUM';
-
+                const ca = cardMotion(index);
                 return (
-                  <button
-                    key={w.id}
-                    onClick={() => handleSelectGun(w)}
-                    className={`group relative flex h-full max-h-[128px] w-full max-w-[114px] flex-col items-center justify-between p-1.5 rounded-2xl border transition-all overflow-hidden active:scale-95 ${rarityCardTheme(w.rarity, locked)} ${
-                      isSelected
-                        ? '!border-[2.5px] !border-[#fef08a] ring-2 ring-[#facc15]/70 shadow-[0_0_20px_rgba(253,224,71,0.75),inset_0_0_14px_rgba(253,224,71,0.28)] z-10 scale-[1.02]'
-                        : ''
-                    }`}
-                  >
-                    {/* Subtle glossy card top-sheen */}
-                    <div className="pointer-events-none absolute inset-x-0 top-0 h-10 rounded-t-2xl bg-gradient-to-b from-white/12 to-transparent" />
-
-                    {/* 1. LABEL RARITY DI ATAS KIRI KOTAK DENGAN BADGE TEGAS */}
-                    <div className="w-full flex items-center justify-between z-10">
-                      <div
-                        className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[8px] font-black text-black tracking-wider shadow"
-                        style={{ background: rc }}
-                      >
-                        <span>{rarityLabel}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        {isGunDefaultMarked(w.id) && (
-                          <span
-                            className="rounded-md border border-amber-200/90 bg-gradient-to-b from-amber-300 to-yellow-500 px-1 py-px text-[7.5px] font-black leading-none text-[#241204] shadow-[0_0_6px_rgba(250,204,21,0.75)]"
-                            title="Sudah ditandai sebagai default"
-                          >
-                            ★
-                          </span>
-                        )}
-                        {(hasSlide11Update(w.id) || hasSlide9Update(w.id) || hasSlide6Update(w.id) || hasSlide7Update(w.id)) && (
-                          <span
-                            className="rounded-md border border-emerald-200/80 bg-gradient-to-b from-emerald-400 to-green-500 px-1 py-px text-[7.5px] font-black uppercase leading-none tracking-wider text-[#052e16] shadow-[0_0_8px_rgba(52,211,153,0.75)]"
-                            title={hasSlide11Update(w.id)
-                              ? 'Desain & efek baru · Slide 5'
-                              : hasSlide6Update(w.id)
-                              ? 'Desain & efek baru · Slide 2'
-                              : hasSlide9Update(w.id)
-                              ? 'Desain & efek baru · Slide 4'
-                              : `Desain & efek baru · Slide 3 SET ${slide7UpdateSet(w.id)}`}
-                          >
-                            NEW
-                          </span>
-                        )}
-                        {isSelected && (
-                          <span className="flex h-4 w-4 items-center justify-center rounded-full bg-emerald-400 text-[9px] font-black text-black shadow">
-                            ✓
-                          </span>
-                        )}
-                      </div>
+                  <button key={w.id} type="button" onClick={() => handleSelectGun(w)} aria-pressed={isSelected} className={`${ca.className} press relative block aspect-[0.9] w-full overflow-hidden rounded-2xl border-2 text-left transition-all ${isSelected ? 'z-10 border-[#ffe066] shadow-[0_0_0_2px_rgba(255,224,102,.35),0_0_18px_rgba(255,214,60,.55)]' : 'border-black/40 hover:border-white/30'}`} style={{ ...ca.style, background: locked ? 'linear-gradient(180deg,#2a2f3a,#161a22)' : `radial-gradient(circle at 50% 42%, ${rc}3d, transparent 65%), linear-gradient(180deg,#555b67,#292c36)` }}>
+                    <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/15 to-transparent" />
+                    <span className="font-arsenal-title absolute left-1.5 top-1.5 z-10 flex items-center gap-1 rounded-md px-1.5 py-1 text-[9px] leading-none text-black shadow-[0_2px_0_rgba(0,0,0,.35)]" style={{ background: rc }}><RarityIconForWeapon rarity={w.rarity} />{rarityLabel(w.rarity)}</span>
+                    {isGunDefaultMarked(w.id) && <span title="Default tersimpan" className="absolute left-1.5 top-7 z-10 grid h-5 w-5 place-items-center rounded-md bg-[#ffd23f] text-[#7a4300] shadow-[0_2px_0_#9a5b00]"><Star className="h-3.5 w-3.5 fill-current" /></span>}
+                    {(hasSlide11Update(w.id) || hasSlide9Update(w.id) || hasSlide6Update(w.id) || hasSlide7Update(w.id)) && <span className="font-arsenal-title absolute right-1.5 top-7 z-10 rounded-full border border-[#3fdc72] bg-[#0f3b1f] px-1.5 py-1 text-[7px] leading-none text-[#4ade80]">NEW</span>}
+                    {isSelected && <span className="absolute right-1.5 top-1.5 z-20 grid h-5 w-5 place-items-center rounded-full bg-[#22c55e] text-white shadow ring-2 ring-[#0f3b1f]"><Check className="h-3.5 w-3.5" /></span>}
+                    <div className={`absolute inset-x-1 top-7 bottom-8 grid place-items-center transition-[filter] ${locked ? 'brightness-[.18] grayscale' : 'drop-shadow-[0_6px_6px_rgba(0,0,0,.52)]'}`}>
+                      <GunItemCanvas weapon={w} isSelected={isSelected} variant={getGunVariant(w.id)} size={112} />
                     </div>
-
-                    {/* 2. VISUAL SENJATA: EXACT CENTER PIVOT */}
-                    <div className="relative flex-1 w-full my-auto overflow-visible">
-                      <div className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 ${locked ? 'opacity-25 grayscale' : ''}`}>
-                        <GunItemCanvas weapon={w} isSelected={isSelected} variant={getGunVariant(w.id)} size={122} />
-                      </div>
-                      {locked && (
-                        <div className="absolute left-1/2 top-1/2 z-20 -translate-x-1/2 -translate-y-1/2">
-                          <LockKeyhole className="h-8 w-8 rounded-xl border border-cyan-200/75 bg-slate-950/90 p-1.5 text-cyan-100 shadow-[0_0_16px_rgba(34,211,238,0.6)]" />
-                        </div>
-                      )}
-                    </div>
-
-                    {/* 3. LABEL NAMA SENJATA DI BAWAH KOTAK */}
-                    <div className={`w-full text-[8.5px] font-black text-center leading-tight py-1 rounded-lg px-1 border shadow-inner z-10 ${
-                      isSelected
-                        ? 'bg-black/85 text-yellow-200 border-yellow-300/35'
-                        : 'bg-black/70 text-white border-white/10'
-                    }`}>
-                      <span className="truncate block drop-shadow">{w.name}</span>
-                    </div>
+                    {locked && <span className="absolute inset-0 z-20 grid place-items-center"><LockKeyhole className="h-10 w-10 rounded-2xl border-2 border-[#22d3ee] bg-[#08202a]/85 p-2 text-cyan-50 shadow-[0_0_16px_rgba(34,211,238,.6)]" /></span>}
+                    <span className={`font-arsenal-title absolute inset-x-1.5 bottom-1.5 z-10 break-words rounded-lg border px-1 py-1.5 text-center text-[11px] leading-[1.05] ${isSelected ? 'border-[#ffe066]/70 bg-black/85 text-[#ffe066]' : 'border-white/10 bg-black/70 text-white'}`}>{w.name.toUpperCase()}</span>
                   </button>
                 );
               })}
-
-              {/* Empty placeholder slots */}
-              {Array.from({ length: Math.max(0, PAGE_SIZE - currentPageWeapons.length) }).map((_, i) => (
-                <div
-                  key={`empty-${i}`}
-                  className="flex h-full max-h-[128px] w-full max-w-[114px] items-center justify-center rounded-2xl border border-purple-900/25 bg-[#140b28]/40 opacity-25"
-                />
-              ))}
             </div>
-
-            {/* Pagination Controls & Dots */}
-            <div className="flex items-center justify-between pt-1.5 px-1 shrink-0">
-              <button
-                disabled={safePage <= 0}
-                onClick={() => {
-                  setPage(Math.max(0, safePage - 1));
-                  sfx.unlock();
-                }}
-                className={`flex h-7 w-9 items-center justify-center rounded-xl border border-purple-400/30 bg-purple-900/60 text-sm font-black transition ${
-                  safePage <= 0 ? 'opacity-25 cursor-not-allowed' : 'hover:bg-purple-700 active:scale-90 text-white shadow'
-                }`}
-              >
-                ◀
-              </button>
-
-              <div className="flex items-center gap-1.5">
-                {Array.from({ length: totalPages }).map((_, i) => (
-                  <button
-                    key={i}
-                    onClick={() => {
-                      setPage(i);
-                      sfx.unlock();
-                    }}
-                    aria-label={`Halaman ${i + 1}`}
-                    className={`h-2 rounded-full transition-all ${
-                      safePage === i ? 'w-5 bg-gradient-to-r from-yellow-300 to-amber-400 shadow-[0_0_8px_rgba(250,204,21,0.7)]' : 'w-2 bg-white/20 hover:bg-white/40'
-                    }`}
-                  />
-                ))}
-                <span className="ml-1 rounded-md bg-white/10 px-1.5 py-0.5 font-mono text-[9px] font-black text-purple-200">
-                  {safePage + 1}/{totalPages}
-                </span>
-              </div>
-
-              <button
-                disabled={safePage >= totalPages - 1}
-                onClick={() => {
-                  setPage(Math.min(totalPages - 1, safePage + 1));
-                  sfx.unlock();
-                }}
-                className={`flex h-7 w-9 items-center justify-center rounded-xl border border-purple-400/30 bg-purple-900/60 text-sm font-black transition ${
-                  safePage >= totalPages - 1 ? 'opacity-25 cursor-not-allowed' : 'hover:bg-purple-700 active:scale-90 text-white shadow'
-                }`}
-              >
-                ▶
-              </button>
-            </div>
-          </>
+            <div className="font-arsenal-title mt-4 pb-2 text-center text-[9px] tracking-wider text-white/35">— {filteredWeapons.length} SENJATA · AKHIR DAFTAR —</div>
+          </div>
         ) : (
-          /* Boss Heads Tab */
-          <div className="flex flex-1 flex-col gap-2.5 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden p-1">
-            <div className="flex items-center gap-4 rounded-2xl border border-purple-400/40 bg-[#1e1038] p-3 shadow-lg">
-              <div
-                className="relative flex h-20 w-20 shrink-0 items-center justify-center rounded-xl border-2 overflow-hidden bg-black/50"
-                style={{ borderColor: selectedBoss.accent }}
-              >
-                <canvas
-                  ref={(cv) => {
-                    if (!cv) return;
-                    cv.width = cv.height = 160;
-                    const ctx = cv.getContext('2d');
-                    if (!ctx) return;
-                    ctx.setTransform(2, 0, 0, 2, 0, 0);
-                    ctx.clearRect(0, 0, 80, 80);
-                    ctx.save();
-                    ctx.translate(40, 40);
-                    renderBossHead(ctx, selectedBoss.id, 35);
-                    ctx.restore();
-                  }}
-                  style={{ width: 80, height: 80 }}
-                />
+          <div className="arsenal-scroll-area min-h-0 flex-1 space-y-2 overflow-y-auto px-2.5 pb-4 pt-2.5">
+            <div className="flex items-center gap-3 rounded-2xl border border-[#c084fc]/35 bg-[#211638]/90 p-2.5 shadow-lg">
+              <div className="relative grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-xl border-2 bg-black/45" style={{ borderColor: selectedBoss.accent }}>
+                <canvas ref={(cv) => { if (!cv) return; cv.width = cv.height = 128; const ctx = cv.getContext('2d'); if (!ctx) return; ctx.setTransform(2, 0, 0, 2, 0, 0); ctx.clearRect(0, 0, 64, 64); ctx.save(); ctx.translate(32, 32); renderBossHead(ctx, selectedBoss.id, 28); ctx.restore(); }} style={{ width: 64, height: 64 }} />
               </div>
-              <div className="min-w-0 flex-1">
-                <div className="text-lg font-black text-white" style={{ color: selectedBoss.accent }}>
-                  {selectedBoss.name}
-                </div>
-                <div className="text-xs font-bold text-white/70">{selectedBoss.title}</div>
-                <div className="text-[10px] text-white/50 mt-0.5 leading-tight">{selectedBoss.desc}</div>
-              </div>
+              <div className="min-w-0 flex-1"><div className="font-arsenal-title text-sm" style={{ color: selectedBoss.accent }}>{selectedBoss.name}</div><div className="text-[10px] font-bold text-white/70">{selectedBoss.title}</div><div className="mt-0.5 text-[8px] leading-tight text-white/50">{selectedBoss.desc}</div></div>
             </div>
-
-            <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-[#110a24] p-2.5">
-              <BossAttackPreview boss={selectedBoss} />
-              <div className="min-w-0">
-                <div className="text-[9px] font-black tracking-[0.16em] text-white/55">DEMO SERANGAN BOS</div>
-                <div className="mt-1 text-[12px] font-black leading-tight" style={{ color: selectedBoss.accent }}>
-                  {selectedBoss.projectileEmoji} {selectedBoss.projectileName}
-                </div>
-                <div className="mt-1 text-[9px] leading-tight text-white/55">Senjata dan efek serangan bergerak sesuai karakter boss.</div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              {BOSS_ROSTER.map((b, idx) => {
-                const beaten = highestLevel >= (idx + 1) * 5;
-                const isSel = selectedBoss.id === b.id;
-                return (
-                  <button
-                    key={b.id}
-                    onClick={() => {
-                      setSelectedBoss(b);
-                      sfx.unlock();
-                    }}
-                    className={`flex items-center gap-2 rounded-xl border p-2 text-left transition ${
-                      isSel ? 'border-amber-300 bg-[#2d1656]' : 'border-purple-500/20 bg-[#1e1038] hover:bg-[#27144a]'
-                    }`}
-                  >
-                    <span className="text-2xl">{b.id === 'knight' ? '🛡️' : b.id === 'oni' ? '👺' : b.id === 'cyborg' ? '🤖' : '🏴‍☠️'}</span>
-                    <div>
-                      <div className="text-xs font-bold text-white leading-none">{b.name}</div>
-                      <div className="text-[9px] text-white/50 mt-0.5">LEVEL {(idx + 1) * 5} {beaten ? '✓' : ''}</div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
+            <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-[#110a24]/90 p-2"><BossAttackPreview boss={selectedBoss} /><div className="min-w-0"><div className="font-arsenal-title text-[8px] tracking-[.16em] text-white/55">DEMO SERANGAN BOS</div><div className="mt-1 text-[10px] font-black" style={{ color: selectedBoss.accent }}>{selectedBoss.projectileEmoji} {selectedBoss.projectileName}</div><div className="mt-1 text-[8px] leading-tight text-white/55">Senjata dan efek bergerak sesuai karakter boss.</div></div></div>
+            <div className="grid grid-cols-2 gap-2">{BOSS_ROSTER.map((boss, idx) => { const beaten = highestLevel >= (idx + 1) * 5; const isSel = selectedBoss.id === boss.id; return <button key={boss.id} type="button" onClick={() => { setSelectedBoss(boss); sfx.unlock(); }} className={`flex items-center gap-2 rounded-xl border p-2 text-left transition ${isSel ? 'border-amber-300 bg-[#2d1656]' : 'border-purple-500/20 bg-[#1e1038] hover:bg-[#27144a]'}`}><span className="grid h-9 w-9 place-items-center rounded-full bg-white/5 text-2xl" style={{ color: boss.accent }}><Skull className="h-6 w-6" /></span><span><span className="block text-[10px] font-bold leading-none text-white">{boss.name}</span><span className="mt-1 block text-[8px] text-white/50">LEVEL {(idx + 1) * 5} {beaten ? '✓' : ''}</span></span></button>; })}</div>
           </div>
         )}
-      </div>
+      </section>
 
-      {/* FOOTER BAR WITH VISUAL COLLECTION PROGRESS */}
-      <div className="relative z-10 mt-2 flex h-10 w-full items-center gap-3 rounded-2xl bg-gradient-to-r from-[#3b0764] via-[#581c87] to-[#3b0764] px-3.5 font-game text-xs font-black shadow-xl border border-purple-300/35">
-        <span className="shrink-0 rounded-xl bg-black/50 px-2.5 py-0.5 font-mono text-xs text-yellow-300 border border-yellow-300/25">
-          {unlockedCount} / {WEAPONS.length}
-        </span>
-        <div className="relative h-2.5 flex-1 overflow-hidden rounded-full bg-black/50 border border-white/10 p-0.5">
-          <div
-            className="h-full rounded-full bg-gradient-to-r from-amber-400 via-yellow-300 to-emerald-400 shadow-[0_0_8px_rgba(250,204,21,0.65)] transition-all duration-300"
-            style={{ width: `${unlockPercent}%` }}
-          />
-        </div>
-        <span className="shrink-0 tracking-wider text-[10.5px] text-white drop-shadow">
-          {unlockedCount} SENJATA TERBUKA
-        </span>
-      </div>
       {editingDesign && canChooseGunDesign(selectedGunId) && (
-        <GunVariantPicker
-          weapon={selectedGun}
-          variantId={selectedGunId}
-          selected={selectedVariant}
-          effect={getGunEffect(selectedGunId)}
-          onSelect={(variant) => {
-            setGunVariant(selectedGunId, variant);
-            setDesignRevision((n) => n + 1);
-            sfx.unlock();
-          }}
-          onEffectSelect={(effect) => {
-            setGunEffect(selectedGunId, effect);
-            setDesignRevision((n) => n + 1);
-            sfx.unlock();
-          }}
-          onMarkDefault={() => {
-            markGunDefault(selectedGunId, selectedVariant, getGunEffect(selectedGunId));
-            setDesignRevision((n) => n + 1);
-            sfx.coin();
-          }}
-          onUnmarkDefault={() => {
-            unmarkGunDefault(selectedGunId);
-            setDesignRevision((n) => n + 1);
-            sfx.unlock();
-          }}
-          onOpenExport={() => {
-            setShowExportModal(true);
-            sfx.unlock();
-          }}
-          onPrevWeapon={() => stepEditableWeapon(-1)}
-          onNextWeapon={() => stepEditableWeapon(1)}
-          weaponStepLabel={`${Math.max(1, stepIds.indexOf(selectedGunId) + 1)} / ${stepIds.length} · ${selectedGun.id}`}
-          exportCount={exportableCount}
-          onClose={() => setEditingDesign(false)}
-        />
+        <GunVariantPicker weapon={selectedGun} variantId={selectedGunId} selected={selectedVariant} effect={getGunEffect(selectedGunId)}
+          onSelect={(variant) => { setGunVariant(selectedGunId, variant); setHeroKey((key) => key + 1); setDesignRevision((n) => n + 1); sfx.unlock(); }}
+          onEffectSelect={(effect) => { setGunEffect(selectedGunId, effect); setHeroKey((key) => key + 1); setDesignRevision((n) => n + 1); sfx.unlock(); }}
+          onMarkDefault={() => { markGunDefault(selectedGunId, selectedVariant, getGunEffect(selectedGunId)); setDesignRevision((n) => n + 1); sfx.coin(); }}
+          onUnmarkDefault={() => { unmarkGunDefault(selectedGunId); setDesignRevision((n) => n + 1); sfx.unlock(); }}
+          onOpenExport={() => { setShowExportModal(true); sfx.unlock(); }}
+          onPrevWeapon={() => stepEditableWeapon(-1)} onNextWeapon={() => stepEditableWeapon(1)}
+          weaponStepLabel={`${Math.max(1, stepIds.indexOf(selectedGunId) + 1)} / ${stepIds.length} · ${selectedGun.id}`} exportCount={exportableCount} onClose={() => setEditingDesign(false)} />
       )}
-      {showExportModal && (
-        <DefaultExportModal
-          onClose={() => setShowExportModal(false)}
-          onJumpToWeapon={(id) => {
-            setSelectedGunId(id);
-            setShowExportModal(false);
-            setEditingDesign(true);
-            sfx.unlock();
-          }}
-          onChanged={() => setDesignRevision((n) => n + 1)}
-        />
-      )}
+      {showExportModal && <DefaultExportModal onClose={() => setShowExportModal(false)} onJumpToWeapon={(id) => { setSelectedGunId(id); setHeroKey((key) => key + 1); setShowExportModal(false); setEditingDesign(true); sfx.unlock(); }} onChanged={() => setDesignRevision((n) => n + 1)} />}
     </div>
   );
 }
