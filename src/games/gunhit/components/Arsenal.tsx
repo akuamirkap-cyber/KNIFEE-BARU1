@@ -536,7 +536,7 @@ export default function Arsenal({
           <SunburstFX
             size={430}
             color={gunSunburstColor(selectedGun.rarity)}
-            intensity={0.34}
+            intensity={0.44}
             speed={32}
             core={false}
             stars={false}

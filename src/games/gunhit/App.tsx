@@ -1735,18 +1735,12 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                 <div {...(menuDeparture === 'play'
                   ? { className: 'relative z-10 h-[min(295px,54vh)] w-[min(337px,90vw)] max-w-full opacity-0', style: {} as CSSProperties }
                   : planStyleMotion(menuPlan.gun, gunTiming(menuPlan.gun), ['in-gun', 'out-spin'], 'relative z-10 h-[min(295px,54vh)] w-[min(337px,90vw)] max-w-full', 1))}>
-                  <div className="shadow-pulse absolute bottom-[12%] left-1/2 h-8 w-40 -translate-x-1/2 rounded-[50%] bg-black/60 blur-sm" />
-                  {!menuDeparture && <div className="mm-pedestal pointer-events-none absolute bottom-[7%] left-1/2 h-12 w-56 -translate-x-1/2" style={{ animationDelay: `${3400 * menuPlan.k}ms` }}>
-                    <span className="absolute inset-0 rounded-[50%] border-2 border-[#a5f3fc]/60 shadow-[0_0_18px_rgba(165,243,252,.55),inset_0_0_14px_rgba(165,243,252,.35)]" />
-                    <svg viewBox="0 0 224 48" className="absolute inset-0 h-full w-full overflow-visible">
-                      <ellipse cx="112" cy="24" rx="96" ry="18" fill="none" stroke="rgba(255,255,255,.4)" strokeWidth="2" strokeDasharray="8 10" className="mm-dash" />
-                      <circle r="4" fill="#fff" style={{ filter: 'drop-shadow(0 0 5px rgba(165,243,252,1))' }}><animateMotion dur="5s" repeatCount="indefinite" path="M224 24 A112 24 0 1 1 0 24 A112 24 0 1 1 224 24" /></circle>
-                    </svg>
-                  </div>}
+                  {/* No ring or shadow on the floor: the weapon stands on the
+                      light of the sunburst alone. */}
                   {!menuDeparture && [18, 42, 64, 82].map((x, i) => <span key={x} className="mm-mote pointer-events-none absolute bottom-[14%] h-1.5 w-1.5 rounded-full bg-[#e0fbff]" style={{ left: `${x}%`, animationDelay: `${(3400 + i * 700) * menuPlan.k}ms` }} />)}
                   <div className="float relative h-full w-full" data-menu-gun>
                     <div ref={weaponPivotRef} className="pointer-events-none absolute inset-0" aria-hidden="true">
-                      <SunburstFX size={430} color={gunSunburstColor(getWeapon(weapon).rarity)} intensity={0.34} speed={32} core={false} stars={false} style={{ left: 'calc(50% + var(--weapon-pivot-x, 0px))', top: 'calc(50% + var(--weapon-pivot-y, 0px))' }} />
+                      <SunburstFX size={430} color={gunSunburstColor(getWeapon(weapon).rarity)} intensity={0.44} speed={32} core={false} stars={false} style={{ left: 'calc(50% + var(--weapon-pivot-x, 0px))', top: 'calc(50% + var(--weapon-pivot-y, 0px))' }} />
                       {!menuDeparture && menuPlan.gun === 'combo' && (
                         <div
                           aria-hidden="true"

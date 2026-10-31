@@ -28,7 +28,7 @@ test('menu keeps Gun Hit\'s own sunburst in the weapon pivot layer', () => {
   assert.match(app, /ctx\.getImageData\(0, 0, cv\.width, cv\.height\)/);
   assert.match(app, /--weapon-pivot-x/);
   assert.match(app, /ref=\{weaponPivotRef\} className="pointer-events-none absolute inset-0"/);
-  assert.match(app, /SunburstFX size=\{430\}[^>]*intensity=\{0\.34\}[^>]*core=\{false\}/);
+  assert.match(app, /SunburstFX size=\{430\}[^>]*intensity=\{0\.44\}[^>]*core=\{false\}/);
 });
 
 test('Gun Hit menu uses PERFECT SHOT branding and keeps special-stage picks in Settings', () => {
@@ -70,7 +70,7 @@ test('Gun Hit menu uses PERFECT SHOT branding and keeps special-stage picks in S
   assert.match(faces, /bgTop: '#1b4d59', bgBot: '#153743'/);
   assert.match(game, /lowerShade\.addColorStop\(0\.58, 'rgba\(2, 10, 18, 0\.045\)'\)/);
   assert.match(game, /lowerShade\.addColorStop\(1, 'rgba\(2, 10, 18, 0\.12\)'\)/);
-  assert.match(app, /SunburstFX size=\{430\} color=\{gunSunburstColor\(getWeapon\(weapon\)\.rarity\)\} intensity=\{0\.34\}[^>]*core=\{false\}/);
+  assert.match(app, /SunburstFX size=\{430\} color=\{gunSunburstColor\(getWeapon\(weapon\)\.rarity\)\} intensity=\{0\.44\}[^>]*core=\{false\}/);
   const coinSprite = readFileSync(path.join(process.cwd(), 'src/games/shared/CoinSprite.tsx'), 'utf8');
   assert.match(coinSprite, /0\.68 \+ Math\.abs\(Math\.cos/);
   assert.match(coinSprite, /false, false/);
@@ -193,7 +193,7 @@ test('menu preview keeps the SGA sunburst and centered canvas inside the Perfect
   const menuStart = app.indexOf("{screen === 'menu' && !mapOpen && !questOpen && !leaderboardOpen");
   const settingsStart = app.indexOf("{screen === 'menu' && settingsOpen && (");
   const previewArea = app.slice(menuStart, settingsStart);
-  assert.match(previewArea, /SunburstFX size=\{430\}[^>]*intensity=\{0\.34\}/);
+  assert.match(previewArea, /SunburstFX size=\{430\}[^>]*intensity=\{0\.44\}/);
   assert.match(previewArea, /w-\[68%\]/);
   assert.match(previewArea, /<canvas ref=\{previewCanvasRef\}/);
   assert.match(previewArea, /width:\s*'min\(337px,\s*90vw\)'/);
@@ -201,7 +201,7 @@ test('menu preview keeps the SGA sunburst and centered canvas inside the Perfect
   assert.match(previewArea, /data-menu-gun/);
   assert.doesNotMatch(previewArea, /translate-x-\[1%\]/);
   assert.match(app, /const previousGunState = \{ \.\.\.gunState \};[\s\S]*?drawGunCentered\(ctx, curW\.id, 0, 0, true, undefined, false\);[\s\S]*?Object\.assign\(gunState, previousGunState\)/);
-  assert.match(app, /intensity=\{0\.34\}/);
+  assert.match(app, /intensity=\{0\.44\}/);
   const motionCss = readFileSync(path.join(process.cwd(), 'src/games/perfect-shot/index.css'), 'utf8');
   assert.match(motionCss, /\.gunhit-menu \.in-gun \{ animation-name: sgaGunIn; \}/);
 });

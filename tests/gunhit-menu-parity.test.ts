@@ -21,7 +21,7 @@ test('SGA menu keeps its own Gun Hit sunburst behind the weapon, not the referen
   assert.doesNotMatch(app, /repeating-conic-gradient\(from 0deg,rgba\(200,240,240,\.22\)/);
   // Game A's own sunburst is back at full strength behind the weapon canvas.
   assert.match(app, /SunburstFX size=\{430\}/, 'the menu shows Gun Hit\'s own 430px sunburst');
-  assert.match(app, /SunburstFX size=\{430\}[^>]*intensity=\{0\.34\}/);
+  assert.match(app, /SunburstFX size=\{430\}[^>]*intensity=\{0\.44\}/);
   assert.match(app, /SunburstFX size=\{430\}[^>]*speed=\{32\}/);
   assert.match(app, /SunburstFX size=\{430\}[^>]*core=\{false\}/);
   assert.match(app, /SunburstFX size=\{430\}[^>]*stars=\{false\}/);

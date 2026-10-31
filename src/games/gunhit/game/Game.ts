@@ -577,7 +577,99 @@ interface Item { angle: number; type: ItemType; age: number; ghostVolley?: numbe
 interface Proj { x: number; y: number; vx: number; vy: number; originX?: number; ghostAim?: boolean; ghostVolley?: number; setSix?: true; setOne?: SetOneShot; setSeven?: SevenShot; setSevenPending?: boolean; s7Ghost?: boolean; hold?: number; setNine?: NineBullet; setNinePending?: boolean; s9Ghost?: boolean; setNineBeam?: number; setEleven?: ElevenProj; setElevenPending?: boolean; s11Wait?: boolean; s11Ghost?: boolean; setTwo?: TwoRound; pierced?: number; hist?: { x: number; y: number }[]; tint?: string; big?: number; mini?: boolean; giant?: boolean; hue?: number; flash?: number; spawnDelay?: number; wob?: number; lastEcho?: number; t?: number; trail?: { x: number; y: number }[] }
 type StepRes = { res: 'none' | 'stick' | 'fail' | 'hit'; spike?: boolean; local?: number };
 interface Light { x: number; y: number; r: number; rgb: string; life: number; max: number }
-interface Fragment { x: number; y: number; vx: number; vy: number; rot: number; vr: number; a0: number; a1: number; pitch: number; pitchV: number }
+interface Fragment {
+  x: number; y: number; vx: number; vy: number; rot: number; vr: number;
+  a0: number; a1: number; pitch: number; pitchV: number;
+  /** Colour/thickness read from the target artwork for this wedge. */
+  side?: string; edge?: string; depth?: number;
+}
+
+export interface TargetPixels { data: Uint8ClampedArray; size: number }
+
+/** Read the target artwork once so the shatter debris can wear its own colours. */
+export function readTargetPixels(face: HTMLCanvasElement | null): TargetPixels | null {
+  if (!face) return null;
+  try {
+    const ctx = face.getContext('2d');
+    if (!ctx) return null;
+    const size = face.width;
+    return { data: ctx.getImageData(0, 0, size, size).data, size };
+  } catch {
+    return null; // a canvas we are not allowed to read: keep the palette fallback
+  }
+}
+
+const hex = (r: number, g: number, b: number) =>
+  `#${[r, g, b].map((n) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0')).join('')}`;
+
+/** Average ink of one wheel/boss wedge, plus its lighter bevel and darker wall. */
+export function wedgeInk(
+  pix: TargetPixels,
+  radius: number,
+  pad: number,
+  scale: number,
+  a0: number,
+  a1: number,
+): { side: string; edge: string } | null {
+  const { data, size } = pix;
+  let r = 0, g = 0, b = 0, n = 0;
+  const rings = [0.42, 0.56, 0.7, 0.84, 0.94];
+  const steps = 6;
+  for (const k of rings) {
+    for (let i = 0; i < steps; i++) {
+      const a = a0 + (a1 - a0) * ((i + 0.5) / steps);
+      const px = Math.round((Math.cos(a) * radius * k + radius + pad) * scale);
+      const py = Math.round((Math.sin(a) * radius * k + radius + pad) * scale);
+      if (px < 0 || py < 0 || px >= size || py >= size) continue;
+      const o = (py * size + px) * 4;
+      if (data[o + 3] < 70) continue;
+      r += data[o];
+      g += data[o + 1];
+      b += data[o + 2];
+      n++;
+    }
+  }
+  if (!n) return null;
+  r /= n;
+  g /= n;
+  b /= n;
+  // Walls sit in shade, bevels catch the light: the same hue as the artwork.
+  return {
+    side: hex(r * 0.52, g * 0.52, b * 0.52),
+    edge: hex(r + (255 - r) * 0.42, g + (255 - g) * 0.42, b + (255 - b) * 0.42),
+  };
+}
+
+/** The artwork's own dominant colours, for the chips and shards flying off it. */
+export function artChips(pix: TargetPixels): string[] | null {
+  const { data, size } = pix;
+  const buckets = new Map<number, { n: number; r: number; g: number; b: number }>();
+  const step = Math.max(2, Math.floor(size / 96));
+  for (let y = 0; y < size; y += step) {
+    for (let x = 0; x < size; x += step) {
+      const o = (y * size + x) * 4;
+      if (data[o + 3] < 120) continue;
+      const r = data[o], g = data[o + 1], b = data[o + 2];
+      const key = ((r >> 5) << 6) | ((g >> 5) << 3) | (b >> 5);
+      const hit = buckets.get(key);
+      if (hit) {
+        hit.n++;
+        hit.r += r;
+        hit.g += g;
+        hit.b += b;
+      } else {
+        buckets.set(key, { n: 1, r, g, b });
+      }
+    }
+  }
+  const ranked = [...buckets.values()].sort((p, q) => q.n - p.n).slice(0, 3);
+  if (!ranked.length) return null;
+  const colors = ranked.map((c) => hex(c.r / c.n, c.g / c.n, c.b / c.n));
+  // A single dark bucket (a silhouette) still needs a readable chip colour.
+  const light = ranked.map((c) => (c.r + c.g + c.b) / (3 * c.n)).sort((p, q) => q - p);
+  if (colors.length === 1) colors.push(hex(light[0] * 1.35, light[0] * 1.35, light[0] * 1.35));
+  return colors;
+}
 
 /** Draw the stage-clear wheel chunks as extruded solids, including their textured rear face. */
 export function drawExtrudedWheelFragment(
@@ -648,8 +740,8 @@ export function drawExtrudedWheelFragment(
     c.fill();
     c.fillStyle = wallLight;
     c.fill();
-    c.strokeStyle = 'rgba(0,0,0,0.18)';
-    c.lineWidth = 1.25;
+    c.strokeStyle = 'rgba(0,0,0,0.16)';
+    c.lineWidth = 1;
     c.stroke();
   };
 
@@ -696,8 +788,8 @@ export function drawExtrudedWheelFragment(
 
   // Fine bevel glints instead of a thick, uniformly bright outline.
   sector(0);
-  c.strokeStyle = 'rgba(0,0,0,0.32)';
-  c.lineWidth = 3;
+  c.strokeStyle = 'rgba(0,0,0,0.30)';
+  c.lineWidth = 2;
   c.stroke();
   c.save();
   sector(0);
@@ -4284,6 +4376,15 @@ export class Game {
     this.stateT = 0;
     this.projs = [];
     const R = this.level.radius;
+    // The chunks and debris take their colour from the target that just broke —
+    // the wheel's own image, or the boss's image on a boss stage — so the pieces
+    // look like they came out of that artwork instead of a fixed stage palette.
+    const pix = readTargetPixels(this.face ?? null);
+    const facePad = this.level.boss ? 40 : 4;
+    const debris = (pix ? artChips(pix) : null) ?? STYLE_COLORS[this.level.style].chips;
+    // Chunk thickness follows the art's own weight: heavier wheels read thicker,
+    // and a boss slab is never as deep as it is wide.
+    const depth = Math.max(5, Math.min(12, R * 0.07));
     const k = 9;
     const offs = rand(0, TAU);
     for (let i = 0; i < k; i++) {
@@ -4291,12 +4392,14 @@ export class Game {
       const a1 = offs + ((i + 1) / k) * TAU;
       const mid = (a0 + a1) / 2 + this.rot;
       const v = rand(260, 520);
+      const ink = pix ? wedgeInk(pix, R, facePad, this.faceScale, a0, a1) : null;
       this.frags.push({
         x: CX, y: this.targetY, vx: Math.cos(mid) * v, vy: Math.sin(mid) * v - 220,
         rot: this.rot, vr: rand(-6, 6), a0, a1,
         // Start each wedge already pitched away from the camera, then tumble it
         // between two oblique angles so the artwork never reads as a flat front.
         pitch: rand(0.68, 1.3), pitchV: rand(-3.2, 3.2),
+        side: ink?.side, edge: ink?.edge, depth,
       });
     }
     for (const it of this.items) {
@@ -4368,7 +4471,7 @@ export class Game {
     }
     this.resetSevenLayer();
     this.items = [];
-    const cols = STYLE_COLORS[this.level.style].chips;
+    const cols = debris;
     for (let i = 0; i < 50; i++) {
       const a = rand(0, TAU);
       const v = rand(150, 750);
@@ -4392,7 +4495,7 @@ export class Game {
     const wheelBurstRgb = getWheelSunburstTheme(this.level.style).rgb;
     this.sink.light(CX, this.targetY, R * 2.6, wheelBurstRgb, 0.65);
     this.sink.push({ x: CX, y: this.targetY, vx: 0, vy: 0, life: 0.5, max: 0.5, size: R * 1.85, color: wheelBurstRgb, kind: 'shock', rot: 0, vr: 0, g: 0 });
-    const cc = STYLE_COLORS[this.level.style].chips;
+    const cc = debris;
     for (let i = 0; i < 18; i++) {
       const a = rand(0, TAU);
       const v = rand(250, 700);
@@ -7808,9 +7911,9 @@ export class Game {
         fragPad,
         f.a0,
         f.a1,
-        14,
-        palette.chips[1],
-        palette.chips[0],
+        f.depth ?? 14,
+        f.side ?? palette.chips[1],
+        f.edge ?? palette.chips[0],
         f.pitch,
         -Math.PI * 0.75 - f.rot,
       );

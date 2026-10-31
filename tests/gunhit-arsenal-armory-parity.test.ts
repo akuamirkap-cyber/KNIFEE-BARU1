@@ -10,7 +10,7 @@ test('the armory showcase wears the menu sunburst, not a second ray wheel', () =
   // make the showcase read as "juicy"; the light itself is the menu's burst.
   assert.match(
     arsenal,
-    /<SunburstFX\s+size=\{430\}\s+color=\{gunSunburstColor\(selectedGun\.rarity\)\}\s+intensity=\{0\.34\}\s+speed=\{32\}\s+core=\{false\}\s+stars=\{false\}/,
+    /<SunburstFX\s+size=\{430\}\s+color=\{gunSunburstColor\(selectedGun\.rarity\)\}\s+intensity=\{0\.44\}\s+speed=\{32\}\s+core=\{false\}\s+stars=\{false\}/,
     'same size, speed, strength and no hot core as the cover screen',
   );
   assert.doesNotMatch(arsenal, /repeating-conic-gradient\(from 0deg, rgba\(255,255,255,\.2\)/, 'no extra conic ray wheel');
