@@ -1099,7 +1099,8 @@ test('Slide #2 pentatonic sound rhythm, UI/clear/fail/start SFX, wheel 0.15->1 e
   // 4. Wheel entrance animation (0.15 -> 1 via dt * 9) and STAGE CLEAR! + BONUS +3 banner in Game.ts
   const gameSrc = readFileSync('src/games/gunhit/game/Game.ts', 'utf8');
   assert.ok(gameSrc.includes('this.wheelScale = 0.15;'), 'wheel starts at 0.15 scale like Slide #2');
-  assert.ok(gameSrc.includes('this.wheelScale += (1 - this.wheelScale) * Math.min(1, dt * this.wheelEntryRate);') && gameSrc.includes('private wheelEntryRate = 9;'), 'the standard wheel keeps its original Slide #2 damping');
+  assert.ok(gameSrc.includes('const wheelEntryTotal = this.wheelEntryDelayT + 1.16 * this.pace;'), 'every wheel plays the full Perfect Shot entrance timeline');
+  assert.ok(!gameSrc.includes("this.synchronizedEntrance && this.state === 'intro'"), 'the wheel entrance is never gated behind the menu handoff');
   assert.ok(gameSrc.includes("c.fillText('STAGE CLEAR!', 0, 0);"), 'draws STAGE CLEAR! banner on canvas like Slide #2');
   assert.ok(gameSrc.includes("c.fillText('BONUS +3', 0, 40);"), 'draws BONUS +3 subtitle on canvas like Slide #2');
   assert.ok(gameSrc.includes('c.drawImage(this.face,'), 'keeps SGA wheel face image');

@@ -35,7 +35,7 @@ test('scope transition frames the real stage target and lets the wheel drop afte
   assert.match(app, /startAtLevel\(level, wantsWeaponFlight, gunEntryDelay, true, wheelEntryDelay\)/);
   assert.match(app, /startSpecialStage\(specialMode, gunEntryDelay, true, wheelEntryDelay\)/);
   assert.match(game, /this\.wheelEntryDelayT = this\.synchronizedEntrance \? Math\.max\(0, wheelEntryDelay\) \* this\.pace : 0/);
-  assert.match(game, /perfectShotWheelEntry\(this\.introT - this\.wheelEntryDelayT, this\.pace, this\.level\.radius\)/);
+  assert.match(game, /perfectShotWheelEntry\(\s*this\.wheelEntryT - this\.wheelEntryDelayT,\s*this\.pace,\s*this\.level\.radius,?\s*\)/);
   assert.match(game, /perfectShotWheelEntry\(wheelEntryT, this\.pace, R\)/);
   assert.doesNotMatch(app, /wheelSettleMs/);
   assert.match(app, /y: \(initialGameplayWheelCenterY\(stageConfig\.boss, Boolean\(specialMode\)\) \/ H\) \* 100/);

@@ -143,7 +143,7 @@ test('the rival wheel keeps its Perfect Shot drop visible: it starts only after 
     assert.ok(near(game.introDuration, 1.76), 'the intro covers the delay plus the full 1.1s entrance');
     game.update(0.3);
     assert.equal(game.wheelScale, 0.5, 'nothing moves while the cover is still shut');
-    game.update(0.3 + 0.06 + 1.1 * 0.42 + 1e-6);
+    game.update(0.6 + 0.06 + 1.1 * 0.42 - 0.3 + 1e-6);
     assert.ok(game.wheelScale > 0.8, 'the wheel lands as the reveal opens, on the reference 42% frame');
     for (let i = 0; i < 20; i++) game.update(0.05);
     assert.equal(game.state, 'play', 'input unlocks once the entrance is over');
@@ -153,6 +153,32 @@ test('the rival wheel keeps its Perfect Shot drop visible: it starts only after 
     assert.equal(game.wheelEntryDelayT, 0, 'ordinary next stages never wait for a cover');
     game.update(0.06 + 1.1 * 0.42 + 1e-6);
     assert.ok(game.wheelScale > 0.8, 'a fresh wheel lands without any wait');
+  } finally { game.destroy(); }
+});
+
+test('every wheel plays the full Perfect Shot drop, even when the stage was not entered from the menu', () => {
+  const game = new Game(canvas(), events as never) as Live;
+  try {
+    game.setGameSpeed(1);
+    // A plain start (no synchronized menu entrance, no cover, no reduced-motion help).
+    game.startAtLevel(1);
+    assert.equal(game.synchronizedEntrance, false);
+    game.update(0.1);
+    assert.ok(game.wheelScale > 0.49 && game.wheelScale < 0.55,
+      'the wheel starts off-screen at the reference scale, never popped in at full size');
+    game.update(0.06 + 1.1 * 0.42 - 0.1 + 1e-6);
+    assert.ok(game.wheelScale > 0.8, 'it still lands on the reference 42% frame');
+    game.update(1.1 * 0.38);
+    assert.ok(game.wheelScale >= 1.3, 'and the pop-blast frame still fires');
+    game.update(1);
+    assert.equal(game.wheelScale, 1, 'the wheel settles at its resting size');
+
+    // Boss and special stages use the very same entrance.
+    for (const start of [() => game.startAtLevel(5), () => game.startSpecialStage('boulder')]) {
+      start();
+      game.update(0.2);
+      assert.ok(game.wheelScale <= 0.6, 'a fresh boss / special wheel also begins above the screen');
+    }
   } finally { game.destroy(); }
 });
 

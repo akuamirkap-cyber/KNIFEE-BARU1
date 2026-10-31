@@ -875,13 +875,14 @@ export class Game {
   private wheelFlash = 0;
   private wheelFlashRgb = '200,255,128';
   private introT = 0;
-  private introFxT = 0;
   private introDuration = 0.5;
   private synchronizedEntrance = false;
-  private wheelEntryRate = 9;
   private wheelEntryDuration = 1.1;
   /** Real seconds the wheel waits before it drops in (the scope cover). */
   private wheelEntryDelayT = 0;
+  /** Perfect Shot's target entrance clock — runs for every wheel, however it spawned. */
+  private wheelEntryT = 0;
+  private wheelBurstT = 0;
   private wheelScale = 1;
   private gunEntryDelayT = 0;
   private gunEntryRate = 1;
@@ -1806,8 +1807,7 @@ export class Game {
     this.introDuration = this.synchronizedEntrance
       ? Math.max(1.35, Math.max(0, wheelEntryDelay) + 1.16) * this.pace
       : 0.5;
-    this.wheelEntryRate = this.synchronizedEntrance ? 3.8 : 9;
-    this.wheelEntryDuration = this.synchronizedEntrance ? 1.1 * this.pace : 1.1;
+    this.wheelEntryDuration = 1.1 * this.pace;
     this.gunEntryDelayT = reducedMotion ? 0 : Math.max(0, weaponEntryDelay) * this.pace;
     this.gunEntryRate = this.synchronizedEntrance ? GAMEPLAY_GUN_ENTRY_DURATION / (0.56 * this.pace) : 1;
     this.gunEntryT = reducedMotion || weaponHandoff ? GAMEPLAY_GUN_ENTRY_DURATION : 0;
@@ -1833,7 +1833,6 @@ export class Game {
     this.synchronizedEntrance = false;
     this.wheelEntryDelayT = 0;
     this.introDuration = 0.5;
-    this.wheelEntryRate = 9;
     this.wheelEntryDuration = 1.1;
     this.snowLoaded = SNOWBALL_MAG_SIZE;
     this.level = makeLevel(1);
@@ -2004,7 +2003,6 @@ export class Game {
     this.synchronizedEntrance = false;
     this.wheelEntryDelayT = 0;
     this.introDuration = 0.5;
-    this.wheelEntryRate = 9;
     this.wheelEntryDuration = 1.1;
     this.level = makeLevel(n, forcedMode);
     this.events.onStageChange?.();
@@ -2069,7 +2067,8 @@ export class Game {
     this.levelTime = 0;
     this.state = 'intro';
     this.introT = 0;
-    this.introFxT = 0;
+    this.wheelEntryT = 0;
+    this.wheelBurstT = 0;
     // A fresh wheel always drops in immediately; only the first stage of a run can
     // wait for the scope cover (startRun re-applies wheelEntryDelayT right after).
     this.wheelEntryDelayT = 0;
@@ -5544,17 +5543,23 @@ export class Game {
       }
     }
 
-    if (this.synchronizedEntrance && this.introFxT < this.wheelEntryDelayT + 1.75 * this.pace) this.introFxT += dt;
-    if (this.synchronizedEntrance && this.state === 'intro') {
+    // The rival wheel ALWAYS drops in with Perfect Shot's entrance — every stage,
+    // every speed, even with reduced motion — so Game A never pops a wheel in
+    // without an animation. This clock is independent of the input-ready `intro`
+    // state, so readiness keeps its original 0.5s / 1.35s timing.
+    const wheelEntryTotal = this.wheelEntryDelayT + 1.16 * this.pace;
+    if (this.wheelEntryT < wheelEntryTotal) {
+      this.wheelEntryT = Math.min(wheelEntryTotal, this.wheelEntryT + dt);
+      this.wheelScale = perfectShotWheelEntry(
+        this.wheelEntryT - this.wheelEntryDelayT,
+        this.pace,
+        this.level.radius,
+      ).scaleY;
+    }
+    if (this.wheelBurstT < this.wheelEntryDelayT + 1.75 * this.pace) this.wheelBurstT += dt;
+    if (this.state === 'intro') {
       this.introT += dt;
-      this.wheelScale = perfectShotWheelEntry(this.introT - this.wheelEntryDelayT, this.pace, this.level.radius).scaleY;
       if (this.introT >= this.introDuration) this.state = 'play';
-    } else {
-      this.wheelScale += (1 - this.wheelScale) * Math.min(1, dt * this.wheelEntryRate);
-      if (this.state === 'intro') {
-        this.introT += dt;
-        if (this.introT >= this.introDuration) this.state = 'play';
-      }
     }
     this.bannerT = Math.max(0, this.bannerT - dt);
 
@@ -7277,14 +7282,15 @@ export class Game {
     // under the wheel, the way slide 11's own `render()` paints it.
     if (this.state !== 'idle' && this.elevenActive) this.s11State!.drawLight(c);
 
-    // While the synchronized Play entrance is running, the wheel artwork and
-    // its rays share one center/transform just like Perfect Shot's target art.
-    const wheelEntryT = this.introT - this.wheelEntryDelayT;
-    const burstT = this.introFxT - this.wheelEntryDelayT;
-    const wheelEntry = this.synchronizedEntrance && this.state === 'intro'
+    // The wheel artwork and its rays share one center/transform while Perfect
+    // Shot's entrance plays — exactly like the right-hand game's target art.
+    const wheelEntryT = this.wheelEntryT - this.wheelEntryDelayT;
+    const burstT = this.wheelBurstT - this.wheelEntryDelayT;
+    const wheelEntering = wheelEntryT < 1.16 * this.pace;
+    const wheelEntry = wheelEntering
       ? perfectShotWheelEntry(wheelEntryT, this.pace, R)
       : RESTING_WHEEL_ENTRY;
-    const wheelEntryBurst = this.synchronizedEntrance && burstT > 0 && burstT < 1.75 * this.pace
+    const wheelEntryBurst = burstT > 0 && burstT < 1.75 * this.pace
       ? perfectShotWheelBurst(burstT, this.pace)
       : NO_WHEEL_BURST;
     // Pure-white Sunburst ALWAYS renders BEHIND the front view of the wheel,
@@ -7319,7 +7325,7 @@ export class Game {
     // Keep the clean diamond / chest visible through the special-stage celebration.
     if (this.state !== 'idle' && (this.state !== 'clear' || isSpecial(this.level.mode))) {
       const wScale = this.wheelScale ?? 1;
-      const sc = (this.synchronizedEntrance && this.state === 'intro' ? 1 : wScale) * (1 + this.bump * 0.035);
+      const sc = (wheelEntering ? 1 : wScale) * (1 + this.bump * 0.035);
       // A slide-11 gun's hits kick, squash and shiver the wheel like slide 11's.
       const wm = this.elevenMotion();
       // …and a slide-9 gun's hits shove it back on slide 9's recoil spring.
