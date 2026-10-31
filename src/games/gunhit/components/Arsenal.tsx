@@ -529,24 +529,20 @@ export default function Arsenal({
       {/* The reference showcase: spinning ray burst, rarity aura, a landing
           flash + dust ring, and the gun floating above its podium. */}
       <section ref={heroSectionRef} className="relative z-10 flex mt-1 h-[clamp(120px,20vh,185px)] shrink-0 items-center justify-center">
+        {/* The showcase light is the menu's own sunburst — one burst of rays,
+            same size/speed/strength as the cover screen, so the armory and the
+            menu read as the same room instead of two stacked ray wheels. */}
         <div {...A('in-rays', SHOP_IN.rays, 'out-rays', { d: 80, dur: 500 }, 'pointer-events-none absolute h-[150%] aspect-square')} aria-hidden="true">
-          <div
-            className="spin-slow h-full w-full rounded-full"
-            style={{
-              background: 'repeating-conic-gradient(from 0deg, rgba(255,255,255,.2) 0deg 6deg, transparent 6deg 18deg)',
-              WebkitMask: 'radial-gradient(circle, #000 0%, rgba(0,0,0,.5) 35%, transparent 68%)',
-              mask: 'radial-gradient(circle, #000 0%, rgba(0,0,0,.5) 35%, transparent 68%)',
-            }}
+          <SunburstFX
+            size={430}
+            color={gunSunburstColor(selectedGun.rarity)}
+            intensity={0.34}
+            speed={32}
+            core={false}
+            stars={false}
+            style={{ left: '50%', top: '50%' }}
           />
         </div>
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center" aria-hidden="true">
-          <SunburstFX size={430} color={gunSunburstColor(selectedGun.rarity)} intensity={0.55} speed={30} stars={false} />
-        </div>
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute h-40 w-40 rounded-full transition-colors duration-500"
-          style={{ background: `radial-gradient(circle, ${RARITY_COLOR[selectedGun.rarity]}66, transparent 70%)` }}
-        />
         <div className="pointer-events-none absolute bottom-0 left-1/2 h-6 w-48 -translate-x-1/2 rounded-[50%] border-2 border-[#c084fc]/40 bg-gradient-to-b from-[#3b2a66] to-[#1a1033] shadow-[0_0_24px_rgba(168,85,247,.35)]" />
         {!leaving && (
           <div key={`hero-fx-${heroKey}`} className="pointer-events-none absolute inset-0" aria-hidden="true">

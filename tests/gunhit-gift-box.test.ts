@@ -86,10 +86,32 @@ test('BossGiftBoxModal memakai kotak hadiah & efek Knife, tapi senjata dari data
 
 test('alur boss Gun Hit memakai BossGiftBoxModal sebagai bonus stage', () => {
   const app = readFileSync(path.join(ROOT, 'src/games/gunhit/App.tsx'), 'utf8');
-  assert.match(app, /import \{ BossGiftBoxModal \}/);
+  assert.match(app, /import \{ BossGiftBoxModal, GiftBoxScene \}/);
   assert.match(app, /<BossGiftBoxModal/);
   assert.match(app, /onClaim=\{handleGiftBoxClaim\}/);
   assert.match(app, /setBonusStageOpen\(true\)/);
+});
+
+test('peti milestone di halaman reward membuka kado sungguhan', () => {
+  const app = readFileSync(path.join(ROOT, 'src/games/gunhit/App.tsx'), 'utf8');
+  // Klaim milestone tidak lagi langsung memberi hadiah: ia menyiapkan kado.
+  assert.match(app, /setMilestoneGift\(\{ count, weaponId: reward \? reward\.id : null, coins: reward \? 0 : 1000 \}\)/);
+  // Hadiah baru masuk setelah kado terbuka dan tombol ambil ditekan.
+  assert.match(app, /const takeMilestoneGift = \(equip: boolean\) => \{/);
+  assert.match(app, /onClaim=\{\(equip\) => takeMilestoneGift\(equip\)\}/);
+  assert.match(app, /<GiftBoxScene\s+badge="★ REWARD MILESTONE ★"/);
+});
+
+test('GiftBoxScene memakai adegan buka kado Knife untuk kado mana pun', () => {
+  const src = readFileSync(path.join(ROOT, 'src/games/gunhit/components/BossGiftBoxModal.tsx'), 'utf8');
+  assert.match(src, /export function GiftBoxScene\(/);
+  // Tiga ketukan, tutup terbang, kotak tenggelam, sinar keluar dari kotak.
+  for (const needle of ['lid-fly', 'box-sink', 'beam-up', 'weapon-rise', 'TAP UNTUK MEMBUKA!']) {
+    assert.ok(src.includes(needle), `GiftBoxScene harus memakai ${needle}`);
+  }
+  // Kado koin (milestone saat semua senjata rarity itu sudah dimiliki) tetap punya reveal.
+  assert.match(src, /weapon \? \(/);
+  assert.match(src, /<CoinSprite size=\{132\} \/>/);
 });
 
 

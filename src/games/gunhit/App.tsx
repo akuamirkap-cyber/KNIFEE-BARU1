@@ -24,7 +24,7 @@ import SgaSettingsPanel from './components/SgaSettingsPanel';
 import SgaWeaponFlight, { WEAPON_FLIGHT_MS, type SgaWeaponFlightData } from './components/SgaWeaponFlight';
 import { Leaderboard as PerfectShotLeaderboard } from '../perfect-shot/components/Leaderboard';
 import { BossDefeatedModal } from './components/BossDefeatedModal';
-import { BossGiftBoxModal } from './components/BossGiftBoxModal';
+import { BossGiftBoxModal, GiftBoxScene } from './components/BossGiftBoxModal';
 import StarBuffModal from './components/StarBuffModal';
 import { QuestMap as PerfectShotQuestMap } from '../perfect-shot/components/QuestMap';
 import type { StageBase } from '../perfect-shot/quest/data';
@@ -318,6 +318,9 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   const [diamondReveal, setDiamondReveal] = useState<{ id: number; amount: number } | null>(null);
   const [diamondHudMode, setDiamondHudMode] = useState(false);
   const [weaponCelebration, setWeaponCelebration] = useState<{ weaponId: WeaponId; id: number } | null>(null);
+  // Peti milestone di halaman reward membuka kado sungguhan (tap 3× → tutup
+  // terbang → hadiah keluar) sebelum hadiahnya benar-benar masuk.
+  const [milestoneGift, setMilestoneGift] = useState<{ count: number; weaponId: WeaponId | null; coins: number } | null>(null);
 
   const [questState, setQuestState] = useState<QuestState>(getInitialQuests);
   const questStateRef = useRef(questState);
@@ -592,6 +595,8 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     });
   };
 
+  // Peti milestone di halaman reward: buka kadonya dulu, hadiah masuk setelah
+  // kado benar-benar terbuka dan pemain menekan tombol ambil.
   const handleClaimMilestone = (count: number) => {
     const current = questStateRef.current;
     const milestone = MILESTONES.find(item => item.count === count);
@@ -599,21 +604,37 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     const completed = QUESTS.filter(q => Math.min(q.progress(current, owned.length), q.target) >= q.target).length;
     if (!milestone || completed < count || current.milestonesClaimed.includes(count)) return;
 
-    const nextState = { ...current, milestonesClaimed: [...current.milestonesClaimed, count] };
     const available = WEAPONS.filter(w => w.rarity === milestone.rarity && !owned.includes(w.id));
     const reward = available.length ? available[Math.floor(Math.random() * available.length)] : null;
-    saveQuests(nextState);
     sfx4.match();
-    if (reward) {
+    setMilestoneGift({ count, weaponId: reward ? reward.id : null, coins: reward ? 0 : 1000 });
+  };
+
+  const takeMilestoneGift = (equip: boolean) => {
+    const gift = milestoneGift;
+    if (!gift) return;
+    const current = questStateRef.current;
+    const owned = ownedWeaponIds();
+    const completed = QUESTS.filter(q => Math.min(q.progress(current, owned.length), q.target) >= q.target).length;
+    if (completed < gift.count || current.milestonesClaimed.includes(gift.count)) {
+      setMilestoneGift(null);
+      return;
+    }
+    const nextState = { ...current, milestonesClaimed: [...current.milestonesClaimed, gift.count] };
+    if (gift.weaponId) {
+      saveQuests(nextState);
       try {
         const stored: string[] = JSON.parse(storage.getItem(LS.owned) || '[]');
-        storage.setItem(LS.owned, JSON.stringify([...new Set([...stored, reward.id])]));
-      } catch { storage.setItem(LS.owned, JSON.stringify([reward.id])); }
-      celebrateNewWeapon(reward.id);
+        storage.setItem(LS.owned, JSON.stringify([...new Set([...stored, gift.weaponId])]));
+      } catch { storage.setItem(LS.owned, JSON.stringify([gift.weaponId])); }
+      celebrateNewWeapon(gift.weaponId);
+      if (equip) chooseWeapon(gift.weaponId);
     } else {
-      depositCoins(1000);
-      saveQuests({ ...nextState, totalCoinsCollected: nextState.totalCoinsCollected + 1000 });
+      saveQuests(nextState);
+      depositCoins(gift.coins);
+      saveQuests({ ...nextState, totalCoinsCollected: nextState.totalCoinsCollected + gift.coins });
     }
+    setMilestoneGift(null);
   };
 
   // Create one engine per mounted slide. Quest/coin updates must not destroy a live run.
@@ -2027,6 +2048,24 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
             leaving={questLeaving}
           />
         )}
+
+        {/* Kado peti milestone di halaman reward: adegan buka kado yang sama
+            dengan stage bonus boss, bukan peti yang langsung berubah sendiri. */}
+        {milestoneGift && (() => {
+          const rewardWeapon = milestoneGift.weaponId ? getWeapon(milestoneGift.weaponId) : null;
+          return (
+            <GiftBoxScene
+              badge="★ REWARD MILESTONE ★"
+              headline={`MILESTONE ${milestoneGift.count}!`}
+              hint="🎁 Peti hadiah milestone siap dibuka!"
+              weapon={rewardWeapon ?? undefined}
+              coins={milestoneGift.coins}
+              claimLabel={rewardWeapon ? 'PAKAI & LANJUT ➜' : 'AMBIL HADIAH ➜'}
+              declineLabel={rewardWeapon ? 'Lanjut tanpa ganti senjata' : undefined}
+              onClaim={(equip) => takeMilestoneGift(equip)}
+            />
+          );
+        })()}
 
         {screen === 'menu' && leaderboardOpen && (
           <PerfectShotLeaderboard

@@ -24,6 +24,7 @@ import {
 import { drawGunCentered } from '../game/art/drawCentered';
 import { getGunMetrics } from '../game/art/metrics';
 import { getSavedSgaSpeed } from '../game/gameSpeed';
+import CoinSprite from '../../shared/CoinSprite';
 
 type BoxState = 'drop' | 'ready' | 'charging' | 'open';
 const TAPS = 3;
@@ -42,6 +43,9 @@ const RARITY_STARS: Record<Rarity, number> = {
   EPIC: 3,
   LEGENDARIS: 3,
 };
+
+/** Warna emas untuk kado yang isinya koin saja. */
+const COIN_RGB = '251,191,36';
 
 /** Koin bonus buka kotak: naik per stage + bonus rarity senjata. */
 export function giftBoxCoins(stage: number, rarity: Rarity): number {
@@ -113,21 +117,36 @@ function GunRevealCanvas({ id, silhouette }: { id: WeaponId; silhouette: boolean
   );
 }
 
-interface BossGiftBoxModalProps {
-  bossName: string;
-  stage: number;
-  /** Senjata yang sedang dipakai — tidak ikut di-roll supaya hadiah terasa baru. */
-  currentWeaponId?: WeaponId;
-  /** Klaim hadiah: koin bonus, id senjata baru, dan apakah langsung dipakai. */
-  onClaim: (coins: number, weaponId: WeaponId, equip: boolean) => void;
+export interface GiftBoxSceneProps {
+  /** Banner kecil di paling atas (mis. BONUS REWARD STAGE / REWARD MILESTONE). */
+  badge: string;
+  /** Judul besar yang dipecah per huruf. */
+  headline: string;
+  hint: string;
+  /** Senjata yang keluar dari kado. Kosongkan untuk kado berisi koin saja. */
+  weapon?: Weapon;
+  /** Koin bonus yang ikut diberikan. */
+  coins: number;
+  claimLabel: string;
+  declineLabel?: string;
+  onClaim: (equip: boolean) => void;
 }
 
 /**
- * Bonus stage kotak hadiah ala Knife Boss 100 Lv untuk Gun Hit Arcade:
- * kotak jatuh → tap 3× → buka (lid terbang + sinar + konfeti) → reveal senjata
- * baru dari katalog senjata Gun Hit.
+ * Adegan buka kado yang sama dengan slide Knife Boss 100 Lv:
+ * kotak jatuh → tap 3× → buka (lid terbang + sinar + konfeti) → reveal hadiah.
+ * Dipakai stage bonus boss dan peti hadiah di halaman reward.
  */
-export const BossGiftBoxModal = ({ bossName, stage, currentWeaponId, onClaim }: BossGiftBoxModalProps) => {
+export function GiftBoxScene({
+  badge,
+  headline,
+  hint,
+  weapon,
+  coins,
+  claimLabel,
+  declineLabel,
+  onClaim,
+}: GiftBoxSceneProps) {
   const active = useSlideActive();
   const wrapRef = useRef<HTMLDivElement>(null);
   const punchRef = useRef<HTMLDivElement>(null);
@@ -135,9 +154,7 @@ export const BossGiftBoxModal = ({ bossName, stage, currentWeaponId, onClaim }: 
   const [taps, setTaps] = useState(0);
   const [showInfo, setShowInfo] = useState(false);
 
-  const weapon: Weapon = useMemo(() => rollGiftWeapon(currentWeaponId), [currentWeaponId]);
-  const rayColor = RARITY_RGB[weapon.rarity];
-  const coins = giftBoxCoins(stage, weapon.rarity);
+  const rayColor = weapon ? RARITY_RGB[weapon.rarity] : COIN_RGB;
 
   useEffect(() => {
     if (!active || state !== 'drop') return;
@@ -190,7 +207,7 @@ export const BossGiftBoxModal = ({ bossName, stage, currentWeaponId, onClaim }: 
 
   const claim = (equip: boolean) => {
     boxSfx.click();
-    onClaim(coins, weapon.id, equip);
+    onClaim(equip);
   };
 
   const isOpen = state === 'open';
@@ -206,20 +223,20 @@ export const BossGiftBoxModal = ({ bossName, stage, currentWeaponId, onClaim }: 
       {/* Judul */}
       <div className="absolute inset-x-0 top-4 text-center">
         <span className="inline-block rounded-full bg-amber-400 px-3 py-0.5 text-[10px] font-black tracking-widest text-black shadow-md">
-          ★ BONUS REWARD STAGE ★
+          {badge}
         </span>
       </div>
       <div className="absolute inset-x-0 top-[72px] text-center">
         {!showInfo ? (
           <div className={`transition-all duration-300 ${isOpen ? 'scale-75 opacity-0' : ''}`}>
             <h2 className="text-[30px] font-black leading-none text-amber-300 drop-shadow-[0_3px_0_#9a5b00]">
-              <LetterPop text={`${bossName} DEFEATED!`} delay={0.2} />
+              <LetterPop text={headline} delay={0.2} />
             </h2>
             <p className="fade-up mt-2 text-base text-white/80" style={{ animationDelay: '.8s' }}>
-              🎁 Kotak hadiah boss didapat!
+              {hint}
             </p>
           </div>
-        ) : (
+        ) : weapon ? (
           <>
             <div className="pop-in flex justify-center">
               <span
@@ -242,6 +259,19 @@ export const BossGiftBoxModal = ({ bossName, stage, currentWeaponId, onClaim }: 
               {Array.from({ length: RARITY_STARS[weapon.rarity] }).map((_, i) => (
                 <span key={i} className="pop-in text-2xl text-yellow-300 drop-shadow-[0_0_8px_#fde047]" style={{ animationDelay: `${0.5 + i * 0.12}s` }}>
                   ★
+                </span>
+              ))}
+            </div>
+          </>
+        ) : (
+          <>
+            <h2 className="text-[30px] font-black leading-none text-amber-300 drop-shadow-[0_3px_0_#9a5b00]">
+              <LetterPop text="KOIN BONUS!" />
+            </h2>
+            <div className="fade-up mt-2 flex justify-center gap-1.5" style={{ animationDelay: '.3s' }}>
+              {[0, 1, 2].map((i) => (
+                <span key={i} className="pop-in" style={{ animationDelay: `${0.35 + i * 0.12}s` }}>
+                  <CoinSprite size={40} />
                 </span>
               ))}
             </div>
@@ -276,14 +306,23 @@ export const BossGiftBoxModal = ({ bossName, stage, currentWeaponId, onClaim }: 
           <div className="absolute left-1/2 top-[-62px] z-20 h-[240px] w-[336px] -translate-x-1/2">
             <div className="weapon-rise h-full w-full">
               <div className={`float relative flex h-full w-full items-center justify-center ${showInfo ? 'reveal-pop' : ''}`}>
-                <GunRevealCanvas id={weapon.id} silhouette={!showInfo} />
-                {!showInfo && (
-                  <span
-                    className="absolute inset-0 flex items-center justify-center pl-4 text-4xl font-bold text-white/90 drop-shadow-[0_0_10px_#7cf8ff]"
-                    style={{ transform: 'rotate(35deg)' }}
-                  >
-                    ?
-                  </span>
+                {weapon ? (
+                  <>
+                    <GunRevealCanvas id={weapon.id} silhouette={!showInfo} />
+                    {!showInfo && (
+                      <span
+                        className="absolute inset-0 flex items-center justify-center pl-4 text-4xl font-bold text-white/90 drop-shadow-[0_0_10px_#7cf8ff]"
+                        style={{ transform: 'rotate(35deg)' }}
+                      >
+                        ?
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <div className="relative grid place-items-center gap-1">
+                    <CoinSprite size={132} />
+                    <span className="text-[22px] font-black text-amber-300 drop-shadow-[0_2px_0_#7a4a00]">+{coins}</span>
+                  </div>
                 )}
               </div>
             </div>
@@ -337,7 +376,7 @@ export const BossGiftBoxModal = ({ bossName, stage, currentWeaponId, onClaim }: 
 
       {isOpen && <div className="flash pointer-events-none absolute inset-0 bg-white" />}
 
-      {/* Info senjata + aksi */}
+      {/* Info hadiah + aksi */}
       <div className={`absolute inset-x-0 ${showInfo ? 'top-[390px]' : 'bottom-[36px]'} flex flex-col items-center gap-2 px-6`}>
         {state === 'ready' && (
           <>
@@ -356,28 +395,65 @@ export const BossGiftBoxModal = ({ bossName, stage, currentWeaponId, onClaim }: 
         )}
         {showInfo && (
           <div className="pop-in flex w-full max-w-[340px] flex-col items-center gap-1.5">
-            <div className="flex flex-wrap items-center justify-center gap-1.5">
-              <span className="rounded-full border border-white/20 bg-black/45 px-2.5 py-1 text-[11px] font-black tracking-wide text-amber-200">
-                {weapon.emoji} {weapon.name}
-              </span>
-              <span
-                className="rounded-full px-2 py-1 text-[10px] font-black text-white"
-                style={{ background: RARITY_COLOR[weapon.rarity] }}
-              >
-                ⚡ {weapon.perk}
-              </span>
-            </div>
-            <p className="max-w-[340px] text-center text-[12px] leading-snug font-medium text-white/80">{weapon.desc}</p>
+            {weapon && (
+              <>
+                <div className="flex flex-wrap items-center justify-center gap-1.5">
+                  <span className="rounded-full border border-white/20 bg-black/45 px-2.5 py-1 text-[11px] font-black tracking-wide text-amber-200">
+                    {weapon.emoji} {weapon.name}
+                  </span>
+                  <span
+                    className="rounded-full px-2 py-1 text-[10px] font-black text-white"
+                    style={{ background: RARITY_COLOR[weapon.rarity] }}
+                  >
+                    ⚡ {weapon.perk}
+                  </span>
+                </div>
+                <p className="max-w-[340px] text-center text-[12px] leading-snug font-medium text-white/80">{weapon.desc}</p>
+              </>
+            )}
             <p className="text-[16px] font-black text-amber-300 drop-shadow-[0_2px_0_#7a4a00]">+{coins} KOIN 💰</p>
             <GreenButton onClick={() => claim(true)} className="w-full max-w-[300px] px-4 py-2 text-[18px]">
-              PAKAI &amp; LANJUT ➜
+              {claimLabel}
             </GreenButton>
-            <button onClick={() => claim(false)} className="text-[12px] font-bold text-white/75 underline underline-offset-2">
-              Lanjut tanpa ganti senjata
-            </button>
+            {declineLabel && (
+              <button onClick={() => claim(false)} className="text-[12px] font-bold text-white/75 underline underline-offset-2">
+                {declineLabel}
+              </button>
+            )}
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+interface BossGiftBoxModalProps {
+  bossName: string;
+  stage: number;
+  /** Senjata yang sedang dipakai — tidak ikut di-roll supaya hadiah terasa baru. */
+  currentWeaponId?: WeaponId;
+  /** Klaim hadiah: koin bonus, id senjata baru, dan apakah langsung dipakai. */
+  onClaim: (coins: number, weaponId: WeaponId, equip: boolean) => void;
+}
+
+/**
+ * Bonus stage kotak hadiah ala Knife Boss 100 Lv untuk Gun Hit Arcade:
+ * kotak jatuh → tap 3× → buka (lid terbang + sinar + konfeti) → reveal senjata
+ * baru dari katalog senjata Gun Hit.
+ */
+export const BossGiftBoxModal = ({ bossName, stage, currentWeaponId, onClaim }: BossGiftBoxModalProps) => {
+  const weapon: Weapon = useMemo(() => rollGiftWeapon(currentWeaponId), [currentWeaponId]);
+  const coins = giftBoxCoins(stage, weapon.rarity);
+  return (
+    <GiftBoxScene
+      badge="★ BONUS REWARD STAGE ★"
+      headline={`${bossName} DEFEATED!`}
+      hint="🎁 Kotak hadiah boss didapat!"
+      weapon={weapon}
+      coins={coins}
+      claimLabel="PAKAI & LANJUT ➜"
+      declineLabel="Lanjut tanpa ganti senjata"
+      onClaim={(equip) => onClaim(coins, weapon.id, equip)}
+    />
   );
 };

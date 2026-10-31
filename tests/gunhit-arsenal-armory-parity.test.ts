@@ -5,16 +5,21 @@ import { readFileSync } from 'node:fs';
 const arsenal = readFileSync('src/games/gunhit/components/Arsenal.tsx', 'utf8');
 const css = readFileSync('src/games/perfect-shot/index.css', 'utf8');
 
-test('the armory showcase runs the reference glow stack', () => {
-  // Rotating ray burst, landing flash, dust ring and the floating pose are the
-  // four beats that make Perfect Shot's showcase read as "juicy".
-  assert.match(arsenal, /spin-slow h-full w-full rounded-full/, 'the ray wheel spins');
-  assert.match(arsenal, /repeating-conic-gradient\(from 0deg, rgba\(255,255,255,\.2\) 0deg 6deg, transparent 6deg 18deg\)/);
+test('the armory showcase wears the menu sunburst, not a second ray wheel', () => {
+  // Landing flash, dust ring and the floating pose are the three beats that
+  // make the showcase read as "juicy"; the light itself is the menu's burst.
+  assert.match(
+    arsenal,
+    /<SunburstFX\s+size=\{430\}\s+color=\{gunSunburstColor\(selectedGun\.rarity\)\}\s+intensity=\{0\.34\}\s+speed=\{32\}\s+core=\{false\}\s+stars=\{false\}/,
+    'same size, speed, strength and no hot core as the cover screen',
+  );
+  assert.doesNotMatch(arsenal, /repeating-conic-gradient\(from 0deg, rgba\(255,255,255,\.2\)/, 'no extra conic ray wheel');
+  assert.doesNotMatch(arsenal, /h-40 w-40 rounded-full transition-colors/, 'no second rarity halo under the burst');
+  assert.equal(arsenal.split('<SunburstFX').length - 1, 1, 'exactly one sunburst in the showcase');
   assert.match(arsenal, /className="a sh-flash /, 'the white landing flash fires');
   assert.match(arsenal, /className="a sh-dust /, 'the dust ring fires');
   assert.match(arsenal, /className=\{`float /, 'the gun floats in place');
-  assert.match(arsenal, /radial-gradient\(circle, \$\{RARITY_COLOR\[selectedGun\.rarity\]\}66, transparent 70%\)/, 'rarity aura');
-  for (const cls of ['sh-flash', 'sh-dust', 'float', 'spin-slow', 'sh-sel', 'bounce-soft']) {
+  for (const cls of ['sh-flash', 'sh-dust', 'float', 'sh-sel', 'bounce-soft']) {
     assert.ok(css.includes(cls), `${cls} exists in the reference stylesheet`);
   }
 });
