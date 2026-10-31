@@ -175,3 +175,13 @@ test('GiftBoxScene bisa dirender untuk hadiah senjata maupun koin saja', () => {
   assert.ok(coinsOnly.includes('letter-pop'));
   assert.doesNotMatch(coinsOnly, /PAKAI &amp; LANJUT/);
 });
+
+test('kado tetap bisa dibuka dan hadiahnya tetap tergambar saat slide tidak aktif', () => {
+  const src = readFileSync(path.join(ROOT, 'src/games/gunhit/components/BossGiftBoxModal.tsx'), 'utf8');
+  // Kotak yang tampil harus selalu lanjut dari 'drop' ke 'ready' agar bisa ditap.
+  assert.match(src, /if \(state !== 'drop'\) return;/);
+  assert.doesNotMatch(src, /if \(!active \|\| state !== 'drop'\) return;/);
+  // Kanvas reveal menggambar satu frame statis ketika slide tidak aktif.
+  assert.match(src, /if \(!active\) \{\s*paint\(start\);\s*return;\s*\}/);
+  assert.doesNotMatch(src, /if \(!ctx\) return;\n    if \(!active\) return;/);
+});

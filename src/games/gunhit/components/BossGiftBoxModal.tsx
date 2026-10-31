@@ -82,11 +82,9 @@ function GunRevealCanvas({ id, silhouette }: { id: WeaponId; silhouette: boolean
     cv.height = H * dpr;
     const ctx = cv.getContext('2d');
     if (!ctx) return;
-    if (!active) return;
 
-    let raf = 0;
     const start = performance.now();
-    const loop = (now: number) => {
+    const paint = (now: number) => {
       const t = ((now - start) / 1000) * getSavedSgaSpeed();
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, W, H);
@@ -98,6 +96,19 @@ function GunRevealCanvas({ id, silhouette }: { id: WeaponId; silhouette: boolean
       ctx.scale(scale, scale);
       drawGunCentered(ctx, id, t, 0, true, undefined, true);
       ctx.restore();
+    };
+
+    // Kado selalu ada di layar saat komponen ini tampil, jadi hadiahnya tetap
+    // digambar walau slide sedang ditandai tidak aktif: satu frame statis lebih
+    // baik daripada kanvas kosong di balik kotak yang baru terbuka.
+    if (!active) {
+      paint(start);
+      return;
+    }
+
+    let raf = 0;
+    const loop = (now: number) => {
+      paint(now);
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
@@ -157,7 +168,8 @@ export function GiftBoxScene({
   const rayColor = weapon ? RARITY_RGB[weapon.rarity] : COIN_RGB;
 
   useEffect(() => {
-    if (!active || state !== 'drop') return;
+    // Tanpa gerbang `active`: kado yang sedang tampil harus selalu bisa dibuka.
+    if (state !== 'drop') return;
     const spd = getSavedSgaSpeed();
     boxSfx.whoosh();
     const a = setTimeout(() => {
@@ -170,7 +182,7 @@ export function GiftBoxScene({
       clearTimeout(a);
       clearTimeout(b);
     };
-  }, [active, state]);
+  }, [state]);
 
   const tap = useCallback(() => {
     if (state !== 'ready') return;
