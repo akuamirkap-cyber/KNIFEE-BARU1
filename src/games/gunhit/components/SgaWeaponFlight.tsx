@@ -3,6 +3,13 @@ import { useLayoutEffect, useRef } from 'react';
 type Rect = { x: number; y: number; w: number; h: number };
 export type SgaWeaponFlightData = { id: number; image: string; from: Rect; to: Rect };
 
+/**
+ * How long the captured menu frame travels before it lands on the gun slot.
+ * The live canvas gun stays hidden for exactly this long, so the hand-off never
+ * shows two weapons at once.
+ */
+export const WEAPON_FLIGHT_MS = 780;
+
 /** Carries the actual SGA menu-canvas frame into the gameplay weapon slot. */
 export default function SgaWeaponFlight({ flight }: { flight: SgaWeaponFlightData }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -20,7 +27,7 @@ export default function SgaWeaponFlight({ flight }: { flight: SgaWeaponFlightDat
       { offset: 0.78, transform: 'translate(0, 0) scale(1.06, .9)' },
       { offset: 0.9, transform: 'translate(0, -6px) scale(.98, 1.03)' },
       { transform: 'none' },
-    ], { duration: 780, fill: 'both' });
+    ], { duration: WEAPON_FLIGHT_MS, fill: 'both' });
     return () => animation.cancel();
   }, [flight]);
 

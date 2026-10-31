@@ -136,3 +136,38 @@ export function processBossPixels(data: Uint8ClampedArray, w: number, h: number)
 
   return smoothed;
 }
+
+/**
+ * Alpha-only radial contour of an already-cut-out artwork (the reference game's
+ * boss heads, rasterised from their own SVG). Unlike `processBossPixels` this
+ * never treats light pixels as sticker paper: those heads are drawn on a
+ * transparent background, so their pale bone / cream colours ARE the head.
+ */
+export function processAlphaRadii(data: Uint8ClampedArray, w: number, h: number): number[] {
+  const cx = w / 2;
+  const cy = h / 2;
+  const maxSearchR = Math.min(cx, cy);
+  const radii: number[] = new Array(360).fill(0.3);
+  for (let deg = 0; deg < 360; deg++) {
+    const rad = (deg * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    let outerR = 0;
+    for (let r = Math.floor(maxSearchR * 0.99); r >= 2; r--) {
+      const px = Math.round(cx + cos * r);
+      const py = Math.round(cy + sin * r);
+      if (px >= 0 && px < w && py >= 0 && py < h && data[(py * w + px) * 4 + 3] > 16) {
+        outerR = r;
+        break;
+      }
+    }
+    radii[deg] = outerR / maxSearchR;
+  }
+  const smoothed: number[] = new Array(360);
+  for (let deg = 0; deg < 360; deg++) {
+    let sum = 0;
+    for (let k = -2; k <= 2; k++) sum += radii[(deg + k + 360) % 360];
+    smoothed[deg] = sum / 5;
+  }
+  return smoothed;
+}

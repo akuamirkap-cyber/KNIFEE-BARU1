@@ -82,7 +82,7 @@ test('starting a map node launches that real SGA level without replacing stage g
   const game = read('src/games/gunhit/game/Game.ts');
   const map = read('src/games/gunhit/components/LevelMap.tsx');
   const app = read('src/games/gunhit/App.tsx');
-  assert.ok(game.includes('startAtLevel(level: number, weaponHandoff = false, weaponEntryDelay = 0, synchronizedEntrance = false, wheelEntryDelay = 0)'));
+  assert.ok(game.includes('startAtLevel(\n    level: number,\n    weaponHandoff = false,'));
   assert.ok(map.includes('Stage spesial SGA: sistem tetap memilih Batu, Bonus, atau Harta Karun'));
-  assert.ok(app.includes('gameRef.current?.startAtLevel(level, wantsWeaponFlight, gunEntryDelay, true, wheelEntryDelay)'));
+  assert.ok(app.includes('gameRef.current?.startAtLevel(level, wantsWeaponFlight, gunEntryDelay, true, wheelEntryDelay, gunHiddenFor)'));
 });

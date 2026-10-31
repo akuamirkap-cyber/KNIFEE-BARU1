@@ -141,25 +141,31 @@ test('Gameplay & menu weapons are scaled -10% (1.08x / 337x295) and wheel positi
   }
 });
 
-test('Wheel & special-stage sunburst is pure white (255,255,255) and always renders behind the wheel', async () => {
+test('Wheel & special-stage sunburst keeps Gun Hit\'s own warm stage colours and always renders behind the wheel', async () => {
   const {
+    AMBER_WHEEL_SUNBURST,
     WHITE_WHEEL_SUNBURST,
     getWheelSunburstTheme,
     getSpecialSunburstTheme,
     WHEEL_SUNBURST_THEMES,
   } = await import('../src/games/gunhit/game/sunburstPalette');
 
+  // The pure white lab sunburst still exists, but it is no longer forced on
+  // every stage: the game shows the amber rays it always had.
   assert.equal(WHITE_WHEEL_SUNBURST.rgb, '255,255,255');
-  assert.ok(!WHITE_WHEEL_SUNBURST.burstColors.includes('#fde047'), 'wheel sunburst is pure white, never yellow');
-  assert.ok(!WHITE_WHEEL_SUNBURST.burstColors.includes('#facc15'), 'wheel sunburst is pure white, never yellow');
+  assert.equal(AMBER_WHEEL_SUNBURST.rgb, '255,196,92');
+  assert.ok(AMBER_WHEEL_SUNBURST.burstColors.includes('#fde047'), 'the wheel sunburst is warm gold again');
 
+  const seen = new Set<string>();
   for (const style of ['orange', 'wood', 'target', 'knight', 'oni', 'cyborg', 'pirate'] as const) {
     const theme = getWheelSunburstTheme(style);
-    assert.equal(theme.rgb, '255,255,255', `${style} wheel sunburst is pure white`);
+    assert.notEqual(theme.rgb, '255,255,255', `${style} wheel sunburst is a stage colour, not lab white`);
+    seen.add(theme.rgb);
   }
+  assert.ok(seen.size >= 5, 'each stage family keeps its own sunburst colour');
   for (const mode of ['bonus', 'treasure', 'boulder'] as const) {
     const theme = getSpecialSunburstTheme(mode);
-    assert.equal(theme.rgb, '255,255,255', `${mode} special sunburst is pure white`);
+    assert.notEqual(theme.rgb, '255,255,255', `${mode} special sunburst is a stage colour`);
   }
   assert.equal(Object.keys(WHEEL_SUNBURST_THEMES).length, 7);
 

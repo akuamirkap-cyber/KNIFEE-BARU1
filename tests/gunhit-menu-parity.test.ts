@@ -11,19 +11,22 @@ const questModal = read('src/games/gunhit/components/QuestModal.tsx');
 const overlay = read('src/games/perfect-shot/components/TransitionOverlay.tsx');
 const overlayCss = read('src/games/perfect-shot/index.css');
 
-test('SGA menu wheel drops in its own layer at full reference strength, then pops a shock ring', () => {
+test('SGA menu keeps its own Gun Hit sunburst behind the weapon, not the reference conic ray disc', () => {
   const showcase = app.indexOf('Weapon showcase');
   assert.notEqual(showcase, -1);
-  const wheel = app.indexOf("planMotion('rays-drop', WHEEL.d, WHEEL.dur", showcase);
-  const gun = app.indexOf('planStyleMotion(menuPlan.gun', showcase);
-  assert.ok(wheel !== -1 && gun !== -1);
-  assert.ok(wheel < gun, 'the wheel is a sibling layer, never a child of the weapon preset wrapper');
-  assert.match(app.slice(showcase, wheel), /h-\[300px\] w-\[300px\]/);
-  assert.match(app.slice(showcase, wheel), /rays-shock/);
-  assert.match(app, /WHEEL\.d \+ WHEEL\.dur \* 0\.72/, 'the shock ring fires on the wheel pop-blast frame');
-  assert.match(app, /repeating-conic-gradient\(from 0deg,rgba\(200,240,240,\.22\)/);
-  // The old nested copy dimmed the rays to .13 — the reference uses .22.
-  assert.doesNotMatch(app, /rgba\(200,240,240,\.13\)/);
+  const showcaseSlice = app.slice(showcase, showcase + 2600);
+  // The reference menu's ray wheel (conic disc, drop layer, shock ring) is gone.
+  assert.doesNotMatch(showcaseSlice, /rays-drop/);
+  assert.doesNotMatch(showcaseSlice, /rays-shock/);
+  assert.doesNotMatch(app, /repeating-conic-gradient\(from 0deg,rgba\(200,240,240,\.22\)/);
+  // Game A's own sunburst is back at full strength behind the weapon canvas.
+  assert.match(app, /SunburstFX size=\{430\}/, 'the menu shows Gun Hit\'s own 430px sunburst');
+  assert.match(app, /SunburstFX size=\{430\}[^>]*intensity=\{0\.34\}/);
+  assert.match(app, /SunburstFX size=\{430\}[^>]*speed=\{32\}/);
+  assert.match(app, /SunburstFX size=\{430\}[^>]*core=\{false\}/);
+  assert.match(app, /SunburstFX size=\{430\}[^>]*stars=\{false\}/);
+  // It still rides the weapon pivot, so it hugs the gun instead of the frame.
+  assert.match(app, /--weapon-pivot-x/);
 });
 
 test('scope transition frames the real stage target and lets the wheel drop after the lens opens', () => {
@@ -32,8 +35,8 @@ test('scope transition frames the real stage target and lets the wheel drop afte
   // starts first and only then does the Perfect Shot drop begin.
   assert.match(app, /const hold = PLAY_SCOPE\.hold/);
   assert.match(app, /const wheelEntryDelay = hold \/ 1000/);
-  assert.match(app, /startAtLevel\(level, wantsWeaponFlight, gunEntryDelay, true, wheelEntryDelay\)/);
-  assert.match(app, /startSpecialStage\(specialMode, gunEntryDelay, true, wheelEntryDelay\)/);
+  assert.match(app, /startAtLevel\(level, wantsWeaponFlight, gunEntryDelay, true, wheelEntryDelay, gunHiddenFor\)/);
+  assert.match(app, /startSpecialStage\(specialMode, gunEntryDelay, true, wheelEntryDelay, gunHiddenFor, wantsWeaponFlight\)/);
   assert.match(game, /this\.wheelEntryDelayT = this\.synchronizedEntrance \? Math\.max\(0, wheelEntryDelay\) \* this\.pace : 0/);
   assert.match(game, /perfectShotWheelEntry\(\s*this\.wheelEntryT - this\.wheelEntryDelayT,\s*this\.pace,\s*this\.level\.radius,?\s*\)/);
   assert.match(game, /perfectShotWheelEntry\(wheelEntryT, this\.pace, R\)/);

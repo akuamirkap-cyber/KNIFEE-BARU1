@@ -21,7 +21,7 @@ import { GUN_HIT_MAP_MAX_LEVEL, getGunHitMapNodeTheme, getGunHitMapStage } from 
 import Arsenal from './components/Arsenal';
 import QuestModal from './components/QuestModal';
 import SgaSettingsPanel from './components/SgaSettingsPanel';
-import SgaWeaponFlight, { type SgaWeaponFlightData } from './components/SgaWeaponFlight';
+import SgaWeaponFlight, { WEAPON_FLIGHT_MS, type SgaWeaponFlightData } from './components/SgaWeaponFlight';
 import { Leaderboard as PerfectShotLeaderboard } from '../perfect-shot/components/Leaderboard';
 import { BossDefeatedModal } from './components/BossDefeatedModal';
 import { BossGiftBoxModal } from './components/BossGiftBoxModal';
@@ -1152,8 +1152,11 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       setMenuDeparture(null);
       setTransitioning(false);
       setTransitionStep(0);
-      if (specialMode) gameRef.current?.startSpecialStage(specialMode, gunEntryDelay, true, wheelEntryDelay);
-      else gameRef.current?.startAtLevel(level, wantsWeaponFlight, gunEntryDelay, true, wheelEntryDelay);
+      // The flying menu frame is the only weapon until it lands: the live gun
+      // stays hidden for the flight's own duration, then appears in place.
+      const gunHiddenFor = wantsWeaponFlight ? WEAPON_FLIGHT_MS / 1000 : 0;
+      if (specialMode) gameRef.current?.startSpecialStage(specialMode, gunEntryDelay, true, wheelEntryDelay, gunHiddenFor, wantsWeaponFlight);
+      else gameRef.current?.startAtLevel(level, wantsWeaponFlight, gunEntryDelay, true, wheelEntryDelay, gunHiddenFor);
       setScreen('playing');
     });
     deferPageClose(revealAt, () => setPlayTransition((current) => current ? { ...current, phase: 'reveal' } : current));
@@ -1699,26 +1702,10 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                 </div>
               </div>
 
-              {/* Weapon showcase — same layering as the reference menu: the wheel
-                  (rays) is a SIBLING of the weapon, so its own drop → squash →
-                  pop-blast timeline never inherits the weapon's comb spin/scale. */}
+              {/* Weapon showcase. The light behind the weapon is Gun Hit's own
+                  sunburst (`SunburstFX`, the amber-ray burst this menu has
+                  always used), never the reference menu's conic ray disc. */}
               <div className="relative flex min-h-0 flex-1 items-center justify-center">
-                <div className="pointer-events-none absolute left-1/2 top-1/2 z-0 h-[300px] w-[300px] -translate-x-1/2 -translate-y-1/2" aria-hidden="true">
-                  {!menuDeparture && (
-                    <span
-                      className="rays-shock absolute left-1/2 top-1/2 h-[220px] w-[220px] rounded-full"
-                      style={{
-                        borderStyle: 'solid',
-                        borderColor: 'rgba(220,255,255,.9)',
-                        boxShadow: '0 0 26px rgba(200,255,255,.6)',
-                        '--sd': `${(WHEEL.d + WHEEL.dur * 0.72) * menuPlan.k}ms`,
-                      } as CSSProperties}
-                    />
-                  )}
-                  <div {...planMotion('rays-drop', WHEEL.d, WHEEL.dur, 'h-full w-full', undefined, 'out-rays', 100, 500)}>
-                    <div className="spin-slow h-full w-full rounded-full" style={{ background: 'repeating-conic-gradient(from 0deg,rgba(200,240,240,.22) 0deg 7deg,transparent 7deg 22deg)', WebkitMask: 'radial-gradient(circle,#000 0%,rgba(0,0,0,.6) 35%,transparent 70%)', mask: 'radial-gradient(circle,#000 0%,rgba(0,0,0,.6) 35%,transparent 70%)' }} />
-                  </div>
-                </div>
                 <div {...(menuDeparture === 'play'
                   ? { className: 'relative z-10 h-[min(295px,54vh)] w-[min(337px,90vw)] max-w-full opacity-0', style: {} as CSSProperties }
                   : planStyleMotion(menuPlan.gun, gunTiming(menuPlan.gun), ['in-gun', 'out-spin'], 'relative z-10 h-[min(295px,54vh)] w-[min(337px,90vw)] max-w-full', 1))}>
@@ -1733,7 +1720,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                   {!menuDeparture && [18, 42, 64, 82].map((x, i) => <span key={x} className="mm-mote pointer-events-none absolute bottom-[14%] h-1.5 w-1.5 rounded-full bg-[#e0fbff]" style={{ left: `${x}%`, animationDelay: `${(3400 + i * 700) * menuPlan.k}ms` }} />)}
                   <div className="float relative h-full w-full" data-menu-gun>
                     <div ref={weaponPivotRef} className="pointer-events-none absolute inset-0" aria-hidden="true">
-                      <SunburstFX size={390} color={gunSunburstColor(getWeapon(weapon).rarity)} intensity={0.16} speed={24 / gameSpeed} core={false} stars={false} style={{ left: 'calc(50% + var(--weapon-pivot-x, 0px))', top: 'calc(50% + var(--weapon-pivot-y, 0px))' }} />
+                      <SunburstFX size={430} color={gunSunburstColor(getWeapon(weapon).rarity)} intensity={0.34} speed={32} core={false} stars={false} style={{ left: 'calc(50% + var(--weapon-pivot-x, 0px))', top: 'calc(50% + var(--weapon-pivot-y, 0px))' }} />
                       {!menuDeparture && menuPlan.gun === 'combo' && (
                         <div
                           aria-hidden="true"

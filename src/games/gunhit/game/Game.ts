@@ -78,15 +78,17 @@ import { drawStar, drawRockFragment } from './art/boulder';
 import { DiamondRock, drawRockDiamond, type BrokenRockCell } from './art/diamondRock';
 import { drawBonusCoin, TreasureChest } from './art/bonusArt';
 import { advanceTreasureCoins, throwTreasureCoins, type TreasureCoin } from './treasureShower';
-import { drawBreakerCoin } from '../../shared/coinArt';
+import { drawBreakerDiamond } from '../../shared/diamondArt';
+import { drawWalletCoin } from '../../shared/walletArt';
 import { getBossDef, type BossType } from './bossRoster';
-import { getWheelSunburstTheme, gunSunburstColor } from './sunburstPalette';
+import { getSpecialSunburstTheme, getWheelSunburstTheme, gunSunburstColor } from './sunburstPalette';
 import {
   drawBossMuzzleFlash,
   drawBossProjectile,
   type BossMuzzleFlash,
 } from './bossProjectileArt';
 import { getExactBossRadius, onBossAssetsLoaded } from './bossAssetProcessor';
+import { processAlphaRadii } from './bossAssetPixels';
 import {
   createFirework8State,
   drawFirework8Background,
@@ -898,8 +900,21 @@ export class Game {
   private wheelArtCache = new Map<string, HTMLImageElement>();
   private wheelArtKey = '';
   private wheelImage: HTMLImageElement | null = null;
+  /**
+   * The radial contour of the boss artwork that is actually on screen. Boss
+   * levels show the reference game's own head art (rasterised by `TargetArt`),
+   * so the hit test samples THAT bitmap instead of the legacy portrait: a shot
+   * sticks where the drawing is, exactly like the reference game's `edgeR()`.
+   */
+  private bossArtProfile: number[] | null = null;
   private gunEntryDelayT = 0;
   private gunEntryRate = 1;
+  /**
+   * While the menu's own captured frame is still flying to the gun slot, the
+   * canvas must not paint a second weapon underneath it. This clock hides the
+   * live gun for exactly as long as that flight lasts.
+   */
+  private gunHiddenT = 0;
   private stateT = 0;
   private recoil = 0;
   private muzzle = 0;
@@ -1549,8 +1564,7 @@ export class Game {
   /** Centre of the target's lower edge, accounting for the imported ghost's tip. */
   private ghostAimY(tip = 0): number {
     const radius = this.level.mode === 'treasure' ? 88
-      : this.level.boss ? getExactBossRadius(this.level.style as BossType, norm(Math.PI / 2 - this.rot), this.level.radius)
-        : this.level.radius;
+      : this.bossRadiusAt(norm(Math.PI / 2 - this.rot));
     return this.targetY + radius + (isSpecial(this.level.mode) ? 0 : tip);
   }
 
@@ -1800,6 +1814,7 @@ export class Game {
     weaponEntryDelay = 0,
     synchronizedEntrance = false,
     wheelEntryDelay = 0,
+    gunHiddenFor = 0,
   ) {
     sfx.unlock();
     // Slide 7's own AudioContext can only start after a user gesture as well.
@@ -1825,6 +1840,8 @@ export class Game {
     this.gunEntryDelayT = reducedMotion ? 0 : Math.max(0, weaponEntryDelay) * this.pace;
     this.gunEntryRate = this.synchronizedEntrance ? GAMEPLAY_GUN_ENTRY_DURATION / (0.56 * this.pace) : 1;
     this.gunEntryT = reducedMotion || weaponHandoff ? GAMEPLAY_GUN_ENTRY_DURATION : 0;
+    // The flying menu frame is the only weapon on screen until it lands.
+    this.gunHiddenT = weaponHandoff && !reducedMotion ? Math.max(0, gunHiddenFor) : 0;
   }
 
   /** Wire the Game B artwork source (the React side owns `TargetArt`). */
@@ -1856,13 +1873,35 @@ export class Game {
   start() { this.startRun(1); }
 
   /** Start an existing SGA level directly from the level map without changing its stage rules. */
-  startAtLevel(level: number, weaponHandoff = false, weaponEntryDelay = 0, synchronizedEntrance = false, wheelEntryDelay = 0) {
-    this.startRun(Math.max(1, Math.floor(level)), undefined, weaponHandoff, weaponEntryDelay, synchronizedEntrance, wheelEntryDelay);
+  startAtLevel(
+    level: number,
+    weaponHandoff = false,
+    weaponEntryDelay = 0,
+    synchronizedEntrance = false,
+    wheelEntryDelay = 0,
+    gunHiddenFor = 0,
+  ) {
+    this.startRun(
+      Math.max(1, Math.floor(level)),
+      undefined,
+      weaponHandoff,
+      weaponEntryDelay,
+      synchronizedEntrance,
+      wheelEntryDelay,
+      gunHiddenFor,
+    );
   }
 
   /** Menu shortcuts enter the same real, playable levels as the Arcade progression. */
-  startSpecialStage(mode: 'boulder' | SpecialMode, weaponEntryDelay = 0, synchronizedEntrance = false, wheelEntryDelay = 0) {
-    this.startRun(4, mode, false, weaponEntryDelay, synchronizedEntrance, wheelEntryDelay);
+  startSpecialStage(
+    mode: 'boulder' | SpecialMode,
+    weaponEntryDelay = 0,
+    synchronizedEntrance = false,
+    wheelEntryDelay = 0,
+    gunHiddenFor = 0,
+    weaponHandoff = false,
+  ) {
+    this.startRun(4, mode, weaponHandoff, weaponEntryDelay, synchronizedEntrance, wheelEntryDelay, gunHiddenFor);
   }
 
   toIdle() {
@@ -2212,9 +2251,44 @@ export class Game {
     // canvas faces below stay as the instant fallback for the first frames.
     if (this.wheelImage) c.drawImage(this.wheelImage, -R, -R, R * 2, R * 2);
     else drawFace(c, R, this.level.style);
+    // A boss is hit where its pixels are, never on a circle.
+    this.bossArtProfile = this.level.boss && this.wheelImage ? this.sampleArtProfile(this.wheelImage) : null;
     this.face = cv;
     this.faceCtx = c;
     this.faceR = R;
+  }
+
+  /** 360-bin alpha contour of the artwork currently drawn as the target. */
+  private sampleArtProfile(image: HTMLImageElement): number[] | null {
+    try {
+      const size = 240;
+      const cv = document.createElement('canvas');
+      cv.width = size;
+      cv.height = size;
+      const g = cv.getContext('2d');
+      if (!g) return null;
+      g.drawImage(image, 0, 0, size, size);
+      const pixels = g.getImageData(0, 0, size, size);
+      return processAlphaRadii(pixels.data, size, size);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * The target's surface radius at a local angle: the on-screen boss artwork's
+   * own contour when it has one, the imported portrait's contour otherwise, and
+   * a plain radius for the round stages. No circle is ever used for a boss.
+   */
+  private bossRadiusAt(localAngle: number, radius = this.level.radius): number {
+    if (!this.level.boss) return radius;
+    const TAU = Math.PI * 2;
+    const normA = ((localAngle % TAU) + TAU) % TAU;
+    const deg = Math.floor((normA * 180) / Math.PI) % 360;
+    if (this.bossArtProfile) {
+      return Math.max(radius * 0.3, this.bossArtProfile[deg] * radius * 1.02);
+    }
+    return getExactBossRadius(this.level.style as BossType, localAngle, radius);
   }
 
   private crack(a: number, tint?: string) {
@@ -3607,7 +3681,7 @@ export class Game {
       const ca = Math.cos(a);
       const sa = Math.sin(a);
       const surfaceR = it.acid.hybrid && this.level.boss
-        ? getExactBossRadius(this.level.style as BossType, it.angle, this.level.radius) * wScale : R;
+        ? this.bossRadiusAt(it.angle) * wScale : R;
       const sag = Math.min(1, it.age / 1.2);
       for (const b of it.acid.blobs) {
         const wob = Math.sin(t * 3 + b.ph) * 1.2;
@@ -4389,7 +4463,7 @@ export class Game {
     const worldA = Math.atan2(py, px);
     const local = norm(worldA - this.rot);
     // Exact pixel-perfect raycast radius matching the cutout silhouette of the generated boss head!
-    const effectiveR = bType ? getExactBossRadius(bType, local, this.level.radius) : this.level.radius;
+    const effectiveR = bType ? this.bossRadiusAt(local) : this.level.radius;
     const dist = Math.hypot(px, py);
     // A slide-3 round ("Slide 3" card) meets the wheel the way slide 3's own
     // `collide()` decides it: from its tip (`y - tip`, up to 54 px ahead of
@@ -4413,7 +4487,7 @@ export class Game {
       if (p.ghostVolley !== undefined && p.ghostVolley === it.ghostVolley) continue;
       const d = angDiff(local, it.angle);
       // Tangential angular clearance threshold
-      const itemR = bType ? getExactBossRadius(bType, it.angle, this.level.radius) : this.level.radius;
+      const itemR = bType ? this.bossRadiusAt(it.angle) : this.level.radius;
 
       if (it.type === 'bullet' || it.type === 'old') {
         const sc = it.scale ?? 1;
@@ -4458,7 +4532,7 @@ export class Game {
     if (dist <= R + 36) {
       for (const it of [...this.items]) {
         if (it.type !== 'coin' && it.type !== 'diamond_chest') continue;
-        const targetR = bType ? getExactBossRadius(bType, it.angle, this.level.radius) : this.level.radius;
+        const targetR = bType ? this.bossRadiusAt(it.angle) : this.level.radius;
         const cp = this.worldPos(it.angle, it.type === 'coin' ? targetR + 18 : targetR + 4);
         const hitDistance = Math.hypot(p.x - cp.x, p.y - cp.y);
 
@@ -4897,7 +4971,7 @@ export class Game {
       if (it.type !== 'bullet' || !it.busterPellet) continue;
       c.save();
       c.rotate(it.angle);
-      const itemR = this.level.boss ? getExactBossRadius(this.level.style as BossType, it.angle, radius) : radius;
+      const itemR = this.bossRadiusAt(it.angle, radius);
       c.translate(itemR + 3, 0);
       if (it.scale) c.scale(it.scale, it.scale);
       drawBusterPelletOrb(c, 0, 0, this.time + it.angle * 2);
@@ -5156,6 +5230,7 @@ export class Game {
     const dt = rawDt * this.pace;
     // The stage clock and gun must stop while the player chooses a star upgrade.
     if (this.choosingBuff) return;
+    if (this.gunHiddenT > 0) this.gunHiddenT = Math.max(0, this.gunHiddenT - dt);
     if (this.gunEntryDelayT > 0) {
       this.gunEntryDelayT = Math.max(0, this.gunEntryDelayT - dt);
     } else if (this.gunEntryT < GAMEPLAY_GUN_ENTRY_DURATION) {
@@ -6102,9 +6177,7 @@ export class Game {
       for (const it of this.items) {
         if (it.type === 'bullet' && it.w === 'yoyo') {
           const worldA = it.angle + this.rot;
-          const itemR = this.level.boss
-            ? getExactBossRadius(this.level.style as BossType, it.angle, this.level.radius)
-            : this.level.radius;
+          const itemR = this.bossRadiusAt(it.angle);
           const dist = itemR + 4;
           stuckPins.push({
             x: CX + Math.cos(worldA) * dist,
@@ -6150,9 +6223,7 @@ export class Game {
       for (const it of this.items) {
         if (it.type === 'bullet' && it.w === 'diamond' && !it.hideArt) {
           const worldA = it.angle + this.rot;
-          const itemR = this.level.boss
-            ? getExactBossRadius(this.level.style as BossType, it.angle, this.level.radius)
-            : this.level.radius;
+          const itemR = this.bossRadiusAt(it.angle);
           const dist = itemR + 14;
           stuckPins.push({
             x: CX + Math.cos(worldA) * dist,
@@ -6421,8 +6492,9 @@ export class Game {
   }
 
   private drawCoin(c: CanvasRenderingContext2D, t: number, glowing = true) {
-    // HUD and classic pickups share Diamond Breaker's reflective dollar coin.
-    drawBreakerCoin(c, 0, 0, CLASSIC_COIN_RADIUS, t, 0, Math.abs(Math.cos(t * 3)) * 0.6 + 0.4, glowing);
+    // HUD and classic pickups wear the collection screen's own coin badge:
+    // the amber `Coins` disc from the armory wallet, still flipping.
+    drawWalletCoin(c, 0, 0, CLASSIC_COIN_RADIUS, Math.abs(Math.cos(t * 3)) * 0.6 + 0.4, glowing);
   }
 
   // Berlian / Diamond tertancap ke papan arena:
@@ -6435,7 +6507,7 @@ export class Game {
     c.translate(shake, 0);
     c.scale(CLASSIC_DIAMOND_SCALE, CLASSIC_DIAMOND_SCALE);
 
-    const D_SIZE = 14; // Entire normal-stage diamond, including facets and badge, is 20% larger.
+    const D_SIZE = 14; // The board keeps its old footprint; only the gem art changes.
 
     // Pendaran kilau kristal (fast vector halo, zero Gaussian shadowBlur)
     c.fillStyle = hits === 1 ? 'rgba(251,113,133,0.28)' : 'rgba(56,189,248,0.26)';
@@ -6449,82 +6521,15 @@ export class Game {
     c.ellipse(0, 0, D_SIZE * 0.8, 3.5, 0, 0, TAU);
     c.fill();
 
-    // 1. Bagian kerucut tajam (pavilion) yang MENANCAP KE DALAM PAPAN (-y direction)
-    // Dibuat agak tembus pandang / tertancap di kayu/kulit target
-    c.beginPath();
-    c.moveTo(0, -D_SIZE * 1.15); // Ujung kerucut paling dalam menancap ke pusat papan!
-    c.lineTo(-D_SIZE * 0.82, -1);
-    c.lineTo(D_SIZE * 0.82, -1);
-    c.closePath();
-    const gDeep = c.createLinearGradient(0, -D_SIZE * 1.15, 0, 0);
-    if (hits === 1) {
-      gDeep.addColorStop(0, 'rgba(159,18,57,0.3)');
-      gDeep.addColorStop(0.7, 'rgba(244,63,94,0.6)');
-      gDeep.addColorStop(1, 'rgba(253,224,71,0.8)');
-    } else {
-      gDeep.addColorStop(0, 'rgba(12,74,110,0.35)');
-      gDeep.addColorStop(0.65, 'rgba(14,165,233,0.65)');
-      gDeep.addColorStop(1, 'rgba(56,189,248,0.85)');
-    }
-    c.fillStyle = gDeep;
-    c.fill();
-    c.strokeStyle = hits === 1 ? 'rgba(254,205,211,0.5)' : 'rgba(186,230,253,0.5)';
-    c.lineWidth = 1;
-    c.stroke();
-
-    // 2. Bagian mahkota berlian (crown & table) yang MENONJOL KELUAR (+y direction)
-    // Inilah setengah berlian yang terlihat mengkilap di permukaan papan!
-    c.beginPath();
-    c.moveTo(-D_SIZE * 0.85, 0);
-    c.lineTo(-D_SIZE * 0.55, D_SIZE * 0.65); // Sisi mahkota kiri
-    c.lineTo(D_SIZE * 0.55, D_SIZE * 0.65);  // Sisi mahkota kanan
-    c.lineTo(D_SIZE * 0.85, 0);
-    c.lineTo(0, -3); // Sedikit bevel ke dalam
-    c.closePath();
-
-    const gCrown = c.createLinearGradient(-D_SIZE, 0, D_SIZE, D_SIZE * 0.65);
-    if (hits === 1) {
-      // Retak kemerahan/kuning tanda tembakan 1 mengenai berlian!
-      gCrown.addColorStop(0, '#fef08a');
-      gCrown.addColorStop(0.35, '#fb7185');
-      gCrown.addColorStop(0.7, '#e11d48');
-      gCrown.addColorStop(1, '#9f1239');
-    } else {
-      // Berlian cyan cemerlang berkilauan
-      gCrown.addColorStop(0, '#ffffff');
-      gCrown.addColorStop(0.2, '#cffafe');
-      gCrown.addColorStop(0.6, '#38bdf8');
-      gCrown.addColorStop(1, '#0284c7');
-    }
-    c.fillStyle = gCrown;
-    c.fill();
-    c.shadowBlur = 0;
-    c.strokeStyle = hits === 1 ? '#fecdd3' : '#e0f2fe';
-    c.lineWidth = 1.6;
-    c.stroke();
-
-    // Garis faset kristal (facet cut) pada setengah berlian yang menonjol
-    c.strokeStyle = 'rgba(255,255,255,0.85)';
-    c.lineWidth = 1;
-    c.beginPath();
-    // Garis horizontal faset
-    c.moveTo(-D_SIZE * 0.85, 0);
-    c.lineTo(D_SIZE * 0.85, 0);
-    // Garis segitiga faset
-    c.moveTo(-D_SIZE * 0.55, D_SIZE * 0.65);
-    c.lineTo(0, 0);
-    c.lineTo(D_SIZE * 0.55, D_SIZE * 0.65);
-    c.stroke();
-
-    // Kilatan specular cahaya di sudut atas berlian
-    c.fillStyle = '#ffffff';
-    c.beginPath();
-    c.arc(-D_SIZE * 0.35, D_SIZE * 0.45, 1.8, 0, TAU);
-    c.fill();
+    // The gem itself is the collection screen's diamond — `DiamondSprite` draws
+    // exactly this (`drawBreakerDiamond`), so the wallet and the board agree.
+    // It sits a little proud of the board so the crown stays readable while the
+    // pavilion is still sunk into the surface.
+    drawBreakerDiamond(c, 0, -D_SIZE * 0.52, t, 0.22);
 
     // Retakan visual saat hits === 1
     if (hits === 1) {
-      c.strokeStyle = '#ffffff';
+      c.strokeStyle = 'rgba(255,255,255,0.95)';
       c.lineWidth = 1.3;
       c.beginPath();
       c.moveTo(-4, D_SIZE * 0.55);
@@ -6541,9 +6546,9 @@ export class Game {
     const badgeLabel = hits === 1 ? '1x!' : '2x';
     c.strokeStyle = 'rgba(0,0,0,0.82)';
     c.lineWidth = 2.4;
-    c.strokeText(badgeLabel, 0, D_SIZE * 0.3);
+    c.strokeText(badgeLabel, 0, D_SIZE * 0.95);
     c.fillStyle = hits === 1 ? '#ffe4e6' : '#ffffff';
-    c.fillText(badgeLabel, 0, D_SIZE * 0.3);
+    c.fillText(badgeLabel, 0, D_SIZE * 0.95);
 
     c.restore();
   }
@@ -6616,19 +6621,14 @@ export class Game {
       c.globalCompositeOperation = 'lighter';
       drawRgbGlowSprite(c, px, py + 42 * gs, 120 * gs, 32 * gs, acc, 0.72);
       c.restore();
-      c.save();
-      c.fillStyle = '#121824';
-      c.strokeStyle = 'rgba(150,200,255,0.3)';
-      c.lineWidth = 2;
-      c.beginPath();
-      c.ellipse(px, py + 44 * gs, 68 * gs, 18 * gs, 0, 0, TAU);
-      c.fill();
-      c.stroke();
-      c.restore();
+      // No pedestal disc and no rim ring here: the gun stands in its own light
+      // only, so no dark circle / outlined ellipse sits around the weapon.
     }
   }
 
   private drawGunNow(c: CanvasRenderingContext2D) {
+    // One weapon only: the captured menu frame is still travelling here.
+    if (this.gunHiddenT > 0) return;
     const sinceShot = this.state === 'idle' ? 9 : this.rt - this.lastShotRT;
     const kerisCharging =
       this.weapon.id === 'keris' && sinceShot >= 0 && sinceShot < KERIS_GLEAM_DUR;
@@ -6836,16 +6836,6 @@ export class Game {
       for (const ox of this.gunOffsets) {
         drawYoyoSlideGunGlow(c, CX + ox, y0 + 60 * GAMEPLAY_GUN_SCALE, nextHue, this.recoil);
       }
-    }
-    if (this.weapon.id === 'keris' && !s3Art) {
-      c.save();
-      c.fillStyle = 'rgba(0,0,0,0.42)';
-      for (const ox of this.gunOffsets) {
-        c.beginPath();
-        c.ellipse(CX + ox, GUN_Y + entryOffset + 172 * GAMEPLAY_GUN_SCALE, 44 * GAMEPLAY_GUN_SCALE, 9 * GAMEPLAY_GUN_SCALE, 0, 0, TAU);
-        c.fill();
-      }
-      c.restore();
     }
     if (this.weapon.id === 'diamond' && !s3Art) {
       for (const ox of this.gunOffsets) {
@@ -7340,7 +7330,16 @@ export class Game {
     // Pure-white Sunburst ALWAYS renders BEHIND the front view of the wheel,
     // rock, bonus coin ring, treasure chest, and shattering wheel fragments!
     if (this.state !== 'idle' && isSpecial(this.level.mode)) {
-      drawBehindWheelSunburst(c, CX, this.targetY + wheelEntry.offsetY, R * 1.92, this.time, 0.42 * wheelEntry.opacity);
+      const specialRays = getSpecialSunburstTheme(this.level.mode as 'boulder' | 'bonus' | 'treasure');
+      drawBehindWheelSunburst(
+        c,
+        CX,
+        this.targetY + wheelEntry.offsetY,
+        R * 1.92,
+        this.time,
+        0.42 * wheelEntry.opacity,
+        specialRays.rgb,
+      );
     }
     const clearBurstT = this.stageClearBurstT ?? 0;
     if (clearBurstT > 0) {
@@ -7348,6 +7347,7 @@ export class Game {
       const u = Math.max(0, Math.min(1, 1 - clearBurstT / burstMax));
       const fade = 1 - u;
       const burstR = (this.stageClearBurstBoss ? 255 : 210) * (0.72 + 0.42 * Math.min(1, u * 2.2));
+      const clearRays = getWheelSunburstTheme(this.level.style);
       drawBehindWheelSunburst(
         c,
         CX,
@@ -7355,10 +7355,11 @@ export class Game {
         burstR,
         this.time * 1.8,
         fade * (this.stageClearBurstBoss ? 0.95 : 0.82),
+        clearRays.rgb,
       );
       c.save();
       c.globalCompositeOperation = 'lighter';
-      c.strokeStyle = `rgba(255,255,255,${(fade * 0.55).toFixed(3)})`;
+      c.strokeStyle = clearRays.shockwave.replace(/[\d.]+\)$/, `${(fade * 0.55).toFixed(3)})`);
       c.lineWidth = (this.stageClearBurstBoss ? 4.5 : 3.2) * fade;
       c.beginPath();
       c.arc(CX, this.targetY, R * 0.55 + u * (this.stageClearBurstBoss ? 195 : 155), 0, TAU);
@@ -7457,7 +7458,7 @@ export class Game {
           // Masuk lebih dalam hingga hanya terlihat setengah (50% tertanam di dalam papan)
           const embedDepth = totalWeaponLen * 0.5;
           const pencilEmbedBonus = it.w === 'pencil' ? Math.sin(it.angle * 13) * 5 : 0;
-          const itemR = this.level.boss ? getExactBossRadius(this.level.style as BossType, it.angle, R) : R;
+          const itemR = this.bossRadiusAt(it.angle, R);
           const snowball = it.type === 'bullet' && it.w === 'snowball';
           const firework = it.type === 'bullet' && it.w === 'firework';
           const yoyo = it.type === 'bullet' && it.w === 'yoyo';
@@ -7593,7 +7594,7 @@ export class Game {
           c.rotate(it.angle - Math.PI / 2);
           const k = this.spikeOffT > 0 ? Math.min(1, this.spikeOffT / 0.25) * (this.spikeOffT > 0.3 ? 1 : this.spikeOffT / 0.3) : 0;
           // Di boss, duri menempel pas pada permukaan kontur kepala organik boss!
-          const itemR = this.level.boss ? getExactBossRadius(this.level.style as BossType, it.angle, R) : R;
+          const itemR = this.bossRadiusAt(it.angle, R);
           c.translate(0, itemR - 6 - (SPIKE_LEN + 4) * SPIKE_SCALE * Math.min(1, k * 1.5));
           this.drawSpike(c);
           c.restore();
@@ -7657,7 +7658,7 @@ export class Game {
           c.save();
           if (!this.level.boss) { c.beginPath(); c.arc(0, 0, R, 0, TAU); c.clip(); }
           c.rotate(it.angle - Math.PI / 2);
-          const itemR = this.level.boss ? getExactBossRadius(this.level.style as BossType, it.angle, R) : R;
+          const itemR = this.bossRadiusAt(it.angle, R);
           c.translate(0, itemR - 11);
           if (it.scale) c.scale(it.scale, it.scale);
           drawXenoCorrosion(c, 0, 0, this.time, it.acid.seed, it.age);
@@ -7666,7 +7667,7 @@ export class Game {
           c.save();
           c.rotate(it.angle - Math.PI / 2);
           const sink = Math.max(0, 1 - it.age * 12) * 6;
-          const itemR = this.level.boss ? getExactBossRadius(this.level.style as BossType, it.angle, R) : R;
+          const itemR = this.bossRadiusAt(it.angle, R);
           c.translate(0, itemR + sink);
           if (it.scale) c.scale(it.scale, it.scale);
           drawKerisStuckCrater(c, 0, this.time);
@@ -7675,7 +7676,7 @@ export class Game {
           c.save();
           c.rotate(it.angle - Math.PI / 2);
           const sink = Math.max(0, 1 - it.age * 12) * 6;
-          const itemR = this.level.boss ? getExactBossRadius(this.level.style as BossType, it.angle, R) : R;
+          const itemR = this.bossRadiusAt(it.angle, R);
           c.translate(0, itemR - 3 + sink);
           if (it.scale) c.scale(it.scale, it.scale);
           drawSlide3BazookaStuckCrater(c, this.time, it.angle * 3.7, Math.max(0.38, 1 - it.age * 0.8));
@@ -7766,7 +7767,7 @@ export class Game {
         if (it.type !== 'coin' && it.type !== 'diamond_chest') continue;
         c.save();
         c.rotate(it.angle - Math.PI / 2);
-        const itemR = this.level.boss ? getExactBossRadius(this.level.style as BossType, it.angle, R) : R;
+        const itemR = this.bossRadiusAt(it.angle, R);
         if (it.type === 'coin') {
           c.translate(0, itemR + 18);
           this.drawCoin(c, this.time + it.angle);
