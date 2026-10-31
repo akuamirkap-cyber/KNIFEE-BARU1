@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { Check, Coins, Crosshair, Crown, Download, Flame, Gem, LockKeyhole, MoreHorizontal, Palette, Shield, Skull, Star, Zap } from 'lucide-react';
+import { Check, Crosshair, Crown, Download, Flame, Gem, LockKeyhole, MoreHorizontal, Palette, Shield, Skull, Star, Zap } from 'lucide-react';
+import CoinSprite from '../../shared/CoinSprite';
 import DiamondSprite from '../../shared/DiamondSprite';
 import { WEAPONS, getWeapon, RARITY_COLOR, type WeaponId, type Weapon } from '../game/weapons';
 import { BOSS_ROSTER, type BossProfile } from '../game/bossRoster';
@@ -509,7 +510,7 @@ export default function Arsenal({
           </div>
         </div>
         <div className="flex h-9 shrink-0 items-center gap-1.5 rounded-full border-2 border-white/10 bg-black/45 pl-2 pr-1 text-white shadow-inner">
-          <span className="grid h-6 w-6 place-items-center rounded-full border border-amber-200/60 bg-gradient-to-b from-yellow-300 to-amber-500 text-amber-950 shadow"><Coins className="h-4 w-4" /></span>
+          <CoinSprite size={24} className="drop-shadow-[0_0_5px_rgba(255,210,80,.7)]" />
           <span className="min-w-[24px] text-[13px] font-black">{totalCoins}</span>
           <span className="h-5 w-px bg-white/20" />
           <DiamondSprite size={17} />

@@ -89,21 +89,27 @@ test('the alpha contour of a cut-out head follows its shape instead of filling a
   assert.ok(Math.max(...radii) - Math.min(...radii) > 0.3, 'the contour is a silhouette, not a circle');
 });
 
-test('gameplay coins and diamonds wear the menu wallet art', () => {
+test('every coin and diamond in Game A is the Diamond Breaker art', () => {
   const game = read('src/games/gunhit/game/Game.ts');
-  const wallet = read('src/games/shared/walletArt.ts');
-  assert.match(game, /import \{ drawWalletCoin \} from '\.\.\/\.\.\/shared\/walletArt';/);
-  assert.match(game, /drawWalletCoin\(c, 0, 0, CLASSIC_COIN_RADIUS, Math\.abs\(Math\.cos\(t \* 3\)\) \* 0\.6 \+ 0\.4, glowing\)/);
-  assert.doesNotMatch(game, /drawBreakerCoin/);
-  // Same diamond the armory's DiamondSprite draws.
-  assert.match(game, /drawBreakerDiamond\(c, 0, -D_SIZE \* 0\.52, t, 0\.22\)/);
-  assert.match(wallet, /export function drawWalletCoinsGlyph/);
-  assert.match(wallet, /#fde047/);
-  assert.match(wallet, /#f59e0b/);
-  assert.match(wallet, /#451a03/);
   const arsenal = read('src/games/gunhit/components/Arsenal.tsx');
-  assert.match(arsenal, /from-yellow-300 to-amber-500/, 'the wallet badge keeps the same two colours');
-  assert.match(arsenal, /<Coins className="h-4 w-4" \/>/);
+  const sprite = read('src/games/shared/CoinSprite.tsx');
+  const diamondSprite = read('src/games/shared/DiamondSprite.tsx');
+
+  // HUD + every board pickup use the breaker coin, and nothing else.
+  assert.match(game, /import \{ drawBreakerCoin \} from '\.\.\/\.\.\/shared\/coinArt';/);
+  assert.match(game, /drawBreakerCoin\(c, 0, 0, CLASSIC_COIN_RADIUS, t, 0, Math\.abs\(Math\.cos\(t \* 3\)\) \* 0\.6 \+ 0\.4, glowing\)/);
+  assert.doesNotMatch(game, /drawWalletCoin/);
+  // The board diamond is the Diamond Breaker gem.
+  assert.match(game, /drawBreakerDiamond\(c, 0, -D_SIZE \* 0\.52, t, 0\.22\)/);
+
+  // The shared sprites the DOM HUD, quest modal, result card and wallet use.
+  assert.match(sprite, /import \{ drawBreakerCoin \} from '\.\/coinArt';/);
+  assert.match(diamondSprite, /import \{ drawBreakerDiamond \} from '\.\/diamondArt';/);
+
+  // The armory wallet is the same coin now, not a second icon.
+  assert.match(arsenal, /<CoinSprite size=\{24\}/);
+  assert.match(arsenal, /<DiamondSprite size=\{17\} \/>/);
+  assert.doesNotMatch(arsenal, /\bCoins\b/);
 });
 
 test("the wheel sunburst is Gun Hit's warm stage light again", () => {

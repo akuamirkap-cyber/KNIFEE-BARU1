@@ -78,8 +78,8 @@ import { drawStar, drawRockFragment } from './art/boulder';
 import { DiamondRock, drawRockDiamond, type BrokenRockCell } from './art/diamondRock';
 import { drawBonusCoin, TreasureChest } from './art/bonusArt';
 import { advanceTreasureCoins, throwTreasureCoins, type TreasureCoin } from './treasureShower';
+import { drawBreakerCoin } from '../../shared/coinArt';
 import { drawBreakerDiamond } from '../../shared/diamondArt';
-import { drawWalletCoin } from '../../shared/walletArt';
 import { getBossDef, type BossType } from './bossRoster';
 import { getSpecialSunburstTheme, getWheelSunburstTheme, gunSunburstColor } from './sunburstPalette';
 import {
@@ -6492,9 +6492,9 @@ export class Game {
   }
 
   private drawCoin(c: CanvasRenderingContext2D, t: number, glowing = true) {
-    // HUD and classic pickups wear the collection screen's own coin badge:
-    // the amber `Coins` disc from the armory wallet, still flipping.
-    drawWalletCoin(c, 0, 0, CLASSIC_COIN_RADIUS, Math.abs(Math.cos(t * 3)) * 0.6 + 0.4, glowing);
+    // One coin in the whole game: Diamond Breaker's reflective gold coin. The
+    // HUD, every pickup, the bonus ring and the wallet all show this same art.
+    drawBreakerCoin(c, 0, 0, CLASSIC_COIN_RADIUS, t, 0, Math.abs(Math.cos(t * 3)) * 0.6 + 0.4, glowing);
   }
 
   // Berlian / Diamond tertancap ke papan arena:
