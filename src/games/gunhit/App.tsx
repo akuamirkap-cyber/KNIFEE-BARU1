@@ -44,7 +44,7 @@ import { ACH_IN, ACH_OUT } from '../perfect-shot/ach/data';
 import { LB_IN, LB_OUT } from '../perfect-shot/rank/data';
 import { GameIcon, NavFrame, type IconName } from '../perfect-shot/ui/GameIcons';
 import { useSettings as usePerfectShotSettings } from '../perfect-shot/theme/themes';
-import { animClass, animStore, getSharedMenuPlan, gunTiming, resolvePlan, subscribeMenuPlan, TL, WHEEL, useAnimCfg, type Plan, type StyleId } from '../perfect-shot/anim/presets';
+import { animClass, animStore, getSharedMenuPlan, gunTiming, publishMenuPlan, resolvePlan, SPEEDS, STYLES, subscribeMenuPlan, TL, WHEEL, useAnimCfg, type Plan, type StyleId } from '../perfect-shot/anim/presets';
 import { OVERLAY_RATE } from '../perfect-shot/anim/speed';
 
 type Screen = 'menu' | 'playing' | 'over';
@@ -265,7 +265,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   const [menuDeparture, setMenuDeparture] = useState<MenuDeparture>(null);
   const menuPageTransitionBusyRef = useRef(false);
   const menuPageTransitionTimersRef = useRef<number[]>([]);
-  const [playTransition, setPlayTransition] = useState<{ phase: OverlayPhase; label: string; origin: { x: number; y: number } } | null>(null);
+  const [playTransition, setPlayTransition] = useState<{ phase: OverlayPhase; label: string; origin: { x: number; y: number }; lens: number } | null>(null);
   const [playMenuExiting, setPlayMenuExiting] = useState(false);
   const [weaponFlight, setWeaponFlight] = useState<SgaWeaponFlightData | null>(null);
   const playTransitionBusyRef = useRef(false);
@@ -1076,18 +1076,26 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       setPlayMenuExiting(true);
       setMenuDeparture('play');
     }
+    const stageConfig = makeLevel(level, specialMode);
     const lead = fromMenu || fromSettings ? PLAY_SCOPE.menuLead : fromMap ? PLAY_SCOPE.questLead : PLAY_SCOPE.otherLead;
     const mountAt = lead + PLAY_SCOPE.cover;
+    // The wheel drops in with Perfect Shot's entrance curve (42% of 1.1s, scaled
+    // by the SGA speed preset). Keep the lens closed until it has actually landed,
+    // otherwise the crosshair opens on empty space above the target.
+    const wheelSettleMs = Math.round(1.1 * gameSpeed * 0.42 * 1000 + 90);
+    const hold = Math.max(PLAY_SCOPE.hold, wheelSettleMs);
     // Keep the filled WAAPI flight visible through reveal, matching Perfect Shot;
     // it is cleared alongside the scope after the in-game gun is fully exposed.
-    const revealAt = mountAt + PLAY_SCOPE.hold;
+    const revealAt = mountAt + hold;
     const finishAt = revealAt + PLAY_SCOPE.reveal;
-    const stageConfig = makeLevel(level, specialMode);
-    const gunEntryDelay = fromMap || fromSettings ? PLAY_SCOPE.hold / 1000 : 0;
+    const gunEntryDelay = fromMap || fromSettings ? hold / 1000 : 0;
+    // Aim the scope lens exactly at the stage target: same centre as the wheel
+    // and a radius that frames it (106 normal / 122 boss / 166 boulder).
     const origin = {
       x: 50,
       y: (initialGameplayWheelCenterY(stageConfig.boss, Boolean(specialMode)) / H) * 100,
     };
+    const lens = stageConfig.radius + 14;
     const label = `STAGE ${level} · ${stageConfig.name.toUpperCase()}`;
 
     if (fromMap) {
@@ -1103,10 +1111,10 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     studioSfx.scopeOpen(revealAt / 1000);
     studioSfx.playEnter(mountAt / 1000, PLAY_IN, stageConfig.boss, stageConfig.ammo, {
       gun: !fromMenu,
-      offset: PLAY_SCOPE.hold,
+      offset: hold,
     });
 
-    deferPageClose(lead, () => setPlayTransition({ phase: 'cover', label, origin }));
+    deferPageClose(lead, () => setPlayTransition({ phase: 'cover', label, origin, lens }));
     deferPageClose(mountAt, () => {
       startingLevelRef.current = level;
       setMapOpen(false);
@@ -1379,6 +1387,27 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   const chooseMenuTheme = (theme: MenuEnvironmentTheme) => {
     setMenuTheme(theme);
   };
+
+  /**
+   * Menu preset controls (speed + weapon style) resolve a fresh plan and replay
+   * the entrance immediately — the exact same plan object the right-hand game
+   * publishes, so both menus can never drift apart in pacing.
+   */
+  const replayMenuWithPlan = (next?: Plan) => {
+    const plan = next ?? resolvePlan(animStore.get(), menuPlanRef.current);
+    publishMenuPlan(plan);
+    setMenuPlan(plan);
+    setMenuReturnKey((key) => key + 1);
+    studioSfx.menuEnter(0.03, plan);
+  };
+  const chooseAnimSpeed = (speed: number) => {
+    animStore.setSpeed(speed);
+    replayMenuWithPlan();
+  };
+  const chooseGunPreset = (style: StyleId) => {
+    animStore.setGroup('gun', { mode: 'fixed', style });
+    replayMenuWithPlan();
+  };
   const ownedWeaponCount = ownedWeaponIds().length;
   const readyQuestRewardCount = QUESTS.filter((quest) =>
     !questState.claimed.includes(quest.id) && Math.min(quest.progress(questState, ownedWeaponCount), quest.target) >= quest.target,
@@ -1559,7 +1588,15 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
           <div key={menuReturnKey} className={`gunhit-menu absolute inset-0 z-20 overflow-hidden text-white isolate ${active && introReady ? '' : 'slide-paused'} ${menuReady && introReady && !menuDeparture && !settingsOpen ? '' : 'pointer-events-none'} ${playMenuExiting && !menuDeparture ? 'sga-play-exit' : ''}`} data-menu-theme={menuTheme}>
             {/* Preserve the existing SGA menu world, stars, particles and theme lighting. */}
             <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden" aria-hidden="true">
-              <MenuEnvironment theme={menuTheme} />
+              {/* The menu world exits with the same zoom/blur dip as the reference
+                  game, then re-enters when the menu is remounted after a page. */}
+              <div
+                {...(menuDeparture === 'play'
+                  ? { className: 'absolute inset-0', style: {} as CSSProperties }
+                  : planMotion('in-bg', 0, 1100, 'absolute inset-0', undefined, 'out-bg', 120, 700))}
+              >
+                <MenuEnvironment theme={menuTheme} />
+              </div>
               <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_46%,rgba(125,211,252,.08),transparent_68%)]" />
               <div className="absolute inset-0 opacity-60">
                 <Dust count={14} />
@@ -1620,8 +1657,26 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                 </div>
               </div>
 
-              {/* Rays are in the same float/rotation frame as the rendered weapon, so their pivot cannot drift. */}
+              {/* Weapon showcase — same layering as the reference menu: the wheel
+                  (rays) is a SIBLING of the weapon, so its own drop → squash →
+                  pop-blast timeline never inherits the weapon's comb spin/scale. */}
               <div className="relative flex min-h-0 flex-1 items-center justify-center">
+                <div className="pointer-events-none absolute left-1/2 top-1/2 z-0 h-[300px] w-[300px] -translate-x-1/2 -translate-y-1/2" aria-hidden="true">
+                  {!menuDeparture && (
+                    <span
+                      className="rays-shock absolute left-1/2 top-1/2 h-[220px] w-[220px] rounded-full"
+                      style={{
+                        borderStyle: 'solid',
+                        borderColor: 'rgba(220,255,255,.9)',
+                        boxShadow: '0 0 26px rgba(200,255,255,.6)',
+                        '--sd': `${(WHEEL.d + WHEEL.dur * 0.72) * menuPlan.k}ms`,
+                      } as CSSProperties}
+                    />
+                  )}
+                  <div {...planMotion('rays-drop', WHEEL.d, WHEEL.dur, 'h-full w-full', undefined, 'out-rays', 100, 500)}>
+                    <div className="spin-slow h-full w-full rounded-full" style={{ background: 'repeating-conic-gradient(from 0deg,rgba(200,240,240,.22) 0deg 7deg,transparent 7deg 22deg)', WebkitMask: 'radial-gradient(circle,#000 0%,rgba(0,0,0,.6) 35%,transparent 70%)', mask: 'radial-gradient(circle,#000 0%,rgba(0,0,0,.6) 35%,transparent 70%)' }} />
+                  </div>
+                </div>
                 <div {...(menuDeparture === 'play'
                   ? { className: 'relative z-10 h-[min(295px,54vh)] w-[min(337px,90vw)] max-w-full opacity-0', style: {} as CSSProperties }
                   : planStyleMotion(menuPlan.gun, gunTiming(menuPlan.gun), ['in-gun', 'out-spin'], 'relative z-10 h-[min(295px,54vh)] w-[min(337px,90vw)] max-w-full', 1))}>
@@ -1653,12 +1708,6 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                           ))}
                         </div>
                       )}
-                      <div className="absolute left-1/2 top-1/2 h-[min(300px,64vw)] w-[min(300px,64vw)] -translate-x-1/2 -translate-y-1/2" style={{ left: 'calc(50% + var(--weapon-pivot-x, 0px))', top: 'calc(50% + var(--weapon-pivot-y, 0px))' }}>
-                        {/* Centering stays on the static anchor; raysDrop animates only the inner layer. */}
-                        <div {...planMotion('rays-drop', WHEEL.d, WHEEL.dur, 'h-full w-full', undefined, 'out-rays', 100, 500)}>
-                          <div className="spin-slow h-full w-full rounded-full" style={{ background: 'repeating-conic-gradient(from 0deg,rgba(200,240,240,.13) 0deg 7deg,transparent 7deg 22deg)', WebkitMask: 'radial-gradient(circle,#000 0%,rgba(0,0,0,.6) 35%,transparent 70%)', mask: 'radial-gradient(circle,#000 0%,rgba(0,0,0,.6) 35%,transparent 70%)' }} />
-                        </div>
-                      </div>
                     </div>
                     <canvas ref={previewCanvasRef} style={{ width: 'min(337px, 90vw)', height: 'min(295px, 54vh)' }} className="block cursor-pointer drop-shadow-[0_10px_20px_rgba(0,0,0,.5)] transition-transform hover:scale-105" role="button" tabIndex={0} aria-label="Buka koleksi senjata" onClick={() => startArsenalTransition(true)} onKeyDown={(event) => {
                       if (event.key === 'Enter' || event.key === ' ') {
@@ -1743,6 +1792,12 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
             onVolume={changeSoundVolume}
             onSpeed={setGameSpeed}
             onTheme={chooseMenuTheme}
+            animSpeed={psAnimationConfig.speed}
+            animGunStyle={psAnimationConfig.groups.gun.style}
+            animSpeeds={SPEEDS}
+            animStyles={STYLES}
+            onAnimSpeed={chooseAnimSpeed}
+            onAnimGunStyle={chooseGunPreset}
             onReplayIntro={() => {
               if (!muted) {
                 juicyAudio.enabled = true;
@@ -2051,7 +2106,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
           />
         )}
         {playTransition && (
-          <TransitionOverlay phase={playTransition.phase} origin={playTransition.origin} label={playTransition.label} variant="scope" />
+          <TransitionOverlay phase={playTransition.phase} origin={playTransition.origin} label={playTransition.label} variant="scope" lens={playTransition.lens} />
         )}
         {weaponFlight && <SgaWeaponFlight key={weaponFlight.id} flight={weaponFlight} />}
       </div>

@@ -1539,9 +1539,10 @@
    SCOPE v2 — aims at the target spot, no full blackout
    ===================================================================== */
 .sc2-cover { animation: sc2Cover 620ms cubic-bezier(.2,.75,.25,1) both; }
-@keyframes sc2Cover { 0% { --sr: 860px; } 82% { --sr: 108px; } 100% { --sr: 118px; } }
+/* --scl lets a host game frame its own target; default stays 118px for Perfect Shot */
+@keyframes sc2Cover { 0% { --sr: 860px; } 82% { --sr: calc(var(--scl, 118px) - 10px); } 100% { --sr: var(--scl, 118px); } }
 .sc2-reveal { animation: sc2Reveal 680ms cubic-bezier(.6,0,.35,1) both; }
-@keyframes sc2Reveal { 0% { --sr: 118px; } 20% { --sr: 104px; } 100% { --sr: 940px; } }
+@keyframes sc2Reveal { 0% { --sr: var(--scl, 118px); } 20% { --sr: calc(var(--scl, 118px) - 14px); } 100% { --sr: 940px; } }
 .sc2-ret-in { opacity: 0; animation: inFade 260ms ease-out 300ms both; }
 .sc2-ret-out { animation: outFade 260ms ease-in 120ms both; }
 .sc2-knob-in { animation: sc2Knob 620ms cubic-bezier(.2,.75,.25,1) both; }

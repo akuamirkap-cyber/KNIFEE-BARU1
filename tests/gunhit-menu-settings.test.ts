@@ -14,17 +14,24 @@ test('Vortex ring, combo ghost, and combo glow are disabled in both SGA and Perf
   assert.doesNotMatch(perfectShotCss, /@keyframes comboVortex2|@keyframes comboGlow|@keyframes comboGhost/);
   assert.match(app, /SunburstFX size=\{390\}/, 'the separate rarity Sunburst stays in SGA');
 });
-test('menu rays share the weapon frame pivot and keep centering separate from the animated transform', () => {
+test('menu wheel (rays) drops in its own layer so the weapon preset transform cannot drag it around', () => {
   const menuStart = app.indexOf('MAIN MENU: EXACT MATCHING SCREENSHOT');
-  const gunFrame = app.indexOf("planStyleMotion(menuPlan.gun", menuStart);
-  const raysStart = app.indexOf("planMotion('rays-drop', WHEEL.d, WHEEL.dur", menuStart);
-  const raysAnchor = app.lastIndexOf('className="absolute left-1/2 top-1/2 h-[min(300px,64vw)]', raysStart);
+  const showcase = app.indexOf('Weapon showcase', menuStart);
+  const raysStart = app.indexOf("planMotion('rays-drop', WHEEL.d, WHEEL.dur", showcase);
+  const gunFrame = app.indexOf("planStyleMotion(menuPlan.gun", showcase);
   assert.notEqual(menuStart, -1);
-  assert.notEqual(gunFrame, -1);
+  assert.notEqual(showcase, -1);
   assert.notEqual(raysStart, -1);
-  assert.ok(gunFrame < raysAnchor && raysAnchor < raysStart, 'the light is anchored inside the animated weapon frame');
-  assert.match(app.slice(raysAnchor, raysStart), /-translate-x-1\/2 -translate-y-1\/2/);
-  assert.match(app.slice(raysStart, raysStart + 110), /'h-full w-full'/);
+  assert.notEqual(gunFrame, -1);
+  // Exactly like the reference menu: the wheel is a sibling that drops on its own
+  // 200ms → 1100ms timeline, never the child of the spinning weapon wrapper.
+  assert.ok(raysStart < gunFrame, 'the wheel layer comes before the animated weapon frame');
+  assert.match(app.slice(showcase, raysStart), /h-\[300px\] w-\[300px\]/);
+  assert.match(app.slice(showcase, raysStart), /-translate-x-1\/2 -translate-y-1\/2/);
+  assert.match(app.slice(showcase, raysStart), /rays-shock/);
+  assert.match(app.slice(raysStart, raysStart + 130), /'h-full w-full'/);
+  // Full-strength rays (the SGA copy was previously dimmed to .13 and rotated with the gun).
+  assert.match(app, /repeating-conic-gradient\(from 0deg,rgba\(200,240,240,\.22\)/);
   assert.match(app, /className="float relative h-full w-full" data-menu-gun/);
   assert.match(app, /ctx\.getImageData\(0, 0, cv\.width, cv\.height\)/);
   assert.match(app, /--weapon-pivot-x/);
