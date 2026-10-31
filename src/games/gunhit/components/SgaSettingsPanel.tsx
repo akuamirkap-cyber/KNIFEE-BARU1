@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { SgaBackgroundTheme, SgaBgThemeOption } from '../game/backgroundThemes';
 import type { SgaGameSpeed } from '../game/gameSpeed';
 import type { StyleId } from '../../perfect-shot/anim/presets';
+import CoinSprite from '../../shared/CoinSprite';
 import DiamondSprite from '../../shared/DiamondSprite';
 
 type Props = {
@@ -177,7 +178,7 @@ export default function SgaSettingsPanel({
                   <DiamondSprite size={22} /><span className="mt-1 block font-title text-[9px] text-cyan-100">BATU · 3</span>
                 </button>
                 <button type="button" onClick={() => onSpecial('bonus')} className="press rounded-xl border border-amber-300/30 bg-amber-400/10 px-1 py-2 text-center">
-                  <span className="block text-xl leading-none">🪙</span><span className="mt-1 block font-title text-[9px] text-amber-100">BONUS · 4</span>
+                  <CoinSprite size={22} /><span className="mt-1 block font-title text-[9px] text-amber-100">BONUS · 4</span>
                 </button>
                 <button type="button" onClick={() => onSpecial('treasure')} className="press rounded-xl border border-pink-300/30 bg-pink-400/10 px-1 py-2 text-center">
                   <span className="block text-xl leading-none">🧰</span><span className="mt-1 block font-title text-[9px] text-pink-100">HARTA · 6</span>
