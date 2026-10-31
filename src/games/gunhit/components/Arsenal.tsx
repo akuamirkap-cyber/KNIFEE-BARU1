@@ -125,7 +125,7 @@ function GunItemCanvas({ weapon, isSelected, variant, size = 110 }: { weapon: We
 // -------------------------------------------------------------
 // Top Spotlight Preview with Sunburst Rays
 // -------------------------------------------------------------
-function SpotlightGun({ weapon, variant }: { weapon: Weapon; variant: GunVariant }) {
+function SpotlightGun({ weapon, variant, box }: { weapon: Weapon; variant: GunVariant; box: { w: number; h: number } }) {
   const active = useSlideActive();
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -133,8 +133,8 @@ function SpotlightGun({ weapon, variant }: { weapon: Weapon; variant: GunVariant
     const cv = canvasRef.current;
     if (!cv) return;
     const dpr = getOptimalCanvasDpr(2);
-    const w = 220;
-    const h = 170;
+    const { w, h } = box;
+    if (w < 2 || h < 2) return;
     cv.width = Math.round(w * dpr);
     cv.height = Math.round(h * dpr);
     const ctx = getFast2DContext(cv);
@@ -156,7 +156,9 @@ function SpotlightGun({ weapon, variant }: { weapon: Weapon; variant: GunVariant
 
       const m = getGunMetrics(weapon.id, variant);
       const span = Math.max(m.span, 130);
-      const scale = (h * 0.88) / span;
+      // 0.98 of the showcase height: the pose reads as large as the reference
+      // and still scales down with the pane on small screens.
+      const scale = (h * 0.98) / span;
       ctx.scale(scale, scale);
 
       drawGunCentered(ctx, weapon.id, t, 0, true, variant, true);
@@ -169,16 +171,24 @@ function SpotlightGun({ weapon, variant }: { weapon: Weapon; variant: GunVariant
     reducedMotion?.addEventListener?.('change', onMotionChange);
     loop(start);
     return () => { cancelAnimationFrame(raf); reducedMotion?.removeEventListener?.('change', onMotionChange); };
-  }, [weapon.id, active, variant]);
+  }, [weapon.id, active, variant, box.w, box.h]);
 
   return (
     <canvas
       ref={canvasRef}
-      style={{ width: 220, height: 170 }}
-      className="block filter drop-shadow-[0_12px_28px_rgba(255,255,255,0.45)]"
+      style={{ width: box.w, height: box.h }}
+      className="pointer-events-none block max-w-full filter drop-shadow-[0_12px_28px_rgba(255,255,255,0.45)]"
     />
   );
 }
+
+/** Same rarity chips the reference plate uses. */
+const RARITY_CHIP: Record<Weapon['rarity'], string> = {
+  UMUM: 'bg-[#c9ced6] text-[#2b3038]',
+  LANGKA: 'bg-[#3b82f6] text-white',
+  EPIC: 'bg-[#a855f7] text-white',
+  LEGENDARIS: 'bg-gradient-to-b from-[#ffd23f] to-[#f59e0b] text-[#3a2400]',
+};
 
 function RarityIconForWeapon({ rarity }: { rarity: Weapon['rarity'] }) {
   const Icon = rarity === 'UMUM' ? Shield : rarity === 'LANGKA' ? Gem : rarity === 'EPIC' ? Zap : Flame;
@@ -269,6 +279,25 @@ export default function Arsenal({
   const [selectedBoss, setSelectedBoss] = useState<BossProfile>(BOSS_ROSTER[0]);
   const [bulkUnlockMessage, setBulkUnlockMessage] = useState('');
   const gridRef = useRef<HTMLDivElement>(null);
+  // The showcase strip is measured once and handed to the canvas, so the hero
+  // pose is drawn at the strip's own size on every screen.
+  const heroSectionRef = useRef<HTMLElement>(null);
+  const [heroBox, setHeroBox] = useState({ w: 380, h: 180 });
+
+  useEffect(() => {
+    const el = heroSectionRef.current;
+    if (!el) return;
+    const measure = () => {
+      const r = el.getBoundingClientRect();
+      if (r.width > 2 && r.height > 2) {
+        setHeroBox((prev) => (Math.abs(prev.w - r.width) < 1 && Math.abs(prev.h - r.height) < 1 ? prev : { w: Math.round(r.width), h: Math.round(r.height) }));
+      }
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   useEffect(() => { if (gridRef.current) gridRef.current.scrollTop = 0; }, [tab]);
 
@@ -379,6 +408,9 @@ export default function Arsenal({
     .filter((id): id is EditableWeapon => canChooseGunDesign(id));
   const stepIds = editableCatalogIds.length > 0 ? editableCatalogIds : [...UNIQUE_EDITABLE_WEAPONS];
   const exportableCount = getWeaponDefaultExportEntries('marked_or_changed', WEAPONS).length;
+  // The showcase lands the gun at the same beat as the reference, so the white
+  // flash and dust fire exactly where it touches down.
+  const heroLand = heroKey === 0 ? SHOP_IN.hero.d + SHOP_IN.hero.dur * SHOP_IN.hero.land : 120 + 620 * 0.55;
   const selectedPos = canChooseGunDesign(selectedGunId)
     ? getGunSkinAndEffectPosition(selectedGunId, selectedVariant, getGunEffect(selectedGunId))
     : null;
@@ -493,26 +525,53 @@ export default function Arsenal({
         </div>}
       </header>
 
-      {/* SGA artwork remains the hero: original gun renderer + SGA SunburstFX. */}
-      <section className="relative z-10 flex mt-1 h-[clamp(120px,20vh,185px)] shrink-0 flex-col items-center justify-center">
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-full bg-[radial-gradient(ellipse_at_50%_42%,rgba(255,255,255,.22),rgba(196,181,253,.10)_34%,transparent_70%)]" />
-        <div {...A('in-rays', SHOP_IN.rays, 'out-rays', { d: 80, dur: 500 }, 'pointer-events-none absolute inset-0 flex items-center justify-center')} aria-hidden="true">
-          <SunburstFX size={450} color={gunSunburstColor(selectedGun.rarity)} intensity={0.85} speed={30} stars={false} />
+      {/* The reference showcase: spinning ray burst, rarity aura, a landing
+          flash + dust ring, and the gun floating above its podium. */}
+      <section ref={heroSectionRef} className="relative z-10 flex mt-1 h-[clamp(120px,20vh,185px)] shrink-0 items-center justify-center">
+        <div {...A('in-rays', SHOP_IN.rays, 'out-rays', { d: 80, dur: 500 }, 'pointer-events-none absolute h-[150%] aspect-square')} aria-hidden="true">
+          <div
+            className="spin-slow h-full w-full rounded-full"
+            style={{
+              background: 'repeating-conic-gradient(from 0deg, rgba(255,255,255,.2) 0deg 6deg, transparent 6deg 18deg)',
+              WebkitMask: 'radial-gradient(circle, #000 0%, rgba(0,0,0,.5) 35%, transparent 68%)',
+              mask: 'radial-gradient(circle, #000 0%, rgba(0,0,0,.5) 35%, transparent 68%)',
+            }}
+          />
         </div>
-        <div className="pointer-events-none absolute bottom-[4%] left-1/2 h-5 w-48 -translate-x-1/2 rounded-[50%] border-2 border-[#c084fc]/45 bg-gradient-to-b from-[#3b2a66] to-[#1a1033] shadow-[0_0_24px_rgba(168,85,247,.38)]" />
-        <div key={`${selectedGunId}-${heroKey}`} {...A(heroKey === 0 ? 'sh-hero-in' : 'sh-hero-swap', heroKey === 0 ? SHOP_IN.hero : { d: 120, dur: 620 }, 'sh-hero-out', SHOP_OUT.hero, `relative z-10 ${selectedLocked ? 'opacity-35 grayscale' : ''}`)}>
-          <div className={selectedLocked ? 'opacity-35 grayscale' : ''}><SpotlightGun weapon={selectedGun} variant={selectedVariant} /></div>
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center" aria-hidden="true">
+          <SunburstFX size={430} color={gunSunburstColor(selectedGun.rarity)} intensity={0.55} speed={30} stars={false} />
+        </div>
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute h-40 w-40 rounded-full transition-colors duration-500"
+          style={{ background: `radial-gradient(circle, ${RARITY_COLOR[selectedGun.rarity]}66, transparent 70%)` }}
+        />
+        <div className="pointer-events-none absolute bottom-0 left-1/2 h-6 w-48 -translate-x-1/2 rounded-[50%] border-2 border-[#c084fc]/40 bg-gradient-to-b from-[#3b2a66] to-[#1a1033] shadow-[0_0_24px_rgba(168,85,247,.35)]" />
+        {!leaving && (
+          <div key={`hero-fx-${heroKey}`} className="pointer-events-none absolute inset-0" aria-hidden="true">
+            <div
+              className="a sh-flash absolute left-1/2 top-1/2 -ml-24 -mt-24 h-48 w-48 rounded-full"
+              style={{ '--d': `${heroLand - 40}ms`, '--dur': '600ms', background: 'radial-gradient(circle, rgba(255,255,255,.95), rgba(255,240,200,.5) 35%, transparent 70%)' } as CSSProperties}
+            />
+            <div
+              className="a sh-dust absolute bottom-[2%] left-1/2 h-6 w-36 rounded-[50%]"
+              style={{ '--d': `${heroLand}ms`, '--dur': '700ms', background: 'radial-gradient(ellipse, rgba(220,210,255,.7), transparent 70%)' } as CSSProperties}
+            />
+          </div>
+        )}
+        <div key={`hero-${selectedGunId}-${heroKey}`} {...A(heroKey === 0 ? 'sh-hero-in' : 'sh-hero-swap', heroKey === 0 ? SHOP_IN.hero : { d: 120, dur: 620 }, 'sh-hero-out', SHOP_OUT.hero, `relative z-10 ${selectedLocked ? 'opacity-35 grayscale' : ''}`)}>
+          <div className={`float ${selectedLocked ? 'opacity-35 grayscale' : ''}`}><SpotlightGun weapon={selectedGun} variant={selectedVariant} box={heroBox} /></div>
           {selectedLocked && <div className="absolute inset-0 grid place-items-center"><LockKeyhole className="h-14 w-14 rounded-2xl border-2 border-cyan-100/80 bg-slate-950/90 p-3 text-cyan-100 shadow-[0_0_28px_rgba(34,211,238,.7)]" /></div>}
         </div>
       </section>
 
       <div className="relative z-20 mt-1.5 flex min-h-[42px] shrink-0 items-center justify-center gap-2">
-        <div {...A('in-slam', SHOP_IN.plate, 'out-up', SHOP_OUT.plate, 'flex max-w-[82%] items-center gap-2 rounded-2xl border-2 border-[#ffd23f]/30 bg-gradient-to-b from-[#2a1d48] to-[#140b26] px-4 py-2 shadow-[0_6px_16px_rgba(0,0,0,.5),inset_0_1px_0_rgba(255,255,255,.12)]')}>
+        <div key={`plate-${selectedGunId}-${heroKey}`} {...A('in-slam', heroKey === 0 ? SHOP_IN.plate : { d: 260, dur: 460 }, 'out-up', SHOP_OUT.plate, 'flex max-w-[82%] items-center gap-2 rounded-2xl border-2 border-[#ffd23f]/30 bg-gradient-to-b from-[#2a1d48] to-[#140b26] px-4 py-2 shadow-[0_6px_16px_rgba(0,0,0,.5),inset_0_1px_0_rgba(255,255,255,.12)]')}>
           <span className="font-arsenal-title truncate text-[24px] leading-none text-[#ffd23f] [text-shadow:0_2px_0_#9c5a10,0_0_12px_rgba(255,210,63,.35)]">{selectedGun.name.toUpperCase()}</span>
-          <span className="font-arsenal-title flex shrink-0 items-center gap-1 rounded-md bg-white/10 px-2 py-1 text-[12px] leading-none text-white/90"><RarityIcon className="h-3 w-3" />{rarityLabel(selectedGun.rarity)}</span>
+          <span className={`font-arsenal-title flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[12px] leading-none ${RARITY_CHIP[selectedGun.rarity]}`}><RarityIcon className="h-3 w-3" />{rarityLabel(selectedGun.rarity)}</span>
         </div>
         {canChooseGunDesign(selectedGunId) && selectedPos && (
-          <button {...A('in-pop', SHOP_IN.pill, 'out-up', { d: 30, dur: 360 }, 'press relative grid h-10 w-10 shrink-0 place-items-center rounded-2xl border-2 border-[#c084fc]/60 bg-gradient-to-b from-[#7c3aed] to-[#4c1d95] text-white shadow-[0_4px_0_#2e1065]')} type="button" onClick={() => setEditingDesign(true)} aria-label={`Bandingkan desain ${selectedGun.name}`} title="Ganti desain dan efek"><Palette className="h-5 w-5" /><span className="font-arsenal-title absolute -bottom-1.5 -right-1.5 rounded-full bg-[#fbbf24] px-1.5 py-[1px] text-[8px] leading-none text-[#4a2a00] ring-2 ring-[#140b26]">{selectedPos.skinNo}/{selectedPos.skinTotal}</span></button>
+          <button {...A('in-pop', SHOP_IN.pill, 'out-up', { d: 30, dur: 360 }, 'press relative grid h-12 w-12 shrink-0 place-items-center rounded-2xl border-2 border-[#c084fc]/60 bg-gradient-to-b from-[#7c3aed] to-[#4c1d95] text-white shadow-[0_4px_0_#2e1065]')} type="button" onClick={() => setEditingDesign(true)} aria-label={`Bandingkan desain ${selectedGun.name}`} title="Ganti desain dan efek"><Palette className="h-5 w-5" /><span className="font-arsenal-title absolute -bottom-1.5 -right-1.5 rounded-full bg-[#fbbf24] px-1.5 py-[1px] text-[8px] leading-none text-[#4a2a00] ring-2 ring-[#140b26]">{selectedPos.skinNo}/{selectedPos.skinTotal}</span></button>
         )}
       </div>
 
@@ -530,7 +589,9 @@ export default function Arsenal({
         {tabItems.map(({ id, label, Icon, color }, i) => {
           const active = tab === id;
           return <div key={id} {...A('in-pop', SHOP_IN.tab(i), 'out-down', SHOP_OUT.tab(i))}><button type="button" aria-pressed={active} onClick={() => changeTab(id)} className={`press flex w-full flex-col items-center gap-0.5 rounded-t-xl border-x-2 border-t-2 px-0.5 pt-1.5 pb-1 transition-all duration-300 ${active ? '-translate-y-1 border-[#f0abfc]/70 bg-gradient-to-b from-[#c026d3] to-[#7e22ce] shadow-[0_-4px_14px_rgba(192,38,211,.45)]' : 'border-white/10 bg-gradient-to-b from-[#3a2d5c] to-[#271c42]'}`}>
-            <Icon className={`h-5 w-5 ${active ? 'scale-110 text-white' : ''}`} style={active ? undefined : { color }} />
+            <span className={active ? 'bounce-soft' : ''}>
+              <Icon className={`h-5 w-5 ${active ? 'scale-110 text-white' : ''}`} style={active ? undefined : { color }} />
+            </span>
             <span className={`font-arsenal-title text-[10px] leading-none ${active ? 'text-white' : 'text-white/70'}`}>{label}</span>
           </button></div>;
         })}
@@ -552,7 +613,7 @@ export default function Arsenal({
                 const rc = RARITY_COLOR[w.rarity];
                 const ca = cardMotion(index);
                 return (
-                  <button key={w.id} type="button" onClick={() => handleSelectGun(w)} aria-pressed={isSelected} className={`${ca.className} press relative block aspect-[0.9] w-full overflow-hidden rounded-2xl border-2 text-left transition-all ${isSelected ? 'z-10 border-[#ffe066] shadow-[0_0_0_2px_rgba(255,224,102,.35),0_0_18px_rgba(255,214,60,.55)]' : 'border-black/40 hover:border-white/30'}`} style={{ ...ca.style, background: locked ? 'linear-gradient(180deg,#2a2f3a,#161a22)' : `radial-gradient(circle at 50% 42%, ${rc}3d, transparent 65%), linear-gradient(180deg,#555b67,#292c36)` }}>
+                  <button key={w.id} type="button" onClick={() => handleSelectGun(w)} aria-pressed={isSelected} className={`${ca.className} press relative block aspect-[0.9] w-full overflow-hidden rounded-2xl border-2 text-left transition-all ${isSelected ? 'sh-sel z-10 border-[#ffe066]' : 'border-black/40 hover:border-white/30'}`} style={{ ...ca.style, background: locked ? 'linear-gradient(180deg,#2a2f3a,#161a22)' : `radial-gradient(circle at 50% 42%, ${rc}3d, transparent 65%), linear-gradient(180deg,#555b67,#292c36)` }}>
                     <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/15 to-transparent" />
                     <span className="font-arsenal-title absolute left-1.5 top-1.5 z-10 flex items-center gap-1 rounded-md px-1.5 py-1 text-[9px] leading-none text-black shadow-[0_2px_0_rgba(0,0,0,.35)]" style={{ background: rc }}><RarityIconForWeapon rarity={w.rarity} />{rarityLabel(w.rarity)}</span>
                     {isGunDefaultMarked(w.id) && <span title="Default tersimpan" className="absolute left-1.5 top-7 z-10 grid h-5 w-5 place-items-center rounded-md bg-[#ffd23f] text-[#7a4300] shadow-[0_2px_0_#9a5b00]"><Star className="h-3.5 w-3.5 fill-current" /></span>}
