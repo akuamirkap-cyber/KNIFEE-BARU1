@@ -11,7 +11,7 @@ import {
   rollGiftWeapon,
   type Rarity,
 } from '../src/games/gunhit/game/weapons';
-import { BossGiftBoxModal, giftBoxCoins } from '../src/games/gunhit/components/BossGiftBoxModal';
+import { BossGiftBoxModal, GiftBoxScene, giftBoxCoins } from '../src/games/gunhit/components/BossGiftBoxModal';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 
@@ -137,4 +137,41 @@ test('senjata LANGKA butuh kepemilikan pembelian, sementara rarity lain tetap te
   assert.equal(isWeaponUnlocked(rare), false);
   assert.equal(isWeaponUnlocked(rare, [rare.id]), true);
   assert.equal(isWeaponUnlocked(common), true);
+});
+
+test('GiftBoxScene bisa dirender untuk hadiah senjata maupun koin saja', () => {
+  const weapon = WEAPONS.find((w) => w.rarity === 'EPIC') ?? WEAPONS[0];
+  const withWeapon = renderToStaticMarkup(
+    createElement(GiftBoxScene, {
+      badge: '★ REWARD MILESTONE ★',
+      headline: 'MILESTONE 8!',
+      hint: '🎁 Peti hadiah milestone siap dibuka!',
+      weapon,
+      coins: 0,
+      claimLabel: 'PAKAI & LANJUT ➜',
+      declineLabel: 'Lanjut tanpa ganti senjata',
+      onClaim: () => {},
+    }),
+  );
+  assert.match(withWeapon, /REWARD MILESTONE/);
+  assert.match(withWeapon, /Peti hadiah milestone siap dibuka/);
+  assert.match(withWeapon, /drop-in/);
+  assert.match(withWeapon, /viewBox="0 0 200 96"/, 'tutup kado Knife ikut dirender');
+  assert.match(withWeapon, /viewBox="0 0 180 132"/, 'badan kado Knife ikut dirender');
+  // Judul dipecah per huruf oleh LetterPop, jadi yang dicek animasi hurufnya.
+  assert.ok(withWeapon.includes('letter-pop'));
+
+  const coinsOnly = renderToStaticMarkup(
+    createElement(GiftBoxScene, {
+      badge: '★ REWARD MILESTONE ★',
+      headline: 'MILESTONE 20!',
+      hint: '🎁 Peti hadiah milestone siap dibuka!',
+      coins: 1000,
+      claimLabel: 'AMBIL HADIAH ➜',
+      onClaim: () => {},
+    }),
+  );
+  assert.match(coinsOnly, /drop-in/);
+  assert.ok(coinsOnly.includes('letter-pop'));
+  assert.doesNotMatch(coinsOnly, /PAKAI &amp; LANJUT/);
 });
