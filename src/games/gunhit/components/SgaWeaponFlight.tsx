@@ -38,7 +38,7 @@ export default function SgaWeaponFlight({ flight }: { flight: SgaWeaponFlightDat
       aria-hidden="true"
     >
       <div ref={ref} className="h-full w-full" style={{ transformOrigin: '50% 0%' }}>
-        <img src={flight.image} alt="" className="h-full w-full object-contain drop-shadow-[0_10px_18px_rgba(0,0,0,.6)]" />
+        <img src={flight.image} alt="" className="h-full w-full object-contain" />
       </div>
     </div>
   );

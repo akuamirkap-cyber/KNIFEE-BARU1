@@ -1159,6 +1159,11 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       else gameRef.current?.startAtLevel(level, wantsWeaponFlight, gunEntryDelay, true, wheelEntryDelay, gunHiddenFor);
       setScreen('playing');
     });
+    // The instant the captured frame lands, the live canvas gun takes over, so
+    // the hand-off never leaves a bitmap copy resting on top of it.
+    if (wantsWeaponFlight) {
+      deferPageClose(mountAt + WEAPON_FLIGHT_MS + 24, () => setWeaponFlight(null));
+    }
     deferPageClose(revealAt, () => setPlayTransition((current) => current ? { ...current, phase: 'reveal' } : current));
     deferPageClose(finishAt, () => {
       setPlayTransition(null);

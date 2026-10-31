@@ -16,6 +16,8 @@ test('the menu frame is the only weapon in the air: the live gun waits for it to
   assert.match(flight, /duration: WEAPON_FLIGHT_MS/);
   assert.match(app, /import SgaWeaponFlight, \{ WEAPON_FLIGHT_MS/);
   assert.match(app, /const gunHiddenFor = wantsWeaponFlight \? WEAPON_FLIGHT_MS \/ 1000 : 0;/);
+  // The bitmap is removed the moment it lands, so nothing rests on the gun.
+  assert.match(app, /deferPageClose\(mountAt \+ WEAPON_FLIGHT_MS \+ 24, \(\) => setWeaponFlight\(null\)\)/);
   assert.match(app, /startAtLevel\(level, wantsWeaponFlight, gunEntryDelay, true, wheelEntryDelay, gunHiddenFor\)/);
   assert.match(app, /startSpecialStage\(specialMode, gunEntryDelay, true, wheelEntryDelay, gunHiddenFor, wantsWeaponFlight\)/);
 
