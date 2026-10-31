@@ -14,7 +14,8 @@ installSilentAudio();
 
 const {
   Game, GUN_Y, GAMEPLAY_GUN_SCALE, GAMEPLAY_GUN_ENTRY_DURATION,
-  GAMEPLAY_GUN_ENTRY_DISTANCE, gameplayGunEntryOffset,
+  GAMEPLAY_GUN_ENTRY_DISTANCE, gameplayGunEntryOffset, perfectShotWheelEntry,
+  perfectShotWheelBurst, initialGameplayWheelCenterY,
 } = await import('../src/games/gunhit/game/Game');
 
 const gradient = { addColorStop: () => undefined };
@@ -72,6 +73,65 @@ test('gameplay weapon rises from below and settles without changing its resting 
       assert.ok(positions.some(([x, y]) => near(x, 210) && near(y, GUN_Y)), `${id} returns to the original muzzle position`);
     } finally { game.destroy(); }
   }
+});
+
+test('Perfect Shot wheel intro drops, squashes, pops and lands on the original animation timeline', () => {
+  const almost = (a: number, b: number) => Math.abs(a - b) < 1e-5;
+  const start = perfectShotWheelEntry(0, 1, 106);
+  assert.equal(start.opacity, 0);
+  assert.equal(start.scaleX, 0.5);
+  assert.ok(almost(start.offsetY, -339.2), 'the wheel begins 170% above its own diameter');
+  const landed = perfectShotWheelEntry(0.06 + 1.1 * 0.42, 1, 106);
+  assert.ok(almost(landed.offsetY, 0));
+  assert.ok(almost(landed.scaleX, 1.14));
+  assert.ok(almost(landed.scaleY, 0.84), 'the impact compresses the wheel vertically');
+  const rebound = perfectShotWheelEntry(0.06 + 1.1 * 0.52, 1, 106);
+  assert.ok(almost(rebound.offsetY, -0.16 * 106), 'the rebound matches the reference -8% of the wheel diameter');
+  assert.ok(almost(rebound.scaleX, 0.96) && almost(rebound.scaleY, 1.05));
+  const blast = perfectShotWheelEntry(0.06 + 1.1 * 0.8, 1, 106);
+  assert.ok(almost(blast.scaleX, 1.32));
+  assert.ok(almost(blast.scaleY, 1.32));
+  assert.ok(almost(blast.brightness, 2.4));
+  assert.equal(perfectShotWheelEntry(1.2, 1, 106).scaleX, 1, 'the wheel rests at the original Perfect Shot timing');
+});
+
+test('scope origin follows the exact SGA wheel center and the arrival gets the timed warm landing burst', () => {
+  assert.equal(initialGameplayWheelCenterY(false, false), 184);
+  assert.equal(initialGameplayWheelCenterY(true, false), 220);
+  assert.equal(initialGameplayWheelCenterY(false, true), 184);
+  const before = perfectShotWheelBurst(0.8, 1);
+  assert.equal(before.flashOpacity, 0);
+  assert.ok(before.waves.every((wave) => wave.opacity === 0));
+  const impact = perfectShotWheelBurst(0.06 + 1.1 * 0.8, 1);
+  assert.ok(impact.flashOpacity > 0.8, 'the warm flash peaks during the target pop');
+  assert.equal(impact.waves.length, 2, 'both expanding rings from the Perfect Shot entrance are present');
+  assert.ok(impact.waves.some((wave) => wave.opacity > 0.8), 'a shockwave accompanies the target pop');
+  assert.ok(impact.waves.every((wave) => wave.scale >= 0.2 && wave.scale <= 2.6));
+  const finished = perfectShotWheelBurst(1.75, 1);
+  assert.equal(finished.flashOpacity, 0);
+  assert.ok(finished.waves.every((wave) => wave.opacity === 0));
+});
+
+test('shared Play entrance times the wheel reveal, gun handoff and gameplay-ready state together', () => {
+  const game = new Game(canvas(), events as never) as Live;
+  try {
+    game.setGameSpeed(1);
+    game.startAtLevel(3, false, 0.6, true);
+    assert.equal(game.introDuration, 1.35, 'the stage remains in its READY intro for the Perfect Shot timeline');
+    assert.equal(game.gunEntryDelayT, 0.6, 'the SGA weapon waits for the same 600ms handoff offset');
+    assert.equal(game.state, 'intro');
+    game.update(0.5);
+    assert.equal(game.state, 'intro', 'the wheel entrance remains active behind the scope reveal');
+    assert.ok(game.wheelScale >= 0.5 && game.wheelScale < 0.84, 'the wheel is visibly dropping toward its Perfect Shot landing');
+    assert.ok(game.gunEntryDelayT < 0.11 && game.gunEntryT === 0, 'the gun delay is not confused with its rise animation');
+    for (let i = 0; i < 19; i++) game.update(0.05);
+    assert.equal(game.state, 'play', 'input unlocks at the shared ready cue');
+    assert.equal(game.gunEntryT, GAMEPLAY_GUN_ENTRY_DURATION, 'the weapon handoff ends at its intended gameplay slot');
+
+    game.startAtLevel(1, true, 0, true);
+    assert.equal(game.gunEntryT, GAMEPLAY_GUN_ENTRY_DURATION, 'a menu-to-game weapon flight skips a duplicate rise');
+    assert.equal(game.synchronizedEntrance, true, 'the target wheel still plays its synchronized arrival');
+  } finally { game.destroy(); }
 });
 
 test('entry replays for new runs, keeps stage transitions stable, and never delays the first accepted shot', () => {

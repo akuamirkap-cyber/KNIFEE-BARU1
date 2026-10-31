@@ -262,8 +262,8 @@ test('slide 1 renders only after the saved values are readable', async () => {
   const app = readFileSync(fileURLToPath(new URL('../src/games/gunhit/App.tsx', import.meta.url)), 'utf8');
   assert.ok(app.includes("import { savedValues, storage } from './game/safeStorage'"));
   assert.match(app, /savedValues\.isReady\(\)/, 'the gate asks the tracker');
-  assert.match(app, /if \(!ready\) return <div className="h-full w-full bg-\[#0b1418\]" aria-busy="true" \/>/,
-    'while waiting it paints the game shell, not a white page');
+  assert.ok(app.includes('MEMULIHKAN PROGRES') && app.includes('aria-busy="true"'),
+    'while waiting it paints a visible progress state, not a blank page');
   const gate = app.slice(app.indexOf('export default function App('), app.indexOf('function GunHitGame('));
-  assert.match(gate, /return <GunHitGame onExit=\{onExit\} \/>;/, 'the game mounts once the values are there');
+  assert.match(gate, /return <GunHitGame onExit=\{onExit\} introReady=\{introReady\} \/>;/, 'the game mounts with the host intro state once the values are there');
 });

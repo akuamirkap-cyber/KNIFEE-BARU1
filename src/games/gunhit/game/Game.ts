@@ -167,6 +167,10 @@ const CX = W / 2;
 export const BASE_WHEEL_CY = 255;
 export const CY = Math.round(BASE_WHEEL_CY * (1 - 0.28)); // 28% higher wheel position (184)
 export const SPECIAL_CY = CY; // Bonus / Special stage wheel sits at the same vertical position as the normal wheel.
+export function initialGameplayWheelCenterY(boss = false, special = false) {
+  if (special) return SPECIAL_CY;
+  return boss ? CY + 36 : CY;
+}
 const ROCK_RADIUS = 166; // ~80% of the 420px screen, as on Diamond Breaker's 480px screen.
 export const GAMEPLAY_GUN_SCALE = 1.08; // -10% from 1.2x (1.2 * 0.9 = 1.08)
 const TWIN_SPACING = 30; // dual lebih rapat: 60px antar laras (dulu 92px)
@@ -191,6 +195,132 @@ export function gameplayGunEntryOffset(age: number): number {
   if (!Number.isFinite(age) || age >= GAMEPLAY_GUN_ENTRY_DURATION) return 0;
   const remaining = 1 - Math.max(0, age) / GAMEPLAY_GUN_ENTRY_DURATION;
   return GAMEPLAY_GUN_ENTRY_DISTANCE * remaining * remaining * remaining;
+}
+
+export type PerfectShotWheelEntry = {
+  offsetY: number;
+  scaleX: number;
+  scaleY: number;
+  opacity: number;
+  brightness: number;
+};
+export type PerfectShotWheelBurst = {
+  flashOpacity: number;
+  flashScale: number;
+  waves: { opacity: number; scale: number; width: number }[];
+};
+
+const NO_WHEEL_BURST: PerfectShotWheelBurst = {
+  flashOpacity: 0,
+  flashScale: 0.2,
+  waves: [{ opacity: 0, scale: 0.2, width: 12 }, { opacity: 0, scale: 0.2, width: 12 }],
+};
+
+/** Warm landing flash and expanding target shockwaves from Perfect Shot's PLAY_IN timeline. */
+export function perfectShotWheelBurst(elapsed: number, pace = 1): PerfectShotWheelBurst {
+  const safePace = Number.isFinite(pace) && pace > 0 ? pace : 1;
+  const t = elapsed - 0.06 * safePace;
+  const duration = 1.1 * safePace;
+  const flashAge = t - duration * 0.72;
+  const flashDuration = 0.56 * safePace;
+  const flashProgress = Math.max(0, Math.min(1, flashAge / flashDuration));
+  const flashEase = [0, 0, 0.58, 1] as const; // CSS ease-out used by Perfect Shot's shFlash.
+  const flashOpacity = flashAge < 0 ? 0 : flashProgress < 0.18
+    ? bezierProgress(flashProgress / 0.18, ...flashEase)
+    : 1 - bezierProgress((flashProgress - 0.18) / 0.82, ...flashEase);
+  const shockEase = [0.1, 0.7, 0.3, 1] as const;
+  const waves = ([0.74, 0.8] as const).map((start) => {
+    const age = t - duration * start;
+    const waveDuration = 0.8 * safePace;
+    const progress = Math.max(0, Math.min(1, age / waveDuration));
+    const opacity = age < 0 || age >= waveDuration ? 0 : progress < 0.06
+      ? bezierProgress(progress / 0.06, ...shockEase)
+      : 1 - bezierProgress((progress - 0.06) / 0.94, ...shockEase);
+    const easedProgress = bezierProgress(progress, ...shockEase);
+    return { opacity: Math.max(0, opacity), scale: 0.2 + easedProgress * 2.4, width: 12 - easedProgress * 11 };
+  });
+  return {
+    flashOpacity: Math.max(0, flashOpacity),
+    flashScale: 0.2 + bezierProgress(flashProgress, ...flashEase) * 1.8,
+    waves,
+  };
+}
+
+const RESTING_WHEEL_ENTRY: PerfectShotWheelEntry = {
+  offsetY: 0, scaleX: 1, scaleY: 1, opacity: 1, brightness: 1,
+};
+
+function bezierCoordinate(t: number, p1: number, p2: number): number {
+  const inverse = 1 - t;
+  return 3 * inverse * inverse * t * p1 + 3 * inverse * t * t * p2 + t * t * t;
+}
+
+function bezierProgress(x: number, x1: number, y1: number, x2: number, y2: number): number {
+  if (x <= 0) return 0;
+  if (x >= 1) return 1;
+  let low = 0;
+  let high = 1;
+  for (let i = 0; i < 18; i++) {
+    const t = (low + high) / 2;
+    if (bezierCoordinate(t, x1, x2) < x) low = t;
+    else high = t;
+  }
+  return bezierCoordinate((low + high) / 2, y1, y2);
+}
+
+/**
+ * The first gameplay wheel uses the same delayed, drop-and-pop choreography as
+ * Perfect Shot's gpTargetIn keyframes. Values are sampled in game-time seconds.
+ */
+export function perfectShotWheelEntry(elapsed: number, pace = 1, radius = 106): PerfectShotWheelEntry {
+  const safePace = Number.isFinite(pace) && pace > 0 ? pace : 1;
+  const t = elapsed - 0.06 * safePace;
+  const duration = 1.1 * safePace;
+  if (t <= 0) return { offsetY: -3.2 * radius, scaleX: 0.5, scaleY: 0.5, opacity: 0, brightness: 1 };
+  if (t >= duration) return RESTING_WHEEL_ENTRY;
+  const p = Number(((t / duration) * 100).toFixed(9));
+  type Frame = { at: number; value: number; ease?: readonly [number, number, number, number] };
+  const sample = (frames: Frame[]) => {
+    let index = 0;
+    while (index < frames.length - 2 && p > frames[index + 1].at) index++;
+    const from = frames[index];
+    const to = frames[index + 1];
+    const raw = Math.max(0, Math.min(1, (p - from.at) / (to.at - from.at)));
+    const u = from.ease ? bezierProgress(raw, ...from.ease) : raw;
+    return from.value + (to.value - from.value) * u;
+  };
+  const dropEase = [0.55, 0, 1, 0.45] as const;
+  const landEase = [0, 0.55, 0.45, 1] as const;
+  const easeIn = [0.42, 0, 1, 1] as const;
+  const popEase = [0.2, 0.9, 0.3, 1] as const;
+  const y = sample([
+    { at: 0, value: -3.2, ease: dropEase }, { at: 42, value: 0, ease: landEase },
+    { at: 52, value: -0.16, ease: easeIn }, { at: 60, value: 0, ease: easeIn },
+    { at: 68, value: 0, ease: popEase }, { at: 80, value: 0 },
+    { at: 90, value: 0 }, { at: 100, value: 0 },
+  ]);
+  const sx = sample([
+    { at: 0, value: 0.5, ease: dropEase }, { at: 42, value: 1.14, ease: landEase },
+    { at: 52, value: 0.96, ease: easeIn }, { at: 60, value: 1, ease: easeIn },
+    { at: 68, value: 0.72, ease: popEase }, { at: 80, value: 1.32 },
+    { at: 90, value: 0.94 }, { at: 100, value: 1 },
+  ]);
+  const sy = sample([
+    { at: 0, value: 0.5, ease: dropEase }, { at: 42, value: 0.84, ease: landEase },
+    { at: 52, value: 1.05, ease: easeIn }, { at: 60, value: 1, ease: easeIn },
+    { at: 68, value: 0.72, ease: popEase }, { at: 80, value: 1.32 },
+    { at: 90, value: 0.94 }, { at: 100, value: 1 },
+  ]);
+  const opacity = sample([
+    { at: 0, value: 0, ease: dropEase }, { at: 10, value: 1 }, { at: 100, value: 1 },
+  ]);
+  const brightness = sample([
+    { at: 0, value: 1 }, { at: 42, value: 1, ease: landEase },
+    { at: 52, value: 1, ease: easeIn }, { at: 60, value: 1, ease: easeIn },
+    { at: 68, value: 1.3, ease: popEase },
+    { at: 80, value: 2.4 }, { at: 90, value: 1.1 }, { at: 100, value: 1 },
+  ]);
+  return { offsetY: y * radius, scaleX: sx, scaleY: sy, opacity, brightness };
 }
 
 /** Symmetrical 5-pointed star path used for the Boss stage indicator on the gameplay HUD. */
@@ -435,7 +565,143 @@ interface Item { angle: number; type: ItemType; age: number; ghostVolley?: numbe
 interface Proj { x: number; y: number; vx: number; vy: number; originX?: number; ghostAim?: boolean; ghostVolley?: number; setSix?: true; setOne?: SetOneShot; setSeven?: SevenShot; setSevenPending?: boolean; s7Ghost?: boolean; hold?: number; setNine?: NineBullet; setNinePending?: boolean; s9Ghost?: boolean; setNineBeam?: number; setEleven?: ElevenProj; setElevenPending?: boolean; s11Wait?: boolean; s11Ghost?: boolean; setTwo?: TwoRound; pierced?: number; hist?: { x: number; y: number }[]; tint?: string; big?: number; mini?: boolean; giant?: boolean; hue?: number; flash?: number; spawnDelay?: number; wob?: number; lastEcho?: number; t?: number; trail?: { x: number; y: number }[] }
 type StepRes = { res: 'none' | 'stick' | 'fail' | 'hit'; spike?: boolean; local?: number };
 interface Light { x: number; y: number; r: number; rgb: string; life: number; max: number }
-interface Fragment { x: number; y: number; vx: number; vy: number; rot: number; vr: number; a0: number; a1: number }
+interface Fragment { x: number; y: number; vx: number; vy: number; rot: number; vr: number; a0: number; a1: number; pitch: number; pitchV: number }
+
+/** Draw the stage-clear wheel chunks as extruded solids, including their textured rear face. */
+export function drawExtrudedWheelFragment(
+  c: CanvasRenderingContext2D,
+  face: CanvasImageSource,
+  radius: number,
+  pad: number,
+  start: number,
+  end: number,
+  depth: number,
+  sideColor: string,
+  edgeColor: string,
+  pitch: number,
+  lightAngle: number,
+) {
+  // Pitch the slice away from camera: compress its face and project its depth
+  // toward the viewer instead of showing a flat, front-on wedge.
+  const faceSquash = Math.max(0.22, Math.abs(Math.cos(pitch)));
+  const sideDepth = depth * Math.abs(Math.sin(pitch)) / faceSquash;
+  c.save();
+  c.scale(1, faceSquash);
+  const point = (angle: number, y = 0) => ({
+    x: Math.cos(angle) * radius,
+    y: Math.sin(angle) * radius + y,
+  });
+  const sector = (offsetY: number) => {
+    c.beginPath();
+    c.moveTo(0, offsetY);
+    c.lineTo(Math.cos(start) * radius, Math.sin(start) * radius + offsetY);
+    c.arc(0, offsetY, radius, start, end);
+    c.closePath();
+  };
+  const drawTexturedSector = (offsetY: number) => {
+    c.save();
+    sector(offsetY);
+    c.clip();
+    c.drawImage(face, -radius - pad, -radius - pad + offsetY, (radius + pad) * 2, (radius + pad) * 2);
+    c.restore();
+  };
+
+  const a = point(start);
+  const b = point(end);
+  const wallLight = c.createLinearGradient(0, 0, 0, sideDepth);
+  wallLight.addColorStop(0, 'rgba(255,255,255,0.24)');
+  wallLight.addColorStop(0.18, 'rgba(255,255,255,0.08)');
+  wallLight.addColorStop(0.56, 'rgba(0,0,0,0.03)');
+  wallLight.addColorStop(1, 'rgba(0,0,0,0.18)');
+
+  // A small cast shadow separates the rear face from the glowing stage backdrop.
+  c.save();
+  sector(sideDepth + 4);
+  c.fillStyle = 'rgba(0,0,0,0.16)';
+  c.fill();
+  c.restore();
+
+  // The lower, textured face sits in shadow; the three connecting planes get
+  // consistent light on their front bevel and darker shading toward the back.
+  drawTexturedSector(sideDepth);
+  c.save();
+  sector(sideDepth);
+  c.clip();
+  c.fillStyle = 'rgba(0,0,0,0.14)';
+  c.fill();
+  c.restore();
+
+  const paintWall = () => {
+    c.fillStyle = sideColor;
+    c.fill();
+    c.fillStyle = wallLight;
+    c.fill();
+    c.strokeStyle = 'rgba(0,0,0,0.18)';
+    c.lineWidth = 1.25;
+    c.stroke();
+  };
+
+  c.beginPath();
+  c.moveTo(0, 0);
+  c.lineTo(a.x, a.y);
+  c.lineTo(a.x, a.y + sideDepth);
+  c.lineTo(0, sideDepth);
+  c.closePath();
+  paintWall();
+
+  c.beginPath();
+  c.moveTo(0, 0);
+  c.lineTo(b.x, b.y);
+  c.lineTo(b.x, b.y + sideDepth);
+  c.lineTo(0, sideDepth);
+  c.closePath();
+  paintWall();
+
+  c.beginPath();
+  c.moveTo(a.x, a.y);
+  c.arc(0, 0, radius, start, end);
+  c.lineTo(b.x, b.y + sideDepth);
+  c.arc(0, sideDepth, radius, end, start, true);
+  c.closePath();
+  paintWall();
+
+  // Front face: keep the artwork, but shade it from one fixed upper-left light
+  // source so the bevel, surface and shadow all agree on the lighting direction.
+  drawTexturedSector(0);
+  const lightX = Math.cos(lightAngle) * radius * 0.82;
+  const lightY = Math.sin(lightAngle) * radius * 0.82;
+  const frontLight = c.createLinearGradient(lightX, lightY, -lightX, -lightY);
+  frontLight.addColorStop(0, 'rgba(255,255,255,0.20)');
+  frontLight.addColorStop(0.22, 'rgba(255,255,255,0.07)');
+  frontLight.addColorStop(0.58, 'rgba(0,0,0,0.01)');
+  frontLight.addColorStop(1, 'rgba(0,0,0,0.14)');
+  c.save();
+  sector(0);
+  c.clip();
+  c.fillStyle = frontLight;
+  c.fill();
+  c.restore();
+
+  // Fine bevel glints instead of a thick, uniformly bright outline.
+  sector(0);
+  c.strokeStyle = 'rgba(0,0,0,0.32)';
+  c.lineWidth = 3;
+  c.stroke();
+  c.save();
+  sector(0);
+  c.globalAlpha = 0.22;
+  c.strokeStyle = edgeColor;
+  c.lineWidth = 0.9;
+  c.stroke();
+  c.restore();
+  c.beginPath();
+  c.arc(0, 0, radius - 1.5, start + 0.025, end - 0.025);
+  c.strokeStyle = 'rgba(255,255,255,0.46)';
+  c.lineWidth = 1;
+  c.stroke();
+  c.restore();
+}
+
 interface Flyer { x: number; y: number; vx: number; vy: number; rot: number; vr: number; kind: ItemType; w?: WeaponId; hue?: number; busterPellet?: boolean; scale?: number }
 interface Beam { x: number; y: number; life: number; max: number; rgb: string }
 interface Portal { x: number; y: number; life: number; max: number; rgb: string }
@@ -609,7 +875,14 @@ export class Game {
   private wheelFlash = 0;
   private wheelFlashRgb = '200,255,128';
   private introT = 0;
+  private introFxT = 0;
+  private introDuration = 0.5;
+  private synchronizedEntrance = false;
+  private wheelEntryRate = 9;
+  private wheelEntryDuration = 1.1;
   private wheelScale = 1;
+  private gunEntryDelayT = 0;
+  private gunEntryRate = 1;
   private stateT = 0;
   private recoil = 0;
   private muzzle = 0;
@@ -1238,12 +1511,12 @@ export class Game {
   }
 
   private get targetY() {
-    if (isSpecial(this.level.mode)) return SPECIAL_CY;
-    if (this.level.boss) {
-      const bossBaseY = CY + 36;
-      return Math.max(60 + this.level.radius, bossBaseY - bossRiseOffset(this.levelTime));
+    const special = isSpecial(this.level.mode);
+    const baseY = initialGameplayWheelCenterY(this.level.boss, special);
+    if (this.level.boss && !special) {
+      return Math.max(60 + this.level.radius, baseY - bossRiseOffset(this.levelTime));
     }
-    return CY;
+    return baseY;
   }
 
   /**
@@ -1251,9 +1524,7 @@ export class Game {
    * never invalidates and reallocates 840x1520 Retina canvases 60 times per second.
    */
   private get steadyTargetY() {
-    if (isSpecial(this.level.mode)) return SPECIAL_CY;
-    if (this.level.boss) return CY + 36;
-    return CY;
+    return initialGameplayWheelCenterY(this.level.boss, isSpecial(this.level.mode));
   }
   private get hasTwinGuns() { return this.level.mode === 'double' || this.twinGuns; }
   private get gunOffsets(): readonly number[] { return this.hasTwinGuns ? TWIN_BARRELS : SINGLE_BARREL; }
@@ -1380,7 +1651,10 @@ export class Game {
     if (this.choosingBuff) return;
     // Once input is accepted, keep the visible muzzle at the real projectile
     // origin even if the last few pixels of the entrance are still settling.
-    if (this.state === 'play') this.gunEntryT = GAMEPLAY_GUN_ENTRY_DURATION;
+    if (this.state === 'play') {
+      this.gunEntryDelayT = 0;
+      this.gunEntryT = GAMEPLAY_GUN_ENTRY_DURATION;
+    }
     this.holding = true;
     const plain = this.plainTrigger;
     // Slide 3 fires on the press (see `sevenPlainTrigger`).
@@ -1502,7 +1776,7 @@ export class Game {
     }
   }
 
-  private startRun(level: number, forcedMode?: LevelMode) {
+  private startRun(level: number, forcedMode?: LevelMode, weaponHandoff = false, weaponEntryDelay = 0, synchronizedEntrance = false) {
     sfx.unlock();
     // Slide 7's own AudioContext can only start after a user gesture as well.
     setOneSfx.unlock();
@@ -1515,20 +1789,37 @@ export class Game {
     this.frags = [];
     this.flyers = [];
     this.loadLevel(level, forcedMode);
-    this.gunEntryT = this.motionPreference?.matches ? GAMEPLAY_GUN_ENTRY_DURATION : 0;
+    const reducedMotion = !!this.motionPreference?.matches;
+    this.synchronizedEntrance = synchronizedEntrance && !reducedMotion;
+    this.introDuration = this.synchronizedEntrance ? 1.35 * this.pace : 0.5;
+    this.wheelEntryRate = this.synchronizedEntrance ? 3.8 : 9;
+    this.wheelEntryDuration = this.synchronizedEntrance ? 1.1 * this.pace : 1.1;
+    this.gunEntryDelayT = reducedMotion ? 0 : Math.max(0, weaponEntryDelay) * this.pace;
+    this.gunEntryRate = this.synchronizedEntrance ? GAMEPLAY_GUN_ENTRY_DURATION / (0.56 * this.pace) : 1;
+    this.gunEntryT = reducedMotion || weaponHandoff ? GAMEPLAY_GUN_ENTRY_DURATION : 0;
   }
 
   start() { this.startRun(1); }
 
   /** Start an existing SGA level directly from the level map without changing its stage rules. */
-  startAtLevel(level: number) { this.startRun(Math.max(1, Math.floor(level))); }
+  startAtLevel(level: number, weaponHandoff = false, weaponEntryDelay = 0, synchronizedEntrance = false) {
+    this.startRun(Math.max(1, Math.floor(level)), undefined, weaponHandoff, weaponEntryDelay, synchronizedEntrance);
+  }
 
   /** Menu shortcuts enter the same real, playable levels as the Arcade progression. */
-  startSpecialStage(mode: 'boulder' | SpecialMode) { this.startRun(4, mode); }
+  startSpecialStage(mode: 'boulder' | SpecialMode, weaponEntryDelay = 0, synchronizedEntrance = false) {
+    this.startRun(4, mode, false, weaponEntryDelay, synchronizedEntrance);
+  }
 
   toIdle() {
     this.state = 'idle';
     this.gunEntryT = GAMEPLAY_GUN_ENTRY_DURATION;
+    this.gunEntryDelayT = 0;
+    this.gunEntryRate = 1;
+    this.synchronizedEntrance = false;
+    this.introDuration = 0.5;
+    this.wheelEntryRate = 9;
+    this.wheelEntryDuration = 1.1;
     this.snowLoaded = SNOWBALL_MAG_SIZE;
     this.level = makeLevel(1);
     this.events.onStageChange?.();
@@ -1693,6 +1984,12 @@ export class Game {
     // A continuing run keeps its weapon in place between stages. startRun()
     // explicitly re-arms the entrance for Play, map and special-stage starts.
     this.gunEntryT = GAMEPLAY_GUN_ENTRY_DURATION;
+    this.gunEntryDelayT = 0;
+    this.gunEntryRate = 1;
+    this.synchronizedEntrance = false;
+    this.introDuration = 0.5;
+    this.wheelEntryRate = 9;
+    this.wheelEntryDuration = 1.1;
     this.level = makeLevel(n, forcedMode);
     this.events.onStageChange?.();
     // A new level starts with an empty wheel: no rounds stuck from the last one.
@@ -1756,6 +2053,7 @@ export class Game {
     this.levelTime = 0;
     this.state = 'intro';
     this.introT = 0;
+    this.introFxT = 0;
     this.wheelScale = 0.15;
     this.bannerT = 1.8;
     this.timeScale = 1;
@@ -3857,7 +4155,13 @@ export class Game {
       const a1 = offs + ((i + 1) / k) * TAU;
       const mid = (a0 + a1) / 2 + this.rot;
       const v = rand(260, 520);
-      this.frags.push({ x: CX, y: this.targetY, vx: Math.cos(mid) * v, vy: Math.sin(mid) * v - 220, rot: this.rot, vr: rand(-6, 6), a0, a1 });
+      this.frags.push({
+        x: CX, y: this.targetY, vx: Math.cos(mid) * v, vy: Math.sin(mid) * v - 220,
+        rot: this.rot, vr: rand(-6, 6), a0, a1,
+        // Start each wedge already pitched away from the camera, then tumble it
+        // between two oblique angles so the artwork never reads as a flat front.
+        pitch: rand(0.68, 1.3), pitchV: rand(-3.2, 3.2),
+      });
     }
     for (const it of this.items) {
       const wa = it.angle + this.rot;
@@ -4790,8 +5094,10 @@ export class Game {
     const dt = rawDt * this.pace;
     // The stage clock and gun must stop while the player chooses a star upgrade.
     if (this.choosingBuff) return;
-    if (this.gunEntryT < GAMEPLAY_GUN_ENTRY_DURATION) {
-      this.gunEntryT = Math.min(GAMEPLAY_GUN_ENTRY_DURATION, this.gunEntryT + dt);
+    if (this.gunEntryDelayT > 0) {
+      this.gunEntryDelayT = Math.max(0, this.gunEntryDelayT - dt);
+    } else if (this.gunEntryT < GAMEPLAY_GUN_ENTRY_DURATION) {
+      this.gunEntryT = Math.min(GAMEPLAY_GUN_ENTRY_DURATION, this.gunEntryT + dt * this.gunEntryRate);
     }
     if (this.stageClearBurstT > 0) this.stageClearBurstT = Math.max(0, this.stageClearBurstT - dt);
     this.rock?.update(dt);
@@ -5219,10 +5525,17 @@ export class Game {
       }
     }
 
-    this.wheelScale += (1 - this.wheelScale) * Math.min(1, dt * 9);
-    if (this.state === 'intro') {
+    if (this.synchronizedEntrance && this.introFxT < 1.75 * this.pace) this.introFxT += dt;
+    if (this.synchronizedEntrance && this.state === 'intro') {
       this.introT += dt;
-      if (this.introT >= 0.5) this.state = 'play';
+      this.wheelScale = perfectShotWheelEntry(this.introT, this.pace, this.level.radius).scaleY;
+      if (this.introT >= this.introDuration) this.state = 'play';
+    } else {
+      this.wheelScale += (1 - this.wheelScale) * Math.min(1, dt * this.wheelEntryRate);
+      if (this.state === 'intro') {
+        this.introT += dt;
+        if (this.introT >= this.introDuration) this.state = 'play';
+      }
     }
     this.bannerT = Math.max(0, this.bannerT - dt);
 
@@ -5964,6 +6277,11 @@ export class Game {
       f.x += f.vx * s;
       f.y += f.vy * s;
       f.rot += f.vr * s;
+      f.pitch += f.pitchV * s;
+      if (f.pitch < 0.58 || f.pitch > 1.4) {
+        f.pitch = Math.max(0.58, Math.min(1.4, f.pitch));
+        f.pitchV *= -1;
+      }
       if (f.y <= H + 200) this.frags[fragWrite++] = f;
     }
     this.frags.length = fragWrite;
@@ -6940,10 +7258,18 @@ export class Game {
     // under the wheel, the way slide 11's own `render()` paints it.
     if (this.state !== 'idle' && this.elevenActive) this.s11State!.drawLight(c);
 
+    // While the synchronized Play entrance is running, the wheel artwork and
+    // its rays share one center/transform just like Perfect Shot's target art.
+    const wheelEntry = this.synchronizedEntrance && this.state === 'intro'
+      ? perfectShotWheelEntry(this.introT, this.pace, R)
+      : RESTING_WHEEL_ENTRY;
+    const wheelEntryBurst = this.synchronizedEntrance && this.introFxT < 1.75 * this.pace
+      ? perfectShotWheelBurst(this.introFxT, this.pace)
+      : NO_WHEEL_BURST;
     // Pure-white Sunburst ALWAYS renders BEHIND the front view of the wheel,
     // rock, bonus coin ring, treasure chest, and shattering wheel fragments!
     if (this.state !== 'idle' && isSpecial(this.level.mode)) {
-      drawBehindWheelSunburst(c, CX, this.targetY, R * 1.92, this.time, 0.42);
+      drawBehindWheelSunburst(c, CX, this.targetY + wheelEntry.offsetY, R * 1.92, this.time, 0.42 * wheelEntry.opacity);
     }
     const clearBurstT = this.stageClearBurstT ?? 0;
     if (clearBurstT > 0) {
@@ -6972,7 +7298,7 @@ export class Game {
     // Keep the clean diamond / chest visible through the special-stage celebration.
     if (this.state !== 'idle' && (this.state !== 'clear' || isSpecial(this.level.mode))) {
       const wScale = this.wheelScale ?? 1;
-      const sc = wScale * (1 + this.bump * 0.035);
+      const sc = (this.synchronizedEntrance && this.state === 'intro' ? 1 : wScale) * (1 + this.bump * 0.035);
       // A slide-11 gun's hits kick, squash and shiver the wheel like slide 11's.
       const wm = this.elevenMotion();
       // …and a slide-9 gun's hits shove it back on slide 9's recoil spring.
@@ -6982,8 +7308,41 @@ export class Game {
       const s7w = this.sevenWheel;
       const sf = s7w ? s7w.feel : null;
       c.save();
-      c.translate(CX + (wm?.dx ?? 0) + nk.x, this.targetY + this.bump * 7 + (wm?.dy ?? 0) + nk.y + (sf?.bumpY ?? 0));
-      c.scale(sc * (wm?.sx ?? 1) * (1 + (sf?.pulseS ?? 0)), sc * (wm?.sy ?? 1) * (1 + (sf?.pulseS ?? 0)));
+      c.globalAlpha *= wheelEntry.opacity;
+      if (wheelEntry.brightness !== 1) c.filter = `brightness(${wheelEntry.brightness})`;
+      c.translate(CX + (wm?.dx ?? 0) + nk.x, this.targetY + wheelEntry.offsetY + this.bump * 7 + (wm?.dy ?? 0) + nk.y + (sf?.bumpY ?? 0));
+      if (wheelEntryBurst.flashOpacity > 0 || wheelEntryBurst.waves.some((wave) => wave.opacity > 0)) {
+        c.save();
+        c.globalCompositeOperation = 'lighter';
+        c.filter = 'none';
+        const entryFlashRadius = R * 1.2 * wheelEntryBurst.flashScale;
+        if (wheelEntryBurst.flashOpacity > 0) {
+          const flash = c.createRadialGradient(0, 0, 0, 0, 0, entryFlashRadius);
+          flash.addColorStop(0, 'rgba(255,255,255,.95)');
+          flash.addColorStop(0.35, this.level.boss ? 'rgba(255,120,80,.6)' : 'rgba(255,240,200,.45)');
+          flash.addColorStop(0.7, 'rgba(255,255,255,0)');
+          c.globalAlpha *= wheelEntryBurst.flashOpacity;
+          c.fillStyle = flash;
+          c.beginPath();
+          c.arc(0, 0, entryFlashRadius, 0, TAU);
+          c.fill();
+        }
+        for (const [index, wave] of wheelEntryBurst.waves.entries()) {
+          if (wave.opacity <= 0) continue;
+          c.globalAlpha = wheelEntry.opacity * wave.opacity;
+          c.strokeStyle = index === 1
+            ? 'rgba(255,255,255,1)'
+            : this.level.boss ? '#ff6b6b' : '#fff3b0';
+          c.shadowBlur = index === 1 ? 0 : this.level.boss ? 30 : 26;
+          c.shadowColor = this.level.boss ? '#ff4d4d' : '#ffd27a';
+          c.lineWidth = wave.width;
+          c.beginPath();
+          c.arc(0, 0, R * wave.scale, 0, TAU);
+          c.stroke();
+        }
+        c.restore();
+      }
+      c.scale(sc * wheelEntry.scaleX * (wm?.sx ?? 1) * (1 + (sf?.pulseS ?? 0)), sc * wheelEntry.scaleY * (wm?.sy ?? 1) * (1 + (sf?.pulseS ?? 0)));
       // Slide 2's soft ring of light behind the target.
       if (this.setTwoLook) {
         drawSetTwoWheelGlow(c, R, setTwoWheelHue(this.weapon.id, this.level.n), Math.min(1, this.bump / 14));
@@ -7362,18 +7721,27 @@ export class Game {
       }
     }
 
-    // fragments
+    // fragments: each chunk keeps the wheel artwork on top and underneath,
+    // with dark, highlighted sidewalls that make its thickness obvious in flight.
     for (const f of this.frags) {
       c.save();
       c.translate(f.x, f.y);
       c.rotate(f.rot);
-      c.beginPath();
-      c.moveTo(0, 0);
-      c.arc(0, 0, R + 1, f.a0, f.a1);
-      c.closePath();
-      c.clip();
       const fragPad = this.level.boss ? 40 : 4;
-      c.drawImage(this.face, -R - fragPad, -R - fragPad, (R + fragPad) * 2, (R + fragPad) * 2);
+      const palette = STYLE_COLORS[this.level.style];
+      drawExtrudedWheelFragment(
+        c,
+        this.face,
+        R,
+        fragPad,
+        f.a0,
+        f.a1,
+        14,
+        palette.chips[1],
+        palette.chips[0],
+        f.pitch,
+        -Math.PI * 0.75 - f.rot,
+      );
       c.restore();
     }
     // Real, textured chunks keep their embedded rounds as they tumble away.

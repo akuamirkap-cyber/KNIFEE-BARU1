@@ -44,7 +44,7 @@ test('Slides 02-05 and earlier extra slides are removed from the hub so only Sli
   ]) {
     assert.ok(fs.existsSync(path.join(root, rel)), `keep ${rel}`);
   }
-  assert.ok(app.includes('<GunHitGame />'), 'App renders GunHitGame directly');
+  assert.ok(app.includes('<GunHitGame introReady={hasBooted && !loading} />'), 'App renders GunHitGame directly with synchronized intro state');
   assert.ok(!app.includes('SLIDE 01'), 'outer hub slide chrome is removed for pure 9:16 mobile SGA');
   assert.ok(app.includes('baseWidth={420}'), '9:16 mobile portrait baseWidth is preserved');
   assert.ok(app.includes('baseHeight={760}'), '9:16 mobile portrait baseHeight is preserved');

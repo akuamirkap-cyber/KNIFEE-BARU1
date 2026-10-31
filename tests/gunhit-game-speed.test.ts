@@ -172,8 +172,9 @@ test('Game.setGameSpeed scales wheel rotation, intro, cooldown, projectile fligh
 test('SGA Pengaturan exposes the speed selector while App focuses purely on 9:16 SGA', () => {
   const hub = readFileSync(path.join(process.cwd(), 'src/App.tsx'), 'utf8');
   const sga = readFileSync(path.join(process.cwd(), 'src/games/gunhit/App.tsx'), 'utf8');
-  assert.ok(hub.includes('<GunHitGame />'));
+  assert.ok(hub.includes('<GunHitGame introReady={hasBooted && !loading} />'));
   assert.ok(!hub.includes('<header'), 'no outer desktop hub header on 9:16 mobile view');
-  assert.ok(sga.includes('KECEPATAN GAME (SGA)'));
+  const settingsUi = readFileSync(path.join(process.cwd(), 'src/games/gunhit/components/SgaSettingsPanel.tsx'), 'utf8');
+  assert.ok(settingsUi.includes('KECEPATAN GAME SGA'));
   assert.ok(sga.includes('SGA_SPEED_OPTIONS'));
 });

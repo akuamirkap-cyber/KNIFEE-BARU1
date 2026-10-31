@@ -228,15 +228,27 @@ test('2d-game-intro-animation (1).zip Mochi Garden audio engine plays Do-Mi-Sol-
   assert.ok(introSrc.includes('juicyAudio.playGameArrival()'));
 });
 
-test('App gates SGA activity behind SansStudioLoading before entering the game', () => {
+test('App plays the SANS STUDIO intro before booting SGA and keeps replay non-destructive', () => {
   const appSrc = fs.readFileSync(path.join(ROOT, 'src/App.tsx'), 'utf8');
-  assert.ok(appSrc.includes('SansStudioLoading'), 'App mounts SansStudioLoading');
-  assert.ok(
-    appSrc.includes('active={pageVisible && !loading}'),
-    'SGA canvas loop stays paused while SANS STUDIO intro animation plays',
-  );
-  assert.ok(appSrc.includes('<GunHitGame />'), 'SGA remains mounted inside the 9:16 ScaledFrame');
+  assert.ok(appSrc.includes("const loadGunHitGame = () => import('./games/gunhit/App')"), 'large game bundle is loaded separately');
+  assert.ok(appSrc.includes('void loadGunHitGame().catch'), 'SGA code is preloaded during the logo intro to avoid a post-intro hitch');
+  assert.ok(appSrc.includes("const [loading, setLoading] = useState(true)"), 'the studio intro is shown on initial startup');
+  assert.ok(appSrc.includes('const [hasBooted, setHasBooted] = useState(false)'), 'SGA does not mount and start its menu entrance before the intro completes');
+  assert.ok(appSrc.includes('setHasBooted(true)'), 'the intro completion unlocks the first SGA mount');
+  assert.ok(appSrc.includes('sans-intro-complete'), 'the game can restart its menu entrance when an intro replay finishes');
+  assert.ok(appSrc.includes('detail: { replay: introRunKey > 0 }'), 'initial and replayed intros are distinguished for synced entrance audio');
+  assert.ok(appSrc.includes('studioSfx.startMusic()'), 'the shared ambient music starts on a user gesture');
+  assert.ok(appSrc.includes('<Suspense fallback={<GameBootFallback />}'), 'lazy loading always shows a visible boot state');
+  assert.ok(appSrc.includes('SansStudioLoading'), 'the studio intro is available at startup and for replay');
+  assert.ok(appSrc.includes("active={pageVisible && !loading && activeGame === 'sga'}"), 'SGA pauses during the intro and while its side-by-side page is offscreen');
+  assert.ok(appSrc.includes('<GunHitGame introReady={hasBooted && !loading} />'), 'SGA receives intro readiness directly so a lazy-load race cannot freeze its menu');
   assert.ok(appSrc.includes('sans-replay-intro'), 'App listens for sans-replay-intro to replay the intro');
+});
+
+test('HTML shows a boot indicator before JavaScript and does not block first paint on remote fonts', () => {
+  const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  assert.ok(html.includes('class="boot-screen"'), 'static boot UI is present before React starts');
+  assert.ok(html.includes('media="print" onload="this.media=\'all\'"'), 'Google Fonts load without blocking initial paint');
 });
 
 test('mobilePerf calibrates mobile DPR and suppresses expensive Canvas2D shadowBlur passes', () => {
