@@ -573,9 +573,9 @@ const PAINT = ['244,63,94', '250,204,21', '34,211,238', '168,85,247', '74,222,12
 
 type ItemType = 'bullet' | 'old' | 'spike' | 'coin' | 'diamond_chest';
 interface AcidStuck { blobs: AcidStuckBlob[]; dripT: number; drip: number; seed: number; hybrid?: boolean }
-interface Item { angle: number; type: ItemType; age: number; ghostVolley?: number; w?: WeaponId; scale?: number; vel?: number; harvested?: boolean; tint?: string; big?: number; hits?: number; hue?: number; flash?: number; acid?: AcidStuck; hideArt?: boolean; busterPellet?: boolean; setTwo?: boolean; s7Half?: number; s7Protrude?: number }
+interface Item { angle: number; type: ItemType; age: number; /** Exact radius (px) the round bit into the target artwork. */ r?: number; ghostVolley?: number; w?: WeaponId; scale?: number; vel?: number; harvested?: boolean; tint?: string; big?: number; hits?: number; hue?: number; flash?: number; acid?: AcidStuck; hideArt?: boolean; busterPellet?: boolean; setTwo?: boolean; s7Half?: number; s7Protrude?: number }
 interface Proj { x: number; y: number; vx: number; vy: number; originX?: number; ghostAim?: boolean; ghostVolley?: number; setSix?: true; setOne?: SetOneShot; setSeven?: SevenShot; setSevenPending?: boolean; s7Ghost?: boolean; hold?: number; setNine?: NineBullet; setNinePending?: boolean; s9Ghost?: boolean; setNineBeam?: number; setEleven?: ElevenProj; setElevenPending?: boolean; s11Wait?: boolean; s11Ghost?: boolean; setTwo?: TwoRound; pierced?: number; hist?: { x: number; y: number }[]; tint?: string; big?: number; mini?: boolean; giant?: boolean; hue?: number; flash?: number; spawnDelay?: number; wob?: number; lastEcho?: number; t?: number; trail?: { x: number; y: number }[] }
-type StepRes = { res: 'none' | 'stick' | 'fail' | 'hit'; spike?: boolean; local?: number };
+type StepRes = { res: 'none' | 'stick' | 'fail' | 'hit'; spike?: boolean; local?: number; r?: number };
 interface Light { x: number; y: number; r: number; rgb: string; life: number; max: number }
 interface Fragment {
   x: number; y: number; vx: number; vy: number; rot: number; vr: number;
@@ -584,7 +584,47 @@ interface Fragment {
   side?: string; edge?: string; depth?: number;
 }
 
-export interface TargetPixels { data: Uint8ClampedArray; size: number }
+export interface ArtMask {
+  size: number;
+  /** Alpha of the target artwork, row-major, exactly as drawn inside [-R, R]. */
+  alpha: Uint8Array;
+}
+
+/** Alpha mask of the artwork that is actually on screen, for pixel-exact hits. */
+export function buildArtMask(image: HTMLImageElement | null, size = 240): ArtMask | null {
+  if (!image) return null;
+  try {
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = size;
+    const g = cv.getContext('2d');
+    if (!g) return null;
+    g.drawImage(image, 0, 0, size, size);
+    const data = g.getImageData(0, 0, size, size).data;
+    const alpha = new Uint8Array(size * size);
+    for (let i = 0, p = 3; i < alpha.length; i++, p += 4) alpha[i] = data[p];
+    return { size, alpha };
+  } catch {
+    return null;
+  }
+}
+
+/** Is this mask pixel opaque? A 3x3 neighbourhood keeps thin strokes solid. */
+function maskSolid(mask: ArtMask, x: number, y: number): boolean {
+  const { size, alpha } = mask;
+  for (let dy = -1; dy <= 1; dy++) {
+    const py = y + dy;
+    if (py < 0 || py >= size) continue;
+    const row = py * size;
+    for (let dx = -1; dx <= 1; dx++) {
+      const px = x + dx;
+      if (px < 0 || px >= size) continue;
+      if (alpha[row + px] > 20) return true;
+    }
+  }
+  return false;
+}
+
+interface TargetPixels { data: Uint8ClampedArray; size: number }
 
 /** Read the target artwork once so the shatter debris can wear its own colours. */
 export function readTargetPixels(face: HTMLCanvasElement | null): TargetPixels | null {
@@ -999,6 +1039,9 @@ export class Game {
    * sticks where the drawing is, exactly like the reference game's `edgeR()`.
    */
   private bossArtProfile: number[] | null = null;
+  /** Alpha mask of the on-screen target art: hits are pixel tests, not circles. */
+  private artMask: ArtMask | null = null;
+  private artMaskMaxR = 1;
   private gunEntryDelayT = 0;
   private gunEntryRate = 1;
   /**
@@ -2343,8 +2386,12 @@ export class Game {
     // canvas faces below stay as the instant fallback for the first frames.
     if (this.wheelImage) c.drawImage(this.wheelImage, -R, -R, R * 2, R * 2);
     else drawFace(c, R, this.level.style);
-    // A boss is hit where its pixels are, never on a circle.
+    // A boss is hit where its pixels are, never on a circle: keep the angular
+    // profile (cheap broad phase, item placement) and the alpha mask (exact
+    // pixel test for every bullet).
     this.bossArtProfile = this.level.boss && this.wheelImage ? this.sampleArtProfile(this.wheelImage) : null;
+    this.artMask = this.level.boss ? buildArtMask(this.wheelImage) : null;
+    this.artMaskMaxR = this.bossArtProfile ? Math.max(...this.bossArtProfile) : 1;
     this.face = cv;
     this.faceCtx = c;
     this.faceR = R;
@@ -2372,6 +2419,43 @@ export class Game {
    * own contour when it has one, the imported portrait's contour otherwise, and
    * a plain radius for the round stages. No circle is ever used for a boss.
    */
+  /**
+   * Pixel test against the artwork that is on screen right now. Returns the
+   * exact radius (px) of the point where the round met the drawing, or null
+   * when that point is empty space beside the boss.
+   */
+  private artSurfaceAt(worldX: number, worldY: number): number | null {
+    const mask = this.artMask;
+    if (!mask) return null;
+    const R = this.level.radius;
+    const mx = worldX - CX;
+    const my = worldY - this.targetY;
+    const dist = Math.hypot(mx, my);
+    if (dist > R * this.artMaskMaxR + 2) return null; // outside the outermost ink
+    const cos = Math.cos(-this.rot);
+    const sin = Math.sin(-this.rot);
+    let lx = mx * cos - my * sin;
+    let ly = mx * sin + my * cos;
+    // The boss also floats, sways and breathes on screen; undo that decoration
+    // so the test lands on the pixels the player can actually see.
+    if (this.level.boss) {
+      const bt = this.time;
+      const ox = lx - Math.sin(bt * 0.53) * 3.2;
+      const oy = ly - Math.sin(bt * 1.15) * 3.8;
+      const wob = Math.sin(bt * 0.66 + 1.0) * 0.085;
+      const breath = 1 + Math.sin(bt * 1.35) * 0.014;
+      const cw = Math.cos(-wob);
+      const sw = Math.sin(-wob);
+      lx = (ox * cw - oy * sw) / breath;
+      ly = (ox * sw + oy * cw) / breath;
+    }
+    const u = Math.round((lx / R + 1) * 0.5 * (mask.size - 1));
+    const v = Math.round((ly / R + 1) * 0.5 * (mask.size - 1));
+    if (u < 0 || v < 0 || u >= mask.size || v >= mask.size) return null;
+    return maskSolid(mask, u, v) ? dist : null;
+  }
+
+  /** Angular radius of the on-screen art (grid placement, item seats). */
   private bossRadiusAt(localAngle: number, radius = this.level.radius): number {
     if (!this.level.boss) return radius;
     const TAU = Math.PI * 2;
@@ -3924,7 +4008,7 @@ export class Game {
     c.restore();
   }
 
-  private stickAt(local: number, p?: Proj) {
+  private stickAt(local: number, p?: Proj, surfaceR?: number) {
     const R = this.level.radius;
     const w = this.weapon;
     const big = p?.big ?? 0;
@@ -3994,6 +4078,7 @@ export class Game {
       angle: local,
       type: 'bullet',
       age: 0,
+      r: surfaceR,
       ghostVolley: p?.ghostVolley,
       w: w.id,
       big,
@@ -4576,7 +4661,21 @@ export class Game {
     const s3 = this.setSevenLive;
     const shot7 = s3 ? p.setSeven : undefined;
     const reach = dist - (shot7 ? shot7.tip : 0);
-    if (reach > effectiveR + L + 4 + (shot7 ? 60 : 0)) return { res: 'none' };
+    // With the artwork's mask in hand the broad phase has to reach the furthest
+    // piece of ink, not the angular radius, or a horn would be unhittable.
+    const phaseR = this.artMask ? this.level.radius * this.artMaskMaxR : effectiveR;
+    if (reach > phaseR + L + 4 + (shot7 ? 60 : 0)) return { res: 'none' };
+    // Boss: the drawing decides. Test the round's nose (and its centre) against
+    // the artwork's own pixels, so a shot flies through the empty space beside a
+    // horn or a shoulder instead of sticking to an invisible circle.
+    if (this.artMask) {
+      const nose = shot7 ? shot7.tip : 0;
+      const head = nose > 0 && dist > nose
+        ? { x: p.x + (p.vx / (Math.hypot(p.vx, p.vy) || 1)) * nose, y: p.y + (p.vy / (Math.hypot(p.vx, p.vy) || 1)) * nose }
+        : null;
+      const surface = (head ? this.artSurfaceAt(head.x, head.y) : null) ?? this.artSurfaceAt(p.x, p.y);
+      if (surface !== null) return { res: 'stick', local, r: surface };
+    }
     if (isSpecial(this.level.mode)) return this.stepSpecialProjectile(p);
     const w = this.weapon;
     const R = effectiveR;
@@ -4590,7 +4689,7 @@ export class Game {
       if (p.ghostVolley !== undefined && p.ghostVolley === it.ghostVolley) continue;
       const d = angDiff(local, it.angle);
       // Tangential angular clearance threshold
-      const itemR = bType ? this.bossRadiusAt(it.angle) : this.level.radius;
+      const itemR = it.r ?? (bType ? this.bossRadiusAt(it.angle) : this.level.radius);
 
       if (it.type === 'bullet' || it.type === 'old') {
         const sc = it.scale ?? 1;
@@ -4652,8 +4751,9 @@ export class Game {
         }
       }
     }
-    // Slide 3 lands its round the moment the tip crosses the rim.
-    if (reach <= R) return { res: 'stick', local };
+    // Slide 3 lands its round the moment the tip crosses the rim. On a boss the
+    // rim is the drawing itself: if no ink was hit, the round keeps flying.
+    if (!this.artMask && reach <= R) return { res: 'stick', local };
     return { res: 'none' };
   }
 
@@ -6452,7 +6552,7 @@ export class Game {
       }
       if (r.res === 'stick') {
         this.projs.splice(i, 1);
-        this.stickAt(r.local ?? norm(Math.PI / 2 - this.rot), p);
+        this.stickAt(r.local ?? norm(Math.PI / 2 - this.rot), p, r.r);
         if ((this.state as State) === 'clear') break;
       } else if (r.res === 'hit') {
         // Consume one projectile per stone/star hit; a star pauses further shots.
@@ -7561,7 +7661,7 @@ export class Game {
           // Masuk lebih dalam hingga hanya terlihat setengah (50% tertanam di dalam papan)
           const embedDepth = totalWeaponLen * 0.5;
           const pencilEmbedBonus = it.w === 'pencil' ? Math.sin(it.angle * 13) * 5 : 0;
-          const itemR = this.bossRadiusAt(it.angle, R);
+          const itemR = it.r ?? this.bossRadiusAt(it.angle, R);
           const snowball = it.type === 'bullet' && it.w === 'snowball';
           const firework = it.type === 'bullet' && it.w === 'firework';
           const yoyo = it.type === 'bullet' && it.w === 'yoyo';
