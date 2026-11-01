@@ -45,7 +45,7 @@ test('the boss hit surface is sampled from the artwork on screen, never a circle
   assert.match(game, /private bossArtProfile: number\[\] \| null = null;/);
   // The contour is read back from the very canvas the renderer blits, so it
   // follows Game B's raster and this file's fallback face alike.
-  assert.match(game, /this\.bossArtProfile = readable \? this\.sampleArtProfile\(art, span\) : null;/);
+  assert.match(game, /this\.bossArtProfile = readable && mask \? maskProfile\(mask\) : null;/);
   assert.match(game, /private bossRadiusAt\(localAngle: number, radius = this\.level\.radius\): number \{/);
   // Every gameplay hit / placement site goes through that one helper.
   assert.doesNotMatch(game, /this\.level\.boss\s*\?\s*getExactBossRadius/);

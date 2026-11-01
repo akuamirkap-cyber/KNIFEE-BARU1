@@ -66,7 +66,7 @@ test('every bullet tests the boss pixels before anything else', () => {
   assert.match(game, /let mask = this\.level\.boss \? buildArtMask\(art, span, 384\) : null;/);
   assert.match(game, /let readable = !!mask && mask\.maxR > 0\.05;/);
   assert.match(game, /this\.artMask = readable \? mask : null;/);
-  assert.match(game, /this\.bossArtProfile = readable \? this\.sampleArtProfile\(art, span\) : null;/);
+  assert.match(game, /this\.bossArtProfile = readable && mask \? maskProfile\(mask\) : null;/);
   // When the browser refuses to read a canvas that had an SVG drawn into it,
   // the same head is rasterised from its own markup instead — never a ring.
   assert.match(game, /const traced = buildArtMaskFromSvg\(this\.wheelSvg, span, 384\);/);

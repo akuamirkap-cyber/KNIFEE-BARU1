@@ -54,6 +54,7 @@ import { spawnPlasmaImpact, YELLOW_PLASMA_IMPACT } from '../../../../games/game-
 import { sfx2 } from './sfx2';
 import { drawKnife, knifeVariant, KNIFE_SINK } from './knifeArt';
 import { sfx as bossVoice } from '../../perfect-shot/audio/sfx';
+import { bossNameFor } from './bossIdentity';
 import { sfx3 } from './sfx3';
 import { sfx4 } from './sfx4';
 import { sfx6 } from './sfx6';
@@ -90,7 +91,6 @@ import {
   type BossMuzzleFlash,
 } from './bossProjectileArt';
 import { getExactBossRadius, onBossAssetsLoaded } from './bossAssetProcessor';
-import { processAlphaRadii } from './bossAssetPixels';
 import {
   createFirework8State,
   drawFirework8Background,
@@ -904,30 +904,33 @@ function applySvgTransforms(g: CanvasRenderingContext2D, raw: string | null) {
  * from the artwork's own pixels, so it can never describe a circle that the
  * drawing does not have.
  */
+/**
+ * The artwork's own edge, one exact value per degree: a ray is walked from just
+ * outside the mask inwards and the first solid pixel is the surface — the same
+ * rule every round is tested with. No smoothing and no inset, because this is
+ * also what positions the knives, the coins and the aim guide: a 5-tap average
+ * put a knife a few pixels off a spiked silhouette (the pirate's mane), which
+ * read as "the knife is on the wheel rim, not on the head".
+ */
 export function maskProfile(mask: ArtMask): number[] {
-  const { size, alpha, span } = mask;
+  const { size, span } = mask;
   const half = size / 2;
-  const raw: number[] = new Array(360).fill(0.3);
+  const out: number[] = new Array(360).fill(0.3);
   for (let deg = 0; deg < 360; deg++) {
     const a = (deg * Math.PI) / 180;
     const cos = Math.cos(a);
     const sin = Math.sin(a);
-    let outer = 0;
-    for (let r = Math.floor(half * 0.99); r >= 2; r--) {
-      const x = Math.round(half + cos * r);
-      const y = Math.round(half + sin * r);
-      if (x >= 0 && x < size && y >= 0 && y < size && alpha[y * size + x] > 16) {
-        outer = r;
+    let found = 0;
+    for (let r = half * 0.995; r >= 2; r -= 0.3) {
+      const x = Math.floor(half + cos * r);
+      const y = Math.floor(half + sin * r);
+      if (x < 0 || y < 0 || x >= size || y >= size) continue;
+      if (maskSolid(mask, x, y)) {
+        found = r;
         break;
       }
     }
-    raw[deg] = Math.min(1.45, Math.max(0.3, (outer / half) * span));
-  }
-  const out: number[] = new Array(360);
-  for (let deg = 0; deg < 360; deg++) {
-    let sum = 0;
-    for (let k = -2; k <= 2; k++) sum += raw[(deg + k + 360) % 360];
-    out[deg] = sum / 5;
+    out[deg] = Math.min(1.45, Math.max(0.3, (found / half) * span));
   }
   return out;
 }
@@ -1300,7 +1303,11 @@ export function makeLevel(n: number, forcedMode?: LevelMode): LevelCfg {
   // Double the boss shot quota so the fight can sustain exactly twice the HP without an early ammo clear.
   const ammo = boss ? (regularAmmo + 2) * 2 : regularAmmo;
   const bossIdx = Math.floor(n / 5) - 1;
+  // The boss on screen *is* Perfect Shot's head, so its name is read from that
+  // same artwork: stage 5 is the pirate, and calling it "DARK KNIGHT" was the
+  // HUD contradicting the drawing.
   const style: Style = boss ? BOSS_STYLES[Math.max(0, bossIdx) % BOSS_STYLES.length] : WORLD_STYLES[world % WORLD_STYLES.length];
+  const bossName = boss ? bossNameFor(n) : '';
   // Boss DARK KNIGHT tampil bersih: tanpa duri jebakan & penghalang (peluru berkarat).
   const cleanKnight = boss && style === 'knight';
   const old = cleanKnight ? 0 : n < 2 ? 0 : Math.min(1 + Math.floor((n - 2) / 3), 5);
@@ -1321,7 +1328,10 @@ export function makeLevel(n: number, forcedMode?: LevelMode): LevelCfg {
   return {
     n, boss, ammo: isSpecial(mode) ? 12 : ammo, base, pattern, dir: Math.random() < 0.5 ? 1 : -1,
     radius: boss ? 122 : mode === 'boulder' || mode === 'bonus' ? ROCK_RADIUS : 106, style,
-    name: boss ? BOSS_NAMES[Math.max(0, bossIdx) % BOSS_NAMES.length] : '',
+    name: boss
+      ? bossName || BOSS_NAMES[Math.max(0, bossIdx) % BOSS_NAMES.length]
+      // the HUD prints the level name as-is for non-boss stages
+      : '',
     // Perfect Shot's boss stage has no spikes at all: its rintangan are the 3–5
     // knives already buried in the head, so Game A uses exactly those.
     old: isSpecial(mode) ? 0 : boss ? bossKnifeCount(n) : old,
@@ -2988,7 +2998,11 @@ export class Game {
         readable = true;
       }
     }
-    this.bossArtProfile = readable ? this.sampleArtProfile(art, span) : null;
+    // One shape only: the profile is read from the same mask every round is
+    // tested against. A second sampler (a downscaled read of the same bitmap)
+    // would drift from it by a pixel or two, and every knife, coin and spike
+    // placed from the profile would sit just off the drawing.
+    this.bossArtProfile = readable && mask ? maskProfile(mask) : null;
     this.artMask = readable ? mask : null;
     this.maskOutline = this.artMask ? buildMaskOutline(this.artMask) : null;
     this.maskSurface = this.artMask ? buildMaskSurface(this.artMask) : null;
@@ -3001,22 +3015,6 @@ export class Game {
    * 360-bin alpha contour of the artwork currently drawn as the target, in
    * units of R (the padded face canvas is scaled back by `span`).
    */
-  private sampleArtProfile(source: CanvasImageSource, span: number): number[] | null {
-    try {
-      const size = 360;
-      const cv = document.createElement('canvas');
-      cv.width = size;
-      cv.height = size;
-      const g = cv.getContext('2d');
-      if (!g) return null;
-      g.drawImage(source, 0, 0, size, size);
-      const pixels = g.getImageData(0, 0, size, size);
-      return processAlphaRadii(pixels.data, size, size).map((r) => Math.min(1.45, r * span));
-    } catch {
-      return null;
-    }
-  }
-
   /**
    * The target's surface radius at a local angle: the on-screen boss artwork's
    * own contour when it has one, the imported portrait's contour otherwise, and
@@ -3118,15 +3116,18 @@ export class Game {
       c.stroke();
       c.setLineDash([]);
     }
-    // the old circular hitbox, for comparison
-    c.save();
-    c.setLineDash([3, 7]);
-    c.strokeStyle = 'rgba(255,64,96,0.95)';
-    c.lineWidth = 1.4;
-    c.beginPath();
-    c.arc(0, 0, R, 0, TAU);
-    c.stroke();
-    c.restore();
+    // The old circular hitbox, only in the inspection mode: in the game itself
+    // it would look like a second, competing collision.
+    if (this.hitboxFlag) {
+      c.save();
+      c.setLineDash([3, 7]);
+      c.strokeStyle = 'rgba(255,64,96,0.95)';
+      c.lineWidth = 1.4;
+      c.beginPath();
+      c.arc(0, 0, R, 0, TAU);
+      c.stroke();
+      c.restore();
+    }
     // The artwork's exact edge: every pixel where the drawing stops. Cheap
     // enough here because it only runs in the `?hitbox=1` inspection mode; the
     // always-on overlay strokes the cached surface path instead.
@@ -3189,7 +3190,7 @@ export class Game {
   /** The colour key for the collision overlay, in screen space under the boss. */
   private drawHitboxLegend(c: CanvasRenderingContext2D, R: number) {
     const label = 'HITBOX = BENTUK GAMBAR';
-    const sub = 'cyan siluet - hijau area tabrakan - merah lingkaran lama';
+    const sub = 'hijau = daerah tabrakan (tepi gambar bos)';
     const y = this.targetY + R + 26;
     c.save();
     c.textAlign = 'center';
@@ -3383,9 +3384,9 @@ export class Game {
     // the mask instead of reaching for a legacy shape.
     if (!this.bossArtProfile && this.artMask) this.bossArtProfile = maskProfile(this.artMask);
     if (this.bossArtProfile) {
-      // 0.985 rather than 1.0: a hint inside the traced edge, so a point asked
-      // for on the "surface" is always a pixel the player actually sees.
-      return Math.max(radius * 0.3, this.bossArtProfile[deg] * radius * 0.985);
+      // The profile *is* the traced edge (first solid pixel along the ray), so
+      // this needs no fudge factor: it lands on the drawing the player sees.
+      return Math.max(radius * 0.3, this.bossArtProfile[deg] * radius);
     }
     return getExactBossRadius(this.level.style as BossType, localAngle, radius);
   }
