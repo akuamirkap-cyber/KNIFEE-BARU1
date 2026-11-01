@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createCanvas } from '@napi-rs/canvas';
-import { buildArtMask } from '../src/games/gunhit/game/Game';
+import { installSilentAudio } from '../tools/supportAudioSilent';
+import { buildArtMask, Game } from '../src/games/gunhit/game/Game';
 
 const game = readFileSync('src/games/gunhit/game/Game.ts', 'utf8');
 
@@ -33,7 +34,7 @@ function bossArt() {
 }
 
 test('the boss mask is the artwork alpha, not a filled disc', () => {
-  const mask = buildArtMask(bossArt() as unknown as HTMLImageElement, 240);
+  const mask = buildArtMask(bossArt(), 1, 240);
   assert.ok(mask, 'a mask is built from the drawn artwork');
   const at = (x: number, y: number) => mask!.alpha[y * mask!.size + x];
   // centre of the blob is ink
@@ -45,17 +46,37 @@ test('the boss mask is the artwork alpha, not a filled disc', () => {
   const hornY = Math.round((16 / 200) * 240);
   assert.ok(at(hornX, hornY) > 20, 'the horn counts as boss surface');
   assert.equal(buildArtMask(null), null);
+  // A padded blit (what the renderer does for a boss) reports its own extent.
+  const padded = buildArtMask(bossArt(), 1.3, 240);
+  assert.ok(padded && padded.span === 1.3, 'the mask knows how far it spans');
+  assert.ok(padded!.maxR > 1 && padded!.maxR <= 1.3 * Math.SQRT2, 'outermost ink stays inside the span');
 });
 
 test('every bullet tests the boss pixels before anything else', () => {
-  // The mask is built from the same art that is drawn on screen.
-  assert.match(game, /this\.artMask = this\.level\.boss \? buildArtMask\(this\.wheelImage\) : null;/);
+  // The mask and the contour are read back from `cv` — the very canvas the
+  // renderer blits (`this.face`) — so they can never describe another shape,
+  // whether the art came from Game B's raster or the vector fallback.
+  assert.match(game, /this\.face = cv;/);
+  assert.match(game, /const span = \(R \+ pad\) \/ R;/);
+  assert.match(game, /const mask = this\.level\.boss \? buildArtMask\(art, span, 384\) : null;/);
+  assert.match(game, /const readable = !!mask && mask\.maxR > 0\.05;/);
+  assert.match(game, /this\.artMask = readable \? mask : null;/);
+  assert.match(game, /this\.bossArtProfile = readable \? this\.sampleArtProfile\(art, span\) : null;/);
+  // The mask is read from the pristine art, never from the face that bullet
+  // holes are painted into all stage long.
+  assert.doesNotMatch(game, /buildArtMask\(cv/);
+  assert.match(game, /c\.drawImage\(art, -R - pad, -R - pad\);/);
+  // The padded blit is mapped back through the mask's own span.
+  assert.match(game, /const u = Math\.floor\(\(\(lx \/ R \/ mask\.span\) \+ 1\) \* 0\.5 \* mask\.size\);/);
   // StepProj runs the pixel test and returns the exact surface radius.
   assert.match(game, /if \(this\.artMask\) \{/);
   assert.match(game, /const surface = \(head \? this\.artSurfaceAt\(head\.x, head\.y\) : null\) \?\? this\.artSurfaceAt\(p\.x, p\.y\);/);
   assert.match(game, /if \(surface !== null\) return \{ res: 'stick', local, r: surface \};/);
-  // No circular fallback is left on a boss stage that has artwork.
-  assert.match(game, /if \(!this\.artMask && reach <= R\) return \{ res: 'stick', local \};/);
+  // No circular fallback is left on a boss stage, not even without a mask:
+  // the rim there is the artwork's own contour.
+  assert.match(game, /if \(!this\.artMask\) \{/);
+  assert.match(game, /const rim = bType \? this\.bossRadiusAt\(local\) \+ 1 : R;/);
+  assert.doesNotMatch(game, /if \(!this\.artMask && reach <= R\)/);
   // The broad phase reaches the furthest ink so horns stay hittable.
   assert.match(game, /const phaseR = this\.artMask \? this\.level\.radius \* this\.artMaskMaxR : effectiveR;/);
   // The surface test rotates into the target's own frame and reads alpha.
@@ -72,4 +93,95 @@ test('a stuck round keeps the exact spot it bit into the artwork', () => {
   assert.match(game, /this\.stickAt\(r\.local \?\? norm\(Math\.PI \/ 2 - this\.rot\), p, r\.r\);/);
   assert.match(game, /const itemR = it\.r \?\? this\.bossRadiusAt\(it\.angle, R\);/);
   assert.match(game, /const itemR = it\.r \?\? \(bType \? this\.bossRadiusAt\(it\.angle\) : this\.level\.radius\);/);
+});
+
+test('a real boss stage gets its mask from the drawn face, with no image needed', () => {
+  const g = globalThis as unknown as Record<string, unknown> & { window: Record<string, unknown> };
+  installSilentAudio();
+  g.window = Object.assign(g.window ?? {}, {
+    setTimeout, clearTimeout,
+    setInterval: () => 0, clearInterval: () => undefined,
+    addEventListener: () => undefined, removeEventListener: () => undefined,
+    devicePixelRatio: 1, innerWidth: 420, innerHeight: 750,
+  });
+  // The target canvas itself only needs to swallow drawing calls: every
+  // offscreen face/mask canvas goes through `document.createElement`, which is
+  // a real raster (see the shim at the top of this file).
+  const grad = { addColorStop: () => {} };
+  const ctx = new Proxy({}, {
+    get: (_t, prop) => {
+      if (prop === 'createLinearGradient' || prop === 'createRadialGradient'
+        || prop === 'createConicGradient' || prop === 'createPattern') return () => grad;
+      if (prop === 'measureText') return () => ({ width: 24 });
+      if (prop === 'getTransform') return () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 });
+      if (prop === 'getImageData') return () => ({ data: new Uint8ClampedArray(4) });
+      return () => {};
+    },
+    set: () => true,
+  }) as unknown as CanvasRenderingContext2D;
+  const canvas = {
+    width: 420,
+    height: 750,
+    style: {},
+    getBoundingClientRect: () => ({ width: 420, height: 750, left: 0, top: 0 }),
+    getContext: () => ctx,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  } as unknown as HTMLCanvasElement;
+
+  const game = new Game(canvas, {}) as unknown as Record<string, any>;
+  game.startAtLevel(5); // the boss stage
+  assert.equal(game.level.boss, true, 'level 5 is a boss');
+  assert.ok(game.face, 'the boss face canvas is built');
+  // The critical regression: no raster is handed over in this environment, and
+  // the stage must STILL collide with the artwork instead of a wheel circle.
+  assert.ok(game.artMask, 'the mask comes from the drawn face, not from wheelImage');
+  assert.ok(game.artMask.size >= 120, 'the mask has real resolution');
+  assert.ok(game.bossArtProfile && game.bossArtProfile.length === 360);
+  assert.ok(game.artMaskMaxR > 0.3 && game.artMaskMaxR <= 1.35, 'outermost ink is measured');
+
+  // The mask must agree with the canvas that is on screen. Sample in the
+  // artwork's own frame and push each point through the boss' idle decoration,
+  // exactly the way the renderer does, so only real disagreements fail.
+  const R = game.level.radius as number;
+  const face = game.face as { width: number; getContext: (k: string) => any };
+  const fctx = face.getContext('2d');
+  const S = face.width / ((R + 40) * 2);
+  // The sway angle is exactly zero at this instant; the float and the breath
+  // are known offsets/scales, so the art frame and the screen frame line up.
+  const t = (Math.PI - 1) / 0.66;
+  game.time = t;
+  const ox = Math.sin(t * 0.53) * 3.2;
+  const oy = Math.sin(t * 1.15) * 3.8;
+  const breath = 1 + Math.sin(t * 1.35) * 0.014;
+  const faceInk = (ax: number, ay: number) => {
+    const px = Math.floor((ax + R + 40) * S);
+    const py = Math.floor((ay + R + 40) * S);
+    const d = fctx.getImageData(px - 2, py - 2, 5, 5).data;
+    let ink = 0;
+    for (let i = 3; i < d.length; i += 4) if (d[i] > 20) ink++;
+    return ink === 25 ? true : ink === 0 ? false : null;
+  };
+  const CX = 210;
+  const at = (ax: number, ay: number) =>
+    game.artSurfaceAt(CX + ax * breath + ox, game.targetY + ay * breath + oy);
+  let agree = 0;
+  let solidSamples = 0;
+  for (const deg of [0, 30, 45, 60, 90, 120, 135, 150, 180, 210, 225, 240, 270, 300, 315, 330]) {
+    for (const k of [0.2, 0.35, 0.5, 0.65, 0.8, 0.9, 0.98, 1.05, 1.12]) {
+      const a = (deg * Math.PI) / 180;
+      const ax = Math.cos(a) * R * k;
+      const ay = Math.sin(a) * R * k;
+      const expected = faceInk(ax, ay);
+      if (expected === null) continue; // a borderline pixel: skip it
+      assert.equal(at(ax, ay) !== null, expected, `mask matches the drawn face at ${deg}deg / ${k}R`);
+      agree++;
+      if (expected) solidSamples++;
+    }
+  }
+  assert.ok(agree > 60, `enough unambiguous points compared (${agree})`);
+  assert.ok(solidSamples > 15, `the boss really is solid in places (${solidSamples})`);
+  // Every weapon used to bite the old 0.889R ring here — empty space beside a
+  // boss whose art ends well inside it. The silhouette test must refuse that.
+  assert.equal(at(-R * 0.889, 0), null, 'no bullet meets the boss where the drawing is empty');
 });

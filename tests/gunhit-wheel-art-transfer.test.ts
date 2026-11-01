@@ -106,8 +106,12 @@ test('cached artwork is reused without a second request', () => {
 
 test('the face renderer draws the reference wheel and falls back to the canvas art until it lands', () => {
   const source = readFileSync('src/games/gunhit/game/Game.ts', 'utf8');
-  assert.match(source, /if \(this\.wheelImage\) c\.drawImage\(this\.wheelImage, -R, -R, R \* 2, R \* 2\)/);
-  assert.match(source, /else drawFace\(c, R, this\.level\.style\)/);
+  // The exact same painting routine fills the pristine art canvas (which the
+  // collision mask is read back from) and the live face the renderer blits.
+  assert.match(source, /const paint = \(ctx: CanvasRenderingContext2D\) => \{/);
+  assert.match(source, /if \(this\.wheelImage\) ctx\.drawImage\(this\.wheelImage, -R, -R, R \* 2, R \* 2\);/);
+  assert.match(source, /else drawFace\(ctx, R, this\.level\.style\);/);
+  assert.match(source, /paint\(ac\);/);
   assert.match(source, /this\.syncWheelArt\(true\)/);
 });
 

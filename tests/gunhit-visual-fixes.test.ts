@@ -43,7 +43,9 @@ test('no circular shadow is drawn under the weapon', () => {
 test('the boss hit surface is sampled from the artwork on screen, never a circle', () => {
   const game = read('src/games/gunhit/game/Game.ts');
   assert.match(game, /private bossArtProfile: number\[\] \| null = null;/);
-  assert.match(game, /this\.bossArtProfile = this\.level\.boss && this\.wheelImage \? this\.sampleArtProfile\(this\.wheelImage\) : null;/);
+  // The contour is read back from the very canvas the renderer blits, so it
+  // follows Game B's raster and this file's fallback face alike.
+  assert.match(game, /this\.bossArtProfile = readable \? this\.sampleArtProfile\(art, span\) : null;/);
   assert.match(game, /private bossRadiusAt\(localAngle: number, radius = this\.level\.radius\): number \{/);
   // Every gameplay hit / placement site goes through that one helper.
   assert.doesNotMatch(game, /this\.level\.boss\s*\?\s*getExactBossRadius/);

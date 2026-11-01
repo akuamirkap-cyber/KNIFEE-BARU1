@@ -586,23 +586,46 @@ interface Fragment {
 
 export interface ArtMask {
   size: number;
-  /** Alpha of the target artwork, row-major, exactly as drawn inside [-R, R]. */
+  /** Alpha of the target artwork, row-major, exactly as drawn on screen. */
   alpha: Uint8Array;
+  /**
+   * Half of the mask's world extent, in units of the level radius R. The target
+   * is blitted into a padded canvas (`R + 40` for a boss), so the mask spans
+   * more than [-R, R] and every lookup has to be scaled by this.
+   */
+  span: number;
+  /** Outermost opaque pixel of the mask, in units of R. */
+  maxR: number;
 }
 
-/** Alpha mask of the artwork that is actually on screen, for pixel-exact hits. */
-export function buildArtMask(image: HTMLImageElement | null, size = 240): ArtMask | null {
-  if (!image) return null;
+/**
+ * Alpha mask of the artwork that is actually on screen, for pixel-exact hits.
+ * `source` is the very canvas the renderer blits (or an image drawn 1:1 into
+ * it), so the mask can never describe a different shape than the player sees.
+ */
+export function buildArtMask(source: CanvasImageSource | null, span = 1, size = 240): ArtMask | null {
+  if (!source) return null;
   try {
     const cv = document.createElement('canvas');
     cv.width = cv.height = size;
     const g = cv.getContext('2d');
     if (!g) return null;
-    g.drawImage(image, 0, 0, size, size);
+    g.drawImage(source, 0, 0, size, size);
     const data = g.getImageData(0, 0, size, size).data;
     const alpha = new Uint8Array(size * size);
-    for (let i = 0, p = 3; i < alpha.length; i++, p += 4) alpha[i] = data[p];
-    return { size, alpha };
+    const half = size / 2;
+    let maxPx = 0;
+    for (let i = 0, p = 3; i < alpha.length; i++, p += 4) {
+      const a = data[p];
+      alpha[i] = a;
+      if (a > 20) {
+        const x = (i % size) - half + 0.5;
+        const y = Math.floor(i / size) - half + 0.5;
+        const d = Math.hypot(x, y);
+        if (d > maxPx) maxPx = d;
+      }
+    }
+    return { size, alpha, span, maxR: (maxPx / half) * span };
   } catch {
     return null;
   }
@@ -2377,38 +2400,67 @@ export class Game {
     const S = this.faceScale;
     const pad = this.level.boss ? 40 : 4;
     const size = (R + pad) * 2;
+    // Game B's own wheel artwork wins whenever it has been rasterised; the
+    // canvas faces below stay as the instant fallback for the first frames.
+    const paint = (ctx: CanvasRenderingContext2D) => {
+      if (this.wheelImage) ctx.drawImage(this.wheelImage, -R, -R, R * 2, R * 2);
+      else drawFace(ctx, R, this.level.style);
+    };
+    // `art` stays pristine — it is the shape the player sees, so it is what the
+    // bullets are tested against. `cv` is the live face and gets bullet holes
+    // and scorch marks painted into it all stage long; masking that one would
+    // grow the boss a little every time a round bit into it.
+    const artSize = size;
+    const art = document.createElement('canvas');
+    art.width = art.height = artSize;
+    const ac = art.getContext('2d')!;
+    ac.translate(R + pad, R + pad);
+    paint(ac);
+
     const cv = document.createElement('canvas');
     cv.width = cv.height = size * S;
     const c = cv.getContext('2d')!;
     c.scale(S, S);
     c.translate(R + pad, R + pad);
-    // Game B's own wheel artwork wins whenever it has been rasterised; the
-    // canvas faces below stay as the instant fallback for the first frames.
-    if (this.wheelImage) c.drawImage(this.wheelImage, -R, -R, R * 2, R * 2);
-    else drawFace(c, R, this.level.style);
-    // A boss is hit where its pixels are, never on a circle: keep the angular
-    // profile (cheap broad phase, item placement) and the alpha mask (exact
-    // pixel test for every bullet).
-    this.bossArtProfile = this.level.boss && this.wheelImage ? this.sampleArtProfile(this.wheelImage) : null;
-    this.artMask = this.level.boss ? buildArtMask(this.wheelImage) : null;
-    this.artMaskMaxR = this.bossArtProfile ? Math.max(...this.bossArtProfile) : 1;
+    c.drawImage(art, -R - pad, -R - pad);
     this.face = cv;
     this.faceCtx = c;
     this.faceR = R;
+    // A boss is hit where its pixels are, never on a circle. Both the angular
+    // profile (cheap broad phase, item placement) and the alpha mask (exact
+    // pixel test for every bullet) are read back from `cv` — the exact canvas
+    // the renderer blits — so the silhouette can never disagree with the art,
+    // whether it came from Game B's raster or this file's vector fallback.
+    const span = (R + pad) / R;
+    // 384 bins keep thin rims (the boss' dark outline) inside a single sample,
+    // so a round can never slip between two mask pixels and fly through.
+    const mask = this.level.boss ? buildArtMask(art, span, 384) : null;
+    // A readback that finds no ink at all (a canvas this environment refuses to
+    // hand back) is not a boss with no body: say "no mask" and let the artwork
+    // contour below stand in, so hits still land on the drawing.
+    const readable = !!mask && mask.maxR > 0.05;
+    this.bossArtProfile = readable ? this.sampleArtProfile(art, span) : null;
+    this.artMask = readable ? mask : null;
+    this.artMaskMaxR = this.artMask
+      ? this.artMask.maxR
+      : this.bossArtProfile ? Math.max(...this.bossArtProfile) : 1;
   }
 
-  /** 360-bin alpha contour of the artwork currently drawn as the target. */
-  private sampleArtProfile(image: HTMLImageElement): number[] | null {
+  /**
+   * 360-bin alpha contour of the artwork currently drawn as the target, in
+   * units of R (the padded face canvas is scaled back by `span`).
+   */
+  private sampleArtProfile(source: CanvasImageSource, span: number): number[] | null {
     try {
-      const size = 240;
+      const size = 360;
       const cv = document.createElement('canvas');
       cv.width = size;
       cv.height = size;
       const g = cv.getContext('2d');
       if (!g) return null;
-      g.drawImage(image, 0, 0, size, size);
+      g.drawImage(source, 0, 0, size, size);
       const pixels = g.getImageData(0, 0, size, size);
-      return processAlphaRadii(pixels.data, size, size);
+      return processAlphaRadii(pixels.data, size, size).map((r) => Math.min(1.45, r * span));
     } catch {
       return null;
     }
@@ -2449,8 +2501,9 @@ export class Game {
       lx = (ox * cw - oy * sw) / breath;
       ly = (ox * sw + oy * cw) / breath;
     }
-    const u = Math.round((lx / R + 1) * 0.5 * (mask.size - 1));
-    const v = Math.round((ly / R + 1) * 0.5 * (mask.size - 1));
+    // Pixel-centre mapping of the padded blit: world 0 sits on the middle pixel.
+    const u = Math.floor(((lx / R / mask.span) + 1) * 0.5 * mask.size);
+    const v = Math.floor(((ly / R / mask.span) + 1) * 0.5 * mask.size);
     if (u < 0 || v < 0 || u >= mask.size || v >= mask.size) return null;
     return maskSolid(mask, u, v) ? dist : null;
   }
@@ -4753,7 +4806,13 @@ export class Game {
     }
     // Slide 3 lands its round the moment the tip crosses the rim. On a boss the
     // rim is the drawing itself: if no ink was hit, the round keeps flying.
-    if (!this.artMask && reach <= R) return { res: 'stick', local };
+    // Even with the mask unavailable, a boss falls back to its own contour —
+    // never to the plain wheel radius, which is the ring this stage must not
+    // have.
+    if (!this.artMask) {
+      const rim = bType ? this.bossRadiusAt(local) + 1 : R;
+      if (reach <= rim) return { res: 'stick', local };
+    }
     return { res: 'none' };
   }
 
