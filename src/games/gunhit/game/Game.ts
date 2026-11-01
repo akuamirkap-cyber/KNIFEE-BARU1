@@ -387,6 +387,26 @@ export function diamondCoreProjectileRadius(weaponHalf: number, shotScale: numbe
  * - cyborg: High-torque servo overdrive with 3x harmonic burst pulses
  * - pirate: Stormy swashbuckler sea-surge pendulum whip
  */
+/**
+ * Game B's boss wheel rhythm, number for number (`levels.ts` → `speedAt`, the
+ * `boss` pattern), in rad/s: 6 s cycle of fast spin → fake brake → reverse
+ * burst → freeze → jitter. Game A's old per-type spin curves (knight lunge,
+ * oni whiplash, pirate surge) are Game A's own invention and no longer run on
+ * a boss stage: Perfect Shot's boss is what Game A's boss does now.
+ */
+export function bossSpinSpeed(level: number, levelTime: number) {
+  const baseDeg = 72 + Math.min(110, Math.max(0, level) * 4);
+  const b = (baseDeg * Math.PI) / 180;
+  const t = Math.max(0, levelTime);
+  const c = t % 6;
+  const k = c < 2.1 ? 1.25
+    : c < 2.6 ? 0.12
+    : c < 4.1 ? -1.5
+    : c < 4.5 ? 0
+    : 0.85 + 0.75 * Math.sin(t * 6);
+  return b * k;
+}
+
 export function bossRotationSpeed(type: BossType, levelTime: number) {
   const t = Math.max(0, levelTime);
   switch (type) {
@@ -1291,6 +1311,20 @@ export class Game {
   private wheelBurstT = 0;
   private wheelScale = 1;
   private wheelArtSource: WheelArtSource | null = null;
+  /**
+   * `?hitbox=1` paints the boss' real collision contour over the head, in the
+   * very transform the art and the stuck weapons use. Green = the contour is
+   * read from Perfect Shot's artwork; red = the art never reached the engine and
+   * the stage fell back to a legacy ring — the exact thing to look for when
+   * "the boss still feels like a wheel".
+   */
+  private readonly showHitbox = (() => {
+    try {
+      return typeof location !== 'undefined' && /(^|[?&])hitbox=1(&|$)/.test(location.search);
+    } catch {
+      return false;
+    }
+  })();
   private wheelArtCache = new Map<string, HTMLImageElement>();
   private wheelArtKey = '';
   private wheelImage: HTMLImageElement | null = null;
@@ -6161,7 +6195,7 @@ export class Game {
       // Faster, readable boss rhythms: Knight reverses every 7s, Oni every 5s,
       // while Cyborg and Pirate reverse smoothly on their own distinct cycles.
       if (this.level.boss) {
-        const bv = bossRotationSpeed(this.level.style as BossType, this.levelTime);
+        const bv = bossSpinSpeed(this.level.n, this.levelTime);
         // Game B's MARAH! state spins the boss 1.35x faster.
         this.rot += bv * s * slowF * aimF * freezeF * (this.bossRage ? 1.35 : 1);
         if (bv) this.rotDir = bv < 0 ? -1 : 1;
@@ -8244,6 +8278,24 @@ export class Game {
       // Lapisan target berputar — bos juga berputar pelan (this.rot di update),
       // bukan terkunci diam. Kecepatan boss konstan agar tidak muter liar.
       if (this.level.mode !== 'treasure') c.rotate(this.rot);
+      if (this.showHitbox && this.level.boss) {
+        c.save();
+        c.strokeStyle = this.artMask ? 'rgba(34,255,136,0.95)' : 'rgba(255,64,64,0.95)';
+        c.lineWidth = 2;
+        c.setLineDash([6, 5]);
+        c.beginPath();
+        for (let deg = 0; deg <= 360; deg += 3) {
+          const a = (deg * Math.PI) / 180;
+          const r = this.bossRadiusAt(a);
+          const x = Math.cos(a) * r;
+          const y = Math.sin(a) * r;
+          if (deg === 0) c.moveTo(x, y);
+          else c.lineTo(x, y);
+        }
+        c.stroke();
+        c.setLineDash([]);
+        c.restore();
+      }
       hasBusterWheelPellets = !this.rock && !this.chest && this.items.some((it) => !!it.busterPellet);
       if (hasBusterWheelPellets && typeof c.getTransform === 'function') {
         busterWheelTransform = c.getTransform() ?? null;
