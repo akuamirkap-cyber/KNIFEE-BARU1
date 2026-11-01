@@ -319,8 +319,17 @@ export class SetSevenFx implements SevenHost, SevenWheelHost {
       this.captured = it;
       return;
     }
-    it.world.x = this.wheel.x + Math.cos(it.angle + this.wheel.angle) * this.wheel.R;
-    it.world.y = this.wheel.y + this.wheel.bumpY + Math.sin(it.angle + this.wheel.angle) * this.wheel.R;
+    // On a boss the round lands on the drawing, not on the wheel's circle: the
+    // host answers with the silhouette's own point for this angle when it can.
+    const onArt = (this.hooks.wheel() as { surfacePoint?: (a: number) => { x: number; y: number } })
+      .surfacePoint?.(it.angle);
+    if (onArt) {
+      it.world.x = onArt.x;
+      it.world.y = onArt.y + this.wheel.bumpY;
+    } else {
+      it.world.x = this.wheel.x + Math.cos(it.angle + this.wheel.angle) * this.wheel.R;
+      it.world.y = this.wheel.y + this.wheel.bumpY + Math.sin(it.angle + this.wheel.angle) * this.wheel.R;
+    }
     this.stuck.push(it);
     this.stuck.sort((a, b) => b.protrude - a.protrude);
   }

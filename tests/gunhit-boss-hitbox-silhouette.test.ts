@@ -7,6 +7,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { HeadArt } from '../src/games/perfect-shot/play/HeadArt';
 import { levelConfig } from '../src/games/perfect-shot/play/levels';
 import { installSilentAudio } from '../tools/supportAudioSilent';
+import { setGunEffect, setGunVariant } from '../src/games/gunhit/game/art/gunVariants';
 
 const globals = globalThis as unknown as Record<string, any>;
 globals.Path2D ??= Path2D;
@@ -188,4 +189,74 @@ test('the head scaled up by its laugh / angry / rage pose is still hittable', as
     'the pose really does push this ink outside the wheel radius');
   assert.ok(game.artSurfaceAt(w.x, w.y) !== null, 'and it is still the boss');
   game.destroy();
+});
+
+/**
+ * Every weapon layer (slide 2 bullets, slide 6 sight, slide 7 rain, slide 9
+ * marks, slide 11 embeds) asks the host where the target's surface is. On a
+ * boss that answer has to be the artwork, and its depth has to vary with the
+ * angle — a radius would give one number.
+ */
+test('the wheel hook every layer asks answers with the artwork, not a radius', async () => {
+  const { game, kind } = await bossStage(5);
+  const hook = game.wheelHookRot(0);
+  assert.equal(typeof hook.ink, 'function', `${kind}: layers get an artwork test`);
+  const radii: number[] = [];
+  for (let deg = 0; deg < 360; deg += 10) {
+    const a = (deg * Math.PI) / 180;
+    radii.push(hook.radiusAt(a));
+    const p = hook.surfacePoint(a);
+    assert.ok(game.artSurfaceAt(p.x, p.y) !== null,
+      `${kind}: the surface point at ${deg}deg is on the drawing`);
+  }
+  const spread = Math.max(...radii) - Math.min(...radii);
+  assert.ok(spread > 18, `${kind}: the hook's depth follows the silhouette (${spread.toFixed(0)} px spread)`);
+  assert.equal(hook.ink(hook.surfacePoint(Math.PI).x, hook.surfacePoint(Math.PI).y), true,
+    `${kind}: the hook's own surface answers as ink`);
+  game.destroy();
+});
+
+/** Weapon slides that draw their own FX must land on the artwork too. */
+test('every weapon slide bites the artwork, never the old circle', async () => {
+  const cases: [string, string][] = [
+    ['pistol', 'original'],
+    ['sniper', 'original'],
+    ['plasma', 'original'],
+    ['pistol', 'set11'],
+    ['pistol', 'set7'],
+    ['pistol', 'set9'],
+    ['shotgun', 'original'],
+    ['crossbow', 'set7'],
+  ];
+  for (const [id, effect] of cases) {
+    setGunVariant(id as never, 'original');
+    setGunEffect(id as never, effect as never);
+    const { game } = await bossStage(5);
+    game.setWeapon(id);
+    game.items = [];
+    game.projs = [];
+    const impacts: { x: number; y: number }[] = [];
+    for (const turn of [0, 0.8, 1.6, 2.5]) {
+      game.rot = turn;
+      const before = new Set(game.items as any[]);
+      for (let f = 0; f < 90; f++) {
+        game.ammoLeft = 99;
+        if (f % 10 === 0) game.press();
+        if (f % 10 === 7) game.onRelease();
+        game.update(1 / 60);
+        if ((game.items as any[]).some((it) => !before.has(it) && it.px !== undefined)) break;
+      }
+      game.onRelease();
+      const fresh = (game.items as any[]).find((it: any) => !before.has(it) && it.px !== undefined);
+      if (fresh) impacts.push({ x: fresh.px, y: fresh.py });
+    }
+    assert.ok(impacts.length >= 2, `${id}/${effect}: rounds bit into the head (${impacts.length})`);
+    for (const p of impacts) {
+      assert.ok(maskInk(game, p.x, p.y), `${id}/${effect}: the round sits on ink`);
+    }
+    const depths = impacts.map((p) => Math.hypot(p.x, p.y));
+    assert.ok(depths.some((d) => Math.abs(d - game.level.radius) > 6),
+      `${id}/${effect}: at least one bite is off the old radius (${depths.map((d) => d.toFixed(0)).join(',')})`);
+    game.destroy();
+  }
 });

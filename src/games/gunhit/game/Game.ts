@@ -1634,7 +1634,7 @@ export class Game {
         this.faceCtx.restore();
       },
       addWheelFx: (fx) => { this.s1.addWheel(fx); },
-      wheel: () => ({ x: CX, y: this.targetY, R: this.level.radius }),
+      wheel: () => this.wheelHook(),
     };
   }
 
@@ -1704,7 +1704,7 @@ export class Game {
   private sixHooks(): SixHooks {
     return {
       shake: (amount) => { this.shake = Math.max(this.shake, amount * 0.55); },
-      wheel: () => ({ x: CX, y: this.targetY, R: this.level.radius, angle: this.rot }),
+      wheel: () => this.wheelHookRot(),
     };
   }
 
@@ -1747,7 +1747,7 @@ export class Game {
       },
       // Keep the slide's flashes and shake, without a whole-world impact stall.
       hitStop: () => {},
-      wheel: () => ({ x: CX, y: this.targetY, R: this.level.radius, angle: this.rot }),
+      wheel: () => this.wheelHookRot(),
     };
   }
 
@@ -1892,10 +1892,7 @@ export class Game {
         fx.flashScreen(YELLOW_PLASMA_IMPACT.screenFlash, 0.18);
         spawnPlasmaImpact(fx.g, local, x, y, YELLOW_PLASMA_IMPACT);
       },
-      wheel: () => ({
-        x: CX, y: this.targetY, R: this.level.radius, angle: this.rot, dir: this.rotDir,
-        marks: !isSpecial(this.level.mode),
-      }),
+      wheel: () => this.wheelHookRot({ dir: this.rotDir, marks: !isSpecial(this.level.mode) }),
     };
   }
 
@@ -1954,7 +1951,7 @@ export class Game {
         draw(c);
         c.restore();
       },
-      wheel: () => ({ x: CX, y: this.targetY, R: this.level.radius, angle: this.rot }),
+      wheel: () => this.wheelHookRot(),
     };
   }
 
@@ -3253,7 +3250,9 @@ export class Game {
     // the mask instead of reaching for a legacy shape.
     if (!this.bossArtProfile && this.artMask) this.bossArtProfile = maskProfile(this.artMask);
     if (this.bossArtProfile) {
-      return Math.max(radius * 0.3, this.bossArtProfile[deg] * radius * 1.02);
+      // 0.985 rather than 1.0: a hint inside the traced edge, so a point asked
+      // for on the "surface" is always a pixel the player actually sees.
+      return Math.max(radius * 0.3, this.bossArtProfile[deg] * radius * 0.985);
     }
     return getExactBossRadius(this.level.style as BossType, localAngle, radius);
   }
@@ -4019,6 +4018,86 @@ export class Game {
     return best;
   }
 
+  /**
+   * The wheel object every imported weapon layer reads. `R` stays the plain
+   * radius for an ordinary wheel, but on a boss the three new members let a
+   * layer land on the drawing instead of on a circle:
+   *
+   *   radiusAt(localAngle)      — the silhouette's radius in that direction
+   *   surfacePoint(localAngle)  — that point in world space (decor included)
+   *   ink(worldX, worldY)       — is this screen point on the boss at all?
+   */
+  private wheelHook() {
+    return {
+      x: CX,
+      y: this.targetY,
+      R: this.level.radius,
+      radiusAt: (a: number) => (this.level.boss ? this.bossRadiusAt(norm(a)) : this.level.radius),
+      surfacePoint: (a: number) => this.surfacePointAt(norm(a)),
+      // Only a boss has a drawing to test against; an ordinary wheel keeps its
+      // layers' own circle maths (`ink` is absent there on purpose).
+      ...(this.level.boss
+        ? { ink: (x: number, y: number) => this.artHitAt(x, y) !== null }
+        : {}),
+    };
+  }
+
+  /** The same wheel object plus the wheel's own angle (rotating layers). */
+  private wheelHookRot(extra: Record<string, unknown> = {}) {
+    return { ...this.wheelHook(), angle: this.rot, ...extra };
+  }
+
+  /** World point on the silhouette along a wheel-local angle. */
+  private surfacePointAt(localAngle: number) {
+    const R = this.level.radius;
+    if (!this.level.boss) {
+      const wa = localAngle + this.rot;
+      return { x: CX + Math.cos(wa) * R, y: this.targetY + Math.sin(wa) * R };
+    }
+    // Exact: march the mask itself, so the point handed to a weapon layer is a
+    // pixel of the drawing. The 360-bin profile is only a cheap approximation
+    // for placement that has to happen every frame.
+    const exact = this.artSurfaceLocal(localAngle);
+    if (exact) return this.artToWorld(exact.x, exact.y);
+    const r = this.bossRadiusAt(localAngle);
+    return this.artToWorld(Math.cos(localAngle) * r, Math.sin(localAngle) * r);
+  }
+
+  /**
+   * The point on the drawing along one direction, measured in the artwork's own
+   * frame: the mask is walked from just outside its furthest ink inwards, so the
+   * first solid pixel is the surface the player sees. No binning, no averaging,
+   * and no radius — a ray that slips through a gap between hat and shoulder
+   * reports the gap, not a ring.
+   */
+  private artSurfaceLocal(localAngle: number): { x: number; y: number; r: number } | null {
+    const mask = this.ensureArtMask();
+    if (!mask) return null;
+    const R = this.level.radius;
+    const cos = Math.cos(localAngle);
+    const sin = Math.sin(localAngle);
+    const outer = R * mask.maxR + 2;
+    for (let r = outer; r > 4; r -= 0.9) {
+      if (!this.artSolidAtLocal(mask, cos * r, sin * r)) continue;
+      // Sit a pixel and a half inside the traced edge. The artwork's own
+      // anti-aliased border can flip a single sample, and an effect anchored on
+      // the surface must never end up just outside the drawing.
+      const inner = Math.max(4, r - 1.5);
+      const at = this.artSolidAtLocal(mask, cos * inner, sin * inner) ? inner : r;
+      return { x: cos * at, y: sin * at, r: at };
+    }
+    return null;
+  }
+
+  /** Is this art-local point on the drawing's pixels (untransformed frame)? */
+  private artSolidAtLocal(mask: ArtMask, lx: number, ly: number): boolean {
+    const R = this.level.radius;
+    const u = Math.floor(((lx / R / mask.span) + 1) * 0.5 * mask.size);
+    const v = Math.floor(((ly / R / mask.span) + 1) * 0.5 * mask.size);
+    if (u < 0 || v < 0 || u >= mask.size || v >= mask.size) return false;
+    return maskSolid(mask, u, v);
+  }
+
   private worldPos(local: number, r: number) {
     const wa = local + this.rot;
     return { x: CX + Math.cos(wa) * r, y: this.targetY + Math.sin(wa) * r };
@@ -4667,8 +4746,9 @@ export class Game {
       const a = it.angle + this.rot;
       const ca = Math.cos(a);
       const sa = Math.sin(a);
-      const surfaceR = it.acid.hybrid && this.level.boss
-        ? this.bossRadiusAt(it.angle) * wScale : R;
+      const surfaceR = this.level.boss
+        ? (it.px !== undefined && it.py !== undefined ? Math.hypot(it.px, it.py) : this.bossRadiusAt(it.angle)) * wScale
+        : R;
       const sag = Math.min(1, it.age / 1.2);
       for (const b of it.acid.blobs) {
         const wob = Math.sin(t * 3 + b.ph) * 1.2;
@@ -6015,7 +6095,9 @@ export class Game {
       if (it.type !== 'bullet' || !it.busterPellet) continue;
       c.save();
       c.rotate(it.angle);
-      const itemR = this.bossRadiusAt(it.angle, radius);
+      const itemR = it.px !== undefined && it.py !== undefined
+        ? Math.hypot(it.px, it.py)
+        : this.bossRadiusAt(it.angle, radius);
       c.translate(itemR + 3, 0);
       if (it.scale) c.scale(it.scale, it.scale);
       drawBusterPelletOrb(c, 0, 0, this.time + it.angle * 2);
@@ -8673,7 +8755,9 @@ export class Game {
           c.rotate(it.angle - Math.PI / 2);
           const k = this.spikeOffT > 0 ? Math.min(1, this.spikeOffT / 0.25) * (this.spikeOffT > 0.3 ? 1 : this.spikeOffT / 0.3) : 0;
           // Di boss, duri menempel pas pada permukaan kontur kepala organik boss!
-          const itemR = this.bossRadiusAt(it.angle, R);
+          const itemR = it.px !== undefined && it.py !== undefined
+            ? Math.hypot(it.px, it.py)
+            : this.bossRadiusAt(it.angle, R);
           c.translate(0, itemR - 6 - (SPIKE_LEN + 4) * SPIKE_SCALE * Math.min(1, k * 1.5));
           this.drawSpike(c);
           c.restore();
@@ -8739,7 +8823,9 @@ export class Game {
           c.save();
           if (!this.level.boss) { c.beginPath(); c.arc(0, 0, R, 0, TAU); c.clip(); }
           c.rotate(it.angle - Math.PI / 2);
-          const itemR = this.bossRadiusAt(it.angle, R);
+          const itemR = it.px !== undefined && it.py !== undefined
+            ? Math.hypot(it.px, it.py)
+            : this.bossRadiusAt(it.angle, R);
           c.translate(0, itemR - 11);
           if (it.scale) c.scale(it.scale, it.scale);
           drawXenoCorrosion(c, 0, 0, this.time, it.acid.seed, it.age);
@@ -8748,7 +8834,9 @@ export class Game {
           c.save();
           c.rotate(it.angle - Math.PI / 2);
           const sink = Math.max(0, 1 - it.age * 12) * 6;
-          const itemR = this.bossRadiusAt(it.angle, R);
+          const itemR = it.px !== undefined && it.py !== undefined
+            ? Math.hypot(it.px, it.py)
+            : this.bossRadiusAt(it.angle, R);
           c.translate(0, itemR + sink);
           if (it.scale) c.scale(it.scale, it.scale);
           drawKerisStuckCrater(c, 0, this.time);
@@ -8757,7 +8845,9 @@ export class Game {
           c.save();
           c.rotate(it.angle - Math.PI / 2);
           const sink = Math.max(0, 1 - it.age * 12) * 6;
-          const itemR = this.bossRadiusAt(it.angle, R);
+          const itemR = it.px !== undefined && it.py !== undefined
+            ? Math.hypot(it.px, it.py)
+            : this.bossRadiusAt(it.angle, R);
           c.translate(0, itemR - 3 + sink);
           if (it.scale) c.scale(it.scale, it.scale);
           drawSlide3BazookaStuckCrater(c, this.time, it.angle * 3.7, Math.max(0.38, 1 - it.age * 0.8));

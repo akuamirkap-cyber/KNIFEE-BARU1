@@ -207,7 +207,9 @@ export class SetNineFx implements GameAPI {
     const fx = x - this.cx;
     const fy = y - this.cy;
     const b = 2 * (fx * dx + fy * dy);
-    const c = fx * fx + fy * fy - this.wheelR * this.wheelR;
+    // The beam meets the boss' silhouette in its own direction, not a circle.
+    const rr = this.radiusAt(angle - this.rotation);
+    const c = fx * fx + fy * fy - rr * rr;
     const disc = b * b - 4 * c;
     if (disc < 0) return { hit: false, x: x + dx * 1600, y: y + dy * 1600, dist: 1600 };
     const sq = Math.sqrt(disc);
@@ -362,11 +364,19 @@ export class SetNineFx implements GameAPI {
     this.addMark(w, local, age);
   }
 
+  /** The silhouette's radius in a wheel-local direction (the wheel's R otherwise). */
+  private radiusAt(a: number) {
+    const w = this.hooks.wheel() as { radiusAt?: (a: number) => number };
+    return w.radiusAt ? w.radiusAt(a) : this.wheelR;
+  }
+
   private addMark(w: NineWeapon, local: number, age: number) {
     this.marks.push({
       weapon: w,
       a: local,
-      r: this.wheelR,
+      // A mark burns where the arrow actually landed: on the boss that is the
+      // drawing's own radius for this angle, never the wheel's circle.
+      r: this.radiusAt(local),
       size: w.markSize,
       age,
       seed: Math.random() * 1000,

@@ -300,7 +300,11 @@ export class SetSixFx {
   drawBeam(c: CanvasRenderingContext2D) {
     const w = sixWeapon(this.weaponId);
     const x1 = this.gunX, y1 = this.gunY;
-    const x2 = this.cx, y2 = this.cy + this.wheelR - 4;
+    // The beam's far end is the silhouette's own bottom point on a boss.
+    const foot = (this.hooks.wheel() as { surfacePoint?: (a: number) => { x: number; y: number } })
+      .surfacePoint?.(Math.PI / 2);
+    const x2 = foot ? foot.x : this.cx;
+    const y2 = foot ? foot.y - 4 : this.cy + this.wheelR - 4;
     // Slide 6's sniper keeps a laser sight lit the whole time it is armed.
     if (this.sight && w.id === 'sniper') {
       c.save();
