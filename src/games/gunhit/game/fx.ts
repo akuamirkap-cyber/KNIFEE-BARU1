@@ -107,6 +107,29 @@ function moveToEllipseStart(c: CanvasRenderingContext2D, x: number, y: number, r
 const dropBuckets = new Map<string, Particle[][]>();
 const dropActive: string[] = [];
 
+/**
+ * Boss stages: every splinter, spark, plume, chip and shard a round throws
+ * belongs to the drawing it bit into. The game registers the boss' silhouette
+ * here for the length of its effect pass, and each splinter layer runs its own
+ * particle draw through `withSplinterClip` — so the debris stops on the blue
+ * outline the round stopped on, while a round that is still in flight (painted
+ * by its own layer, outside this hook) keeps flying straight through.
+ */
+type SplinterClipPaint = (c: CanvasRenderingContext2D) => boolean;
+let splinterClip: { ctx: CanvasRenderingContext2D; paint: SplinterClipPaint } | null = null;
+
+export function setSplinterClip(ctx: CanvasRenderingContext2D, paint: SplinterClipPaint | null): void {
+  splinterClip = paint ? { ctx, paint } : null;
+}
+
+export function withSplinterClip(c: CanvasRenderingContext2D, draw: () => void): void {
+  if (!splinterClip || splinterClip.ctx !== c) { draw(); return; }
+  const paint = splinterClip.paint;
+  c.save();
+  if (!paint(c)) { c.restore(); draw(); return; }
+  try { draw(); } finally { c.restore(); }
+}
+
 export function drawDropParticles(c: CanvasRenderingContext2D, particles: readonly Particle[]): void {
   // Wipe whatever the previous frame left in the shared buckets.
   for (const color of dropActive) {

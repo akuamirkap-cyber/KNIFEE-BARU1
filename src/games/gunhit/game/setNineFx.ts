@@ -20,6 +20,7 @@ import {
 } from '../../../../games/game-6/src/game/core';
 import type { Beam, Bullet, GameAPI, Mark, Weapon as NineWeapon } from '../../../../games/game-6/src/game/types';
 import { NINE_SCALE, nineGunOrigin, nineWeapon, type NineId } from './setNineArt';
+import { withSplinterClip } from './fx';
 
 /** What slide 1 does for slide 9 (the parts slide 9 needs from its game). */
 export interface NineHooks {
@@ -525,7 +526,9 @@ export class SetNineFx implements GameAPI {
         /* ignore */
       }
     }
-    drawParticles(ctx, this.particles);
+    // Splinters belong to the target they bit into: on a boss stage the game
+    // hands over that drawing's own outline, and the debris stops on it.
+    withSplinterClip(ctx, () => drawParticles(ctx, this.particles));
     for (const b of this.bullets) {
       if (this.carried.has(b)) continue;
       ctx.save();

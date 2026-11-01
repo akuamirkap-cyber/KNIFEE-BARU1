@@ -19,6 +19,25 @@ globals.document ??= {
   createElement: (tag: string) => (tag === 'canvas' ? createCanvas(64, 64) : { style: {} }),
 };
 
+/**
+ * Screen position of an art-local point, mapped by a scratch canvas that
+ * applies the chain `render()` applies — read from the game itself, but
+ * composed by the canvas, so a wrong composition order in the game's own
+ * maths cannot hide: the ink this maps to is the ink the player sees.
+ */
+function artToScreen(game: any, lx: number, ly: number) {
+  const f = game.wheelDrawFrame();
+  const decor = game.bossDecorMatrix();
+  const scratch = createCanvas(4, 4);
+  const c = scratch.getContext('2d');
+  c.translate(f.x, f.y);
+  c.scale(f.sx, f.sy);
+  c.transform(decor.a, decor.b, decor.c, decor.d, decor.e, decor.f);
+  c.rotate(game.rot);
+  const m = c.getTransform();
+  return { x: m.a * lx + m.c * ly + m.e, y: m.b * lx + m.d * ly + m.f };
+}
+
 /** A "boss": a filled blob in the middle of an otherwise transparent square. */
 function bossArt() {
   const cv = createCanvas(200, 200);
@@ -104,8 +123,20 @@ test('every bullet tests the boss pixels before anything else', () => {
   // and the pixel test inverts exactly that matrix.
   assert.match(game, /const sway = Math\.sin\(t \* 0\.66 \+ 1\.0\) \* 0\.085;/);
   assert.match(game, /const breath = 1 \+ Math\.sin\(t \* 1\.35\) \* 0\.014;/);
-  assert.match(game, /const inv = bossMatInvert\(this\.bossDecorMatrix\(\)\);/);
-  assert.match(game, /const p = bossMatApply\(inv, lx, ly\);/);
+  // The idle float, breath and pose are undone through the same inverse, and
+  // the wheel's own frame (entrance, bump, slide kicks) is undone too — the
+  // spin is applied last by the canvas, so it must be undone last.
+  assert.match(game, /const p = bossMatApply\(bossMatInvert\(this\.bossDecorMatrix\(\)\), x, y\);/);
+  assert.match(game, /const local = this\.worldToArt\(worldX, worldY\);/);
+  assert.match(game, /const cos = Math\.cos\(-this\.rot\);/);
+  // One frame for the drawing and the collision: `render()` takes both its
+  // translate and its scale from `wheelDrawFrame()`, so the hitbox can never
+  // describe a wheel that was never painted.
+  assert.match(game, /const wheelFrame = this\.wheelDrawFrame\(\);/);
+  assert.match(game, /c\.translate\(wheelFrame\.x, wheelFrame\.y\);/);
+  assert.match(game, /c\.scale\(wheelFrame\.sx, wheelFrame\.sy\);/);
+  assert.match(game, /const f = this\.wheelDrawFrame\(\);/);
+  assert.match(game, /return \{ x: f\.x \+ x \* f\.sx, y: f\.y \+ y \* f\.sy \};/);
 });
 
 test('a stuck round keeps the exact spot it bit into the artwork', () => {
@@ -185,13 +216,10 @@ test('a real boss stage wears Perfect Shot\'s head and collides with its pixels'
   const face = game.face as { width: number; getContext: (k: string) => any };
   const fctx = face.getContext('2d');
   const S = face.width / ((R + 40) * 2);
-  // The sway angle is exactly zero at this instant; the float and the breath
-  // are known offsets/scales, so the art frame and the screen frame line up.
-  const t = (Math.PI - 1) / 0.66;
-  game.time = t;
-  const ox = Math.sin(t * 0.53) * 3.2;
-  const oy = Math.sin(t * 1.15) * 3.8;
-  const breath = 1 + Math.sin(t * 1.35) * 0.014;
+  // The boss has finished flying in, exactly as it has by the time a player can
+  // shoot at it; the idle float, sway and breath stay whatever they are, because
+  // the check below uses the real drawn frame.
+  game.wheelEntryT = 99;
   const faceInk = (ax: number, ay: number) => {
     const px = Math.floor((ax + R + 40) * S);
     const py = Math.floor((ay + R + 40) * S);
@@ -200,9 +228,10 @@ test('a real boss stage wears Perfect Shot\'s head and collides with its pixels'
     for (let i = 3; i < d.length; i += 4) if (d[i] > 20) ink++;
     return ink === 25 ? true : ink === 0 ? false : null;
   };
-  const CX = 210;
-  const at = (ax: number, ay: number) =>
-    game.artSurfaceAt(CX + ax * breath + ox, game.targetY + ay * breath + oy);
+  const at = (ax: number, ay: number) => {
+    const screen = artToScreen(game, ax, ay);
+    return game.artSurfaceAt(screen.x, screen.y);
+  };
   let agree = 0;
   let solidSamples = 0;
   for (const deg of [0, 30, 45, 60, 90, 120, 135, 150, 180, 210, 225, 240, 270, 300, 315, 330]) {
@@ -304,14 +333,11 @@ test('a browser that cannot read the SVG image back still collides with the head
   assert.ok(g2.bossArtProfile && g2.bossArtProfile.length === 360);
 
   const R = g2.level.radius as number;
-  const t = (Math.PI - 1) / 0.66;
-  g2.time = t;
-  const ox = Math.sin(t * 0.53) * 3.2;
-  const oy = Math.sin(t * 1.15) * 3.8;
-  const breath = 1 + Math.sin(t * 1.35) * 0.014;
-  const CX = 210;
-  const at = (ax: number, ay: number) =>
-    g2.artSurfaceAt(CX + ax * breath + ox, g2.targetY + ay * breath + oy);
+  g2.wheelEntryT = 99;
+  const at = (ax: number, ay: number) => {
+    const screen = artToScreen(g2, ax, ay);
+    return g2.artSurfaceAt(screen.x, screen.y);
+  };
   assert.ok(at(0, 0) !== null, 'a round in the middle of the head meets the head');
   assert.equal(at(-R * 1.3, 0), null, 'the corner of the square is not the boss');
   assert.equal(at(-R * 0.889, 0), null, 'the old ring radius beside the cheek stays empty');

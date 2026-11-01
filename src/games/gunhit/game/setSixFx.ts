@@ -14,6 +14,7 @@
  */
 import { bolt, glow } from '../../../../games/game-2/src/weapons';
 import { sixWeapon, type SixId } from './setSixArt';
+import { withSplinterClip } from './fx';
 
 const TAU = Math.PI * 2;
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
@@ -383,6 +384,12 @@ export class SetSixFx {
 
   /** Slide-6's `drawPart()`: every particle it can spawn. */
   draw(c: CanvasRenderingContext2D) {
+    // Splinters stay on the drawing they bit into (the boss' own outline).
+    withSplinterClip(c, () => this.drawParts(c));
+  }
+
+  /** The burst itself: every spark, ember and plume of slide 6. */
+  private drawParts(c: CanvasRenderingContext2D) {
     for (const p of this.parts) {
       const k = Math.max(0, p.life / p.max);
       c.save();

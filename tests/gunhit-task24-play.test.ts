@@ -155,7 +155,7 @@ test('Ghost aims at centre on Boulder, Bonus, Treasure and Boss stages for every
       for (const skin of ['original', 'set7']) for (const effect of ['original', 'new', 'set7']) for (const twin of [false, true]) {
         variants.setGunVariant('ghost', skin as never); variants.setGunEffect('ghost', effect as never);
         const game = new Game(canvas as unknown as HTMLCanvasElement, events as never) as unknown as Live;
-        if (mode === 'boss') { game.startAtLevel(5); giveBossMask(game); } else game.startSpecialStage(mode);
+        if (mode === 'boss') { game.startAtLevel(5); giveBossMask(game); game.wheelEntryT = 99; } else game.startSpecialStage(mode);
         game.setWeapon('ghost');
         for (let i = 0; i < 160 && game.state === 'intro'; i++) game.update(1 / 60);
         game.items = []; game.bonusCoins = []; game.level.base = 0; game.rot = 0; game.twinGuns = twin;

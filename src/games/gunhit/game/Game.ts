@@ -61,7 +61,7 @@ import { sfx4 } from './sfx4';
 import { sfx6 } from './sfx6';
 import { sfx5 } from './sfx5';
 import { gunState } from './art/kit';
-import { FX, spawnImpact, spawnMuzzle, spawnSpeedLines, drawFxParticle, drawSmokeParticle, drawDropParticles, cssColor, type Particle, type FxSink } from './fx';
+import { FX, spawnImpact, spawnMuzzle, spawnSpeedLines, drawFxParticle, drawSmokeParticle, drawDropParticles, cssColor, setSplinterClip, withSplinterClip, type Particle, type FxSink } from './fx';
 import { drawPreciseWeaponDecal } from './art/decalSystem';
 import { drawBehindWheelSunburst, drawGlow, drawRgbGlowSprite, drawScreenTintWash } from './art/glowSprite';
 import { drawForestFireflies } from './art/forestFireflies';
@@ -1459,6 +1459,13 @@ export class Game {
   private artMask: ArtMask | null = null;
   /** The artwork's exact silhouette, as a path traced from the alpha mask. */
   private maskOutline: Path2D | null = null;
+  /**
+   * The transform the boss art was actually painted with on the last frame
+   * (wheel origin, scale, float/sway/breath, spin). The impact splinters are
+   * painted later, straight in screen space, so this is what confines them to
+   * the drawing instead of letting them drift into the empty sky.
+   */
+  private bossArtScreen: DOMMatrix | null = null;
   /** The current boss/wheel SVG markup, handed over by the React bridge. */
   private wheelSvg: string | null = null;
   /** That markup traced into paths: the collision shape without any pixel read. */
@@ -3232,20 +3239,13 @@ export class Game {
     const mask = this.ensureArtMask();
     if (!mask) return null;
     const R = this.level.radius;
-    const mx = worldX - CX;
-    const my = worldY - this.targetY;
-    const cos = Math.cos(-this.rot);
-    const sin = Math.sin(-this.rot);
-    let lx = mx * cos - my * sin;
-    let ly = mx * sin + my * cos;
-    // The boss floats, sways, breathes, laughs and rages on screen; undo every
-    // one of those transforms so the test lands on the pixels the player sees.
-    if (this.level.boss) {
-      const inv = bossMatInvert(this.bossDecorMatrix());
-      const p = bossMatApply(inv, lx, ly);
-      lx = p.x;
-      ly = p.y;
-    }
+    // The boss floats, sways, breathes, laughs, rages and takes the wheel's hit
+    // bump and entrance with it; undo every one of those transforms, in the
+    // order the canvas applied them, so the test lands on the pixels the
+    // player sees.
+    const local = this.worldToArt(worldX, worldY);
+    const lx = local.x;
+    const ly = local.y;
     // Pixel-centre mapping of the padded blit: world 0 sits on the middle pixel.
     const u = Math.floor(((lx / R / mask.span) + 1) * 0.5 * mask.size);
     const v = Math.floor(((ly / R / mask.span) + 1) * 0.5 * mask.size);
@@ -3258,6 +3258,177 @@ export class Game {
     // The radius is measured in the artwork's own frame, so it always agrees
     // with the point that is drawn and with the frame the head turns in.
     return { r: Math.hypot(lx, ly), x: lx, y: ly };
+  }
+
+  /** Every splinter, plume, chip, shard and spark of the last impacts. */
+  private drawSplinters(c: CanvasRenderingContext2D) {
+    // Droplets are one batched path per colour; the loop below skips them.
+    drawDropParticles(c, this.particles);
+
+    // particles
+    for (const p of this.particles) {
+      // Callouts are drawn by the caller, over the splinters.
+      if (p.kind === 'text') continue;
+      const a = Math.max(0, p.life / p.max);
+      // Below ~4% alpha nothing is visible on a phone screen, but each one still
+      // costs a fill. Skipping them keeps a paintball burst from paying for a
+      // hundred invisible droplets.
+      if (a < 0.04 || p.kind === 'drop') continue;
+      switch (p.kind) {
+        case 'spark':
+          c.strokeStyle = cssColor(p.color);
+          c.globalAlpha = a;
+          c.lineWidth = p.size;
+          c.beginPath();
+          c.moveTo(p.x, p.y);
+          c.lineTo(p.x - p.vx * 0.025, p.y - p.vy * 0.025);
+          c.stroke();
+          c.globalAlpha = 1;
+          break;
+        case 'chip':
+          c.save();
+          c.globalAlpha = Math.min(1, a * 2);
+          c.translate(p.x, p.y);
+          c.rotate(p.rot);
+          c.fillStyle = cssColor(p.color);
+          c.fillRect(-p.size / 2, -p.size / 3, p.size, p.size * 0.66);
+          c.restore();
+          break;
+        case 'smoke':
+          // Soft plumes: a filled arc left a hard-edged disc, while slide 7
+          // draws smoke through its glow sprite. Gradient falloff matches it,
+          // and the gradient is cached per colour instead of being rebuilt for
+          // every plume on every frame.
+          drawSmokeParticle(c, p, a);
+          break;
+        case 'shell':
+          c.save();
+          c.translate(p.x, p.y);
+          c.rotate(p.rot);
+          c.globalAlpha = Math.min(1, a * 3);
+          c.fillStyle = cssColor(p.color);
+          c.fillRect(-3.5, -7, 7, 13);
+          c.fillStyle = 'rgba(255,255,255,0.5)';
+          c.fillRect(-1.5, -6, 1.5, 11);
+          c.fillStyle = 'rgba(0,0,0,0.35)';
+          c.fillRect(-4, 5, 8, 2.5);
+          c.restore();
+          break;
+        case 'bolt': {
+          c.save();
+          c.globalCompositeOperation = 'lighter';
+          c.lineJoin = 'round';
+          c.lineCap = 'round';
+          const tx = p.tx ?? p.x;
+          const ty = p.ty ?? p.y;
+          c.beginPath();
+          c.moveTo(p.x, p.y);
+          for (let k = 1; k < 7; k++) {
+            const f = k / 7;
+            c.lineTo(p.x + (tx - p.x) * f + rand(-7, 7), p.y + (ty - p.y) * f + rand(-7, 7));
+          }
+          c.lineTo(tx, ty);
+          const boltCol = cssColor(p.color);
+          c.strokeStyle = boltCol;
+          c.globalAlpha = 0.28 * a;
+          c.lineWidth = p.size * 5.2 * a;
+          c.stroke();
+          c.globalAlpha = 1;
+          c.lineWidth = p.size * 2.4 * a;
+          c.stroke();
+          c.strokeStyle = '#ffffff';
+          c.lineWidth = p.size * 0.8 * a;
+          c.stroke();
+          c.restore();
+          break;
+        }
+        case 'glow': {
+          c.save();
+          c.globalCompositeOperation = 'lighter';
+          const r = p.size * (0.5 + a * 0.8);
+          c.fillStyle = cssColor(p.color, a * 0.28);
+          c.beginPath();
+          c.arc(p.x, p.y, r * 1.85, 0, TAU);
+          c.fill();
+          c.fillStyle = cssColor(p.color, a * 0.68);
+          c.beginPath();
+          c.arc(p.x, p.y, r * 1.05, 0, TAU);
+          c.fill();
+          c.fillStyle = `rgba(255,255,255,${a * 0.9})`;
+          c.beginPath();
+          c.arc(p.x, p.y, r * 0.42, 0, TAU);
+          c.fill();
+          c.restore();
+          break;
+        }
+        case 'ring': {
+          const t = 1 - a;
+          c.strokeStyle = cssColor(p.color);
+          c.globalAlpha = a * 0.8;
+          c.lineWidth = 4 * a + 1;
+          c.beginPath();
+          c.arc(p.x, p.y, p.size * (0.2 + t * 0.8), 0, TAU);
+          c.stroke();
+          c.globalAlpha = 1;
+          break;
+        }
+        default:
+          drawFxParticle(c, p, this.time);
+          break;
+      }
+    }
+  }
+
+  /**
+   * Boss stages: a round's splinters may only show inside the blue outline of
+   * the boss drawing — the same silhouette the hit test stops rounds on. A
+   * round never lands in the empty sky, so nothing may be painted there either;
+   * whatever is outside the outline is space the round passed through.
+   *
+   * Ends with the canvas clipped to that outline, back in screen space.
+   */
+  private bossClipPaint(c: CanvasRenderingContext2D): boolean {
+    if (!this.level.boss) return false;
+    const mask = this.ensureArtMask();
+    const surface = this.maskSurface;
+    const art = this.bossArtScreen;
+    if (!mask || !surface || !art || typeof c.getTransform !== 'function') return false;
+    const base = c.getTransform();
+    if (!base) return false;
+    const R = this.level.radius;
+    const k = (2 * mask.span * R) / mask.size;
+    c.setTransform(art);
+    c.scale(k, k);
+    c.translate(-mask.size / 2, -mask.size / 2);
+    c.clip(surface);
+    // Hand the canvas back in screen space, already clipped.
+    c.setTransform(base);
+    return true;
+  }
+
+  /** A damage / combo callout: never splatter, so it is never clipped. */
+  private drawImpactText(c: CanvasRenderingContext2D, p: Particle) {
+    const k = Math.max(0, p.life / p.max);
+    const pop = k < 0.15 ? 1.6 - (k / 0.15) * 0.6 : 1;
+    const al = k > 0.7 ? 1 - (k - 0.7) / 0.3 : 1;
+    c.save();
+    c.translate(p.x, p.y);
+    c.rotate(p.rot);
+    c.scale(pop, pop);
+    c.globalAlpha = al;
+    c.font = `italic 900 ${p.size}px Impact, 'Arial Black', sans-serif`;
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.lineJoin = 'round';
+    c.strokeStyle = '#1a0a00'; c.lineWidth = p.size * 0.28;
+    c.strokeText(p.text || '', 0, 0);
+    c.strokeStyle = '#ffffff'; c.lineWidth = p.size * 0.14;
+    c.strokeText(p.text || '', 0, 0);
+    const tg = c.createLinearGradient(0, -p.size / 2, 0, p.size / 2);
+    tg.addColorStop(0, '#fff6b0'); tg.addColorStop(0.5, cssColor(p.color)); tg.addColorStop(1, '#ff7a00');
+    c.fillStyle = tg;
+    c.fillText(p.text || '', 0, 0);
+    c.restore();
   }
 
   /** Game B's red rage aura, drawn behind the boss head. */
@@ -4260,18 +4431,68 @@ export class Game {
     return base > 0 ? pad * (R / base) : pad;
   }
 
+  /**
+   * The transform the wheel — and so the boss artwork — is really drawn with
+   * this frame: Perfect Shot's entrance, the hit bump, the slide-11 kick, the
+   * slide-9 shove and the slide-3 spring all move it. `render()` takes its
+   * translate/scale from here, and the collision takes its inverse from here,
+   * so the round stops where the drawing is and not where `targetY` used to be.
+   */
+  private wheelDrawFrame() {
+    const R = this.level.radius;
+    const entryT = this.wheelEntryT - this.wheelEntryDelayT;
+    const entering = entryT < 1.16 * this.pace;
+    const entry = entering ? perfectShotWheelEntry(entryT, this.pace, R) : RESTING_WHEEL_ENTRY;
+    const wm = this.elevenMotion();
+    const nk = this.nineKick();
+    const sf = this.sevenWheel ? this.sevenWheel.feel : null;
+    const sc = (entering ? 1 : this.wheelScale ?? 1) * (1 + this.bump * 0.035);
+    const pulse = 1 + (sf?.pulseS ?? 0);
+    return {
+      x: CX + (wm?.dx ?? 0) + nk.x,
+      y: this.targetY + entry.offsetY + this.bump * 7 + (wm?.dy ?? 0) + nk.y + (sf?.bumpY ?? 0),
+      sx: sc * entry.scaleX * (wm?.sx ?? 1) * pulse,
+      sy: sc * entry.scaleY * (wm?.sy ?? 1) * pulse,
+    };
+  }
+
+  /**
+   * Artwork space -> screen. The canvas applies, outermost first: the wheel
+   * origin, the wheel scale, the boss' float/sway/breath/reaction, then the
+   * wheel spin. So a point travels spin -> decor -> scale -> origin.
+   */
   private artToWorld(lx: number, ly: number) {
-    let x = lx;
-    let y = ly;
+    const cos = Math.cos(this.rot);
+    const sin = Math.sin(this.rot);
+    let x = lx * cos - ly * sin;
+    let y = lx * sin + ly * cos;
     if (this.level.boss) {
-      const m = this.bossDecorMatrix();
-      const p = bossMatApply(m, lx, ly);
+      const p = bossMatApply(this.bossDecorMatrix(), x, y);
       x = p.x;
       y = p.y;
     }
-    const cos = Math.cos(this.rot);
-    const sin = Math.sin(this.rot);
-    return { x: CX + x * cos - y * sin, y: this.targetY + x * sin + y * cos };
+    const f = this.wheelDrawFrame();
+    return { x: f.x + x * f.sx, y: f.y + y * f.sy };
+  }
+
+  /**
+   * Screen -> artwork space: the exact inverse of `artToWorld`, undo the wheel
+   * origin, the scale, the boss' decor matrix and finally the wheel spin. Any
+   * shortcut here (for example undoing the spin before the decor) leaves the
+   * test up to 8 px away from the pixels the player sees.
+   */
+  private worldToArt(worldX: number, worldY: number) {
+    const f = this.wheelDrawFrame();
+    let x = (worldX - f.x) / (f.sx || 1);
+    let y = (worldY - f.y) / (f.sy || 1);
+    if (this.level.boss) {
+      const p = bossMatApply(bossMatInvert(this.bossDecorMatrix()), x, y);
+      x = p.x;
+      y = p.y;
+    }
+    const cos = Math.cos(-this.rot);
+    const sin = Math.sin(-this.rot);
+    return { x: x * cos - y * sin, y: x * sin + y * cos };
   }
 
   /** returns true if a save was consumed */
@@ -8778,8 +8999,7 @@ export class Game {
 
     // Keep the clean diamond / chest visible through the special-stage celebration.
     if (this.state !== 'idle' && (this.state !== 'clear' || isSpecial(this.level.mode))) {
-      const wScale = this.wheelScale ?? 1;
-      const sc = (wheelEntering ? 1 : wScale) * (1 + this.bump * 0.035);
+      const wheelFrame = this.wheelDrawFrame();
       // A slide-11 gun's hits kick, squash and shiver the wheel like slide 11's.
       const wm = this.elevenMotion();
       // …and a slide-9 gun's hits shove it back on slide 9's recoil spring.
@@ -8791,7 +9011,7 @@ export class Game {
       c.save();
       c.globalAlpha *= wheelEntry.opacity;
       if (wheelEntry.brightness !== 1) c.filter = `brightness(${wheelEntry.brightness})`;
-      c.translate(CX + (wm?.dx ?? 0) + nk.x, this.targetY + wheelEntry.offsetY + this.bump * 7 + (wm?.dy ?? 0) + nk.y + (sf?.bumpY ?? 0));
+      c.translate(wheelFrame.x, wheelFrame.y);
       if (wheelEntryBurst.flashOpacity > 0 || wheelEntryBurst.waves.some((wave) => wave.opacity > 0)) {
         c.save();
         c.globalCompositeOperation = 'lighter';
@@ -8823,7 +9043,7 @@ export class Game {
         }
         c.restore();
       }
-      c.scale(sc * wheelEntry.scaleX * (wm?.sx ?? 1) * (1 + (sf?.pulseS ?? 0)), sc * wheelEntry.scaleY * (wm?.sy ?? 1) * (1 + (sf?.pulseS ?? 0)));
+      c.scale(wheelFrame.sx, wheelFrame.sy);
       // Slide 2's soft ring of light behind the target.
       if (this.setTwoLook) {
         drawSetTwoWheelGlow(c, R, setTwoWheelHue(this.weapon.id, this.level.n), Math.min(1, this.bump / 14));
@@ -8848,6 +9068,10 @@ export class Game {
       // Lapisan target berputar — bos juga berputar pelan (this.rot di update),
       // bukan terkunci diam. Kecepatan boss konstan agar tidak muter liar.
       if (this.level.mode !== 'treasure') c.rotate(this.rot);
+      // From here down the canvas is in the artwork's own frame. Remember it:
+      // the boss' impact splinters are painted much later, in screen space, and
+      // must be clipped to exactly this drawing.
+      this.bossArtScreen = this.level.boss && typeof c.getTransform === 'function' ? c.getTransform() : null;
       hasBusterWheelPellets = !this.rock && !this.chest && this.items.some((it) => !!it.busterPellet);
       if (hasBusterWheelPellets && typeof c.getTransform === 'function') {
         busterWheelTransform = c.getTransform() ?? null;
@@ -9221,8 +9445,9 @@ export class Game {
         // Same transform chain the head is drawn with: translate, scale, the
         // boss' float/sway/breath/reaction, then the wheel angle. Anything less
         // and the outline would sit a few pixels off the art it describes.
-        c.translate(CX + (this.elevenMotion()?.dx ?? 0), this.targetY + this.bump * 7 + (this.elevenMotion()?.dy ?? 0));
-        c.scale(1 + this.bump * 0.035, 1 + this.bump * 0.035);
+        const fxFrame = this.wheelDrawFrame();
+        c.translate(fxFrame.x, fxFrame.y);
+        c.scale(fxFrame.sx, fxFrame.sy);
         const decor = this.bossDecorMatrix();
         c.transform(decor.a, decor.b, decor.c, decor.d, decor.e, decor.f);
         if (this.level.mode !== 'treasure') c.rotate(this.rot);
@@ -9586,146 +9811,22 @@ export class Game {
       drawBonusCoin(c, coin.x, coin.y, coin.r * scale, this.time, coin.phase, true);
     }
 
-    // Droplets are one batched path per colour; the loop below skips them.
-    drawDropParticles(c, this.particles);
-
-    // particles
+    // Boss stages: every splinter, spark, plume and shard a round throws belongs
+    // to the drawing it bit into. The clip is the boss' own outline, so the
+    // burst dies on the silhouette instead of hanging in the empty sky; a round
+    // that is not on the outline never produced one in the first place. The
+    // splinter layers below (slide 9, slide 11, firework) take the same clip
+    // through `withSplinterClip`, while rounds still in flight keep flying.
+    setSplinterClip(c, (fxCtx) => this.bossClipPaint(fxCtx));
+    withSplinterClip(c, () => this.drawSplinters(c));
+    // Damage / combo callouts are labels, not splatter: they stay legible even
+    // at the very edge of the drawing.
     for (const p of this.particles) {
-      const a = Math.max(0, p.life / p.max);
-      // Below ~4% alpha nothing is visible on a phone screen, but each one still
-      // costs a fill. Skipping them keeps a paintball burst from paying for a
-      // hundred invisible droplets.
-      if ((a < 0.04 && p.kind !== 'text') || p.kind === 'drop') continue;
-      switch (p.kind) {
-        case 'spark':
-          c.strokeStyle = cssColor(p.color);
-          c.globalAlpha = a;
-          c.lineWidth = p.size;
-          c.beginPath();
-          c.moveTo(p.x, p.y);
-          c.lineTo(p.x - p.vx * 0.025, p.y - p.vy * 0.025);
-          c.stroke();
-          c.globalAlpha = 1;
-          break;
-        case 'chip':
-          c.save();
-          c.globalAlpha = Math.min(1, a * 2);
-          c.translate(p.x, p.y);
-          c.rotate(p.rot);
-          c.fillStyle = cssColor(p.color);
-          c.fillRect(-p.size / 2, -p.size / 3, p.size, p.size * 0.66);
-          c.restore();
-          break;
-        case 'smoke':
-          // Soft plumes: a filled arc left a hard-edged disc, while slide 7
-          // draws smoke through its glow sprite. Gradient falloff matches it,
-          // and the gradient is cached per colour instead of being rebuilt for
-          // every plume on every frame.
-          drawSmokeParticle(c, p, a);
-          break;
-        case 'shell':
-          c.save();
-          c.translate(p.x, p.y);
-          c.rotate(p.rot);
-          c.globalAlpha = Math.min(1, a * 3);
-          c.fillStyle = cssColor(p.color);
-          c.fillRect(-3.5, -7, 7, 13);
-          c.fillStyle = 'rgba(255,255,255,0.5)';
-          c.fillRect(-1.5, -6, 1.5, 11);
-          c.fillStyle = 'rgba(0,0,0,0.35)';
-          c.fillRect(-4, 5, 8, 2.5);
-          c.restore();
-          break;
-        case 'bolt': {
-          c.save();
-          c.globalCompositeOperation = 'lighter';
-          c.lineJoin = 'round';
-          c.lineCap = 'round';
-          const tx = p.tx ?? p.x;
-          const ty = p.ty ?? p.y;
-          c.beginPath();
-          c.moveTo(p.x, p.y);
-          for (let k = 1; k < 7; k++) {
-            const f = k / 7;
-            c.lineTo(p.x + (tx - p.x) * f + rand(-7, 7), p.y + (ty - p.y) * f + rand(-7, 7));
-          }
-          c.lineTo(tx, ty);
-          const boltCol = cssColor(p.color);
-          c.strokeStyle = boltCol;
-          c.globalAlpha = 0.28 * a;
-          c.lineWidth = p.size * 5.2 * a;
-          c.stroke();
-          c.globalAlpha = 1;
-          c.lineWidth = p.size * 2.4 * a;
-          c.stroke();
-          c.strokeStyle = '#ffffff';
-          c.lineWidth = p.size * 0.8 * a;
-          c.stroke();
-          c.restore();
-          break;
-        }
-        case 'glow': {
-          c.save();
-          c.globalCompositeOperation = 'lighter';
-          const r = p.size * (0.5 + a * 0.8);
-          c.fillStyle = cssColor(p.color, a * 0.28);
-          c.beginPath();
-          c.arc(p.x, p.y, r * 1.85, 0, TAU);
-          c.fill();
-          c.fillStyle = cssColor(p.color, a * 0.68);
-          c.beginPath();
-          c.arc(p.x, p.y, r * 1.05, 0, TAU);
-          c.fill();
-          c.fillStyle = `rgba(255,255,255,${a * 0.9})`;
-          c.beginPath();
-          c.arc(p.x, p.y, r * 0.42, 0, TAU);
-          c.fill();
-          c.restore();
-          break;
-        }
-        case 'ring': {
-          const t = 1 - a;
-          c.strokeStyle = cssColor(p.color);
-          c.globalAlpha = a * 0.8;
-          c.lineWidth = 4 * a + 1;
-          c.beginPath();
-          c.arc(p.x, p.y, p.size * (0.2 + t * 0.8), 0, TAU);
-          c.stroke();
-          c.globalAlpha = 1;
-          break;
-        }
-        case 'text': {
-          const k = a;
-          const pop = k < 0.15 ? 1.6 - (k / 0.15) * 0.6 : 1;
-          const al = k > 0.7 ? 1 - (k - 0.7) / 0.3 : 1;
-          c.save();
-          c.translate(p.x, p.y);
-          c.rotate(p.rot);
-          c.scale(pop, pop);
-          c.globalAlpha = al;
-          c.font = `italic 900 ${p.size}px Impact, 'Arial Black', sans-serif`;
-          c.textAlign = 'center';
-          c.textBaseline = 'middle';
-          c.lineJoin = 'round';
-          c.strokeStyle = '#1a0a00'; c.lineWidth = p.size * 0.28;
-          c.strokeText(p.text || '', 0, 0);
-          c.strokeStyle = '#ffffff'; c.lineWidth = p.size * 0.14;
-          c.strokeText(p.text || '', 0, 0);
-          const tg = c.createLinearGradient(0, -p.size / 2, 0, p.size / 2);
-          tg.addColorStop(0, '#fff6b0'); tg.addColorStop(0.5, cssColor(p.color)); tg.addColorStop(1, '#ff7a00');
-          c.fillStyle = tg;
-          c.fillText(p.text || '', 0, 0);
-          c.restore();
-          break;
-        }
-        default:
-          drawFxParticle(c, p, this.time);
-          break;
-      }
+      if (p.kind === 'text') this.drawImpactText(c, p);
     }
 
     if (this.state !== 'idle' && (this.weapon.id === 'firework' || (this.fwState && (this.fwState.particles.length > 0 || this.fwState.rings.length > 0)))) {
-      drawFirework8ParticlesAndRings(c, this.getFwState());
+      withSplinterClip(c, () => drawFirework8ParticlesAndRings(c, this.getFwState()));
     }
     // Slide-2 FX layer (black-hole voids, jets, warped starlight, smoke).
     if (this.s2State && (this.slide2Void || this.s2State.particles.length > 0 || this.s2State.voids.length > 0
@@ -9933,6 +10034,10 @@ export class Game {
         c.fillRect(0, rand(0, H), W, rand(2, 14));
       }
     }
+
+    // The effect pass is over: no layer below (HUD, banners, overlays) may
+    // inherit the boss' splinter clip.
+    setSplinterClip(c, null);
 
     if (this.state !== 'idle') this.drawHUD(c);
 

@@ -11,6 +11,7 @@ import { Game } from '../../../../games/game-8/src/game/engine';
 import type { Embed, Proj, Weapon, WeaponState } from '../../../../games/game-8/src/game/types';
 import { clamp, drawGlow, rand, TAU } from '../../../../games/game-8/src/game/util';
 import { restElevenState, elevenScale, elevenWeapon, type ElevenId } from './setElevenArt';
+import { withSplinterClip } from './fx';
 
 /** What slide 1 does for slide 11. */
 export interface ElevenHooks {
@@ -1233,7 +1234,8 @@ export class SetElevenFx {
       ctx.restore();
     }
     try {
-      (g as unknown as { drawParticles(c: CanvasRenderingContext2D): void }).drawParticles(ctx);
+      // Splinters stay on the drawing the round bit into (boss outline).
+      withSplinterClip(ctx, () => (g as unknown as { drawParticles(c: CanvasRenderingContext2D): void }).drawParticles(ctx));
     } catch {
       /* ignore */
     }
