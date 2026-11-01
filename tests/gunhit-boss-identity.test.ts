@@ -4,6 +4,8 @@ import { HEAD_INFO } from '../src/games/perfect-shot/play/HeadArt';
 import { levelConfig } from '../src/games/perfect-shot/play/levels';
 import { makeLevel } from '../src/games/gunhit/game/Game';
 import { bossHeadFor, bossNameFor } from '../src/games/gunhit/game/bossIdentity';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 
 /**
  * The boss on screen is Perfect Shot's head. If the HUD names it something else
@@ -40,4 +42,16 @@ test('stage 5 is the pirate, not the dark knight', () => {
 test('the head rotation follows Perfect Shot, so names never repeat out of order', () => {
   const heads = [5, 10, 15, 20, 25].map((n) => bossHeadFor(n));
   assert.deepEqual(heads, ['pirate', 'jester', 'dragon', 'skeleton', 'tiki']);
+});
+
+test('the QUEST dialog names the boss after the art too', () => {
+  const map = readFileSync(
+    path.join(import.meta.dirname, '..', 'src/games/gunhit/components/LevelMap.tsx'),
+    'utf8',
+  );
+  // The map keeps its own theme label, but the boss line the player reads has
+  // to come from the head Perfect Shot puts on that stage.
+  assert.match(map, /const artBoss = kind === 'boss' \? headInfoFor\(selectedLevel\)\?\.name \?\? '' : '';/);
+  assert.match(map, /`BOSS \$\{artBoss \|\| theme\.label\}/);
+  assert.doesNotMatch(map, /Nama boss peta/);
 });
