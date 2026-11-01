@@ -8,6 +8,7 @@ import { HeadArt } from '../src/games/perfect-shot/play/HeadArt';
 import { levelConfig } from '../src/games/perfect-shot/play/levels';
 import { installSilentAudio } from '../tools/supportAudioSilent';
 import { setGunEffect, setGunVariant } from '../src/games/gunhit/game/art/gunVariants';
+import { INK_ALPHA } from '../src/games/gunhit/game/Game';
 
 const globals = globalThis as unknown as Record<string, any>;
 globals.Path2D ??= Path2D;
@@ -317,22 +318,56 @@ test('the hitbox is the drawn edge: outside it is empty space', async () => {
 });
 
 /**
- * The round has to stop on the pixel it *met*, not a stride deeper. Every
- * substep covers up to 7 px, so a walk that closes in from the wrong end leaves
- * the round buried inside the body — off the blue line by the width of its own
- * stride. The check is exact and angle-free: on the stuck pixel the strict ink
- * test says "boss", and an empty pixel is one mask pixel away.
+ * The round has to stop on the pixel it *met*, not a stride deeper. The game
+ * walks its substep (<= 7 px) from the outside in at 1 px, so the pixel a round
+ * reports must be an *outline* pixel: strict ink with empty space right beside
+ * it. A round left a stride inside the body is ink on every side for 7-8 mask
+ * pixels — this measures that distance, no tolerance picking.
  */
-function edgeGap(game: Record<string, any>, lx: number, ly: number) {
+function edgeDistance(game: Record<string, any>, lx: number, ly: number) {
   const mask = game.ensureArtMask();
   assert.ok(mask, 'the stage has an artwork mask');
-  for (let rr = 0.9; rr <= 3.2; rr += 0.45) {
-    for (let k = 0; k < 36; k++) {
-      const a = (k * Math.PI * 2) / 36;
-      if (!game.artSolidAtLocal(mask, lx + Math.cos(a) * rr, ly + Math.sin(a) * rr)) return rr;
+  const R = game.level.radius as number;
+  const u = Math.floor(((lx / R / mask.span) + 1) * 0.5 * mask.size);
+  const v = Math.floor(((ly / R / mask.span) + 1) * 0.5 * mask.size);
+  const ink = (x: number, y: number) => {
+    if (x < 0 || y < 0 || x >= mask.size || y >= mask.size) return false;
+    return mask.alpha[y * mask.size + x] > INK_ALPHA;
+  };
+  if (!ink(u, v)) return -1;
+  for (let d = 1; d <= 12; d++) {
+    for (let dy = -d; dy <= d; dy++) {
+      for (let dx = -d; dx <= d; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== d) continue;
+        if (!ink(u + dx, v + dy)) return d;
+      }
     }
   }
-  return Number.POSITIVE_INFINITY;
+  return 99;
+}
+
+/**
+ * Fire one round and measure the very frame it sticks: the head keeps swaying,
+ * breathing and laughing afterwards, so the drawing moves under a stuck round —
+ * the impact has to be judged against the art as it was when the round met it.
+ */
+function shootAndMeasure(game: Record<string, any>, theta: number) {
+  game.rot = -Math.PI / 2 - theta;
+  game.items = [];
+  game.projs = [];
+  game.ammoLeft = 99;
+  game.cooldown = 0;
+  game.reloadT = 0;
+  game.aiming = false;
+  game.charging = false;
+  game.press();
+  game.onRelease();
+  for (let i = 0; i < 60 && game.projs.length; i++) {
+    game.update(1 / 60);
+    const it = (game.items as any[]).find((x) => x.type === 'bullet');
+    if (it) return { it, edge: edgeDistance(game, it.px, it.py) };
+  }
+  return null;
 }
 
 test('a fast round stops on the first pixel of the drawing it meets', async () => {
@@ -340,16 +375,18 @@ test('a fast round stops on the first pixel of the drawing it meets', async () =
     const { game, kind } = await bossStage(5);
     game.setWeapon(weapon);
     let hits = 0;
+    let worst = 0;
     for (let deg = 0; deg < 360; deg += 6) {
-      const it = shootAtLocal(game, (Math.PI * deg) / 180);
-      if (!it) continue;
+      const shot = shootAndMeasure(game, (Math.PI * deg) / 180);
+      if (!shot) continue;
       hits++;
+      const { it, edge } = shot;
+      assert.ok(edge > 0 && edge <= 2,
+        `${kind}/${weapon} ${deg}deg: the round sits on the outline (${edge < 0 ? 'not on the drawing' : `${edge} px from empty space`})`);
+      if (edge > 1) worst = Math.max(worst, edge);
       const world = game.artToWorld(it.px, it.py);
       assert.ok(game.artHitAt(world.x, world.y),
-        `${kind}/${weapon} ${deg}deg: the round is on the drawing`);
-      const gap = edgeGap(game, it.px, it.py);
-      assert.ok(gap <= 1.8,
-        `${kind}/${weapon} ${deg}deg: the round sits on the edge, not a stride inside it (${gap.toFixed(2)} px)`);
+        `${kind}/${weapon} ${deg}deg: the stuck round is on the boss`);
     }
     assert.ok(hits >= 15, `${kind}/${weapon}: the fast rounds reached the head (${hits})`);
     game.destroy();

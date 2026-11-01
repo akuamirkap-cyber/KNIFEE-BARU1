@@ -86,7 +86,8 @@ test('every bullet tests the boss pixels before anything else', () => {
   // the first pixel of the drawing is what stops it — a thin brim can never be
   // stepped over, and the round never sinks a stride deep into the body.
   assert.match(game, /let hit: \{ r: number; x: number; y: number \} \| null = head \? this\.artHitAt\(head\.x, head\.y\) : null;/);
-  assert.match(game, /for \(let d = span; !hit && d >= 0; d -= 1\) \{/);
+  assert.match(game, /for \(let d = from; !hit; d -= 1\) \{/);
+  assert.match(game, /while \(from < limit && this\.artHitAt\(p\.x - ux \* from, p\.y - uy \* from\)\) from \+= 1;/);
   assert.match(game, /local: Math\.atan2\(hit\.y, hit\.x\),/);
   assert.match(game, /px: hit\.x,/);
   assert.match(game, /py: hit\.y,/);

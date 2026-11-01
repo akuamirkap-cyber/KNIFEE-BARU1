@@ -996,7 +996,7 @@ export function buildMaskSurface(mask: ArtMask, steps = 720): Path2D | null {
  * player sees is *exactly* the line a round stops on: no anti-aliased halo, no
  * 3x3 neighbourhood, nothing a few pixels outside the artwork's own edge.
  */
-const INK_ALPHA = 96;
+export const INK_ALPHA = 96;
 
 /** Is this mask pixel part of the drawing? */
 function maskSolid(mask: ArtMask, x: number, y: number): boolean {
@@ -5687,7 +5687,7 @@ export class Game {
     this.raf = requestAnimationFrame(this.loop);
   };
 
-  private stepProj(p: Proj): StepRes {
+  private stepProj(p: Proj, stride = 0): StepRes {
     // A floating star can be collected by a straight shot before it reaches the target.
     if (this.state === 'play' && this.star
       && Math.hypot(p.x - this.star.x, p.y - this.star.y) < this.star.r + this.weapon.half * 0.5) {
@@ -5739,10 +5739,21 @@ export class Game {
       const speed = Math.hypot(p.vx, p.vy) || 1;
       const ux = p.vx / speed;
       const uy = p.vy / speed;
-      const span = Math.min(10, speed * 0.02);
+      // The caller hands over the exact length of the substep it just moved, so
+      // the walk starts at the round's previous position and not a pixel past it.
+      const span = Math.min(10, Math.max(1, stride || speed * 0.02));
       let hit: { r: number; x: number; y: number } | null = head ? this.artHitAt(head.x, head.y) : null;
-      for (let d = span; !hit && d >= 0; d -= 1) {
-        hit = this.artHitAt(p.x - ux * d, p.y - uy * d);
+      // The head laughs, rages and breathes: while a round is in the air the
+      // drawing can grow *over* the spot it had already left, so the far end of
+      // the stride is ink too. Step further back until the path is outside the
+      // art again, then close in — the round still stops on the outline it met.
+      let from = span;
+      const limit = Math.min(48, span + 24);
+      while (from < limit && this.artHitAt(p.x - ux * from, p.y - uy * from)) from += 1;
+      for (let d = from; !hit; d -= 1) {
+        const back = Math.max(0, d);
+        hit = this.artHitAt(p.x - ux * back, p.y - uy * back);
+        if (back === 0) break;
       }
       if (hit) {
         return {
@@ -7654,6 +7665,9 @@ export class Game {
       if (p.ghostAim) p.vx = (CX - p.x) * Math.max(0, -p.vy) / Math.max(1, p.y - ghostTargetY);
       const dist = Math.hypot(p.vx, p.vy) * ps;
       const steps = Math.max(1, Math.ceil(dist / 7));
+      // Exactly how far one substep moves the round: the boss walk uses it to
+      // find the pixel the round met instead of the pixel it ended up in.
+      const stepLen = Math.hypot(p.vx, p.vy) * ps / steps;
       let r: StepRes = { res: 'none' };
       for (let k = 0; k < steps; k++) {
         const dy = (p.vy * ps) / steps;
@@ -7665,7 +7679,7 @@ export class Game {
           p.x += (CX - p.x) * fraction;
         } else p.x += (p.vx * ps) / steps;
         p.y += dy;
-        r = this.stepProj(p);
+        r = this.stepProj(p, stepLen);
         if (r.res !== 'none') break;
       }
       if (r.res === 'stick') {
