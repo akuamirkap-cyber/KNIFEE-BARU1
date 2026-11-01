@@ -15,6 +15,8 @@
  * the result is pixel-identical instead of a look-alike.
  */
 
+import { withSplinterClip } from './fx';
+
 export const TAU = Math.PI * 2;
 export const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 export const hsl = (h: number, s: number, l: number, a = 1) =>
@@ -365,70 +367,15 @@ export class Slide2Fx {
   }
 
   draw(ctx: CanvasRenderingContext2D, time: number) {
-    // glows
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    for (const g of this.glows) {
-      const k = g.life / g.max;
-      const rad = g.r * (1.3 - 0.3 * k);
-      const gr = ctx.createRadialGradient(g.x, g.y, 0, g.x, g.y, rad);
-      gr.addColorStop(0, hsl(g.hue, 100, 60, 0.38 * k));
-      gr.addColorStop(1, hsl(g.hue, 100, 50, 0));
-      ctx.fillStyle = gr;
-      ctx.fillRect(g.x - rad, g.y - rad, rad * 2, rad * 2);
-    }
-    ctx.restore();
-
+    // Glows, smokes, streaks and rings are splatter: on a boss stage they stay
+    // on the drawing the round bit into. Jets and beams are the round in
+    // flight, so they are never clipped.
+    withSplinterClip(ctx, () => this.drawGlows(ctx));
     this.drawJets(ctx, time);
     this.drawBeams(ctx, time);
-    this.drawSmokes(ctx, time);
+    withSplinterClip(ctx, () => this.drawSmokes(ctx, time));
 
-    // particles, additive — exact slide-2 streak/twinkle maths
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.lineCap = 'round';
-    for (const p of this.particles) {
-      const k = Math.max(0, p.life / p.max);
-      let a = Math.pow(k, 0.7);
-      if (p.tw && k < 0.6) a *= 0.55 + Math.random() * 0.45;
-      const l = k > 0.88 ? Math.min(95, p.l + 25) : p.l - (1 - k) * 12;
-      const size = p.size * (0.45 + 0.55 * k);
-      ctx.strokeStyle = hsl(p.h, p.s, l, a);
-      ctx.lineWidth = size * 1.6;
-      ctx.beginPath();
-      ctx.moveTo(p.x - p.vx * p.tr, p.y - p.vy * p.tr);
-      ctx.lineTo(p.x, p.y);
-      ctx.stroke();
-      if (size > 2.1 && a > 0.2) {
-        ctx.fillStyle = hsl(p.h, p.s, 70, a * 0.18);
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, size * 3.2, 0, TAU);
-        ctx.fill();
-      }
-    }
-    for (const r of this.rings) {
-      const k = r.life / r.max;
-      if (r.impl) {
-        const rad = Math.max(2, r.r * k);
-        ctx.strokeStyle = hsl(r.hue, 100, 72, 0.85 * (1 - k * 0.4));
-        ctx.lineWidth = 1.5 + 3.5 * (1 - k);
-        ctx.beginPath();
-        ctx.arc(r.x, r.y, rad, 0, TAU);
-        ctx.stroke();
-        ctx.strokeStyle = `rgba(255,255,255,${0.5 * (1 - k)})`;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.arc(r.x, r.y, Math.max(1, rad - 3), 0, TAU);
-        ctx.stroke();
-      } else {
-        ctx.strokeStyle = hsl(r.hue, 100, 70, 0.7 * k);
-        ctx.lineWidth = 3 * k + 0.5;
-        ctx.beginPath();
-        ctx.arc(r.x, r.y, r.r * (1 - k * k) + 4, 0, TAU);
-        ctx.stroke();
-      }
-    }
-    ctx.restore();
+    withSplinterClip(ctx, () => this.drawStreaks(ctx));
 
     this.drawFireballs(ctx, time);
     this.drawFlashes(ctx, time);
@@ -451,6 +398,71 @@ export class Slide2Fx {
   }
 
   // ------------------------------------------------------------- drawing
+  /** Streaks and rings: everything the hit throws off. */
+  private drawStreaks(ctx: CanvasRenderingContext2D) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.lineCap = 'round';
+  for (const p of this.particles) {
+    const k = Math.max(0, p.life / p.max);
+    let a = Math.pow(k, 0.7);
+    if (p.tw && k < 0.6) a *= 0.55 + Math.random() * 0.45;
+    const l = k > 0.88 ? Math.min(95, p.l + 25) : p.l - (1 - k) * 12;
+    const size = p.size * (0.45 + 0.55 * k);
+    ctx.strokeStyle = hsl(p.h, p.s, l, a);
+    ctx.lineWidth = size * 1.6;
+    ctx.beginPath();
+    ctx.moveTo(p.x - p.vx * p.tr, p.y - p.vy * p.tr);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+    if (size > 2.1 && a > 0.2) {
+      ctx.fillStyle = hsl(p.h, p.s, 70, a * 0.18);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, size * 3.2, 0, TAU);
+      ctx.fill();
+    }
+  }
+  for (const r of this.rings) {
+    const k = r.life / r.max;
+    if (r.impl) {
+      const rad = Math.max(2, r.r * k);
+      ctx.strokeStyle = hsl(r.hue, 100, 72, 0.85 * (1 - k * 0.4));
+      ctx.lineWidth = 1.5 + 3.5 * (1 - k);
+      ctx.beginPath();
+      ctx.arc(r.x, r.y, rad, 0, TAU);
+      ctx.stroke();
+      ctx.strokeStyle = `rgba(255,255,255,${0.5 * (1 - k)})`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(r.x, r.y, Math.max(1, rad - 3), 0, TAU);
+      ctx.stroke();
+    } else {
+      ctx.strokeStyle = hsl(r.hue, 100, 70, 0.7 * k);
+      ctx.lineWidth = 3 * k + 0.5;
+      ctx.beginPath();
+      ctx.arc(r.x, r.y, r.r * (1 - k * k) + 4, 0, TAU);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+  }
+
+  /** The impact glows: soft additive halos around a hit. */
+  private drawGlows(ctx: CanvasRenderingContext2D) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const g of this.glows) {
+      const k = g.life / g.max;
+      const rad = g.r * (1.3 - 0.3 * k);
+      const gr = ctx.createRadialGradient(g.x, g.y, 0, g.x, g.y, rad);
+      gr.addColorStop(0, hsl(g.hue, 100, 60, 0.38 * k));
+      gr.addColorStop(1, hsl(g.hue, 100, 50, 0));
+      ctx.fillStyle = gr;
+      ctx.fillRect(g.x - rad, g.y - rad, rad * 2, rad * 2);
+    }
+    ctx.restore();
+  }
+
   private drawVoids(ctx: CanvasRenderingContext2D, time: number) {
     for (const v of this.voids) {
       const k = Math.max(0, v.life / v.max);

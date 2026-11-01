@@ -33,7 +33,13 @@ export const stageState = (n: number, cur: number): StageState => (n < cur ? "do
 /* ---------------- 3D world layout ---------------- */
 export const worldX = (n: number) => 0.34 * Math.sin((n - 1) * 0.9); // gentle zig-zag, -1..1
 export const pillarW = (t: StageType) => (t === "boss" ? 124 : t === "special" ? 108 : 96);
-export const pillarH = (n: number, t: StageType) => 150 + ((n * 29) % 4) * 14 + (t === "boss" ? 18 : 0);
+/**
+ * Every pillar is built to the same height. The stage rhythm then comes from
+ * the perspective alone, so consecutive levels sit an even distance apart
+ * instead of jumping around with a per-stage random height.
+ */
+export const PILLAR_H = 170;
+export const pillarH = (_n: number, _t: StageType) => PILLAR_H;
 
 /* ---------------- timeline (ms) ---------------- */
 export const QUEST_IN = scaleTL({

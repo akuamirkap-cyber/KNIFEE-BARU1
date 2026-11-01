@@ -34,6 +34,12 @@ const hsl = (h: number, s: number, l: number, a = 1) =>
 export interface SetTwoPin {
   /** Where on the rim it landed, in wheel-local radians. */
   a: number;
+  /**
+   * How deep it bit, in canvas px from the centre. A boss has no rim: the round
+   * stops on the drawing, so the pin has to sit at the spot it struck instead of
+   * on a circle of radius `r`.
+   */
+  r?: number;
   hue: number;
   seed: number;
   /** 1 right after the hit, then cools to 0 over ~0.45s. */
@@ -457,8 +463,10 @@ export function drawSetTwoPins(
     for (const p of pins) {
       c.save();
       c.rotate(p.a);
+      // The pin sits where its own round bit; `r` is only the flat-wheel rim.
+      const pr = p.r ?? r;
       if (weapon === "blackhole") {
-        c.translate(r + 2, 0);
+        c.translate(pr + 2, 0);
         drawOrb(c, p.hue, 11.5, time, p.hue * 0.7);
         if (p.flash > 0) {
           c.fillStyle = `rgba(255,255,255,${p.flash * 0.65})`;
@@ -478,13 +486,13 @@ export function drawSetTwoPins(
         // shark clamped onto the board, tail wiggling, jaws snapping shut on bite
         const wig = Math.sin(time * 6 + p.seed * 8) * 0.028 * (0.4 + p.bite);
         c.rotate(wig);
-        c.translate(r - 3, 0);
+        c.translate(pr - 3, 0);
         const snap = Math.sin(Math.min(1, p.bite) * Math.PI) * 0.4;
         const idle = Math.max(0, Math.sin(time * 1.6 + p.seed * 9)) * 0.07;
         drawShark(c, p.hue, 0.16 + snap + idle, time, p.seed, p.flash);
       } else if (bbW) {
         // stone embedded in the wood, half-buried
-        c.translate(r + 2, 0);
+        c.translate(pr + 2, 0);
         drawStone(c, p.hue, 13, time * 0.3, p.seed, p.flash);
         // wooden splinter ring around fresh impacts
         if (p.bite > 0.15) {
@@ -496,14 +504,14 @@ export function drawSetTwoPins(
         }
       } else if (sqW) {
         // water blob stuck on the board, wobbling
-        c.translate(r + 4, 0);
+        c.translate(pr + 4, 0);
         c.rotate(-Math.PI / 2);
         const squash = 1 + Math.sin(time * 7 + p.seed * 8) * 0.06 + p.bite * 0.15;
         c.scale(squash, 1 / squash);
         drawDrop(c, p.hue, 11.5, time, p.seed, p.flash);
       } else if (rwW) {
         // rainbow laser bolt lodged tip-first, humming with spectrum energy
-        c.translate(r - 4, 0);
+        c.translate(pr - 4, 0);
         const jig = Math.sin(time * 10 + p.seed * 9) * 0.012;
         c.rotate(jig);
         const pop = 1 + p.bite * 0.25;
@@ -512,7 +520,7 @@ export function drawSetTwoPins(
       } else if (bzW) {
         // bazooka shell rammed nose-first into armor — crater + molten rim + smoke
         const sink = (1 - Math.min(1, p.bite * 1.6)) * 2;
-        c.translate(r - 5 - sink, 0);
+        c.translate(pr - 5 - sink, 0);
         const jig = Math.sin(time * 9 + p.seed * 8) * 0.014 * (0.4 + p.bite);
         c.rotate(jig);
         // scorched crater behind the shell (cools from white to black)
@@ -554,7 +562,7 @@ export function drawSetTwoPins(
       } else if (rpW) {
         // RPG grenade pierced deep — star-shaped breach + white-hot jet hole
         const sink = (1 - Math.min(1, p.bite * 1.6)) * 3;
-        c.translate(r - 7 - sink, 0);
+        c.translate(pr - 7 - sink, 0);
         const jig = Math.sin(time * 8 + p.seed * 7) * 0.014 * (0.4 + p.bite);
         c.rotate(jig);
         const ck = Math.min(1, p.bite * 1.5);
@@ -603,7 +611,7 @@ export function drawSetTwoPins(
           c.stroke();
         }
       } else {
-        c.translate(r - 6, 0);
+        c.translate(pr - 6, 0);
         drawRocketShape(c, p.hue, p.flash);
       }
       c.restore();

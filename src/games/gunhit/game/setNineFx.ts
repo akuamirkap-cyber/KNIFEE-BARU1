@@ -20,6 +20,7 @@ import {
 } from '../../../../games/game-6/src/game/core';
 import type { Beam, Bullet, GameAPI, Mark, Weapon as NineWeapon } from '../../../../games/game-6/src/game/types';
 import { NINE_SCALE, nineGunOrigin, nineWeapon, type NineId } from './setNineArt';
+import { withSplinterClip } from './fx';
 
 /** What slide 1 does for slide 9 (the parts slide 9 needs from its game). */
 export interface NineHooks {
@@ -207,7 +208,9 @@ export class SetNineFx implements GameAPI {
     const fx = x - this.cx;
     const fy = y - this.cy;
     const b = 2 * (fx * dx + fy * dy);
-    const c = fx * fx + fy * fy - this.wheelR * this.wheelR;
+    // The beam meets the boss' silhouette in its own direction, not a circle.
+    const rr = this.radiusAt(angle - this.rotation);
+    const c = fx * fx + fy * fy - rr * rr;
     const disc = b * b - 4 * c;
     if (disc < 0) return { hit: false, x: x + dx * 1600, y: y + dy * 1600, dist: 1600 };
     const sq = Math.sqrt(disc);
@@ -362,11 +365,19 @@ export class SetNineFx implements GameAPI {
     this.addMark(w, local, age);
   }
 
+  /** The silhouette's radius in a wheel-local direction (the wheel's R otherwise). */
+  private radiusAt(a: number) {
+    const w = this.hooks.wheel() as { radiusAt?: (a: number) => number };
+    return w.radiusAt ? w.radiusAt(a) : this.wheelR;
+  }
+
   private addMark(w: NineWeapon, local: number, age: number) {
     this.marks.push({
       weapon: w,
       a: local,
-      r: this.wheelR,
+      // A mark burns where the arrow actually landed: on the boss that is the
+      // drawing's own radius for this angle, never the wheel's circle.
+      r: this.radiusAt(local),
       size: w.markSize,
       age,
       seed: Math.random() * 1000,
@@ -515,7 +526,9 @@ export class SetNineFx implements GameAPI {
         /* ignore */
       }
     }
-    drawParticles(ctx, this.particles);
+    // Splinters belong to the target they bit into: on a boss stage the game
+    // hands over that drawing's own outline, and the debris stops on it.
+    withSplinterClip(ctx, () => drawParticles(ctx, this.particles));
     for (const b of this.bullets) {
       if (this.carried.has(b)) continue;
       ctx.save();

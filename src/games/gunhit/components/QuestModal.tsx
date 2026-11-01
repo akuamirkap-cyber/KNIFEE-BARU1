@@ -7,6 +7,7 @@ import DiamondSprite from '../../shared/DiamondSprite';
 import { Chest } from '../../perfect-shot/components/Bits';
 import { GiftBox } from '../../perfect-shot/gift/GiftArt';
 import { Ico, IcoTile, type FlatName } from '../../perfect-shot/ui/FlatIcons';
+import { ACH_IN, ACH_OUT } from '../../perfect-shot/ach/data';
 
 interface QuestModalProps {
   state: QuestState;
@@ -66,6 +67,24 @@ export default function QuestModal({ state, ownedCount, coins, diamonds, onClaim
   const completed = QUESTS.filter(q => Math.min(q.progress(state, ownedCount), q.target) >= q.target).length;
   const claimed = state.claimed.length;
   const list = QUESTS.filter(q => q.category === category);
+  /**
+   * Page entrance / exit choreography mirrors the reference Achievement screen:
+   * each block slides, pops or slams in on its own beat, and plays the matching
+   * OUT animation before the transition overlay covers the page.
+   */
+  const animStyle = (
+    inName: string,
+    t: { d: number; dur: number },
+    outName: string,
+    tOut: { d: number; dur: number },
+  ) => v({
+    animationName: leaving ? outName : inName,
+    // the elements keep their `in-*` class, so mirror the reference's faster
+    // exit easing explicitly when the leaving flag flips.
+    animationTimingFunction: leaving ? 'cubic-bezier(0.55, -0.35, 0.75, 0.4)' : 'cubic-bezier(0.22, 1.2, 0.36, 1)',
+    '--d': `${leaving ? tOut.d : t.d}ms`,
+    '--dur': `${leaving ? tOut.dur : t.dur}ms`,
+  });
   const readyAll = QUESTS.filter(q => !state.claimed.includes(q.id) && Math.min(q.progress(state, ownedCount), q.target) >= q.target);
 
   const handleClaim = (q: Quest) => {
@@ -95,7 +114,7 @@ export default function QuestModal({ state, ownedCount, coins, diamonds, onClaim
         </div>
       </div>
       {/* Currency and completion HUD: grouped at the upper right, like the reference. */}
-      <div className="a in-down relative z-20 flex shrink-0 items-center gap-2" style={v({ '--d': '80ms', '--dur': '460ms' })}>
+      <div className="a in-down relative z-20 flex shrink-0 items-center gap-2" style={animStyle('inDown', ACH_IN.top(1), 'outUp', ACH_OUT.top(1))}>
         <div className="flex-1" />
         <div className="font-title flex h-10 items-center gap-1.5 rounded-full border-2 border-[#0b1f5c] bg-[#0b1f5c]/75 pl-2 pr-1 text-white shadow-inner">
           <CoinSprite size={22} />
@@ -112,7 +131,7 @@ export default function QuestModal({ state, ownedCount, coins, diamonds, onClaim
 
       {/* Ribbon title and info/close buttons. */}
       <div className="relative z-10 mt-1.5 flex shrink-0 flex-col items-center">
-        <div className="relative h-[42px] w-[90%]">
+        <div className="a relative h-[42px] w-[90%]" style={animStyle('acBannerIn', ACH_IN.banner, 'acBannerOut', ACH_OUT.banner)}>
           <span className="absolute -left-3 top-3 h-10 w-12 bg-gradient-to-b from-[#c2410c] to-[#7c2d12]" style={{ clipPath: 'polygon(0 0,100% 0,100% 100%,0 100%,28% 50%)' }} />
           <span className="absolute -right-3 top-3 h-10 w-12 bg-gradient-to-b from-[#c2410c] to-[#7c2d12]" style={{ clipPath: 'polygon(0 0,100% 0,72% 50%,100% 100%,0 100%)' }} />
           <div className="absolute inset-x-2 top-0 bottom-1.5 overflow-hidden rounded-2xl border-[3px] border-[#7c2d12] bg-gradient-to-b from-[#ffd25a] via-[#ffa62b] to-[#f97316] shadow-[0_5px_0_#7c2d12,0_10px_20px_rgba(0,0,0,.35)]">
@@ -124,13 +143,13 @@ export default function QuestModal({ state, ownedCount, coins, diamonds, onClaim
           <button data-gloss="off" onClick={() => setInfo(true)} aria-label="Info achievement" className="press font-title absolute -left-1 top-[5px] z-10 grid h-9 w-9 place-items-center rounded-full border-[3px] border-[#0b1f5c] bg-gradient-to-b from-[#7dd3fc] to-[#2563eb] text-lg text-white shadow-[0_3px_0_#0b1f5c]">i</button>
           <button data-gloss="off" onClick={onClose} aria-label="Tutup achievement" className="press absolute -right-1 top-1 z-10 grid h-10 w-10 place-items-center rounded-full border-[3px] border-[#7f1d1d] bg-gradient-to-b from-[#ff7a7a] to-[#dc2626] text-2xl font-black text-white shadow-[0_4px_0_#7f1d1d]">×</button>
         </div>
-        <div className="a in-pop mt-1 flex h-[22px] shrink-0 items-center rounded-full border-2 border-[#3b0764] bg-gradient-to-b from-[#a855f7] to-[#6b21a8] px-3 text-[11px] leading-none text-white shadow-[0_2px_0_#3b0764]" style={v({ '--d': '230ms', '--dur': '400ms' })}>
+        <div className="a in-pop mt-1 flex h-[22px] shrink-0 items-center rounded-full border-2 border-[#3b0764] bg-gradient-to-b from-[#a855f7] to-[#6b21a8] px-3 text-[11px] leading-none text-white shadow-[0_2px_0_#3b0764]" style={animStyle('inPop', ACH_IN.timer, 'outUp', ACH_OUT.top(2))}>
           <Ico name="timer" className="h-3.5 w-3.5" color="#ffffff" /> RESET DALAM {timer}
         </div>
       </div>
 
       {/* Main blue-grid achievement board. */}
-      <section className="a ac-panel-in relative z-10 mt-3 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[22px] border-[3px] border-[#0b1f5c] p-2 shadow-[0_8px_0_#0b1f5c,0_16px_30px_rgba(0,0,0,.45),inset_0_2px_0_rgba(255,255,255,.35)]" style={{ backgroundColor: '#2f6fe0', backgroundImage: 'linear-gradient(rgba(255,255,255,.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.08) 1px, transparent 1px)', backgroundSize: '22px 22px' }}>
+      <section className="a ac-panel-in relative z-10 mt-3 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[22px] border-[3px] border-[#0b1f5c] p-2 shadow-[0_8px_0_#0b1f5c,0_16px_30px_rgba(0,0,0,.45),inset_0_2px_0_rgba(255,255,255,.35)]" style={{ ...animStyle('acPanelIn', ACH_IN.panel, 'acPanelOut', ACH_OUT.panel), backgroundColor: '#2f6fe0', backgroundImage: 'linear-gradient(rgba(255,255,255,.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.08) 1px, transparent 1px)', backgroundSize: '22px 22px' }}>
         {/* milestone route */}
         <div className="relative shrink-0 rounded-2xl border-2 border-[#0b1f5c]/50 bg-[#1a46a8]/60 px-2.5 pt-5 pb-1.5 shadow-[inset_0_3px_8px_rgba(0,0,0,.25)]">
           <div className="font-title absolute -top-3.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border-2 border-[#7c2d12] bg-gradient-to-b from-[#ffd23f] to-[#f59e0b] px-3 py-1 text-[11px] leading-none text-[#5a2a00] shadow-[0_2px_0_#7c2d12]"><Ico name="gift" className="-mt-0.5 mr-1 inline h-3.5 w-3.5" color="#5a2a00" />BONUS MILESTONE · {Math.min(completed, 20)}/20</div>
@@ -175,7 +194,7 @@ export default function QuestModal({ state, ownedCount, coins, diamonds, onClaim
           {(['daily', 'skill'] as const).map((cat, i) => {
             const active = category === cat;
             const readyCount = QUESTS.filter(q => q.category === cat && !state.claimed.includes(q.id) && Math.min(q.progress(state, ownedCount), q.target) >= q.target).length;
-            return <button data-gloss="off" key={cat} onClick={() => setCategory(cat)} className={`press font-title relative flex h-[44px] items-center justify-center gap-2 rounded-2xl border-2 text-[18px] transition-all duration-200 ${active ? 'border-[#7c2d12] bg-gradient-to-b from-[#ffe27a] to-[#f59e0b] text-[#5a2a00] shadow-[0_4px_0_#9a3412]' : 'border-[#0b1f5c] bg-gradient-to-b from-[#3d5fa8] to-[#24427f] text-white/80 shadow-[0_4px_0_#0b1f5c]'}`}>
+            return <button data-gloss="off" key={cat} onClick={() => setCategory(cat)} style={animStyle('inPop', { d: ACH_IN.tabs.d + i * 90, dur: 520 }, 'outDown', { d: 0, dur: 280 })} className={`a press font-title relative flex h-[44px] items-center justify-center gap-2 rounded-2xl border-2 text-[18px] transition-all duration-200 ${active ? 'border-[#7c2d12] bg-gradient-to-b from-[#ffe27a] to-[#f59e0b] text-[#5a2a00] shadow-[0_4px_0_#9a3412]' : 'border-[#0b1f5c] bg-gradient-to-b from-[#3d5fa8] to-[#24427f] text-white/80 shadow-[0_4px_0_#0b1f5c]'}`}>
               <Ico name={cat === 'daily' ? 'calendar' : 'swords'} className="h-4 w-4" color={active ? '#5a2a00' : 'rgba(255,255,255,.8)'} /> {cat.toUpperCase()}
               {readyCount > 0 && <span className="absolute -right-1 -top-2 grid h-5 min-w-5 place-items-center rounded-full bg-[#ef4444] px-1 text-[11px] text-white ring-2 ring-white">{readyCount}</span>}
             </button>;
@@ -184,7 +203,8 @@ export default function QuestModal({ state, ownedCount, coins, diamonds, onClaim
 
         {/* mission rows: ready / active / claimed states stay backed by SGA quest progress */}
         <div className="no-scrollbar smooth-scroll mt-2 min-h-0 flex-1 space-y-2 overflow-y-auto overflow-x-hidden px-0.5 pb-1">
-          {list.map((q) => {
+          {list.map((q, rowIndex) => {
+            const rowStyle = animStyle('inLeft', ACH_IN.row(rowIndex), 'outDown', ACH_OUT.row(rowIndex));
             const progress = Math.min(q.progress(state, ownedCount), q.target);
             const done = progress >= q.target;
             const taken = state.claimed.includes(q.id);
@@ -196,14 +216,14 @@ export default function QuestModal({ state, ownedCount, coins, diamonds, onClaim
               {q.rewardWeapon && <span className="font-title flex items-center gap-0.5 text-[10px] leading-none text-[#7e22ce]"><Ico name="gun" className="h-3 w-3" color="#7e22ce" /> SENJATA</span>}
             </span>;
             if (taken) return (
-              <div key={q.id} className="relative flex h-[62px] w-full items-stretch overflow-hidden rounded-2xl border-2 border-[#0f2a6b] bg-[#1d3d8f]/75 text-left">
+              <div key={q.id} style={rowStyle} className="a relative flex h-[62px] w-full items-stretch overflow-hidden rounded-2xl border-2 border-[#0f2a6b] bg-[#1d3d8f]/75 text-left">
                 {icon}
                 <span className="flex min-w-0 flex-1 flex-col justify-center"><span className="font-title truncate text-[14px] text-white/60 line-through decoration-2">{q.title.toUpperCase()}</span><span className="text-[11px] text-white/50">{q.desc}</span></span>
                 <span className="font-title flex w-[92px] shrink-0 flex-col items-center justify-center gap-0.5 border-l-2 border-[#0f2a6b] bg-[#163275] text-[10px] text-[#86efac]"><span className="grid h-7 w-7 place-items-center rounded-full bg-gradient-to-b from-[#4ade80] to-[#16a34a] text-base text-white shadow-[0_2px_0_#14532d]">✓</span>SELESAI</span>
               </div>
             );
             if (done) return (
-              <button data-gloss="off" key={q.id} onClick={() => handleClaim(q)} className="press shine relative flex h-[70px] w-full items-stretch overflow-hidden rounded-2xl border-2 border-[#0e5a26] bg-gradient-to-b from-[#7cf06f] via-[#3fcf4a] to-[#1f9b37] text-left shadow-[0_4px_0_#0e5a26]">
+              <button data-gloss="off" key={q.id} onClick={() => handleClaim(q)} style={rowStyle} className="a press shine relative flex h-[70px] w-full items-stretch overflow-hidden rounded-2xl border-2 border-[#0e5a26] bg-gradient-to-b from-[#7cf06f] via-[#3fcf4a] to-[#1f9b37] text-left shadow-[0_4px_0_#0e5a26]">
                 <span className="pointer-events-none absolute inset-x-2 top-1 h-[38%] rounded-xl bg-white/25" />
                 {icon}
                 <span className="relative flex min-w-0 flex-1 flex-col justify-center"><span className="font-title text-[23px] leading-none text-white" style={{ textShadow: '0 2px 0 #0e5a26, -1px 0 0 #0e5a26, 1px 0 0 #0e5a26' }}>CLAIM</span><span className="font-title truncate text-[12.5px] text-[#0b3d18]">{q.title.toUpperCase()}</span></span>
@@ -211,7 +231,7 @@ export default function QuestModal({ state, ownedCount, coins, diamonds, onClaim
               </button>
             );
             return (
-              <div key={q.id} className="relative flex h-[74px] w-full items-stretch overflow-hidden rounded-2xl border-2 border-[#1e3a8a] bg-gradient-to-b from-[#f1f6ff] to-[#d3e3ff] text-left shadow-[0_4px_0_#1e3a8a]">
+              <div key={q.id} style={rowStyle} className="a relative flex h-[74px] w-full items-stretch overflow-hidden rounded-2xl border-2 border-[#1e3a8a] bg-gradient-to-b from-[#f1f6ff] to-[#d3e3ff] text-left shadow-[0_4px_0_#1e3a8a]">
                 {icon}
                 <span className="relative flex min-w-0 flex-1 flex-col justify-center pr-2"><span className="flex items-center gap-1.5"><span className="font-title truncate text-[14px] leading-tight text-[#1e3a8a]">{q.title.toUpperCase()}</span><span className="font-title shrink-0 rounded-md bg-[#f59e0b] px-1.5 py-[1px] text-[10px] leading-none text-white shadow-[0_1px_0_#9a3412]">GO ›</span></span><span className="font-ui truncate text-[12px] leading-tight text-[#2c4a85]">{q.desc}</span><span className="relative mt-1.5 h-[18px] w-full overflow-hidden rounded-full border-2 border-[#1e3a8a] bg-[#3b4f86]"><span className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-b from-[#ffe066] to-[#f59e0b]" style={{ width: `${percent}%` }} /><span className="font-title absolute inset-0 grid place-items-center text-[11px] leading-none text-white" style={{ textShadow: '0 1.5px 0 #1e3a8a' }}>{progress}/{q.target}</span></span></span>
                 {reward('blue')}
@@ -221,7 +241,7 @@ export default function QuestModal({ state, ownedCount, coins, diamonds, onClaim
         </div>
 
         {/* One-tap claim-all remains based solely on ready SGA quests. */}
-        <div className="mt-1.5 shrink-0">
+        <div className="a mt-1.5 shrink-0" style={animStyle('inPop', ACH_IN.claimAll, 'outDown', { d: 0, dur: 300 })}>
           {readyAll.length > 0 ? <button data-gloss="off" onClick={claimAll} className="press shine font-title relative flex h-[48px] w-full items-center justify-center gap-2 rounded-2xl border-2 border-[#0e5a26] bg-gradient-to-b from-[#7cf06f] via-[#3fcf4a] to-[#1f9b37] text-[20px] text-white shadow-[0_5px_0_#0e5a26]">
             <span className="pointer-events-none absolute inset-x-3 top-1 h-[35%] rounded-xl bg-white/25" /><Ico name="gift" className="relative h-6 w-6" color="#ffffff" /> <span className="relative" style={{ textShadow: '0 2px 0 #0e5a26' }}>KLAIM SEMUA ({readyAll.length})</span>
           </button> : <div className="font-title flex h-[48px] w-full items-center justify-center gap-2 rounded-2xl border-2 border-[#0b1f5c] bg-[#1e3a8a]/80 text-[12px] text-white/75">⏱ Misi baru dalam {timer}</div>}
@@ -229,7 +249,7 @@ export default function QuestModal({ state, ownedCount, coins, diamonds, onClaim
       </section>
 
       {/* Day ribbon matches the reference; future days stay visually locked. */}
-      <div className="relative z-10 mt-2.5 flex h-[52px] shrink-0 items-stretch">
+      <div className="a relative z-10 mt-2.5 flex h-[52px] shrink-0 items-stretch" style={animStyle('inPop', ACH_IN.day(0), 'outDown', { d: 0, dur: 280 })}>
         {[1, 2, 3, 4].map((day, i) => <div key={day} className={`${i ? '-ml-2' : ''} relative flex-1`} style={{ zIndex: 10 - i }}>
           <div className="relative h-full w-full">
             <span className="absolute inset-0" style={{ clipPath: i === 0 ? 'polygon(0 0,84% 0,100% 50%,84% 100%,0 100%)' : 'polygon(0 0,84% 0,100% 50%,84% 100%,0 100%,16% 50%)', background: i === 0 ? '#7c2d12' : '#0b1f5c' }} />

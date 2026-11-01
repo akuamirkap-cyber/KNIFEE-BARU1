@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { SgaBackgroundTheme, SgaBgThemeOption } from '../game/backgroundThemes';
 import type { SgaGameSpeed } from '../game/gameSpeed';
+import type { StyleId } from '../../perfect-shot/anim/presets';
+import CoinSprite from '../../shared/CoinSprite';
 import DiamondSprite from '../../shared/DiamondSprite';
 
 type Props = {
@@ -11,6 +13,12 @@ type Props = {
   musicEnabled: boolean;
   speed: SgaGameSpeed;
   speedOptions: readonly SgaGameSpeed[];
+  animSpeed: number;
+  animGunStyle: StyleId;
+  animSpeeds: readonly number[];
+  animStyles: readonly { id: StyleId; name: string; icon: string; desc: string }[];
+  onAnimSpeed: (speed: number) => void;
+  onAnimGunStyle: (style: StyleId) => void;
   themes: readonly SgaBgThemeOption[];
   theme: SgaBackgroundTheme;
   onClose: () => void;
@@ -35,6 +43,7 @@ function Toggle({ on }: { on: boolean }) {
 
 export default function SgaSettingsPanel({
   closing, muted, volume, sfxEnabled, musicEnabled, speed, speedOptions, themes, theme,
+  animSpeed, animGunStyle, animSpeeds, animStyles, onAnimSpeed, onAnimGunStyle,
   onClose, onMute, onSfx, onMusic, onVolume, onSpeed, onTheme, onReplayIntro, onSpecial, formatSpeed,
 }: Props) {
   const [advanced, setAdvanced] = useState(false);
@@ -124,6 +133,44 @@ export default function SgaSettingsPanel({
               </div>
             </div>
             <div className="mt-3">
+              <div className="font-title text-[10px] tracking-[.14em] text-white/55">🎬 PRESET ANIMASI SENJATA MENU</div>
+              <p className="mt-1 text-[10px] text-white/55">Sama persis dengan game kanan — kecepatan &amp; gaya masuk senjata.</p>
+              <div className="mt-1.5 grid grid-cols-5 gap-1 rounded-xl bg-black/35 p-1">
+                {animSpeeds.map((value) => {
+                  const active = Math.abs(animSpeed - value) < 1e-6;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => onAnimSpeed(value)}
+                      className={`font-title h-8 rounded-lg text-[11px] transition-all ${active ? 'bg-gradient-to-b from-[#a5f3fc] to-[#0ea5e9] text-[#052a3a] shadow-[0_2px_0_#075985]' : 'text-white/70 hover:bg-white/10'}`}
+                    >
+                      {value}x
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {animStyles.map((style) => {
+                  const active = style.id === animGunStyle;
+                  return (
+                    <button
+                      key={style.id}
+                      type="button"
+                      title={style.desc}
+                      aria-pressed={active}
+                      onClick={() => onAnimGunStyle(style.id)}
+                      className={`press font-title flex items-center gap-1 rounded-lg border px-2 py-1.5 text-[10px] leading-none transition-all ${active ? 'border-[#ffd23f] bg-[#ffd23f]/20 text-[#ffe89a] shadow-[0_0_10px_rgba(255,210,63,.45)]' : 'border-white/15 bg-white/[.05] text-white/70 hover:bg-white/10'}`}
+                    >
+                      <span aria-hidden="true">{style.icon}</span>
+                      {style.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="mt-3">
               <div className="font-title text-[10px] tracking-[.14em] text-white/55">✦ STAGE SPESIAL</div>
               <p className="mt-1 text-[10px] text-white/55">Pilih langsung mode bonus SGA.</p>
               <div className="mt-1.5 grid grid-cols-3 gap-1.5">
@@ -131,7 +178,7 @@ export default function SgaSettingsPanel({
                   <DiamondSprite size={22} /><span className="mt-1 block font-title text-[9px] text-cyan-100">BATU · 3</span>
                 </button>
                 <button type="button" onClick={() => onSpecial('bonus')} className="press rounded-xl border border-amber-300/30 bg-amber-400/10 px-1 py-2 text-center">
-                  <span className="block text-xl leading-none">🪙</span><span className="mt-1 block font-title text-[9px] text-amber-100">BONUS · 4</span>
+                  <CoinSprite size={22} /><span className="mt-1 block font-title text-[9px] text-amber-100">BONUS · 4</span>
                 </button>
                 <button type="button" onClick={() => onSpecial('treasure')} className="press rounded-xl border border-pink-300/30 bg-pink-400/10 px-1 py-2 text-center">
                   <span className="block text-xl leading-none">🧰</span><span className="mt-1 block font-title text-[9px] text-pink-100">HARTA · 6</span>

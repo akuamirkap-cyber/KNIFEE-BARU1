@@ -14,6 +14,7 @@
  */
 import { bolt, glow } from '../../../../games/game-2/src/weapons';
 import { sixWeapon, type SixId } from './setSixArt';
+import { withSplinterClip } from './fx';
 
 const TAU = Math.PI * 2;
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
@@ -300,7 +301,11 @@ export class SetSixFx {
   drawBeam(c: CanvasRenderingContext2D) {
     const w = sixWeapon(this.weaponId);
     const x1 = this.gunX, y1 = this.gunY;
-    const x2 = this.cx, y2 = this.cy + this.wheelR - 4;
+    // The beam's far end is the silhouette's own bottom point on a boss.
+    const foot = (this.hooks.wheel() as { surfacePoint?: (a: number) => { x: number; y: number } })
+      .surfacePoint?.(Math.PI / 2);
+    const x2 = foot ? foot.x : this.cx;
+    const y2 = foot ? foot.y - 4 : this.cy + this.wheelR - 4;
     // Slide 6's sniper keeps a laser sight lit the whole time it is armed.
     if (this.sight && w.id === 'sniper') {
       c.save();
@@ -379,6 +384,12 @@ export class SetSixFx {
 
   /** Slide-6's `drawPart()`: every particle it can spawn. */
   draw(c: CanvasRenderingContext2D) {
+    // Splinters stay on the drawing they bit into (the boss' own outline).
+    withSplinterClip(c, () => this.drawParts(c));
+  }
+
+  /** The burst itself: every spark, ember and plume of slide 6. */
+  private drawParts(c: CanvasRenderingContext2D) {
     for (const p of this.parts) {
       const k = Math.max(0, p.life / p.max);
       c.save();

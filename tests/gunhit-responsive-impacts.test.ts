@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { installCanvasShim } from './supportCanvas';
+import { giveBossMask } from './supportBossMask';
 import { installSilentAudio } from '../tools/supportAudioSilent';
 
 installCanvasShim();
@@ -60,6 +61,9 @@ function stage(id: string, mode: 'normal' | 'boulder' | 'bonus' | 'boss' = 'norm
   game.setWeapon(row[0]);
   if (mode === 'boulder' || mode === 'bonus') game.startSpecialStage(mode);
   else game.startAtLevel(mode === 'boss' ? 5 : 1);
+  // The boss flies in with Perfect Shot's wheel entrance; a player can only
+  // shoot it once it is on screen, so the stage helper lands it first.
+  if (mode === 'boss') { giveBossMask(game); game.wheelEntryT = 99; }
   game.state = 'play';
   game.cooldown = 0;
   return game;

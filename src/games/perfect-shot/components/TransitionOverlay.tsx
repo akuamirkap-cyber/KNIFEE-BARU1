@@ -6,7 +6,15 @@ import { PodiumMedal } from "../rank/Medal";
 export type OverlayPhase = "idle" | "cover" | "reveal";
 export type OverlayVariant = "iris" | "shutter" | "ribbon" | "cloud" | "scope" | "wrap" | "fade" | "none" | "podium";
 
-type Props = { phase: OverlayPhase; origin: { x: number; y: number }; label: string; variant?: OverlayVariant; rate?: number };
+type Props = {
+  phase: OverlayPhase;
+  origin: { x: number; y: number };
+  label: string;
+  variant?: OverlayVariant;
+  rate?: number;
+  /** radius (px) the scope lens frames when it closes — lets a host game aim at its own target size */
+  lens?: number;
+};
 
 const HAZARD = "repeating-linear-gradient(-45deg, #ffd23f 0 14px, #17131f 14px 28px)";
 const STEEL =
@@ -435,9 +443,13 @@ function Podium({ phase, label }: { phase: OverlayPhase; label: string }) {
 }
 
 /* ---------------- SNIPER SCOPE (gameplay) ---------------- */
-function Scope({ phase, origin }: { phase: OverlayPhase; origin: { x: number; y: number } }) {
+function Scope({ phase, origin, lens }: { phase: OverlayPhase; origin: { x: number; y: number }; lens?: number }) {
   const cover = phase === "cover";
-  const pos = { "--sx": `${origin.x}%`, "--sy": `${origin.y}%` } as CSSProperties;
+  const pos = {
+    "--sx": `${origin.x}%`,
+    "--sy": `${origin.y}%`,
+    ...(lens ? { "--scl": `${Math.round(lens)}px` } : {}),
+  } as CSSProperties;
   return (
     <div className={`absolute inset-0 overflow-hidden ${cover ? "sc2-cover" : "sc2-reveal"}`} style={pos}>
       {/* darkness outside the lens */}
@@ -549,7 +561,7 @@ function Wrap({ phase, label }: { phase: OverlayPhase; label: string }) {
   );
 }
 
-export function TransitionOverlay({ phase, origin, label, variant = "iris", rate = 1 }: Props) {
+export function TransitionOverlay({ phase, origin, label, variant = "iris", rate = 1, lens }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   // speed up every CSS animation inside the overlay (delays included) in one go
   useLayoutEffect(() => {
@@ -560,18 +572,18 @@ export function TransitionOverlay({ phase, origin, label, variant = "iris", rate
   if (phase === "idle" || variant === "none") return null;
   return (
     <div ref={ref} className="absolute inset-0 z-50">
-      <OverlayBody phase={phase} origin={origin} label={label} variant={variant} />
+      <OverlayBody phase={phase} origin={origin} label={label} variant={variant} lens={lens} />
     </div>
   );
 }
 
-function OverlayBody({ phase, origin, label, variant }: { phase: OverlayPhase; origin: { x: number; y: number }; label: string; variant: OverlayVariant }) {
+function OverlayBody({ phase, origin, label, variant, lens }: { phase: OverlayPhase; origin: { x: number; y: number }; label: string; variant: OverlayVariant; lens?: number }) {
   if (variant === "fade") return <div className={`absolute inset-0 bg-[#05090b] ${phase === "cover" ? "fd-in" : "fd-out"}`} />;
   if (variant === "shutter") return <Shutter phase={phase} label={label} />;
   if (variant === "ribbon") return <Ribbon phase={phase} label={label} />;
   if (variant === "podium") return <Podium phase={phase} label={label} />;
   if (variant === "cloud") return <Cloud phase={phase} label={label} />;
-  if (variant === "scope") return <Scope phase={phase} origin={origin} />;
+  if (variant === "scope") return <Scope phase={phase} origin={origin} lens={lens} />;
   if (variant === "wrap") return <Wrap phase={phase} label={label} />;
   return (
     <div

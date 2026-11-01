@@ -4,7 +4,17 @@ import { hasSlide6Update, hasSlide7Update, hasSlide9Update, hasSlide11Update } f
 import { gunState } from '../game/art/kit';
 import { fitInkBoxQuarterTurn, getGunInkBox } from '../game/art/metrics';
 import { getSavedSgaSpeed } from '../game/gameSpeed';
+import CoinSprite from '../../shared/CoinSprite';
+import DiamondSprite from '../../shared/DiamondSprite';
 import { getFast2DContext, getOptimalCanvasDpr } from '../utils/mobilePerf';
+
+// The coin and diamond guns are named after currency, so their chips show the
+// game's real Diamond Breaker coin and diamond instead of a look-alike emoji.
+function CurrencyGlyph({ id, size }: { id: WeaponId; size: number }) {
+  if (id === 'coingun') return <CoinSprite size={size} className="inline-block align-middle" />;
+  if (id === 'diamond') return <DiamondSprite size={size} className="inline-block align-middle" />;
+  return <>{getWeapon(id).emoji}</>;
+}
 
 const PW = 300;
 const PH = 115;
@@ -153,7 +163,7 @@ export default function WeaponPicker({
             {w.rarity}
           </div>
           <div className="text-lg font-bold leading-tight drop-shadow font-game text-white flex items-center justify-center gap-1.5">
-            <span>{w.emoji}</span>
+            <CurrencyGlyph id={w.id} size={20} />
             <span>{w.name}</span>
             {(hasSlide11Update(w.id) || hasSlide9Update(w.id) || hasSlide6Update(w.id) || hasSlide7Update(w.id)) && (
               <span className="rounded-full border border-emerald-200/80 bg-gradient-to-r from-emerald-400 to-green-500 px-1.5 py-px text-[8px] font-black tracking-widest text-[#052e16] leading-none shadow-[0_0_8px_rgba(52,211,153,0.8)]">
@@ -199,7 +209,7 @@ export default function WeaponPicker({
               title={x.name}
               aria-label={x.name}
             >
-              {x.emoji}
+              <CurrencyGlyph id={x.id} size={18} />
               {(hasSlide11Update(x.id) || hasSlide9Update(x.id) || hasSlide6Update(x.id) || hasSlide7Update(x.id)) && (
                 <span className="pointer-events-none absolute right-0 top-0 h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.95)]" />
               )}

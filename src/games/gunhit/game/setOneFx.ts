@@ -42,6 +42,7 @@ import {
 } from '../../../../games/game-4/src/game/art';
 import { TAU, drawSprite, glowSprite, lerp, makeBolt, rand, randomPoly } from '../../../../games/game-4/src/game/core';
 import type { SetOneId } from './setOneArt';
+import { withSplinterClip } from './fx';
 
 export const SET_ONE_PURPLES = ['200,140,255', '255,180,255', '150,100,255', '230,200,255'] as const;
 
@@ -146,11 +147,11 @@ export class SetOneFx {
 
   /** Slide-7 draws back particles, then the additive ones, then the FX list. */
   draw(ctx: CanvasRenderingContext2D) {
-    this.particles.draw(ctx, false);
+    withSplinterClip(ctx, () => this.particles.draw(ctx, false));
   }
 
   drawFront(ctx: CanvasRenderingContext2D) {
-    this.particles.draw(ctx, true);
+    withSplinterClip(ctx, () => this.particles.draw(ctx, true));
     for (const f of this.fx) f.draw(ctx);
   }
 

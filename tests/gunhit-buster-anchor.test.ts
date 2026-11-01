@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { installCanvasShim } from './supportCanvas';
+import { giveBossMask } from './supportBossMask';
 import { installSilentAudio } from '../tools/supportAudioSilent';
 import { RETIRED_WEAPONS } from '../src/games/gunhit/game/retiredWeapons';
 import { WEAPONS, getWeapon, rollGiftWeapon } from '../src/games/gunhit/game/weapons';
@@ -57,6 +58,7 @@ function stage(mode: 'classic' | 'boss' | 'boulder' | 'bonus' | 'treasure'): Liv
   else if (mode === 'boss') game.startAtLevel(5);
   else game.startSpecialStage(mode);
   game.setWeapon('mega_buster');
+  if (mode === 'boss') giveBossMask(game);
   for (let i = 0; i < 180 && game.state === 'intro'; i++) game.update(1 / 60);
   assert.equal(game.state, 'play');
   game.items = []; game.bonusCoins = []; game.bossProjs = []; game.star = null;

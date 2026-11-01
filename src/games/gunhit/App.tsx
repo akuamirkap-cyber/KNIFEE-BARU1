@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { Game, GUN_Y, GAMEPLAY_GUN_SCALE, H, makeLevel, initialGameplayWheelCenterY } from './game/Game';
 import { savedValues, storage } from './game/safeStorage';
 import { setMasterVolume, setMuted, sfx } from './game/audio';
@@ -20,14 +20,19 @@ import { MILESTONES, QUESTS, type Quest, type QuestState } from './game/quests';
 import { GUN_HIT_MAP_MAX_LEVEL, getGunHitMapNodeTheme, getGunHitMapStage } from './game/stageMap';
 import Arsenal from './components/Arsenal';
 import QuestModal from './components/QuestModal';
+import { useAllStagesOpen, toggleAllStagesOpen, isUnlockShortcut } from './game/stageUnlock';
 import SgaSettingsPanel from './components/SgaSettingsPanel';
-import SgaWeaponFlight, { type SgaWeaponFlightData } from './components/SgaWeaponFlight';
+import SgaWeaponFlight, { WEAPON_FLIGHT_MS, type SgaWeaponFlightData } from './components/SgaWeaponFlight';
 import { Leaderboard as PerfectShotLeaderboard } from '../perfect-shot/components/Leaderboard';
 import { BossDefeatedModal } from './components/BossDefeatedModal';
-import { BossGiftBoxModal } from './components/BossGiftBoxModal';
+import { BossGiftBoxModal, GiftBoxScene } from './components/BossGiftBoxModal';
 import StarBuffModal from './components/StarBuffModal';
 import { QuestMap as PerfectShotQuestMap } from '../perfect-shot/components/QuestMap';
 import type { StageBase } from '../perfect-shot/quest/data';
+import { levelConfig, type TargetKind } from '../perfect-shot/play/levels';
+import type { FlatName } from '../perfect-shot/ui/FlatIcons';
+import type { HeadKind } from '../perfect-shot/play/HeadArt';
+import { WheelArtBridge } from './components/WheelArtBridge';
 import MenuEnvironment, { type MenuEnvironmentTheme } from './components/MenuEnvironment';
 import { SGA_SPEED_OPTIONS, formatSgaSpeed, getSavedSgaSpeed } from './game/gameSpeed';
 import { useSgaGameSpeed } from './utils/useSgaGameSpeed';
@@ -44,13 +49,32 @@ import { ACH_IN, ACH_OUT } from '../perfect-shot/ach/data';
 import { LB_IN, LB_OUT } from '../perfect-shot/rank/data';
 import { GameIcon, NavFrame, type IconName } from '../perfect-shot/ui/GameIcons';
 import { useSettings as usePerfectShotSettings } from '../perfect-shot/theme/themes';
-import { animClass, animStore, getSharedMenuPlan, gunTiming, resolvePlan, subscribeMenuPlan, TL, WHEEL, useAnimCfg, type Plan, type StyleId } from '../perfect-shot/anim/presets';
+import { animClass, animStore, getSharedMenuPlan, gunTiming, publishMenuPlan, resolvePlan, SPEEDS, STYLES, subscribeMenuPlan, TL, WHEEL, useAnimCfg, type Plan, type StyleId } from '../perfect-shot/anim/presets';
 import { OVERLAY_RATE } from '../perfect-shot/anim/speed';
 
 type Screen = 'menu' | 'playing' | 'over';
 type MenuPageTransition = { phase: OverlayPhase; variant: OverlayVariant; label: string; rate: number } | null;
 type MenuDeparture = 'gun' | 'quest' | 'ready' | 'ranks' | 'play' | null;
 type MenuTransitionTiming = { lead: number; cover: number; hold: number; reveal: number; swapAt: number; finishAt: number; rate: number };
+/** Sounds that belong to one phase of a page transition, fired with that phase. */
+type PhaseAudio = { cover?: (t: MenuTransitionTiming) => void; swap?: (t: MenuTransitionTiming) => void };
+
+/**
+ * Run `fn` on the first frame after the state change that was just queued.
+ *
+ * Every phase sound used to be scheduled from the tap instant with a
+ * pre-computed delay, so React's mount of the incoming page plus its first
+ * paint landed *behind* the audio: the cover slam, the page entrance and the
+ * hero impact were all heard first and seen a few frames later. Firing them
+ * from the frame that actually starts the animations keeps sound and picture
+ * on the same beat, no matter how long the page takes to mount on a phone.
+ */
+const afterPaint = (fn: () => void) => {
+  let fired = false;
+  const run = () => { if (fired) return; fired = true; fn(); };
+  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
+  window.setTimeout(run, 120);
+};
 const PLAY_SCOPE = { menuLead: 180, questLead: 260, otherLead: 460, cover: 620, hold: 600, reveal: 680 };
 const MENU_EXIT_K = 0.78;
 const PAGE_OVERLAYS: Partial<Record<OverlayVariant, { cover: number; hold: number; reveal: number }>> = {
@@ -253,19 +277,52 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   const weaponPivotRef = useRef<HTMLDivElement>(null);
   const gameShellRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Game | null>(null);
+  // Game B's wheel artwork, rasterised on demand and handed to the engine so
+  // every stage shows exactly the wheel the reference game shows.
+  const wheelArtCache = useRef(new Map<string, HTMLImageElement>());
+  // The SVG the raster came from: the engine traces it for pixel-free collision.
+  const wheelSvgCache = useRef(new Map<string, string>());
+  const [wheelArtJobs, setWheelArtJobs] = useState<
+    { key: string; kind: TargetKind; icon?: FlatName; head?: HeadKind }[]
+  >([]);
+  const wheelArtKeyFor = useCallback((level: number) => {
+    const c = levelConfig(level);
+    return `${c.target}|${c.head ?? ''}`;
+  }, []);
+  const requestWheelArt = useCallback((level: number) => {
+    const c = levelConfig(level);
+    const key = `${c.target}|${c.head ?? ''}`;
+    if (wheelArtCache.current.has(key)) return;
+    setWheelArtJobs((jobs) =>
+      jobs.some((job) => job.key === key) ? jobs : [...jobs, { key, kind: c.target, icon: c.icon, head: c.head }],
+    );
+  }, []);
 
   const [screen, setScreen] = useState<Screen>('menu');
   const screenRef = useRef<Screen>(screen);
   screenRef.current = screen;
   const [mapOpen, setMapOpen] = useState(false);
+  /** All stages open (default) — P on the quest page flips back to normal. */
+  const allStagesOpen = useAllStagesOpen();
+  const [unlockToast, setUnlockToast] = useState<string | null>(null);
   const [mapLeaving, setMapLeaving] = useState(false);
   const [questLeaving, setQuestLeaving] = useState(false);
   const [leaderboardLeaving, setLeaderboardLeaving] = useState(false);
   const [menuPageTransition, setMenuPageTransition] = useState<MenuPageTransition>(null);
   const [menuDeparture, setMenuDeparture] = useState<MenuDeparture>(null);
   const menuPageTransitionBusyRef = useRef(false);
+  /**
+   * The entrance choreography of a *replayed* menu.
+   *
+   * Replaying a preset remounts the whole menu, so its CSS entrance only starts
+   * a frame or two after the tap (and later still on a slow phone). The audio
+   * used to be scheduled from the tap itself, which left `menuEnter`'s letters,
+   * thuds and impact a step ahead of the picture every time a preset changed.
+   * The plan waits here instead and is played on the frame the replay paints.
+   */
+  const menuEntranceAudioRef = useRef<Plan | null>(null);
   const menuPageTransitionTimersRef = useRef<number[]>([]);
-  const [playTransition, setPlayTransition] = useState<{ phase: OverlayPhase; label: string; origin: { x: number; y: number } } | null>(null);
+  const [playTransition, setPlayTransition] = useState<{ phase: OverlayPhase; label: string; origin: { x: number; y: number }; lens: number } | null>(null);
   const [playMenuExiting, setPlayMenuExiting] = useState(false);
   const [weaponFlight, setWeaponFlight] = useState<SgaWeaponFlightData | null>(null);
   const playTransitionBusyRef = useRef(false);
@@ -296,6 +353,9 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   const [diamondReveal, setDiamondReveal] = useState<{ id: number; amount: number } | null>(null);
   const [diamondHudMode, setDiamondHudMode] = useState(false);
   const [weaponCelebration, setWeaponCelebration] = useState<{ weaponId: WeaponId; id: number } | null>(null);
+  // Peti milestone di halaman reward membuka kado sungguhan (tap 3× → tutup
+  // terbang → hadiah keluar) sebelum hadiahnya benar-benar masuk.
+  const [milestoneGift, setMilestoneGift] = useState<{ count: number; weaponId: WeaponId | null; coins: number } | null>(null);
 
   const [questState, setQuestState] = useState<QuestState>(getInitialQuests);
   const questStateRef = useRef(questState);
@@ -327,6 +387,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     lead: number,
     onSwap: () => void,
     departure: MenuDeparture = null,
+    audio: PhaseAudio = {},
   ): MenuTransitionTiming | null => {
     const base = PAGE_OVERLAYS[variant];
     if (!base || menuPageTransitionBusyRef.current) return null;
@@ -340,17 +401,24 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     const reveal = Math.round(base.reveal / rate);
     const swapAt = lead + cover + hold;
     const transition = { variant, label, rate };
+    const timing: MenuTransitionTiming = { lead, cover, hold, reveal, swapAt, finishAt: swapAt + reveal, rate };
     const schedule = (delay: number, callback: () => void) => {
       menuPageTransitionTimersRef.current.push(window.setTimeout(callback, delay));
     };
 
     setMenuPageTransition(null);
     setMenuDeparture(departure);
-    schedule(lead, () => setMenuPageTransition({ ...transition, phase: 'cover' }));
+    schedule(lead, () => {
+      setMenuPageTransition({ ...transition, phase: 'cover' });
+      // The cover animation starts with this commit — its sound starts here too.
+      if (audio.cover) afterPaint(() => audio.cover?.(timing));
+    });
     schedule(swapAt, () => {
       onSwap();
       setMenuDeparture(null);
       setMenuPageTransition({ ...transition, phase: 'reveal' });
+      // Same for the reveal + the incoming page's own entrance.
+      if (audio.swap) afterPaint(() => audio.swap?.(timing));
     });
     schedule(swapAt + reveal, () => {
       setMenuPageTransition(null);
@@ -359,7 +427,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       menuPageTransitionTimersRef.current = [];
     });
 
-    return { lead, cover, hold, reveal, swapAt, finishAt: swapAt + reveal, rate };
+    return timing;
   };
 
   const menuPageLead = () => Math.max(300, 380 * menuPlanRef.current.k);
@@ -380,21 +448,19 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
         }
       },
       opening ? 'gun' : null,
+      {
+        cover: (t) => studioSfx.shutterClose(0, (t.cover * 0.8) / 1000, t.rate),
+        swap: (t) => {
+          studioSfx.shutterOpen(0, t.rate);
+          if (opening) studioSfx.shopEnter(0, SHOP_IN);
+          else if (nextPlan) studioSfx.menuEnter(0, nextPlan);
+        },
+      },
     );
     if (!timing) return;
 
-    const k = timing.rate;
-    if (opening) {
-      studioSfx.menuExit('gun', 0, { ...menuPlanRef.current, k: menuPlanRef.current.k * 0.6 });
-      studioSfx.shutterClose(timing.lead / 1000, (timing.cover * 0.8) / 1000, k);
-      studioSfx.shutterOpen(timing.swapAt / 1000, k);
-      studioSfx.shopEnter(timing.swapAt / 1000, SHOP_IN);
-    } else {
-      studioSfx.shopExit(0);
-      studioSfx.shutterClose(timing.lead / 1000, (timing.cover * 0.8) / 1000, k);
-      studioSfx.shutterOpen(timing.swapAt / 1000, k);
-      if (nextPlan) studioSfx.menuEnter(timing.swapAt / 1000, nextPlan);
-    }
+    if (opening) studioSfx.menuExit('gun', 0, { ...menuPlanRef.current, k: menuPlanRef.current.k * 0.6 });
+    else studioSfx.shopExit(0);
   };
 
   // Boss Defeated celebration modal state (Screenshot 2)
@@ -570,6 +636,8 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     });
   };
 
+  // Peti milestone di halaman reward: buka kadonya dulu, hadiah masuk setelah
+  // kado benar-benar terbuka dan pemain menekan tombol ambil.
   const handleClaimMilestone = (count: number) => {
     const current = questStateRef.current;
     const milestone = MILESTONES.find(item => item.count === count);
@@ -577,21 +645,37 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     const completed = QUESTS.filter(q => Math.min(q.progress(current, owned.length), q.target) >= q.target).length;
     if (!milestone || completed < count || current.milestonesClaimed.includes(count)) return;
 
-    const nextState = { ...current, milestonesClaimed: [...current.milestonesClaimed, count] };
     const available = WEAPONS.filter(w => w.rarity === milestone.rarity && !owned.includes(w.id));
     const reward = available.length ? available[Math.floor(Math.random() * available.length)] : null;
-    saveQuests(nextState);
     sfx4.match();
-    if (reward) {
+    setMilestoneGift({ count, weaponId: reward ? reward.id : null, coins: reward ? 0 : 1000 });
+  };
+
+  const takeMilestoneGift = (equip: boolean) => {
+    const gift = milestoneGift;
+    if (!gift) return;
+    const current = questStateRef.current;
+    const owned = ownedWeaponIds();
+    const completed = QUESTS.filter(q => Math.min(q.progress(current, owned.length), q.target) >= q.target).length;
+    if (completed < gift.count || current.milestonesClaimed.includes(gift.count)) {
+      setMilestoneGift(null);
+      return;
+    }
+    const nextState = { ...current, milestonesClaimed: [...current.milestonesClaimed, gift.count] };
+    if (gift.weaponId) {
+      saveQuests(nextState);
       try {
         const stored: string[] = JSON.parse(storage.getItem(LS.owned) || '[]');
-        storage.setItem(LS.owned, JSON.stringify([...new Set([...stored, reward.id])]));
-      } catch { storage.setItem(LS.owned, JSON.stringify([reward.id])); }
-      celebrateNewWeapon(reward.id);
+        storage.setItem(LS.owned, JSON.stringify([...new Set([...stored, gift.weaponId])]));
+      } catch { storage.setItem(LS.owned, JSON.stringify([gift.weaponId])); }
+      celebrateNewWeapon(gift.weaponId);
+      if (equip) chooseWeapon(gift.weaponId);
     } else {
-      depositCoins(1000);
-      saveQuests({ ...nextState, totalCoinsCollected: nextState.totalCoinsCollected + 1000 });
+      saveQuests(nextState);
+      depositCoins(gift.coins);
+      saveQuests({ ...nextState, totalCoinsCollected: nextState.totalCoinsCollected + gift.coins });
     }
+    setMilestoneGift(null);
   };
 
   // Create one engine per mounted slide. Quest/coin updates must not destroy a live run.
@@ -729,6 +813,15 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     g.setGameSpeed(getSavedSgaSpeed());
     g.setBackgroundTheme(getSavedSgaBgTheme());
     gameRef.current = g;
+    g.setWheelArtSource({
+      keyFor: wheelArtKeyFor,
+      get: (key) => wheelArtCache.current.get(key) ?? null,
+      request: requestWheelArt,
+      // The markup behind the same raster: the engine rasterises it itself when
+      // the runtime refuses to hand back the pixels of an SVG-drawn canvas, so a
+      // boss keeps its real silhouette instead of a ring.
+      markup: (key) => wheelSvgCache.current.get(key) ?? null,
+    });
     return () => {
       document.removeEventListener('visibilitychange', onVisChange);
       window.removeEventListener('pagehide', flushShotsToStorage);
@@ -736,7 +829,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       gameRef.current = null;
       flushShotsToStorage();
     };
-  }, []);
+  }, [requestWheelArt, wheelArtKeyFor]);
 
   useEffect(() => {
     if (screen !== 'playing' || questOpen) {
@@ -767,13 +860,31 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       const nextPlan = getSharedMenuPlan() ?? resolvePlan(animStore.get(), menuPlanRef.current);
       if (replay) {
         setMenuPlan(nextPlan);
+        menuEntranceAudioRef.current = nextPlan;
         setMenuReturnKey((key) => key + 1);
+      } else if (studioSfx.ctx?.state === 'running') {
+        // The menu is already on screen and already animating: its sound is due now.
+        afterPaint(() => studioSfx.menuEnter(0, nextPlan));
       }
-      if (studioSfx.ctx?.state === 'running') studioSfx.menuEnter(0.03, nextPlan);
     };
     window.addEventListener('sans-intro-complete', onSansIntroComplete);
     return () => window.removeEventListener('sans-intro-complete', onSansIntroComplete);
   }, []);
+
+  /**
+   * Play a replayed menu's entrance on the frame its remount is painted.
+   *
+   * `menuReturnKey` is the remount key of the menu subtree, so the layout effect
+   * runs once the new DOM exists and the CSS entrance is about to start; the
+   * `afterPaint` frame is the same frame that shows the first animation step.
+   */
+  useLayoutEffect(() => {
+    const plan = menuEntranceAudioRef.current;
+    if (!plan) return;
+    menuEntranceAudioRef.current = null;
+    if (studioSfx.ctx?.state !== 'running') return;
+    afterPaint(() => studioSfx.menuEnter(0, plan));
+  }, [menuReturnKey]);
 
   // Match Perfect Shot's input lock during the 1.7s menu arrival sequence.
   useEffect(() => {
@@ -1076,18 +1187,26 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       setPlayMenuExiting(true);
       setMenuDeparture('play');
     }
+    const stageConfig = makeLevel(level, specialMode);
     const lead = fromMenu || fromSettings ? PLAY_SCOPE.menuLead : fromMap ? PLAY_SCOPE.questLead : PLAY_SCOPE.otherLead;
     const mountAt = lead + PLAY_SCOPE.cover;
+    // The rival wheel plays Perfect Shot's own drop -> squash -> pop entrance, but
+    // it starts the moment the lens opens (never behind the closed cover), so the
+    // hold only covers the shared ready beat.
+    const hold = PLAY_SCOPE.hold;
+    const wheelEntryDelay = hold / 1000;
     // Keep the filled WAAPI flight visible through reveal, matching Perfect Shot;
     // it is cleared alongside the scope after the in-game gun is fully exposed.
-    const revealAt = mountAt + PLAY_SCOPE.hold;
+    const revealAt = mountAt + hold;
     const finishAt = revealAt + PLAY_SCOPE.reveal;
-    const stageConfig = makeLevel(level, specialMode);
-    const gunEntryDelay = fromMap || fromSettings ? PLAY_SCOPE.hold / 1000 : 0;
+    const gunEntryDelay = fromMap || fromSettings ? hold / 1000 : 0;
+    // Aim the scope lens exactly at the stage target: same centre as the wheel
+    // and a radius that frames it (106 normal / 122 boss / 166 boulder).
     const origin = {
       x: 50,
       y: (initialGameplayWheelCenterY(stageConfig.boss, Boolean(specialMode)) / H) * 100,
     };
+    const lens = stageConfig.radius + 14;
     const label = `STAGE ${level} · ${stageConfig.name.toUpperCase()}`;
 
     if (fromMap) {
@@ -1099,14 +1218,18 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       studioSfx.playExit(0);
     }
 
-    studioSfx.scopeAim(lead / 1000);
-    studioSfx.scopeOpen(revealAt / 1000);
-    studioSfx.playEnter(mountAt / 1000, PLAY_IN, stageConfig.boss, stageConfig.ammo, {
+    // The scope closes, the stage mounts and the lens opens on their own beats —
+    // their sounds are fired from those beats, not from a clock started at the tap,
+    // so a slow mount on a phone can no longer leave the audio ahead of the picture.
+    const playEnterAudio = () => studioSfx.playEnter(0, PLAY_IN, stageConfig.boss, stageConfig.ammo, {
       gun: !fromMenu,
-      offset: PLAY_SCOPE.hold,
+      offset: hold,
     });
 
-    deferPageClose(lead, () => setPlayTransition({ phase: 'cover', label, origin }));
+    deferPageClose(lead, () => {
+      setPlayTransition({ phase: 'cover', label, origin, lens });
+      afterPaint(() => studioSfx.scopeAim(0));
+    });
     deferPageClose(mountAt, () => {
       startingLevelRef.current = level;
       setMapOpen(false);
@@ -1117,11 +1240,23 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       setMenuDeparture(null);
       setTransitioning(false);
       setTransitionStep(0);
-      if (specialMode) gameRef.current?.startSpecialStage(specialMode, gunEntryDelay, true);
-      else gameRef.current?.startAtLevel(level, wantsWeaponFlight, gunEntryDelay, true);
+      // The flying menu frame is the only weapon until it lands: the live gun
+      // stays hidden for the flight's own duration, then appears in place.
+      const gunHiddenFor = wantsWeaponFlight ? WEAPON_FLIGHT_MS / 1000 : 0;
+      if (specialMode) gameRef.current?.startSpecialStage(specialMode, gunEntryDelay, true, wheelEntryDelay, gunHiddenFor, wantsWeaponFlight);
+      else gameRef.current?.startAtLevel(level, wantsWeaponFlight, gunEntryDelay, true, wheelEntryDelay, gunHiddenFor);
       setScreen('playing');
+      afterPaint(playEnterAudio);
     });
-    deferPageClose(revealAt, () => setPlayTransition((current) => current ? { ...current, phase: 'reveal' } : current));
+    // The instant the captured frame lands, the live canvas gun takes over, so
+    // the hand-off never leaves a bitmap copy resting on top of it.
+    if (wantsWeaponFlight) {
+      deferPageClose(mountAt + WEAPON_FLIGHT_MS + 24, () => setWeaponFlight(null));
+    }
+    deferPageClose(revealAt, () => {
+      setPlayTransition((current) => current ? { ...current, phase: 'reveal' } : current);
+      afterPaint(() => studioSfx.scopeOpen(0));
+    });
     deferPageClose(finishAt, () => {
       setPlayTransition(null);
       setWeaponFlight(null);
@@ -1137,14 +1272,36 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     pageExitTimersRef.current.push(timer);
   };
 
+  useEffect(() => {
+    if (!unlockToast) return;
+    const timer = window.setTimeout(() => setUnlockToast(null), 1800);
+    return () => window.clearTimeout(timer);
+  }, [unlockToast]);
+
+  // P on the quest page: every stage open -> the earned progression -> back.
+  useEffect(() => {
+    if (screen !== 'menu' || (!mapOpen && !questOpen)) return;
+    const onKey = (ev: KeyboardEvent) => {
+      if (!isUnlockShortcut(ev)) return;
+      ev.preventDefault();
+      const now = toggleAllStagesOpen();
+      studioSfx.tap(0, 900);
+      setUnlockToast(now
+        ? 'SEMUA STAGE TERBUKA'
+        : 'PROGRES NORMAL: stage dibuka satu per satu');
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [screen, mapOpen, questOpen]);
+
   const openLevelMap = () => {
-    const timing = beginMenuPageTransition('cloud', 'QUEST', menuPageLead(), () => setMapOpen(true), 'quest');
+    const timing = beginMenuPageTransition('cloud', 'QUEST', menuPageLead(), () => setMapOpen(true), 'quest', {
+      cover: (t) => studioSfx.cloudClose(0, t.rate),
+      swap: (t) => { studioSfx.cloudOpen(0, t.rate); studioSfx.questEnter(0, QUEST_IN); },
+    });
     if (!timing) return;
     setMapLeaving(false);
     studioSfx.menuExit('quest', 0, { ...menuPlanRef.current, k: menuPlanRef.current.k * 0.6 });
-    studioSfx.cloudClose(timing.lead / 1000, timing.rate);
-    studioSfx.cloudOpen(timing.swapAt / 1000, timing.rate);
-    studioSfx.questEnter(timing.swapAt / 1000, QUEST_IN);
   };
 
   const closeLevelMap = () => {
@@ -1155,23 +1312,23 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       setMapLeaving(false);
       setMenuPlan(nextPlan);
       setMenuReturnKey((key) => key + 1);
+    }, null, {
+      cover: (t) => studioSfx.cloudClose(0, t.rate),
+      swap: (t) => { studioSfx.cloudOpen(0, t.rate); studioSfx.menuEnter(0, nextPlan); },
     });
     if (!timing) return;
     setMapLeaving(true);
     studioSfx.questExit(0);
-    studioSfx.cloudClose(timing.lead / 1000, timing.rate);
-    studioSfx.cloudOpen(timing.swapAt / 1000, timing.rate);
-    studioSfx.menuEnter(timing.swapAt / 1000, nextPlan);
   };
 
   const openQuestPage = () => {
-    const timing = beginMenuPageTransition('wrap', 'ACHIEVEMENT', menuPageLead(), () => setQuestOpen(true), 'ready');
+    const timing = beginMenuPageTransition('wrap', 'ACHIEVEMENT', menuPageLead(), () => setQuestOpen(true), 'ready', {
+      cover: (t) => studioSfx.wrapClose(0, t.rate),
+      swap: (t) => { studioSfx.wrapOpen(0, t.rate); studioSfx.achEnter(0, ACH_IN, readyQuestRewardCount); },
+    });
     if (!timing) return;
     setQuestLeaving(false);
     studioSfx.menuExit('ready', 0, { ...menuPlanRef.current, k: menuPlanRef.current.k * 0.6 });
-    studioSfx.wrapClose(timing.lead / 1000, timing.rate);
-    studioSfx.wrapOpen(timing.swapAt / 1000, timing.rate);
-    studioSfx.achEnter(timing.swapAt / 1000, ACH_IN, readyQuestRewardCount);
   };
 
   const closeQuestPage = () => {
@@ -1182,23 +1339,23 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       setQuestLeaving(false);
       setMenuPlan(nextPlan);
       setMenuReturnKey((key) => key + 1);
+    }, null, {
+      cover: (t) => studioSfx.wrapClose(0, t.rate),
+      swap: (t) => { studioSfx.wrapOpen(0, t.rate); studioSfx.menuEnter(0, nextPlan); },
     });
     if (!timing) return;
     setQuestLeaving(true);
     studioSfx.achExit(0);
-    studioSfx.wrapClose(timing.lead / 1000, timing.rate);
-    studioSfx.wrapOpen(timing.swapAt / 1000, timing.rate);
-    studioSfx.menuEnter(timing.swapAt / 1000, nextPlan);
   };
 
   const openLeaderboardPage = () => {
-    const timing = beginMenuPageTransition('podium', 'PERINGKAT', menuPageLead(), () => setLeaderboardOpen(true), 'ranks');
+    const timing = beginMenuPageTransition('podium', 'PERINGKAT', menuPageLead(), () => setLeaderboardOpen(true), 'ranks', {
+      cover: (t) => studioSfx.podiumClose(0, t.rate),
+      swap: (t) => { studioSfx.podiumOpen(0, t.rate); studioSfx.lbEnter(0, LB_IN); },
+    });
     if (!timing) return;
     setLeaderboardLeaving(false);
     studioSfx.menuExit('ranks', 0, { ...menuPlanRef.current, k: menuPlanRef.current.k * 0.6 });
-    studioSfx.podiumClose(timing.lead / 1000, timing.rate);
-    studioSfx.podiumOpen(timing.swapAt / 1000, timing.rate);
-    studioSfx.lbEnter(timing.swapAt / 1000, LB_IN);
   };
 
   const closeLeaderboardPage = () => {
@@ -1209,13 +1366,13 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       setLeaderboardLeaving(false);
       setMenuPlan(nextPlan);
       setMenuReturnKey((key) => key + 1);
+    }, null, {
+      cover: (t) => studioSfx.podiumClose(0, t.rate),
+      swap: (t) => { studioSfx.podiumOpen(0, t.rate); studioSfx.menuEnter(0, nextPlan); },
     });
     if (!timing) return;
     setLeaderboardLeaving(true);
     studioSfx.lbExit(0);
-    studioSfx.podiumClose(timing.lead / 1000, timing.rate);
-    studioSfx.podiumOpen(timing.swapAt / 1000, timing.rate);
-    studioSfx.menuEnter(timing.swapAt / 1000, nextPlan);
   };
 
   const openSettingsPage = () => {
@@ -1368,16 +1525,39 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       setMenuPlan(nextPlan);
       setMenuReturnKey((key) => key + 1);
       setScreen('menu');
+    }, null, {
+      cover: () => studioSfx.whoosh(0, 0.3, 2400, 400, 0.1),
+      swap: () => studioSfx.menuEnter(0, nextPlan),
     });
     if (!timing) return;
     studioSfx.playExit(0);
-    studioSfx.whoosh(timing.lead / 1000, 0.3, 2400, 400, 0.1);
-    studioSfx.menuEnter(timing.swapAt / 1000, nextPlan);
     saveQuests(questStateRef.current, true);
   };
 
   const chooseMenuTheme = (theme: MenuEnvironmentTheme) => {
     setMenuTheme(theme);
+  };
+
+  /**
+   * Menu preset controls (speed + weapon style) resolve a fresh plan and replay
+   * the entrance immediately — the exact same plan object the right-hand game
+   * publishes, so both menus can never drift apart in pacing.
+   */
+  const replayMenuWithPlan = (next?: Plan) => {
+    const plan = next ?? resolvePlan(animStore.get(), menuPlanRef.current);
+    publishMenuPlan(plan);
+    setMenuPlan(plan);
+    // The remount below is what starts the entrance — its sound rides it.
+    menuEntranceAudioRef.current = plan;
+    setMenuReturnKey((key) => key + 1);
+  };
+  const chooseAnimSpeed = (speed: number) => {
+    animStore.setSpeed(speed);
+    replayMenuWithPlan();
+  };
+  const chooseGunPreset = (style: StyleId) => {
+    animStore.setGroup('gun', { mode: 'fixed', style });
+    replayMenuWithPlan();
   };
   const ownedWeaponCount = ownedWeaponIds().length;
   const readyQuestRewardCount = QUESTS.filter((quest) =>
@@ -1435,6 +1615,22 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
         }
       }}
     >
+      {wheelArtJobs.length > 0 && (
+        <WheelArtBridge
+          key={wheelArtJobs[0].key}
+          kind={wheelArtJobs[0].kind}
+          icon={wheelArtJobs[0].icon}
+          head={wheelArtJobs[0].head}
+          onReady={(_kind, image, markup) => {
+            const job = wheelArtJobs[0];
+            if (!job) return;
+            wheelArtCache.current.set(job.key, image);
+            wheelSvgCache.current.set(job.key, markup);
+            gameRef.current?.setWheelArt(job.key, image, markup);
+            setWheelArtJobs((jobs) => (jobs[0]?.key === job.key ? jobs.slice(1) : jobs));
+          }}
+        />
+      )}
       {onExit && (
         <button
           onClick={onExit}
@@ -1559,7 +1755,15 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
           <div key={menuReturnKey} className={`gunhit-menu absolute inset-0 z-20 overflow-hidden text-white isolate ${active && introReady ? '' : 'slide-paused'} ${menuReady && introReady && !menuDeparture && !settingsOpen ? '' : 'pointer-events-none'} ${playMenuExiting && !menuDeparture ? 'sga-play-exit' : ''}`} data-menu-theme={menuTheme}>
             {/* Preserve the existing SGA menu world, stars, particles and theme lighting. */}
             <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden" aria-hidden="true">
-              <MenuEnvironment theme={menuTheme} />
+              {/* The menu world exits with the same zoom/blur dip as the reference
+                  game, then re-enters when the menu is remounted after a page. */}
+              <div
+                {...(menuDeparture === 'play'
+                  ? { className: 'absolute inset-0', style: {} as CSSProperties }
+                  : planMotion('in-bg', 0, 1100, 'absolute inset-0', undefined, 'out-bg', 120, 700))}
+              >
+                <MenuEnvironment theme={menuTheme} />
+              </div>
               <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_46%,rgba(125,211,252,.08),transparent_68%)]" />
               <div className="absolute inset-0 opacity-60">
                 <Dust count={14} />
@@ -1569,7 +1773,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
               <div className="pointer-events-none absolute inset-0" style={{ background: 'linear-gradient(180deg, rgba(3,7,10,.42) 0%, rgba(3,7,10,.12) 13%, transparent 28%, transparent 76%, rgba(1,5,8,.54) 100%), radial-gradient(ellipse at 50% 46%, transparent 52%, rgba(0,0,0,.24) 100%)' }} />
             </div>
 
-            <div {...planMotion('in-shake', 800 + 560 * 0.78, 380, 'absolute inset-0', undefined, 'out-fade', 0, 220)}>
+            <div {...planMotion('in-shake', 800 + 560 * 0.78, 380, 'absolute inset-0', undefined, '', 0, 0)}>
               <div className="relative flex h-full flex-col">
               {/* SGA coin and diamond artwork stays intact, positioned like Perfect Shot's HUD. */}
               <div className="relative z-10 flex shrink-0 items-center justify-end gap-3 px-5 pt-4">
@@ -1620,23 +1824,19 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                 </div>
               </div>
 
-              {/* Rays are in the same float/rotation frame as the rendered weapon, so their pivot cannot drift. */}
+              {/* Weapon showcase. The light behind the weapon is Gun Hit's own
+                  sunburst (`SunburstFX`, the amber-ray burst this menu has
+                  always used), never the reference menu's conic ray disc. */}
               <div className="relative flex min-h-0 flex-1 items-center justify-center">
                 <div {...(menuDeparture === 'play'
                   ? { className: 'relative z-10 h-[min(295px,54vh)] w-[min(337px,90vw)] max-w-full opacity-0', style: {} as CSSProperties }
                   : planStyleMotion(menuPlan.gun, gunTiming(menuPlan.gun), ['in-gun', 'out-spin'], 'relative z-10 h-[min(295px,54vh)] w-[min(337px,90vw)] max-w-full', 1))}>
-                  <div className="shadow-pulse absolute bottom-[12%] left-1/2 h-8 w-40 -translate-x-1/2 rounded-[50%] bg-black/60 blur-sm" />
-                  {!menuDeparture && <div className="mm-pedestal pointer-events-none absolute bottom-[7%] left-1/2 h-12 w-56 -translate-x-1/2" style={{ animationDelay: `${3400 * menuPlan.k}ms` }}>
-                    <span className="absolute inset-0 rounded-[50%] border-2 border-[#a5f3fc]/60 shadow-[0_0_18px_rgba(165,243,252,.55),inset_0_0_14px_rgba(165,243,252,.35)]" />
-                    <svg viewBox="0 0 224 48" className="absolute inset-0 h-full w-full overflow-visible">
-                      <ellipse cx="112" cy="24" rx="96" ry="18" fill="none" stroke="rgba(255,255,255,.4)" strokeWidth="2" strokeDasharray="8 10" className="mm-dash" />
-                      <circle r="4" fill="#fff" style={{ filter: 'drop-shadow(0 0 5px rgba(165,243,252,1))' }}><animateMotion dur="5s" repeatCount="indefinite" path="M224 24 A112 24 0 1 1 0 24 A112 24 0 1 1 224 24" /></circle>
-                    </svg>
-                  </div>}
+                  {/* No ring or shadow on the floor: the weapon stands on the
+                      light of the sunburst alone. */}
                   {!menuDeparture && [18, 42, 64, 82].map((x, i) => <span key={x} className="mm-mote pointer-events-none absolute bottom-[14%] h-1.5 w-1.5 rounded-full bg-[#e0fbff]" style={{ left: `${x}%`, animationDelay: `${(3400 + i * 700) * menuPlan.k}ms` }} />)}
                   <div className="float relative h-full w-full" data-menu-gun>
                     <div ref={weaponPivotRef} className="pointer-events-none absolute inset-0" aria-hidden="true">
-                      <SunburstFX size={390} color={gunSunburstColor(getWeapon(weapon).rarity)} intensity={0.16} speed={24 / gameSpeed} core={false} stars={false} style={{ left: 'calc(50% + var(--weapon-pivot-x, 0px))', top: 'calc(50% + var(--weapon-pivot-y, 0px))' }} />
+                      <SunburstFX size={430} color={gunSunburstColor(getWeapon(weapon).rarity)} intensity={0.44} speed={32} core={false} stars={false} style={{ left: 'calc(50% + var(--weapon-pivot-x, 0px))', top: 'calc(50% + var(--weapon-pivot-y, 0px))' }} />
                       {!menuDeparture && menuPlan.gun === 'combo' && (
                         <div
                           aria-hidden="true"
@@ -1644,7 +1844,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                           style={{
                             left: 'calc(50% + var(--weapon-pivot-x, 0px))',
                             top: 'calc(50% + var(--weapon-pivot-y, 0px))',
-                            '--pop-delay': `${(gunTiming('combo').inD + gunTiming('combo').inDur * 0.74) * menuPlan.k}ms`,
+                            '--pop-delay': `${(gunTiming('combo').inD + gunTiming('combo').inDur * 0.48) * menuPlan.k}ms`,
                             '--pop-dur': `${gunTiming('combo').inDur * 0.26 * menuPlan.k}ms`,
                           } as CSSProperties}
                         >
@@ -1653,12 +1853,6 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                           ))}
                         </div>
                       )}
-                      <div className="absolute left-1/2 top-1/2 h-[min(300px,64vw)] w-[min(300px,64vw)] -translate-x-1/2 -translate-y-1/2" style={{ left: 'calc(50% + var(--weapon-pivot-x, 0px))', top: 'calc(50% + var(--weapon-pivot-y, 0px))' }}>
-                        {/* Centering stays on the static anchor; raysDrop animates only the inner layer. */}
-                        <div {...planMotion('rays-drop', WHEEL.d, WHEEL.dur, 'h-full w-full', undefined, 'out-rays', 100, 500)}>
-                          <div className="spin-slow h-full w-full rounded-full" style={{ background: 'repeating-conic-gradient(from 0deg,rgba(200,240,240,.13) 0deg 7deg,transparent 7deg 22deg)', WebkitMask: 'radial-gradient(circle,#000 0%,rgba(0,0,0,.6) 35%,transparent 70%)', mask: 'radial-gradient(circle,#000 0%,rgba(0,0,0,.6) 35%,transparent 70%)' }} />
-                        </div>
-                      </div>
                     </div>
                     <canvas ref={previewCanvasRef} style={{ width: 'min(337px, 90vw)', height: 'min(295px, 54vh)' }} className="block cursor-pointer drop-shadow-[0_10px_20px_rgba(0,0,0,.5)] transition-transform hover:scale-105" role="button" tabIndex={0} aria-label="Buka koleksi senjata" onClick={() => startArsenalTransition(true)} onKeyDown={(event) => {
                       if (event.key === 'Enter' || event.key === ' ') {
@@ -1743,6 +1937,12 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
             onVolume={changeSoundVolume}
             onSpeed={setGameSpeed}
             onTheme={chooseMenuTheme}
+            animSpeed={psAnimationConfig.speed}
+            animGunStyle={psAnimationConfig.groups.gun.style}
+            animSpeeds={SPEEDS}
+            animStyles={STYLES}
+            onAnimSpeed={chooseAnimSpeed}
+            onAnimGunStyle={chooseGunPreset}
             onReplayIntro={() => {
               if (!muted) {
                 juicyAudio.enabled = true;
@@ -1761,9 +1961,24 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
           <PerfectShotQuestMap
             leaving={mapLeaving}
             progress={{ stage: Math.max(1, Math.min(GUN_HIT_MAP_MAX_LEVEL, bestLevel)), stages: SGA_QUEST_STAGES }}
+            unlockAll={allStagesOpen}
             onBack={closeLevelMap}
             onPlay={(_event, level) => beginStage(level)}
           />
+        )}
+
+        {screen === 'menu' && (mapOpen || questOpen) && (
+          <>
+            <div className="pointer-events-none absolute bottom-2 left-1/2 z-[70] -translate-x-1/2 whitespace-nowrap rounded-full border border-white/25 bg-black/55 px-3 py-1 text-[10px] font-black tracking-wide text-white/80 backdrop-blur-[2px]">
+              {allStagesOpen ? '🔓 SEMUA STAGE TERBUKA' : '🔒 PROGRES NORMAL'} · tekan <span className="mx-0.5 rounded bg-white/20 px-1">P</span>
+              {allStagesOpen ? ' untuk normal' : ' untuk buka semua'}
+            </div>
+            {unlockToast && (
+              <div key={unlockToast} className="pointer-events-none pop-in absolute left-1/2 top-[16%] z-[70] -translate-x-1/2 whitespace-nowrap rounded-xl border border-amber-200/40 bg-[#1a1206]/90 px-4 py-2 text-[12px] font-black text-amber-100 shadow-[0_10px_30px_rgba(0,0,0,.5)]">
+                {unlockToast}
+              </div>
+            )}
+          </>
         )}
 
         {/* Modals */}
@@ -1939,6 +2154,24 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
           />
         )}
 
+        {/* Kado peti milestone di halaman reward: adegan buka kado yang sama
+            dengan stage bonus boss, bukan peti yang langsung berubah sendiri. */}
+        {milestoneGift && (() => {
+          const rewardWeapon = milestoneGift.weaponId ? getWeapon(milestoneGift.weaponId) : null;
+          return (
+            <GiftBoxScene
+              badge="★ REWARD MILESTONE ★"
+              headline={`MILESTONE ${milestoneGift.count}!`}
+              hint="🎁 Peti hadiah milestone siap dibuka!"
+              weapon={rewardWeapon ?? undefined}
+              coins={milestoneGift.coins}
+              claimLabel={rewardWeapon ? 'PAKAI & LANJUT ➜' : 'AMBIL HADIAH ➜'}
+              declineLabel={rewardWeapon ? 'Lanjut tanpa ganti senjata' : undefined}
+              onClaim={(equip) => takeMilestoneGift(equip)}
+            />
+          );
+        })()}
+
         {screen === 'menu' && leaderboardOpen && (
           <PerfectShotLeaderboard
             leaving={leaderboardLeaving}
@@ -2051,7 +2284,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
           />
         )}
         {playTransition && (
-          <TransitionOverlay phase={playTransition.phase} origin={playTransition.origin} label={playTransition.label} variant="scope" />
+          <TransitionOverlay phase={playTransition.phase} origin={playTransition.origin} label={playTransition.label} variant="scope" lens={playTransition.lens} />
         )}
         {weaponFlight && <SgaWeaponFlight key={weaponFlight.id} flight={weaponFlight} />}
       </div>

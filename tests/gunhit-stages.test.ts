@@ -31,13 +31,28 @@ test('boss cycles contain three normal stages, one random special, then the boss
 
 test('pre-placed rusty bullet obstacles on the stage board are enlarged 2x', () => {
   const game = Object.create(Game.prototype) as Game & { items: { type: string; scale?: number }[] };
-  Object.assign(game, { level: makeLevel(10), items: [] });
+  Object.assign(game, { level: makeLevel(7), items: [] });
+  assert.equal((game.level as { boss: boolean }).boss, false, 'a plain stage still uses rusty bullets');
   const placeObstacles = (game as unknown as { placeObstacles(): void }).placeObstacles;
   placeObstacles.call(game);
   const rustyBullets = (game as unknown as { items: { type: string; scale?: number }[] }).items
     .filter(item => item.type === 'old');
   assert.ok(rustyBullets.length > 0);
   assert.ok(rustyBullets.every(item => item.scale === 2));
+});
+
+test('a boss stage buries Perfect Shot knives instead of rusty bullets', () => {
+  const game = Object.create(Game.prototype) as Game & { items: { type: string; knife?: number; tilt?: number; scale?: number }[] };
+  Object.assign(game, { level: makeLevel(20), items: [] });
+  const placeObstacles = (game as unknown as { placeObstacles(): void }).placeObstacles;
+  placeObstacles.call(game);
+  const knives = (game as unknown as { items: { type: string; knife?: number; tilt?: number; scale?: number }[] }).items
+    .filter(item => item.type === 'old');
+  assert.equal(knives.length, (game.level as { old: number }).old, 'one knife per Game B obstacle');
+  assert.ok(knives.every((item) => item.knife !== undefined), 'every obstacle is a knife variant');
+  assert.ok(knives.every((item) => Math.abs(item.tilt ?? 0) <= 6), 'each knife leans up to 6 degrees');
+  assert.equal((game as unknown as { items: { type: string }[] }).items.filter((i) => i.type === 'spike').length, 0,
+    'no Game A spikes on a boss');
 });
 
 test('Diamond Breaker rock has individually breakable chunks and a protected diamond core', () => {

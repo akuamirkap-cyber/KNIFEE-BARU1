@@ -172,6 +172,7 @@ interface WhiteSunburstSprites {
 }
 
 let whiteSunburstCache: WhiteSunburstSprites | null | undefined;
+const rayLayerCache = new Map<string, WhiteSunburstSprites | null>();
 
 function buildWhiteRayLayer(
   size: number,
@@ -179,6 +180,7 @@ function buildWhiteRayLayer(
   halfAngleFactor: number,
   rayAlpha: number,
   withHalo: boolean,
+  rgb = '255,255,255',
 ): HTMLCanvasElement | null {
   const cv = document.createElement('canvas');
   if (!(cv instanceof HTMLCanvasElement)) return null;
@@ -193,17 +195,17 @@ function buildWhiteRayLayer(
 
   if (withHalo) {
     const halo = g.createRadialGradient(0, 0, half * 0.08, 0, 0, half * 0.94);
-    halo.addColorStop(0, 'rgba(255,255,255,0.52)');
-    halo.addColorStop(0.42, 'rgba(255,255,255,0.22)');
-    halo.addColorStop(0.76, 'rgba(255,255,255,0.06)');
-    halo.addColorStop(1, 'rgba(255,255,255,0)');
+    halo.addColorStop(0, `rgba(${rgb},0.52)`);
+    halo.addColorStop(0.42, `rgba(${rgb},0.22)`);
+    halo.addColorStop(0.76, `rgba(${rgb},0.06)`);
+    halo.addColorStop(1, `rgba(${rgb},0)`);
     g.fillStyle = halo;
     g.beginPath();
     g.arc(0, 0, half * 0.94, 0, tau);
     g.fill();
   }
 
-  g.fillStyle = `rgba(255,255,255,${rayAlpha})`;
+  g.fillStyle = `rgba(${rgb},${rayAlpha})`;
   const step = tau / rayCount;
   const halfW = step * halfAngleFactor;
   g.beginPath();
@@ -243,6 +245,23 @@ function getWhiteSunburstSprites(): WhiteSunburstSprites | null {
   return whiteSunburstCache;
 }
 
+/** The same two-ray-layer sunburst, baked in one stage colour. */
+function getSunburstSprites(rgb: string): WhiteSunburstSprites | null {
+  if (rgb === '255,255,255') return getWhiteSunburstSprites();
+  const hit = rayLayerCache.get(rgb);
+  if (hit !== undefined) return hit;
+  if (typeof document === 'undefined' || typeof HTMLCanvasElement === 'undefined') {
+    rayLayerCache.set(rgb, null);
+    return null;
+  }
+  const primary = buildWhiteRayLayer(288, 16, 0.24, 0.44, true, rgb);
+  const secondary = buildWhiteRayLayer(288, 12, 0.16, 0.26, false, rgb);
+  const made = primary && secondary ? { primary, secondary } : null;
+  if (rayLayerCache.size > 32) rayLayerCache.clear();
+  rayLayerCache.set(rgb, made);
+  return made;
+}
+
 /**
  * Pure white FX-Lab sunburst rendered STRICTLY BEHIND the wheel on `<canvas>`
  * (2 cached `drawImage` calls, zero per-frame gradients, zero DOM overlays).
@@ -254,9 +273,10 @@ export function drawBehindWheelSunburst(
   outerRadius: number,
   time: number,
   intensity = 1,
+  rgb = '255,255,255',
 ) {
   if (outerRadius <= 0 || intensity <= 0.005) return;
-  const sprites = getWhiteSunburstSprites();
+  const sprites = getSunburstSprites(rgb);
   const alpha = Math.min(1, intensity);
 
   c.save();
@@ -277,8 +297,8 @@ export function drawBehindWheelSunburst(
   } else {
     // Headless Node fallback when HTMLCanvasElement is shimmed
     const g = c.createRadialGradient(0, 0, outerRadius * 0.1, 0, 0, outerRadius);
-    g.addColorStop(0, `rgba(255,255,255,${0.42 * alpha})`);
-    g.addColorStop(1, 'rgba(255,255,255,0)');
+    g.addColorStop(0, `rgba(${rgb},${0.42 * alpha})`);
+    g.addColorStop(1, `rgba(${rgb},0)`);
     c.fillStyle = g;
     c.beginPath();
     c.arc(0, 0, outerRadius, 0, Math.PI * 2);

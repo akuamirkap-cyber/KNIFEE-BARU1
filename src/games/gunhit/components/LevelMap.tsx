@@ -7,6 +7,7 @@ import {
   getGunHitMapNodeTheme,
   getGunHitMapStage,
 } from '../game/stageMap';
+import { headInfoFor } from '../game/bossIdentity';
 
 const MAP_X = [50, 31, 19, 32, 50, 69, 81, 68];
 const MAP_GAP = 96;
@@ -183,6 +184,9 @@ export default function LevelMap({
               const theme = getGunHitMapNodeTheme(selectedLevel);
               const meta = MAP_STAGE[kind];
               const boss = kind === 'boss' ? getBossDef(getGunHitMapBoss(selectedLevel)) : null;
+              // The boss the stage actually fires at, named after the head art it
+              // wears — the map keeps its own theme name, the fight keeps its art.
+              const artBoss = kind === 'boss' ? headInfoFor(selectedLevel)?.name ?? '' : '';
               const locked = selectedLevel > highestUnlocked;
               return <>
                 <div className="flex items-start justify-between gap-3">
@@ -195,7 +199,7 @@ export default function LevelMap({
                 </div>
                 <p className="mt-3 text-[12px] leading-relaxed text-white/65">
                   {kind === 'boss'
-                    ? `${boss?.title} · Nama boss peta: ${theme.label}. Pertarungan tetap memakai sistem boss SGA.`
+                    ? `BOSS ${artBoss || theme.label}${artBoss && artBoss !== theme.label ? ` (ikon peta: ${theme.label})` : ''}. Pertarungan tetap memakai sistem boss SGA.`
                     : kind === 'special'
                       ? 'Stage spesial SGA: sistem tetap memilih Batu, Bonus, atau Harta Karun sesuai aturan stage yang sudah ada.'
                       : `Tema ikon peta: ${theme.label}. Musuh dan aturan stage tetap memakai sistem SGA.`}

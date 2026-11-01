@@ -144,7 +144,9 @@ export function getExactBossRadius(type: BossType, localAngle: number, targetRad
   const TAU = Math.PI * 2;
   const normA = ((localAngle % TAU) + TAU) % TAU;
   const deg = Math.floor((normA * 180) / Math.PI) % 360;
-  // Scaled accurately to the character head size
+  // Scaled accurately to the character head size. The floor only guards
+  // against a degenerate 0-length ray; it must never pad the contour back out
+  // towards a circle (the reference game uses 0.3 the same way).
   const scale = targetRadius * 1.05;
-  return Math.max(targetRadius * 0.65, asset.radii[deg] * scale);
+  return Math.max(targetRadius * 0.3, asset.radii[deg] * scale);
 }

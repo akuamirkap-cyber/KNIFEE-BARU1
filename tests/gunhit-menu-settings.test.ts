@@ -12,24 +12,23 @@ test('Vortex ring, combo ghost, and combo glow are disabled in both SGA and Perf
   assert.doesNotMatch(perfectShotMenu, /combo-ghost|combo-glow/);
   assert.match(perfectShotCss, /\.st-in-combo::before \{ content: none !important; animation: none !important; \}/);
   assert.doesNotMatch(perfectShotCss, /@keyframes comboVortex2|@keyframes comboGlow|@keyframes comboGhost/);
-  assert.match(app, /SunburstFX size=\{390\}/, 'the separate rarity Sunburst stays in SGA');
+  assert.match(app, /SunburstFX size=\{430\}/, 'the separate rarity Sunburst stays in SGA');
 });
-test('menu rays share the weapon frame pivot and keep centering separate from the animated transform', () => {
+test('menu keeps Gun Hit\'s own sunburst in the weapon pivot layer', () => {
   const menuStart = app.indexOf('MAIN MENU: EXACT MATCHING SCREENSHOT');
-  const gunFrame = app.indexOf("planStyleMotion(menuPlan.gun", menuStart);
-  const raysStart = app.indexOf("planMotion('rays-drop', WHEEL.d, WHEEL.dur", menuStart);
-  const raysAnchor = app.lastIndexOf('className="absolute left-1/2 top-1/2 h-[min(300px,64vw)]', raysStart);
+  const showcase = app.indexOf('Weapon showcase', menuStart);
+  const gunFrame = app.indexOf("planStyleMotion(menuPlan.gun", showcase);
   assert.notEqual(menuStart, -1);
+  assert.notEqual(showcase, -1);
   assert.notEqual(gunFrame, -1);
-  assert.notEqual(raysStart, -1);
-  assert.ok(gunFrame < raysAnchor && raysAnchor < raysStart, 'the light is anchored inside the animated weapon frame');
-  assert.match(app.slice(raysAnchor, raysStart), /-translate-x-1\/2 -translate-y-1\/2/);
-  assert.match(app.slice(raysStart, raysStart + 110), /'h-full w-full'/);
+  // Gun Hit's own ray burst, not the reference menu's conic disc.
+  assert.doesNotMatch(app.slice(showcase, showcase + 2600), /rays-drop/);
+  assert.doesNotMatch(app.slice(showcase, showcase + 2600), /rays-shock/);
   assert.match(app, /className="float relative h-full w-full" data-menu-gun/);
   assert.match(app, /ctx\.getImageData\(0, 0, cv\.width, cv\.height\)/);
   assert.match(app, /--weapon-pivot-x/);
   assert.match(app, /ref=\{weaponPivotRef\} className="pointer-events-none absolute inset-0"/);
-  assert.match(app, /SunburstFX size=\{390\}[^>]*core=\{false\}/);
+  assert.match(app, /SunburstFX size=\{430\}[^>]*intensity=\{0\.44\}[^>]*core=\{false\}/);
 });
 
 test('Gun Hit menu uses PERFECT SHOT branding and keeps special-stage picks in Settings', () => {
@@ -71,7 +70,7 @@ test('Gun Hit menu uses PERFECT SHOT branding and keeps special-stage picks in S
   assert.match(faces, /bgTop: '#1b4d59', bgBot: '#153743'/);
   assert.match(game, /lowerShade\.addColorStop\(0\.58, 'rgba\(2, 10, 18, 0\.045\)'\)/);
   assert.match(game, /lowerShade\.addColorStop\(1, 'rgba\(2, 10, 18, 0\.12\)'\)/);
-  assert.match(app, /SunburstFX size=\{390\} color=\{gunSunburstColor\(getWeapon\(weapon\)\.rarity\)\} intensity=\{0\.16\}[^>]*core=\{false\}/);
+  assert.match(app, /SunburstFX size=\{430\} color=\{gunSunburstColor\(getWeapon\(weapon\)\.rarity\)\} intensity=\{0\.44\}[^>]*core=\{false\}/);
   const coinSprite = readFileSync(path.join(process.cwd(), 'src/games/shared/CoinSprite.tsx'), 'utf8');
   assert.match(coinSprite, /0\.68 \+ Math\.abs\(Math\.cos/);
   assert.match(coinSprite, /false, false/);
@@ -82,15 +81,15 @@ test('SGA uses Perfect Shot UI, page-transition and ambient audio with a separat
   assert.match(app, /from '\.\.\/perfect-shot\/audio\/useSound'/);
   assert.match(app, /studioSfx\.hover\(\)/);
   assert.match(app, /studioSfx\.tap\(\)/);
-  assert.match(app, /studioSfx\.menuEnter\(0\.03, nextPlan\)/);
+  assert.match(app, /menuEntranceAudioRef\.current = nextPlan;/);
   assert.match(app, /getSharedMenuPlan\(\) \?\? resolvePlan\(psAnimationConfig\)/);
   assert.match(app, /const freshMenuPlan = \(\) => getSharedMenuPlan\(\) \?\? resolvePlan\(animStore\.get\(\), menuPlanRef\.current\)/);
   assert.match(app, /studioSfx\.shutterClose\(/);
   assert.match(app, /studioSfx\.shutterOpen\(/);
   assert.match(app, /studioSfx\.menuExit\('play'/);
-  assert.match(app, /studioSfx\.playEnter\(mountAt \/ 1000, PLAY_IN, stageConfig\.boss, stageConfig\.ammo/);
-  assert.match(app, /studioSfx\.scopeAim\(lead \/ 1000\)/);
-  assert.match(app, /studioSfx\.scopeOpen\(revealAt \/ 1000\)/);
+  assert.match(app, /studioSfx\.playEnter\(0, PLAY_IN, stageConfig\.boss, stageConfig\.ammo/);
+  assert.match(app, /afterPaint\(\(\) => studioSfx\.scopeAim\(0\)\)/);
+  assert.match(app, /afterPaint\(\(\) => studioSfx\.scopeOpen\(0\)\)/);
   assert.match(app, /variant="scope"/);
   assert.match(app, /captureMenuWeaponFlight/);
   assert.match(app, /const PLAY_SCOPE = \{ menuLead: 180, questLead: 260, otherLead: 460, cover: 620, hold: 600, reveal: 680 \}/);
@@ -102,16 +101,16 @@ test('SGA uses Perfect Shot UI, page-transition and ambient audio with a separat
   assert.match(app, /to: \{ x: gameCenterX - flightMassX, y: gameCenterY - flightMassY, w: toW, h: toH \}/);
   assert.match(app, /<SgaWeaponFlight key=\{weaponFlight\.id\} flight=\{weaponFlight\} \/>/);
   const game = readFileSync(path.join(process.cwd(), 'src/games/gunhit/game/Game.ts'), 'utf8');
-  assert.match(game, /startAtLevel\(level: number, weaponHandoff = false, weaponEntryDelay = 0, synchronizedEntrance = false\)/);
+  assert.match(game, /startAtLevel\(\s*level: number,\s*weaponHandoff = false,/);
   assert.match(app, /studioSfx\.playExit\(0\)/);
-  assert.match(app, /studioSfx\.questEnter\(timing\.swapAt \/ 1000, QUEST_IN\)/);
-  assert.match(app, /studioSfx\.achEnter\(timing\.swapAt \/ 1000, ACH_IN/);
-  assert.match(app, /studioSfx\.lbEnter\(timing\.swapAt \/ 1000, LB_IN\)/);
+  assert.match(app, /studioSfx\.questEnter\(0, QUEST_IN\)/);
+  assert.match(app, /studioSfx\.achEnter\(0, ACH_IN/);
+  assert.match(app, /studioSfx\.lbEnter\(0, LB_IN\)/);
   assert.match(app, /beginMenuPageTransition\('cloud', 'QUEST', menuPageLead\(\)/);
   assert.match(app, /beginMenuPageTransition\('wrap', 'ACHIEVEMENT', menuPageLead\(\)/);
   assert.match(app, /beginMenuPageTransition\('podium', 'PERINGKAT', menuPageLead\(\)/);
-  assert.match(app, /studioSfx\.cloudClose\(timing\.lead \/ 1000, timing\.rate\)/);
-  assert.match(app, /studioSfx\.menuEnter\(timing\.swapAt \/ 1000, nextPlan\)/);
+  assert.match(app, /studioSfx\.cloudClose\(0, t\.rate\)/);
+  assert.match(app, /studioSfx\.menuEnter\(0, nextPlan\)/);
   assert.match(app, /phase=\{menuPageTransition\.phase\}/);
   assert.match(app, /progress=\{\{ stage: Math\.max\(1, Math\.min\(GUN_HIT_MAP_MAX_LEVEL, bestLevel\)\), stages: SGA_QUEST_STAGES \}\}/);
   assert.match(app, /className=\{`gunhit-menu[^`]*\$\{active && introReady \? '' : 'slide-paused'\}[^`]*\$\{menuReady && introReady && !menuDeparture && !settingsOpen \? '' : 'pointer-events-none'\}/);
@@ -125,7 +124,7 @@ test('SGA uses Perfect Shot UI, page-transition and ambient audio with a separat
   assert.match(app, /studioSfx\.lbExit\(0\)/);
   assert.match(app, /studioSfx\.subEnter\(/);
   assert.match(app, /studioSfx\.subExit\(/);
-  assert.match(app, /studioSfx\.shopEnter\(timing\.swapAt \/ 1000, SHOP_IN\)/);
+  assert.match(app, /studioSfx\.shopEnter\(0, SHOP_IN\)/);
   assert.match(app, /studioSfx\.shopExit\(0\)/);
   assert.match(app, /studioSfx\.startMusic\(\)/);
   assert.equal((app.match(/<MusicAmbientControl enabled=\{studioSound\.music\} onToggle=\{toggleBackgroundMusic\} \/>/g) ?? []).length, 1);
@@ -144,12 +143,12 @@ test('SGA uses Perfect Shot quest-map geometry while keeping SGA stage progress 
   assert.match(app, /const menuPageLead = \(\) => Math\.max\(300, 380 \* menuPlanRef\.current\.k\)/);
   assert.match(app, /setMenuPageTransition\(\{ \.\.\.transition, phase: 'cover' \}\)/);
   assert.match(app, /setMenuPageTransition\(\{ \.\.\.transition, phase: 'reveal' \}\)/);
-  assert.match(app, /studioSfx\.questEnter\(timing\.swapAt \/ 1000, QUEST_IN\)/);
-  assert.match(app, /studioSfx\.achEnter\(timing\.swapAt \/ 1000, ACH_IN/);
-  assert.match(app, /studioSfx\.lbEnter\(timing\.swapAt \/ 1000, LB_IN\)/);
+  assert.match(app, /studioSfx\.questEnter\(0, QUEST_IN\)/);
+  assert.match(app, /studioSfx\.achEnter\(0, ACH_IN/);
+  assert.match(app, /studioSfx\.lbEnter\(0, LB_IN\)/);
   assert.match(app, /leaving=\{mapLeaving\}/);
   assert.match(app, /beginMenuPageTransition\('cloud', 'QUEST', QUEST_OUT\.total/);
-  assert.match(app, /studioSfx\.menuEnter\(timing\.swapAt \/ 1000, nextPlan\)/);
+  assert.match(app, /studioSfx\.menuEnter\(0, nextPlan\)/);
   assert.match(app, /beginMenuPageTransition\('wrap', 'ACHIEVEMENT', ACH_OUT\.total/);
   assert.match(app, /beginMenuPageTransition\('podium', 'PERINGKAT', LB_OUT\.total/);
   assert.match(app, /opening \? menuPageLead\(\) : SHOP_OUT\.total/);
@@ -194,7 +193,7 @@ test('menu preview keeps the SGA sunburst and centered canvas inside the Perfect
   const menuStart = app.indexOf("{screen === 'menu' && !mapOpen && !questOpen && !leaderboardOpen");
   const settingsStart = app.indexOf("{screen === 'menu' && settingsOpen && (");
   const previewArea = app.slice(menuStart, settingsStart);
-  assert.match(previewArea, /SunburstFX size=\{390\}[^>]*intensity=\{0\.16\}/);
+  assert.match(previewArea, /SunburstFX size=\{430\}[^>]*intensity=\{0\.44\}/);
   assert.match(previewArea, /w-\[68%\]/);
   assert.match(previewArea, /<canvas ref=\{previewCanvasRef\}/);
   assert.match(previewArea, /width:\s*'min\(337px,\s*90vw\)'/);
@@ -202,7 +201,7 @@ test('menu preview keeps the SGA sunburst and centered canvas inside the Perfect
   assert.match(previewArea, /data-menu-gun/);
   assert.doesNotMatch(previewArea, /translate-x-\[1%\]/);
   assert.match(app, /const previousGunState = \{ \.\.\.gunState \};[\s\S]*?drawGunCentered\(ctx, curW\.id, 0, 0, true, undefined, false\);[\s\S]*?Object\.assign\(gunState, previousGunState\)/);
-  assert.match(app, /intensity=\{0\.16\}/);
+  assert.match(app, /intensity=\{0\.44\}/);
   const motionCss = readFileSync(path.join(process.cwd(), 'src/games/perfect-shot/index.css'), 'utf8');
   assert.match(motionCss, /\.gunhit-menu \.in-gun \{ animation-name: sgaGunIn; \}/);
 });
@@ -231,9 +230,54 @@ test('menu & game theme choices default to forest and expose all SGA background 
   ]) {
     assert.ok(bgThemes.includes(`id: '${theme}'`), `backgroundThemes includes ${theme}`);
   }
-  assert.match(themes, /data-menu-environment="morning"/);
-  assert.match(themes, /data-menu-environment="town"/);
-  assert.match(themes, /data-menu-environment="snow"/);
-  assert.match(themes, /data-menu-environment="skyline"/);
-  assert.match(themes, /data-menu-environment="nebula"/);
+  // The menu scenery is the reference game's backdrop: all twelve designs map
+  // onto its theme ids, so every one of them is available in Game A.
+  const backdrop = readFileSync(path.join(process.cwd(), 'src/games/gunhit/components/MenuBackdrop.tsx'), 'utf8');
+  assert.match(themes, /import MenuBackdrop from '\.\/MenuBackdrop'/);
+  assert.match(backdrop, /data-menu-environment=\{theme\}/);
+  assert.match(backdrop, /import \{ ThemeLayer \} from '\.\.\/\.\.\/perfect-shot\/theme\/Backdrop'/);
+  for (const [sga, id] of [
+    ['forest', 'hutan'],
+    ['morning', 'pagi'],
+    ['town', 'town'],
+    ['snow', 'salju'],
+    ['skyline', 'malam'],
+    ['battlefield', 'perang'],
+    ['mystic', 'mistis'],
+    ['crystal', 'kristal'],
+    ['yoyo_neon', 'neon'],
+    ['royal_vault', 'kubah'],
+    ['cyber_grid', 'cyber'],
+    ['nebula', 'nebula'],
+  ]) {
+    assert.match(backdrop, new RegExp(`${sga}: '${id}'`), `${sga} uses the reference ${id} backdrop`);
+  }
+});
+
+test('page-transition sounds fire with the phase that starts them, not from a clock started at the tap', () => {
+  // A pre-computed `lead`/`swapAt` is measured from the tap, but the page only
+  // mounts (and its CSS animations only start) after React renders and the
+  // browser paints. On a phone that gap put every entrance sound ahead of its
+  // animation: the shutter slam, the hero impact and the stage mount were heard
+  // first and seen late. Phase sounds now ride the phase itself.
+  assert.match(app, /type PhaseAudio = \{ cover\?: \(t: MenuTransitionTiming\) => void; swap\?: \(t: MenuTransitionTiming\) => void \};/);
+  assert.match(app, /const afterPaint = \(fn: \(\) => void\) => \{/);
+  assert.match(app, /if \(audio\.cover\) afterPaint\(\(\) => audio\.cover\?\.\(timing\)\);/);
+  assert.match(app, /if \(audio\.swap\) afterPaint\(\(\) => audio\.swap\?\.\(timing\)\);/);
+  // …and nothing may be scheduled from the tap instant again.
+  assert.doesNotMatch(app, /studioSfx\.\w+\(timing\.(swapAt|lead|finishAt) \/ 1000/);
+  assert.doesNotMatch(app, /studioSfx\.(playEnter|scopeAim|scopeOpen)\((mountAt|revealAt|lead) \/ 1000/);
+});
+
+test('a replayed menu preset starts its entrance sound on the frame the menu replays', () => {
+  // Changing the animation preset remounts the menu, so the CSS entrance only
+  // starts a frame or two after the tap — and later still on a slow phone. The
+  // sound is queued with the replay instead of being scheduled from the tap, so
+  // letters, thuds and the shot stay on the picture.
+  assert.match(app, /const menuEntranceAudioRef = useRef<Plan \| null>\(null\);/);
+  assert.match(app, /menuEntranceAudioRef\.current = plan;\s*\n\s*setMenuReturnKey\(\(key\) => key \+ 1\);/);
+  assert.match(app, /useLayoutEffect\(\(\) => \{[\s\S]{0,500}?afterPaint\(\(\) => studioSfx\.menuEnter\(0, plan\)\);/);
+  assert.match(app, /afterPaint\(\(\) => studioSfx\.menuEnter\(0, nextPlan\)\)/);
+  // Nothing may schedule the entrance from the tap instant again.
+  assert.doesNotMatch(app, /studioSfx\.menuEnter\(0\.03/);
 });

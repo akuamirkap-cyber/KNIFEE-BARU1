@@ -11,6 +11,7 @@ import { Game } from '../../../../games/game-8/src/game/engine';
 import type { Embed, Proj, Weapon, WeaponState } from '../../../../games/game-8/src/game/types';
 import { clamp, drawGlow, rand, TAU } from '../../../../games/game-8/src/game/util';
 import { restElevenState, elevenScale, elevenWeapon, type ElevenId } from './setElevenArt';
+import { withSplinterClip } from './fx';
 
 /** What slide 1 does for slide 11. */
 export interface ElevenHooks {
@@ -1024,16 +1025,31 @@ export class SetElevenFx {
       p.x += p.vx * dt;
       p.y += p.vy * dt;
       if (!p.noCollide && this.wy > 0 && p.vy < 0) {
-        const dx = p.x - this.cx;
-        if (Math.abs(dx) < R) {
-          const sy = this.wy + Math.sqrt(Math.max(0, R * R - dx * dx));
-          if (py >= sy && p.y <= sy) {
-            p.y = sy;
-            p.alive = false;
-            try {
-              p.onHit(g, p.x, sy, p);
-            } catch {
-              /* a weapon's own burst must never break the frame */
+        // A boss is a drawing: the round stops where it meets the artwork, not
+        // where it would meet a circle of radius R.
+        const px0 = p.x - p.vx * dt;
+        const onArt = this.hasArt ? this.segmentHit(px0, py, p.x, p.y) : null;
+        if (onArt) {
+          p.x = onArt.x;
+          p.y = onArt.y;
+          p.alive = false;
+          try {
+            p.onHit(g, onArt.x, onArt.y, p);
+          } catch {
+            /* a weapon's own burst must never break the frame */
+          }
+        } else if (!this.hasArt) {
+          const dx = p.x - this.cx;
+          if (Math.abs(dx) < R) {
+            const sy = this.wy + Math.sqrt(Math.max(0, R * R - dx * dx));
+            if (py >= sy && p.y <= sy) {
+              p.y = sy;
+              p.alive = false;
+              try {
+                p.onHit(g, p.x, sy, p);
+              } catch {
+                /* a weapon's own burst must never break the frame */
+              }
             }
           }
         }
@@ -1069,7 +1085,19 @@ export class SetElevenFx {
       p.x += p.vx * dt;
       p.y += p.vy * dt;
       p.rot += p.vr * dt;
-      if (p.hit && g.active && p.vy < 0) {
+      if (p.hit && g.active && p.vy < 0 && this.hasArt) {
+        const onArt = this.segmentHit(p.x - p.vx * dt, py, p.x, p.y);
+        if (onArt) {
+          p.x = onArt.x;
+          p.y = onArt.y;
+          p.life = 0;
+          try {
+            p.hit(g, p);
+          } catch {
+            /* ignore */
+          }
+        }
+      } else if (p.hit && g.active && p.vy < 0) {
         const dx = p.x - this.cx;
         if (Math.abs(dx) < R * 0.97) {
           const sy = this.wy + Math.sqrt(Math.max(0, R * R - dx * dx));
@@ -1111,12 +1139,38 @@ export class SetElevenFx {
     g.embeds = g.embeds.filter((e) => e.fade >= 0);
   }
 
+  /**
+   * First point of a segment that is on the target's artwork, when the host has
+   * one (a boss). `null` means "not the drawing": the caller falls back to the
+   * wheel's own circle maths for an ordinary wheel.
+   */
+  private segmentHit(x0: number, y0: number, x1: number, y1: number) {
+    const w = this.hooks.wheel() as { ink?: (x: number, y: number) => boolean };
+    if (!w.ink) return null;
+    const len = Math.hypot(x1 - x0, y1 - y0);
+    const steps = Math.max(1, Math.ceil(len / 3));
+    for (let i = 1; i <= steps; i++) {
+      const t = i / steps;
+      const x = x0 + (x1 - x0) * t;
+      const y = y0 + (y1 - y0) * t;
+      if (w.ink(x, y)) return { x, y };
+    }
+    return null;
+  }
+
+  /** Whether the host answers with artwork pixels (a boss stage). */
+  private get hasArt() {
+    return !!(this.hooks.wheel() as { ink?: unknown }).ink;
+  }
+
   private embedFire(e: Embed, dt: number) {
     const g = this.raw;
     if (!g) return;
+    const w = this.hooks.wheel() as { surfacePoint?: (a: number) => { x: number; y: number } };
+    const onArt = w.surfacePoint?.(e.a);
     const an = g.wheel.angle + e.a;
-    const ex = this.cx + Math.cos(an) * this.wheelR;
-    const ey = this.wy + Math.sin(an) * this.wheelR;
+    const ex = onArt ? onArt.x : this.cx + Math.cos(an) * this.wheelR;
+    const ey = onArt ? onArt.y : this.wy + Math.sin(an) * this.wheelR;
     if (e.kind === 'acid') {
       const k = clamp(e.fire / 2.4);
       if (Math.random() < dt * 22 * k) {
@@ -1180,7 +1234,8 @@ export class SetElevenFx {
       ctx.restore();
     }
     try {
-      (g as unknown as { drawParticles(c: CanvasRenderingContext2D): void }).drawParticles(ctx);
+      // Splinters stay on the drawing the round bit into (boss outline).
+      withSplinterClip(ctx, () => (g as unknown as { drawParticles(c: CanvasRenderingContext2D): void }).drawParticles(ctx));
     } catch {
       /* ignore */
     }

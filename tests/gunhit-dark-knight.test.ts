@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { bossFireInterval, bossRiseOffset, bossRotationSpeed, Game, makeLevel, SPIKE_SCALE } from '../src/games/gunhit/game/Game';
+import { bossFireInterval, bossKnifeCount, bossRiseOffset, bossRotationSpeed, bossSpinSpeed, Game, makeLevel, SPIKE_SCALE } from '../src/games/gunhit/game/Game';
 import { getWeapon } from '../src/games/gunhit/game/weapons';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
@@ -12,27 +12,15 @@ test('stage-board spikes on the arena and boss are rendered at twice their base 
   assert.equal(SPIKE_SCALE, 2);
 });
 
-test('boss DARK KNIGHT tampil bersih: tanpa duri jebakan & penghalang (peluru berkarat)', () => {
-  for (const n of [5, 25, 45]) {
+test('setiap boss memakai rintangan Perfect Shot: pisau tertancap, tanpa duri', () => {
+  for (const n of [5, 10, 15, 20, 25, 45]) {
     const level = makeLevel(n);
     assert.equal(level.boss, true, `level ${n} harus boss`);
-    assert.equal(level.style, 'knight', `level ${n} harus boss knight`);
-    assert.equal(level.spikes, 0, `level ${n} knight tanpa duri`);
-    assert.equal(level.old, 0, `level ${n} knight tanpa peluru berkarat penghalang`);
-    // koin tetap ada sebagai hadiah
+    assert.equal(level.spikes, 0, `level ${n} tanpa duri jebakan gaya Game A`);
+    assert.equal(level.old, bossKnifeCount(n), `level ${n} memakai jumlah pisau Game B`);
+    assert.ok(level.old >= 3 && level.old <= 5, 'Game B menanam 3–5 pisau di kepala bos');
     assert.ok(['classic'].includes(level.mode));
   }
-});
-
-test('boss lain tetap memakai duri & penghalang seperti semula', () => {
-  const oni = makeLevel(10);
-  assert.equal(oni.style, 'oni');
-  assert.equal(oni.spikes, 4);
-  assert.equal(oni.old, 3);
-  const pirate = makeLevel(20);
-  assert.equal(pirate.style, 'pirate');
-  assert.equal(pirate.spikes, 5);
-  assert.equal(pirate.old, 5);
 });
 
 test('proyektil bos menghadap arah gerak (ke pemain), tidak berputar', () => {
@@ -50,13 +38,20 @@ test('bos punya pola putaran khas yang terkontrol dan tembakan 1.9x lebih cepat'
     src.includes('this.rot = this.level.boss ? 0 : rand(0, TAU)'),
     'boss harus mulai pada sudut 0 (tegak)'
   );
-  assert.ok(src.includes('bossRotationSpeed(this.level.style as BossType, this.levelTime)'), 'rotation profiles drive each boss');
-  assert.ok(bossRotationSpeed('knight', 1.1) > 3.5, 'Knight lunges faster clockwise (>3.5 rad/s)');
-  assert.ok(bossRotationSpeed('knight', 3.3) < -3.5, 'Knight counter-parries sharply in reverse (<-3.5 rad/s)');
-  assert.ok(bossRotationSpeed('oni', 0.8) < -4.0, 'Oni blitzes aggressively counterclockwise (<-4.0 rad/s)');
-  assert.ok(bossRotationSpeed('oni', 1.9) > 3.0 && bossRotationSpeed('oni', 2.5) < -3.5, 'Oni executes a unique fake-out snap and double-whip');
-  assert.ok(bossRotationSpeed('cyborg', 0.25) > 3.5 && bossRotationSpeed('cyborg', 2.1) < -2.8, 'Cyborg sweeps faster with servo harmonic bursts');
-  assert.ok(bossRotationSpeed('pirate', 0.35) > 3.5 && bossRotationSpeed('pirate', 2.15) < -3.2, 'Pirate swings faster with asymmetric storm-wave momentum');
+  // The boss wheel now runs Perfect Shot's own 6 s cycle, not Game A's old
+  // per-type spin curves: fast spin -> brake -> reverse -> freeze -> jitter.
+  assert.ok(src.includes('bossSpinSpeed(this.level.n, this.levelTime)'), "Perfect Shot's boss rhythm drives the boss wheel");
+  const b20 = (72 + 80) * (Math.PI / 180); // level 20: 72 + min(110, 20*4) deg/s
+  assert.ok(Math.abs(bossSpinSpeed(20, 0) - b20 * 1.25) < 1e-9, 'first 2.1 s: fast spin (x1.25)');
+  assert.ok(Math.abs(bossSpinSpeed(20, 2.3) - b20 * 0.12) < 1e-9, '2.1-2.6 s: the fake brake (x0.12)');
+  assert.ok(Math.abs(bossSpinSpeed(20, 3.0) + b20 * 1.5) < 1e-9, '2.6-4.1 s: reverse burst (x-1.5)');
+  assert.equal(bossSpinSpeed(20, 4.3), 0, '4.1-4.5 s: the wheel freezes dead');
+  assert.ok(bossSpinSpeed(20, 4.8) > 0 && bossSpinSpeed(20, 4.8) < b20 * 1.6, 'then the jitter takes over');
+  assert.ok(bossSpinSpeed(20, 6.0) === bossSpinSpeed(20, 0), 'the cycle repeats every 6 s');
+  // Game A's legacy per-type curves are still exported for the old tests, but
+  // they no longer drive a boss stage.
+  assert.ok(!src.includes('bossRotationSpeed(this.level.style as BossType, this.levelTime)'));
+  assert.ok(typeof bossRotationSpeed('knight', 1.1) === 'number');
   assert.ok(src.includes('const spd = (160 + this.level.n * 3) * 1.9;'), 'peluru boss bergerak 1.9x lebih cepat');
   assert.ok(
     src.includes("if (this.level.mode !== 'treasure') c.rotate(this.rot);"),
@@ -67,9 +62,11 @@ test('bos punya pola putaran khas yang terkontrol dan tembakan 1.9x lebih cepat'
     'bos tidak boleh dikunci diam (this.rot = 0)'
   );
   assert.ok(
-    src.includes('c.translate(Math.sin(bt * 0.53) * 3.2, Math.sin(bt * 1.15) * 3.8);'),
+    src.includes('e: Math.sin(t * 0.53) * 3.2, f: Math.sin(t * 1.15) * 3.8'),
     'bos punya gerak idle melayang (terlihat hidup)'
   );
+  assert.ok(src.includes('private bossDecorMatrix(): BossMat'), 'idle + reaksi bos satu matriks');
+  assert.ok(src.includes("this.setBossMood('laugh', 1.1)"), 'bos ketawa berkala seperti Game B');
 });
 
 // ---------------------------------------------------------------------------
@@ -90,7 +87,7 @@ function recorder(): Recorder {
         return gradient;
       }
       if (name === 'measureText') return { width: 30 };
-      if (['rotate', 'translate', 'scale', 'drawImage', 'setTransform'].includes(name)) {
+      if (['rotate', 'translate', 'scale', 'transform', 'drawImage', 'setTransform'].includes(name)) {
         events.push(`${name}(${args.map((v) => (typeof v === 'number' ? v.toFixed(3) : typeof v)).join(',')})`);
       }
       return undefined;
@@ -183,8 +180,8 @@ test('render: lapisan wajah bos ikut berputar (this.rot sampai ke kanvas) + goya
     `rotasi papan bos harus sampai ke kanvas — bos harus muter (rotate(${ADV}))`
   );
   assert.ok(
-    boss.some((e) => e.startsWith('rotate(') && e !== `rotate(${ADV.toFixed(3)})`),
-    'bos punya goyangan idle tambahan (terlihat hidup)'
+    boss.some((e) => e.startsWith('transform(') && e !== 'transform(1.000,0.000,0.000,1.000,0.000,0.000)'),
+    'bos punya goyangan idle + reaksi tambahan (terlihat hidup)'
   );
   // kontrol: target biasa (non-boss) tetap memutar lapisan target
   const r2 = recorder();

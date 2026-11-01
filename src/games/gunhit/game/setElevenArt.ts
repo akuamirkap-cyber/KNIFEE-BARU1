@@ -310,20 +310,14 @@ export function drawSetElevenGun(
   c.translate(cx, y0);
   c.rotate(-Math.PI / 2);
   // Menu cards let the gun breathe a little. In the game it stands exactly
-  // like slide 11's `render()` stands it — no sway, a soft contact shadow
-  // around the stock — and only its own recoil and animation move it.
+  // like slide 11's `render()` stands it — no sway, no shadow under the stock —
+  // and only its own recoil and animation move it.
   if (!live) {
     c.rotate(Math.sin(time * 1.25 + 0.7) * 0.012);
     c.translate(Math.sin(time * 1.9) * 1.3, 0);
   }
   c.scale(sc, sc);
-  if (live) {
-    const shg = c.createRadialGradient(-w.muzzle, 0, 0, -w.muzzle, 0, 150);
-    shg.addColorStop(0, 'rgba(0,0,0,.45)');
-    shg.addColorStop(1, 'rgba(0,0,0,0)');
-    c.fillStyle = shg;
-    c.fillRect(-w.muzzle - 60, -170, 300, 340);
-  }
+  // No contact shadow under the weapon: the gun stands on its own light.
   // Slide 1 anchors the muzzle, slide 11 anchors the stock: shift along the
   // gun's own axis so the muzzle lands exactly on (cx, y0) and the body hangs
   // below it, which is what every slide-1 weapon does.

@@ -11,7 +11,7 @@ import {
   rollGiftWeapon,
   type Rarity,
 } from '../src/games/gunhit/game/weapons';
-import { BossGiftBoxModal, giftBoxCoins } from '../src/games/gunhit/components/BossGiftBoxModal';
+import { BossGiftBoxModal, GiftBoxScene, giftBoxCoins } from '../src/games/gunhit/components/BossGiftBoxModal';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 
@@ -86,10 +86,32 @@ test('BossGiftBoxModal memakai kotak hadiah & efek Knife, tapi senjata dari data
 
 test('alur boss Gun Hit memakai BossGiftBoxModal sebagai bonus stage', () => {
   const app = readFileSync(path.join(ROOT, 'src/games/gunhit/App.tsx'), 'utf8');
-  assert.match(app, /import \{ BossGiftBoxModal \}/);
+  assert.match(app, /import \{ BossGiftBoxModal, GiftBoxScene \}/);
   assert.match(app, /<BossGiftBoxModal/);
   assert.match(app, /onClaim=\{handleGiftBoxClaim\}/);
   assert.match(app, /setBonusStageOpen\(true\)/);
+});
+
+test('peti milestone di halaman reward membuka kado sungguhan', () => {
+  const app = readFileSync(path.join(ROOT, 'src/games/gunhit/App.tsx'), 'utf8');
+  // Klaim milestone tidak lagi langsung memberi hadiah: ia menyiapkan kado.
+  assert.match(app, /setMilestoneGift\(\{ count, weaponId: reward \? reward\.id : null, coins: reward \? 0 : 1000 \}\)/);
+  // Hadiah baru masuk setelah kado terbuka dan tombol ambil ditekan.
+  assert.match(app, /const takeMilestoneGift = \(equip: boolean\) => \{/);
+  assert.match(app, /onClaim=\{\(equip\) => takeMilestoneGift\(equip\)\}/);
+  assert.match(app, /<GiftBoxScene\s+badge="★ REWARD MILESTONE ★"/);
+});
+
+test('GiftBoxScene memakai adegan buka kado Knife untuk kado mana pun', () => {
+  const src = readFileSync(path.join(ROOT, 'src/games/gunhit/components/BossGiftBoxModal.tsx'), 'utf8');
+  assert.match(src, /export function GiftBoxScene\(/);
+  // Tiga ketukan, tutup terbang, kotak tenggelam, sinar keluar dari kotak.
+  for (const needle of ['lid-fly', 'box-sink', 'beam-up', 'weapon-rise', 'TAP UNTUK MEMBUKA!']) {
+    assert.ok(src.includes(needle), `GiftBoxScene harus memakai ${needle}`);
+  }
+  // Kado koin (milestone saat semua senjata rarity itu sudah dimiliki) tetap punya reveal.
+  assert.match(src, /weapon \? \(/);
+  assert.match(src, /<CoinSprite size=\{132\} \/>/);
 });
 
 
@@ -115,4 +137,51 @@ test('senjata LANGKA butuh kepemilikan pembelian, sementara rarity lain tetap te
   assert.equal(isWeaponUnlocked(rare), false);
   assert.equal(isWeaponUnlocked(rare, [rare.id]), true);
   assert.equal(isWeaponUnlocked(common), true);
+});
+
+test('GiftBoxScene bisa dirender untuk hadiah senjata maupun koin saja', () => {
+  const weapon = WEAPONS.find((w) => w.rarity === 'EPIC') ?? WEAPONS[0];
+  const withWeapon = renderToStaticMarkup(
+    createElement(GiftBoxScene, {
+      badge: '★ REWARD MILESTONE ★',
+      headline: 'MILESTONE 8!',
+      hint: '🎁 Peti hadiah milestone siap dibuka!',
+      weapon,
+      coins: 0,
+      claimLabel: 'PAKAI & LANJUT ➜',
+      declineLabel: 'Lanjut tanpa ganti senjata',
+      onClaim: () => {},
+    }),
+  );
+  assert.match(withWeapon, /REWARD MILESTONE/);
+  assert.match(withWeapon, /Peti hadiah milestone siap dibuka/);
+  assert.match(withWeapon, /drop-in/);
+  assert.match(withWeapon, /viewBox="0 0 200 96"/, 'tutup kado Knife ikut dirender');
+  assert.match(withWeapon, /viewBox="0 0 180 132"/, 'badan kado Knife ikut dirender');
+  // Judul dipecah per huruf oleh LetterPop, jadi yang dicek animasi hurufnya.
+  assert.ok(withWeapon.includes('letter-pop'));
+
+  const coinsOnly = renderToStaticMarkup(
+    createElement(GiftBoxScene, {
+      badge: '★ REWARD MILESTONE ★',
+      headline: 'MILESTONE 20!',
+      hint: '🎁 Peti hadiah milestone siap dibuka!',
+      coins: 1000,
+      claimLabel: 'AMBIL HADIAH ➜',
+      onClaim: () => {},
+    }),
+  );
+  assert.match(coinsOnly, /drop-in/);
+  assert.ok(coinsOnly.includes('letter-pop'));
+  assert.doesNotMatch(coinsOnly, /PAKAI &amp; LANJUT/);
+});
+
+test('kado tetap bisa dibuka dan hadiahnya tetap tergambar saat slide tidak aktif', () => {
+  const src = readFileSync(path.join(ROOT, 'src/games/gunhit/components/BossGiftBoxModal.tsx'), 'utf8');
+  // Kotak yang tampil harus selalu lanjut dari 'drop' ke 'ready' agar bisa ditap.
+  assert.match(src, /if \(state !== 'drop'\) return;/);
+  assert.doesNotMatch(src, /if \(!active \|\| state !== 'drop'\) return;/);
+  // Kanvas reveal menggambar satu frame statis ketika slide tidak aktif.
+  assert.match(src, /if \(!active\) \{\s*paint\(start\);\s*return;\s*\}/);
+  assert.doesNotMatch(src, /if \(!ctx\) return;\n    if \(!active\) return;/);
 });

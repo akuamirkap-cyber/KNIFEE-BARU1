@@ -124,7 +124,7 @@ export default function App() {
           onClick={() => selectGame('sga')}
           className={`rounded-md border px-3 py-1 text-[10px] font-semibold tracking-wide transition-colors ${activeGame === 'sga' ? 'border-sky-500 bg-sky-950 text-sky-200' : 'border-slate-700 bg-[#151922] text-slate-400 hover:text-white'}`}
         >
-          GUN HIT · SGA
+          A · GUNHIT <span className="text-slate-500">SGA</span>
         </button>
         <button
           type="button"
@@ -132,13 +132,13 @@ export default function App() {
           onClick={() => selectGame('perfect-shot')}
           className={`rounded-md border px-3 py-1 text-[10px] font-semibold tracking-wide transition-colors ${activeGame === 'perfect-shot' ? 'border-emerald-500 bg-emerald-950 text-emerald-200' : 'border-slate-700 bg-[#151922] text-slate-400 hover:text-white'}`}
         >
-          PERFECT SHOT
+          B · PERFECT SHOT
         </button>
         <span className="hidden text-[9px] text-slate-500 sm:inline">Geser layar untuk berpindah</span>
       </nav>
 
       <div ref={gameStageRef} onScroll={handleStageScroll} className="game-pair">
-        <section className="game-pane" data-game-pane="sga" aria-label="Gun Hit SGA">
+        <section className="game-pane" data-game-pane="sga" data-game-id="A" data-game-name="GUNHIT" aria-label="Game A - Gun Hit SGA">
           <SlideActivityProvider active={pageVisible && !loading && activeGame === 'sga'}>
             <GameLoadBoundary>
               <ScaledFrame baseWidth={420} baseHeight={760}>
@@ -156,7 +156,7 @@ export default function App() {
           </SlideActivityProvider>
         </section>
 
-        <section className="game-pane" data-game-pane="perfect-shot" aria-label="Perfect Shot">
+        <section className="game-pane" data-game-pane="perfect-shot" data-game-id="B" data-game-name="PERFECT SHOT" aria-label="Game B - Perfect Shot">
           <GameLoadBoundary>
             <ScaledFrame baseWidth={420} baseHeight={760}>
               <div className="relative h-[760px] w-[420px] overflow-hidden">
