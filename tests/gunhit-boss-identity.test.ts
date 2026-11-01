@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { HEAD_INFO } from '../src/games/perfect-shot/play/HeadArt';
+import { HEAD_INFO, HEAD_KINDS } from '../src/games/perfect-shot/play/HeadArt';
 import { levelConfig } from '../src/games/perfect-shot/play/levels';
 import { makeLevel } from '../src/games/gunhit/game/Game';
 import { bossHeadFor, bossNameFor } from '../src/games/gunhit/game/bossIdentity';
@@ -54,4 +54,11 @@ test('the QUEST dialog names the boss after the art too', () => {
   assert.match(map, /const artBoss = kind === 'boss' \? headInfoFor\(selectedLevel\)\?\.name \?\? '' : '';/);
   assert.match(map, /`BOSS \$\{artBoss \|\| theme\.label\}/);
   assert.doesNotMatch(map, /Nama boss peta/);
+});
+
+
+test('the first eleven boss stages use all eleven Game B heads', () => {
+  const heads = Array.from({ length: 11 }, (_, i) => bossHeadFor((i + 1) * 5));
+  assert.deepEqual(heads, HEAD_KINDS);
+  assert.equal(new Set(heads).size, 11);
 });

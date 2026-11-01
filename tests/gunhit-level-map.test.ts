@@ -59,12 +59,12 @@ test('the 20 map cycles use the user-provided icon and boss names exactly', () =
   assert.ok(map.includes('getGunHitMapNodeCaption(level)'));
 });
 
-test('map boss portraits follow the submitted five-boss faction groups while SGA combat roster remains unchanged', () => {
+test('legacy map theme data remains available, while combat styles follow the Game B heads', () => {
   const factions = ['knight', 'oni', 'cyborg', 'pirate'] as const;
   for (let bossNumber = 0; bossNumber < 20; bossNumber++) {
     assert.equal(getGunHitMapBoss((bossNumber + 1) * 5), factions[Math.floor(bossNumber / 5)]);
   }
-  assert.deepEqual([5, 10, 15, 20, 25].map(stage => makeLevel(stage).style), ['knight', 'oni', 'cyborg', 'pirate', 'knight']);
+  assert.deepEqual([5, 10, 15, 20, 25].map(stage => makeLevel(stage).style), ['pirate', 'pirate', 'oni', 'knight', 'oni']);
 });
 
 test('the SGB slide is removed and its map entrance/active-node effects are reused in SGA QUEST', () => {

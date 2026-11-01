@@ -276,7 +276,9 @@ test('a replayed menu preset starts its entrance sound on the frame the menu rep
   // letters, thuds and the shot stay on the picture.
   assert.match(app, /const menuEntranceAudioRef = useRef<Plan \| null>\(null\);/);
   assert.match(app, /menuEntranceAudioRef\.current = plan;\s*\n\s*setMenuReturnKey\(\(key\) => key \+ 1\);/);
-  assert.match(app, /useLayoutEffect\(\(\) => \{[\s\S]{0,500}?afterPaint\(\(\) => studioSfx\.menuEnter\(0, plan\)\);/);
+  assert.match(app, /useLayoutEffect\(\(\) => \{[\s\S]{0,500}?afterPaint\(\(\) => \{ if \(current\) studioSfx\.menuEnter\(0, plan\); \}\);/);
+  assert.match(app, /return \(\) => \{ current = false; \};/);
+  assert.match(app, /studioSfx\.cancelMenuEnter\(\);/);
   assert.match(app, /afterPaint\(\(\) => studioSfx\.menuEnter\(0, nextPlan\)\)/);
   // Nothing may schedule the entrance from the tap instant again.
   assert.doesNotMatch(app, /studioSfx\.menuEnter\(0\.03/);

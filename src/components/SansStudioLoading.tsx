@@ -1,9 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Volume2, VolumeX } from 'lucide-react';
-import { getGunMetrics } from '../games/gunhit/game/art/metrics';
-import { getSavedSgaBgTheme } from '../games/gunhit/game/backgroundThemes';
-import { getSavedSgaSpeed } from '../games/gunhit/game/gameSpeed';
-import { WEAPONS } from '../games/gunhit/game/weapons';
 import { juicyAudio } from '../utils/juicyAudio';
 import {
   DropletTransform,
@@ -54,6 +50,12 @@ export function stepSpring(
     s.vel = (s.vel + force * subDt) * decay;
     s.pos += s.vel * subDt;
   }
+}
+
+/** Keep the intro's timeline in real time without destabilising its springs. */
+export function introFrameDelta(elapsedSeconds: number, speed: number) {
+  const elapsed = Math.max(0, elapsedSeconds);
+  return { timeline: elapsed * speed, physics: Math.min(0.025, elapsed) * speed };
 }
 
 // Exact studio physics & scale parameters from 2d-game-intro-animation (1).zip
@@ -325,44 +327,6 @@ export default function SansStudioLoading({
     startIntro();
   }, [startIntro]);
 
-  // Background progressive warmup: fonts + saved prefs + weapon silhouette metrics
-  // Runs quietly while the 3s SANS STUDIO intro plays so SGA starts with 0ms hitch
-  useEffect(() => {
-    let cancelled = false;
-    const warmup = async () => {
-      try {
-        getSavedSgaSpeed();
-        getSavedSgaBgTheme();
-        if (typeof document !== 'undefined' && document.fonts?.ready) {
-          await Promise.race([
-            document.fonts.ready,
-            new Promise((resolve) => setTimeout(resolve, 450)),
-          ]);
-        }
-      } catch {
-        // Ignore font readiness errors in restricted webviews
-      }
-
-      const warmList = WEAPONS.slice(0, 12);
-      for (let i = 0; i < warmList.length; i++) {
-        if (cancelled) return;
-        try {
-          getGunMetrics(warmList[i].id);
-        } catch {
-          // Ignore metric warmup errors in headless environments
-        }
-        if (i % 4 === 3) {
-          await new Promise((resolve) => setTimeout(resolve, 0));
-        }
-      }
-    };
-
-    void warmup();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   // Unlock Mochi Garden Web Audio on first user gesture (and replay intro from 0s if autoplay was blocked)
   const unlockSound = useCallback(
     (event: React.SyntheticEvent) => {
@@ -489,11 +453,13 @@ export default function SansStudioLoading({
     const groundPivotsX = [208, 396, 588, 768];
 
     const tick = (now: number) => {
-      const rawDt = Math.min(0.025, Math.max(0.001, (now - lastTime) / 1000));
+      // Choreography follows real elapsed time even when a phone drops below
+      // 40 fps; only the spring integrator needs a capped step for stability.
+      const frame = introFrameDelta((now - lastTime) / 1000, speedMultiplier);
       lastTime = now;
-      const dt = rawDt * speedMultiplier;
+      const dt = frame.physics;
 
-      animTimeRef.current += dt;
+      animTimeRef.current += frame.timeline;
       const t = animTimeRef.current;
       const events = triggeredEventsRef.current;
       const j = juiciness;
@@ -1078,6 +1044,21 @@ export default function SansStudioLoading({
       {!stageHidden && (
         <div className="studio-red-stage relative flex h-full w-full items-center justify-center overflow-hidden">
           <div className="relative z-10 flex h-full w-full max-w-[calc(100dvh*9/16)] items-center justify-center">
+            <button
+              type="button"
+              data-ui-control="true"
+              data-audio-toggle="true"
+              onClick={() => {
+                if (completedRef.current) return;
+                completedRef.current = true;
+                cancelDelayedActions();
+                juicyAudio.resetScene();
+                onComplete();
+              }}
+              className="absolute left-3.5 top-3.5 z-20 rounded-full border border-white/25 bg-black/20 px-3 py-1.5 text-[11px] font-semibold text-white"
+            >
+              Lewati intro
+            </button>
             {/* Mochi Garden Sound Toggle Pill (from 2d-game-intro-animation (1).zip) */}
             <div
               data-ui-control="true"

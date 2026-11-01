@@ -1,3 +1,4 @@
+import { traceBossSegment } from './bossRaycast';
 /**
  * Slide-9 (`games/game-6` / `Weapon Lab`) runtime for slide 1.
  *
@@ -205,6 +206,11 @@ export class SetNineFx implements GameAPI {
   hitscan(x: number, y: number, angle: number) {
     const dx = Math.cos(angle);
     const dy = Math.sin(angle);
+    const ink = (this.hooks.wheel() as { ink?: (x: number, y: number) => boolean }).ink;
+    if (ink) {
+      const hit = traceBossSegment(x, y, x + dx * 1600, y + dy * 1600, ink);
+      return hit ? { hit: true, ...hit } : { hit: false, x: x + dx * 1600, y: y + dy * 1600, dist: 1600 };
+    }
     const fx = x - this.cx;
     const fy = y - this.cy;
     const b = 2 * (fx * dx + fy * dy);

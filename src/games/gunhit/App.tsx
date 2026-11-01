@@ -321,6 +321,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
    * The plan waits here instead and is played on the frame the replay paints.
    */
   const menuEntranceAudioRef = useRef<Plan | null>(null);
+  const pendingSettingsPlanRef = useRef<Plan | null>(null);
   const menuPageTransitionTimersRef = useRef<number[]>([]);
   const [playTransition, setPlayTransition] = useState<{ phase: OverlayPhase; label: string; origin: { x: number; y: number }; lens: number } | null>(null);
   const [playMenuExiting, setPlayMenuExiting] = useState(false);
@@ -883,7 +884,9 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     if (!plan) return;
     menuEntranceAudioRef.current = null;
     if (studioSfx.ctx?.state !== 'running') return;
-    afterPaint(() => studioSfx.menuEnter(0, plan));
+    let current = true;
+    afterPaint(() => { if (current) studioSfx.menuEnter(0, plan); });
+    return () => { current = false; };
   }, [menuReturnKey]);
 
   // Match Perfect Shot's input lock during the 1.7s menu arrival sequence.
@@ -1390,6 +1393,15 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     deferPageClose(380, () => {
       setSettingsOpen(false);
       setSettingsClosing(false);
+      // Preset controls are inside an opaque dialog. Start their replay only
+      // after it closes, so its animation and sound are both actually visible.
+      const plan = pendingSettingsPlanRef.current;
+      if (plan) {
+        pendingSettingsPlanRef.current = null;
+        setMenuPlan(plan);
+        menuEntranceAudioRef.current = plan;
+        setMenuReturnKey((key) => key + 1);
+      }
     });
   };
 
@@ -1547,6 +1559,13 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     const plan = next ?? resolvePlan(animStore.get(), menuPlanRef.current);
     publishMenuPlan(plan);
     setMenuPlan(plan);
+    // Stop the previous replay's already-scheduled notes immediately; otherwise
+    // they keep sounding over the new animation when presets change quickly.
+    studioSfx.cancelMenuEnter();
+    if (settingsOpen) {
+      pendingSettingsPlanRef.current = plan;
+      return;
+    }
     // The remount below is what starts the entrance — its sound rides it.
     menuEntranceAudioRef.current = plan;
     setMenuReturnKey((key) => key + 1);
@@ -1949,6 +1968,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                 if (juicyAudio.volume === 0) juicyAudio.volume = 0.7;
                 void juicyAudio.unlock();
               }
+              pendingSettingsPlanRef.current = null;
               closeSettingsPage();
               window.dispatchEvent(new CustomEvent('sans-replay-intro'));
             }}

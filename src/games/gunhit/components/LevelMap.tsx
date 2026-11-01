@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { drawVectorBossHead, getBossDef, type BossType } from '../game/bossRoster';
+import { getBossDef } from '../game/bossRoster';
+import { HeadArt } from '../../perfect-shot/play/HeadArt';
 import {
   GUN_HIT_MAP_MAX_LEVEL,
   getGunHitMapBoss,
@@ -7,7 +8,7 @@ import {
   getGunHitMapNodeTheme,
   getGunHitMapStage,
 } from '../game/stageMap';
-import { headInfoFor } from '../game/bossIdentity';
+import { bossHeadFor, headInfoFor } from '../game/bossIdentity';
 
 const MAP_X = [50, 31, 19, 32, 50, 69, 81, 68];
 const MAP_GAP = 96;
@@ -17,20 +18,9 @@ const MAP_HEIGHT = MAP_TOP + (GUN_HIT_MAP_MAX_LEVEL - 1) * MAP_GAP + MAP_BOTTOM;
 const nodeY = (index: number) => MAP_HEIGHT - MAP_BOTTOM - index * MAP_GAP;
 const nodeX = (index: number) => MAP_X[index % MAP_X.length];
 
-function BossIcon({ type, size = 38 }: { type: BossType; size?: number }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const ctx = canvas?.getContext('2d');
-    if (!canvas || !ctx) return;
-    const dpr = 2;
-    canvas.width = size * dpr;
-    canvas.height = size * dpr;
-    ctx.scale(dpr, dpr);
-    ctx.translate(size / 2, size / 2);
-    drawVectorBossHead(ctx, type, size * 0.38);
-  }, [size, type]);
-  return <canvas ref={canvasRef} className="block" style={{ width: size, height: size }} aria-hidden="true" />;
+function BossIcon({ level, size = 38 }: { level: number; size?: number }) {
+  const head = bossHeadFor(level);
+  return head ? <div style={{ width: size, height: size }} aria-hidden="true"><HeadArt kind={head} className="h-full w-full" /></div> : null;
 }
 
 const MAP_STAGE = {
@@ -160,14 +150,14 @@ export default function LevelMap({
                   <span className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-full border border-white/30" style={{ background: `linear-gradient(180deg,${stageColors[0]},${stageColors[1]})`, borderBottom: '5px solid rgba(0,0,0,.42)', boxShadow: `0 8px 16px rgba(0,0,0,.4), 0 0 13px ${kind === 'boss' ? boss?.glow ?? 'rgba(251,113,133,.4)' : kind === 'special' ? 'rgba(252,211,77,.25)' : 'rgba(52,211,153,.18)'}`, filter: locked ? 'grayscale(.8) brightness(.58)' : undefined }}>
                     <span className="pointer-events-none absolute inset-x-2 top-1 h-2 rounded-full bg-white/40 blur-[1px]" />
                     {kind === 'boss' && bossType ? (
-                      <span className="relative z-10 overflow-hidden rounded-full" style={{ width: size - 12, height: size - 12 }}><BossIcon type={bossType} size={size - 12} /></span>
+                      <span className="relative z-10 overflow-hidden rounded-full" style={{ width: size - 12, height: size - 12 }}><BossIcon level={level} size={size - 12} /></span>
                     ) : <span className={`relative z-10 text-[20px] ${kind === 'special' ? 'tap-hint' : ''}`}>{theme.symbol}</span>}
                     {locked && <span className="absolute -bottom-1 -right-1 z-20 flex h-5 w-5 items-center justify-center rounded-full border border-white bg-slate-900 text-[10px]">🔒</span>}
                     {level < activeLevel && <span className="absolute -right-1 -top-1 z-20 flex h-5 w-5 items-center justify-center rounded-full border border-white bg-emerald-500 text-[10px] font-black">✓</span>}
                   </span>
                 </button>
                 <span className="absolute left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded-md border border-white/25 bg-[#06151ddd] px-1.5 py-px text-[8px] font-black tracking-wide text-white shadow-md" style={{ top: size + 3 }}>
-                  {getGunHitMapNodeCaption(level)}
+                  {kind === 'boss' ? `${headInfoFor(level)?.name.toUpperCase() ?? 'BOSS'} LV${level}` : getGunHitMapNodeCaption(level)}
                 </span>
                 </div>
               </div>
@@ -193,13 +183,13 @@ export default function LevelMap({
                   <div>
                     <p className="text-[10px] font-black tracking-[.24em] text-cyan-100/60">STAGE SGA</p>
                     <h3 id="gunhit-stage-title" className="mt-1 text-2xl font-black leading-none text-white">LEVEL {selectedLevel}</h3>
-                    <p className="mt-2 text-[12px] font-black tracking-[.16em]" style={{ color: meta.color }}>{theme.symbol} {theme.label}</p>
+                    <p className="mt-2 text-[12px] font-black tracking-[.16em]" style={{ color: meta.color }}>{theme.symbol} {kind === 'boss' ? artBoss : theme.label}</p>
                   </div>
-                  {boss ? <div className="rounded-full border border-white/15 bg-black/30 p-1"><BossIcon type={boss.id} size={58} /></div> : <div className="grid h-16 w-16 place-items-center rounded-2xl border border-white/10 bg-black/25 text-4xl">{theme.symbol}</div>}
+                  {boss ? <div className="rounded-full border border-white/15 bg-black/30 p-1"><BossIcon level={selectedLevel} size={58} /></div> : <div className="grid h-16 w-16 place-items-center rounded-2xl border border-white/10 bg-black/25 text-4xl">{theme.symbol}</div>}
                 </div>
                 <p className="mt-3 text-[12px] leading-relaxed text-white/65">
                   {kind === 'boss'
-                    ? `BOSS ${artBoss || theme.label}${artBoss && artBoss !== theme.label ? ` (ikon peta: ${theme.label})` : ''}. Pertarungan tetap memakai sistem boss SGA.`
+                    ? `BOSS ${artBoss || theme.label}. Pertarungan memakai boss Game B.`
                     : kind === 'special'
                       ? 'Stage spesial SGA: sistem tetap memilih Batu, Bonus, atau Harta Karun sesuai aturan stage yang sudah ada.'
                       : `Tema ikon peta: ${theme.label}. Musuh dan aturan stage tetap memakai sistem SGA.`}

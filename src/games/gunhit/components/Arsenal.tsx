@@ -3,8 +3,9 @@ import { Check, Crosshair, Crown, Download, Flame, Gem, LockKeyhole, MoreHorizon
 import CoinSprite from '../../shared/CoinSprite';
 import DiamondSprite from '../../shared/DiamondSprite';
 import { WEAPONS, getWeapon, RARITY_COLOR, type WeaponId, type Weapon } from '../game/weapons';
-import { BOSS_ROSTER, type BossProfile } from '../game/bossRoster';
-import { renderBossHead } from '../game/bossRenderer';
+import { getBossDef, type BossProfile } from '../game/bossRoster';
+import { bossStyleFor } from '../game/bossIdentity';
+import { HeadArt, HEAD_INFO, HEAD_KINDS, type HeadKind } from '../../perfect-shot/play/HeadArt';
 import { drawBossProjectile } from '../game/bossProjectileArt';
 import { drawGunCentered } from '../game/art/drawCentered';
 import { getGunMetrics } from '../game/art/metrics';
@@ -196,7 +197,15 @@ function RarityIconForWeapon({ rarity }: { rarity: Weapon['rarity'] }) {
   return <Icon className="h-3 w-3" />;
 }
 
-function BossAttackPreview({ boss }: { boss: BossProfile }) {
+type CatalogBoss = BossProfile & { head: HeadKind; stage: number };
+const GAME_B_BOSSES: CatalogBoss[] = HEAD_KINDS.map((head, index) => {
+  const stage = (index + 1) * 5;
+  const legacy = getBossDef(bossStyleFor(stage) ?? 'pirate');
+  const info = HEAD_INFO[head];
+  return { ...legacy, head, stage, name: info.name.toUpperCase(), title: info.name, desc: info.desc, accent: info.bg[0] };
+});
+
+function BossAttackPreview({ boss }: { boss: CatalogBoss }) {
   const active = useSlideActive();
   const ref = useRef<HTMLCanvasElement>(null);
 
@@ -223,10 +232,7 @@ function BossAttackPreview({ boss }: { boss: BossProfile }) {
       ctx.stroke();
 
       // Mini firing loop: boss portrait, weapon projectile, and its real in-game trail.
-      ctx.save();
-      ctx.translate(27, 48);
-      renderBossHead(ctx, boss.id, 17);
-      ctx.restore();
+
       const phase = t % 1.55;
       if (phase < 1.02) {
         const x = 72 + phase * 45;
@@ -245,7 +251,7 @@ function BossAttackPreview({ boss }: { boss: BossProfile }) {
     return () => cancelAnimationFrame(raf);
   }, [active, boss.id, boss.accent]);
 
-  return <canvas ref={ref} aria-label={`Demo serangan ${boss.name}`} className="h-24 w-40 shrink-0 rounded-xl" />;
+  return <div className="relative h-24 w-40 shrink-0"><canvas ref={ref} aria-label={`Demo serangan ${boss.name}`} className="h-24 w-40 rounded-xl" /><div className="pointer-events-none absolute left-[10px] top-[31px] h-[34px] w-[34px]"><HeadArt kind={boss.head} className="h-full w-full" /></div></div>;
 }
 
 export default function Arsenal({
@@ -277,7 +283,7 @@ export default function Arsenal({
   const [showExportModal, setShowExportModal] = useState(false);
   const [showTools, setShowTools] = useState(false);
   const [, setDesignRevision] = useState(0);
-  const [selectedBoss, setSelectedBoss] = useState<BossProfile>(BOSS_ROSTER[0]);
+  const [selectedBoss, setSelectedBoss] = useState<CatalogBoss>(GAME_B_BOSSES[0]);
   const [bulkUnlockMessage, setBulkUnlockMessage] = useState('');
   const gridRef = useRef<HTMLDivElement>(null);
   // The showcase strip is measured once and handed to the canvas, so the hero
@@ -631,12 +637,12 @@ export default function Arsenal({
           <div className="arsenal-scroll-area min-h-0 flex-1 space-y-2 overflow-y-auto px-2.5 pb-4 pt-2.5">
             <div className="flex items-center gap-3 rounded-2xl border border-[#c084fc]/35 bg-[#211638]/90 p-2.5 shadow-lg">
               <div className="relative grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-xl border-2 bg-black/45" style={{ borderColor: selectedBoss.accent }}>
-                <canvas ref={(cv) => { if (!cv) return; cv.width = cv.height = 128; const ctx = cv.getContext('2d'); if (!ctx) return; ctx.setTransform(2, 0, 0, 2, 0, 0); ctx.clearRect(0, 0, 64, 64); ctx.save(); ctx.translate(32, 32); renderBossHead(ctx, selectedBoss.id, 28); ctx.restore(); }} style={{ width: 64, height: 64 }} />
+                <HeadArt kind={selectedBoss.head} className="h-16 w-16" />
               </div>
               <div className="min-w-0 flex-1"><div className="font-arsenal-title text-sm" style={{ color: selectedBoss.accent }}>{selectedBoss.name}</div><div className="text-[10px] font-bold text-white/70">{selectedBoss.title}</div><div className="mt-0.5 text-[8px] leading-tight text-white/50">{selectedBoss.desc}</div></div>
             </div>
             <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-[#110a24]/90 p-2"><BossAttackPreview boss={selectedBoss} /><div className="min-w-0"><div className="font-arsenal-title text-[8px] tracking-[.16em] text-white/55">DEMO SERANGAN BOS</div><div className="mt-1 text-[10px] font-black" style={{ color: selectedBoss.accent }}>{selectedBoss.projectileEmoji} {selectedBoss.projectileName}</div><div className="mt-1 text-[8px] leading-tight text-white/55">Senjata dan efek bergerak sesuai karakter boss.</div></div></div>
-            <div className="grid grid-cols-2 gap-2">{BOSS_ROSTER.map((boss, idx) => { const beaten = highestLevel >= (idx + 1) * 5; const isSel = selectedBoss.id === boss.id; return <button key={boss.id} type="button" onClick={() => { setSelectedBoss(boss); sfx.unlock(); }} className={`flex items-center gap-2 rounded-xl border p-2 text-left transition ${isSel ? 'border-amber-300 bg-[#2d1656]' : 'border-purple-500/20 bg-[#1e1038] hover:bg-[#27144a]'}`}><span className="grid h-9 w-9 place-items-center rounded-full bg-white/5 text-2xl" style={{ color: boss.accent }}><Skull className="h-6 w-6" /></span><span><span className="block text-[10px] font-bold leading-none text-white">{boss.name}</span><span className="mt-1 block text-[8px] text-white/50">LEVEL {(idx + 1) * 5} {beaten ? '✓' : ''}</span></span></button>; })}</div>
+            <div className="grid grid-cols-2 gap-2">{GAME_B_BOSSES.map((boss, idx) => { const beaten = highestLevel >= (idx + 1) * 5; const isSel = selectedBoss.head === boss.head; return <button key={boss.head} type="button" onClick={() => { setSelectedBoss(boss); sfx.unlock(); }} className={`flex items-center gap-2 rounded-xl border p-2 text-left transition ${isSel ? 'border-amber-300 bg-[#2d1656]' : 'border-purple-500/20 bg-[#1e1038] hover:bg-[#27144a]'}`}><span className="grid h-9 w-9 place-items-center rounded-full bg-white/5 text-2xl" style={{ color: boss.accent }}><HeadArt kind={boss.head} className="h-9 w-9" /></span><span><span className="block text-[10px] font-bold leading-none text-white">{boss.name}</span><span className="mt-1 block text-[8px] text-white/50">LEVEL {(idx + 1) * 5} {beaten ? '✓' : ''}</span></span></button>; })}</div>
           </div>
         )}
       </section>

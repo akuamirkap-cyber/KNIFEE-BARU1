@@ -61,6 +61,20 @@ class Sfx {
   private nextChord = 0;
   private chordIdx = 0;
   private lastHover = 0;
+  private menuBus: { dry: GainNode; wet: GainNode } | null = null;
+  private buildingMenu = false;
+
+  /** Silence scheduled notes from an obsolete menu replay without muting other sounds. */
+  cancelMenuEnter() {
+    if (!this.ctx || !this.menuBus) return;
+    const t = this.ctx.currentTime;
+    for (const node of [this.menuBus.dry, this.menuBus.wet]) {
+      node.gain.cancelScheduledValues(t);
+      node.gain.setValueAtTime(node.gain.value, t);
+      node.gain.linearRampToValueAtTime(0, t + 0.01);
+    }
+    this.menuBus = null;
+  }
 
   state: SoundState = { sfx: load("ps_sfx"), music: load("ps_music"), volume: loadVol() };
   private listeners = new Set<() => void>();
@@ -213,13 +227,13 @@ class Sfx {
     p.pan.setValueAtTime(o.pan ?? 0, t);
     if (o.panTo !== undefined) p.pan.linearRampToValueAtTime(o.panTo, t + (o.dur ?? 0.3));
     input.connect(p);
-    p.connect(o.music ? this.musBus : this.sfxDry);
+    p.connect(o.music ? this.musBus : this.buildingMenu && this.menuBus ? this.menuBus.dry : this.sfxDry);
     const v = o.verb ?? 0.15;
     if (v > 0) {
       const s = ctx.createGain();
       s.gain.value = v;
       p.connect(s);
-      s.connect(o.music ? this.musWet : this.sfxWet);
+      s.connect(o.music ? this.musWet : this.buildingMenu && this.menuBus ? this.menuBus.wet : this.sfxWet);
     }
     return input;
   }
@@ -675,17 +689,21 @@ class Sfx {
     const v = size;
     switch (style) {
       case "combo": {
-        // Drop Up 0–33.3% → Vortex Spin ↻ ×1  33.3–63.3% → Pop Blast 63.3–100% (peak 78%)
-        this.styleIn("rise", d, dur * 0.3333, pan, size);
-        const s0 = t + dur * 0.3333;
-        const sd = dur * 0.3;
+        // comboMove and comboSpin run together for the first third of the
+        // CSS animation. The blast peaks at 48%, not 77% as in the old v2
+        // sequence; keeping the old timing made the sound noticeably late.
+        this.styleIn("rise", d, dur / 3, pan, size);
+        const s0 = t;
+        const sd = dur / 3;
         for (let i = 0; i < 7; i++) {
           const p = i / 7;
           this.noise({ t: s0 + sd * p, d: 0.16, peak: 0.12 * v * (0.6 + p), f: 700 + p * 2600, f2: 1800 + p * 3500, q: 1.6, swell: true, a: 0.5, pan: Math.sin(i * 1.9) * 0.8, verb: 0.15 });
         }
         this.tone({ type: "triangle", f: 220, f2: 1100, glide: sd, t: s0, a: 0.05, d: sd, peak: 0.05 * v, pan, verb: 0.3 });
         this.bell(PENTA[8], s0 + sd, { d: 0.8, peak: 0.05 * v, pan, verb: 0.5 });
-        this.styleIn("pop", d + dur * 0.6333, dur * 0.3667, pan, size);
+        // Pop's transient is at 38% of its own duration. Place that
+        // transient exactly on comboScale/comboFlash's 48% visual peak.
+        this.styleIn("pop", d + dur / 3, dur * ((0.48 - 1 / 3) / 0.38), pan, size);
         break;
       }
       case "pop": {
@@ -811,6 +829,14 @@ class Sfx {
   /* ------------------------------------------------------------------ */
   menuEnter(d = 0, plan?: MenuPlan) {
     if (!this.ok()) return;
+    this.cancelMenuEnter();
+    const dry = this.ctx!.createGain();
+    const wet = this.ctx!.createGain();
+    dry.connect(this.sfxDry);
+    wet.connect(this.sfxWet);
+    this.menuBus = { dry, wet };
+    this.buildingMenu = true;
+    try {
     const p: MenuPlan = plan ?? { title: Array(11).fill("classic"), gun: "classic", buttons: ["classic", "classic"], nav: Array(4).fill("classic"), k: 1 };
     const k = p.k;
     const at = (ms: number) => d + (ms * k) / 1000;
@@ -869,6 +895,9 @@ class Sfx {
         this.styleIn(st, at(t0), len(650), -0.6 + i * 0.4, 0.42);
         this.marimba([783.99, 880, 1046.5, 1318.51][i], this.T(at(t0 + 650 * (LAND_FRAC[st] ?? 0.6))), 0.06, -0.6 + i * 0.4, 0.3);
       }
+    }
+    } finally {
+      this.buildingMenu = false;
     }
   }
 

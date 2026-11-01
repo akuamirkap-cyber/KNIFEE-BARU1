@@ -1,3 +1,4 @@
+import { withSplinterClip } from './fx';
 import { Slide2Fx, TAU, rnd, hsl } from './slide2Fx';
 import { slide2Sfx } from './slide2Audio';
 import {
@@ -1930,9 +1931,11 @@ export class SetTwoFx extends Slide2Fx {
 
   draw(c: CanvasRenderingContext2D, time: number) {
     super.draw(c, time);
-    this.drawBubbles(c);
-    this.drawDebris(c);
-    this.drawBites(c);
+    withSplinterClip(c, () => {
+      this.drawBubbles(c);
+      this.drawDebris(c);
+      this.drawBites(c);
+    });
   }
 }
 

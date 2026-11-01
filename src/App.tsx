@@ -64,7 +64,12 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    void loadGunHitGame().catch(() => undefined);
+    // Give the small intro bundle a head start before downloading/parsing the
+    // much larger game. Still preload during the animation, not after it.
+    const timer = window.setTimeout(() => {
+      void loadGunHitGame().catch(() => undefined);
+    }, 350);
+    return () => window.clearTimeout(timer);
   }, []);
 
   // Freeze RAF simulation when browser tab / mobile app goes to background
@@ -160,9 +165,11 @@ export default function App() {
           <GameLoadBoundary>
             <ScaledFrame baseWidth={420} baseHeight={760}>
               <div className="relative h-[760px] w-[420px] overflow-hidden">
-                <Suspense fallback={<GameBootFallback message="MEMUAT PERFECT SHOT" />}>
-                  <PerfectShotGame />
-                </Suspense>
+                {hasBooted ? (
+                  <Suspense fallback={<GameBootFallback message="MEMUAT PERFECT SHOT" />}>
+                    <PerfectShotGame />
+                  </Suspense>
+                ) : <GameBootFallback message="MENYIAPKAN PERFECT SHOT" />}
               </div>
             </ScaledFrame>
           </GameLoadBoundary>
