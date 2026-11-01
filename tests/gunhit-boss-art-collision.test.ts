@@ -1,13 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { createCanvas } from '@napi-rs/canvas';
+import { createCanvas, Path2D } from '@napi-rs/canvas';
+import { DOMParser as XmldomParser } from '@xmldom/xmldom';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { loadImage } from '@napi-rs/canvas';
 import { HeadArt } from '../src/games/perfect-shot/play/HeadArt';
 import { installSilentAudio } from '../tools/supportAudioSilent';
-import { buildArtMask, Game } from '../src/games/gunhit/game/Game';
+import { buildArtMask, buildArtMaskFromSvg, Game } from '../src/games/gunhit/game/Game';
 
 const game = readFileSync('src/games/gunhit/game/Game.ts', 'utf8');
 
@@ -62,10 +63,14 @@ test('every bullet tests the boss pixels before anything else', () => {
   // whether the art came from Game B's raster or the vector fallback.
   assert.match(game, /this\.face = cv;/);
   assert.match(game, /const span = \(R \+ pad\) \/ R;/);
-  assert.match(game, /const mask = this\.level\.boss \? buildArtMask\(art, span, 384\) : null;/);
-  assert.match(game, /const readable = !!mask && mask\.maxR > 0\.05;/);
+  assert.match(game, /let mask = this\.level\.boss \? buildArtMask\(art, span, 384\) : null;/);
+  assert.match(game, /let readable = !!mask && mask\.maxR > 0\.05;/);
   assert.match(game, /this\.artMask = readable \? mask : null;/);
   assert.match(game, /this\.bossArtProfile = readable \? this\.sampleArtProfile\(art, span\) : null;/);
+  // When the browser refuses to read a canvas that had an SVG drawn into it,
+  // the same head is rasterised from its own markup instead — never a ring.
+  assert.match(game, /const traced = buildArtMaskFromSvg\(this\.wheelSvg, span, 384\);/);
+  assert.doesNotMatch(game, /buildArtMaskFromSvg\(this\.face/);
   // The mask is read from the pristine art, never from the face that bullet
   // holes are painted into all stage long.
   assert.doesNotMatch(game, /buildArtMask\(cv/);
@@ -198,4 +203,97 @@ test('a real boss stage wears Perfect Shot\'s head and collides with its pixels'
   // Every weapon used to bite the old 0.889R ring here — empty space beside the
   // pirate's cheek. The silhouette test must refuse that.
   assert.equal(at(-R * 0.889, 0), null, 'no bullet meets the boss where the drawing is empty');
+});
+
+
+test('the traced mask is the same head the browser draws, for all eleven bosses', async () => {
+  globals.Path2D ??= Path2D;
+  globals.DOMParser ??= XmldomParser;
+  const R = 40;
+  const pad = 40;
+  const span = (R + pad) / R;
+  for (const kind of ['pirate', 'jester', 'dragon', 'skeleton', 'tiki', 'viking', 'oni', 'robot', 'alien', 'vampire', 'sun']) {
+    const svg = renderToStaticMarkup(React.createElement(HeadArt, { kind: kind as any }));
+    const image = await loadImage(Buffer.from(svg));
+    // The padded art canvas the game builds for a boss.
+    const art = createCanvas((R + pad) * 2, (R + pad) * 2);
+    const ac = art.getContext('2d');
+    ac.translate(R + pad, R + pad);
+    ac.drawImage(image, -R, -R, R * 2, R * 2);
+    const drawn = buildArtMask(art, span, 384);
+    const traced = buildArtMaskFromSvg(svg, span, 384);
+    assert.ok(drawn && traced, `${kind}: both masks exist`);
+    assert.ok(Math.abs((drawn!.maxR) - (traced!.maxR)) < 0.05,
+      `${kind}: same outer ink (${drawn!.maxR.toFixed(3)} vs ${traced!.maxR.toFixed(3)})`);
+    let diff = 0;
+    for (let i = 0; i < drawn!.alpha.length; i++) {
+      if ((drawn!.alpha[i] > 20) !== (traced!.alpha[i] > 20)) diff++;
+    }
+    const pct = (100 * diff) / drawn!.alpha.length;
+    assert.ok(pct < 3.5, `${kind}: traced silhouette matches the drawn one (${pct.toFixed(2)}% apart)`);
+    // A transparent corner is never boss, and the mask is never a disc.
+    assert.equal(traced!.alpha[0], 0, `${kind}: (0,0) is empty`);
+    assert.ok(traced!.alpha[traced!.alpha.length - 1] === 0, `${kind}: last pixel is empty`);
+  }
+});
+
+test('a browser that cannot read the SVG image back still collides with the head', async () => {
+  const g = globalThis as unknown as Record<string, unknown> & { window: Record<string, unknown> };
+  installSilentAudio();
+  g.window = Object.assign(g.window ?? {}, {
+    setTimeout, clearTimeout,
+    setInterval: () => 0, clearInterval: () => undefined,
+    addEventListener: () => undefined, removeEventListener: () => undefined,
+    devicePixelRatio: 1, innerWidth: 420, innerHeight: 750,
+  });
+  // The paths have to exist in this runtime for the traced fallback to run.
+  globals.Path2D ??= Path2D;
+  globals.DOMParser ??= XmldomParser;
+  const grad = { addColorStop: () => {} };
+  const ctx = new Proxy({}, {
+    get: (_t, prop) => {
+      if (prop === 'createLinearGradient' || prop === 'createRadialGradient'
+        || prop === 'createConicGradient' || prop === 'createPattern') return () => grad;
+      if (prop === 'measureText') return () => ({ width: 24 });
+      if (prop === 'getTransform') return () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 });
+      if (prop === 'getImageData') return () => ({ data: new Uint8ClampedArray(4) });
+      return () => {};
+    },
+    set: () => true,
+  }) as unknown as CanvasRenderingContext2D;
+  const canvas = {
+    width: 420,
+    height: 750,
+    style: {},
+    getBoundingClientRect: () => ({ width: 420, height: 750, left: 0, top: 0 }),
+    getContext: () => ctx,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  } as unknown as HTMLCanvasElement;
+
+  const g2 = new Game(canvas, {}) as unknown as Record<string, any>;
+  g2.setWheelArtSource({ keyFor: () => 'boss|pirate', get: () => null, request: () => {} });
+  g2.startAtLevel(20);
+  const svg = renderToStaticMarkup(React.createElement(HeadArt, { kind: 'pirate' as any }));
+  // An unreadable raster: alpha all zero, exactly what a tainted SVG canvas
+  // hands back in the WebViews that started this. The markup is the real head.
+  const blank = createCanvas((g2.level.radius + 40) * 2, (g2.level.radius + 40) * 2);
+  g2.setWheelArt('boss|pirate', blank as unknown as HTMLImageElement, svg);
+
+  assert.ok(g2.artMask, 'the traced head is the mask: no raster readback needed');
+  assert.ok(g2.artMask.maxR > 0.5 && g2.artMask.maxR <= 1.35, `traced outline measured (${g2.artMask.maxR})`);
+  assert.ok(g2.bossArtProfile && g2.bossArtProfile.length === 360);
+
+  const R = g2.level.radius as number;
+  const t = (Math.PI - 1) / 0.66;
+  g2.time = t;
+  const ox = Math.sin(t * 0.53) * 3.2;
+  const oy = Math.sin(t * 1.15) * 3.8;
+  const breath = 1 + Math.sin(t * 1.35) * 0.014;
+  const CX = 210;
+  const at = (ax: number, ay: number) =>
+    g2.artSurfaceAt(CX + ax * breath + ox, g2.targetY + ay * breath + oy);
+  assert.ok(at(0, 0) !== null, 'a round in the middle of the head meets the head');
+  assert.equal(at(-R * 1.3, 0), null, 'the corner of the square is not the boss');
+  assert.equal(at(-R * 0.889, 0), null, 'the old ring radius beside the cheek stays empty');
 });

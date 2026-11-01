@@ -8,8 +8,12 @@ type Props = {
   kind: TargetKind;
   icon?: FlatName;
   head?: HeadKind;
-  /** Receives the rasterised wheel exactly as Game B draws it. */
-  onReady: (kind: TargetKind, image: HTMLImageElement) => void;
+  /**
+   * Receives the rasterised wheel exactly as Game B draws it, plus the SVG
+   * markup it came from — the engine traces that markup into real paths so the
+   * collision shape survives even where a canvas refuses to hand back pixels.
+   */
+  onReady: (kind: TargetKind, image: HTMLImageElement, markup: string) => void;
 };
 
 /**
@@ -32,7 +36,7 @@ export function WheelArtBridge({ kind, icon, head, onReady }: Props) {
     clone.setAttribute("height", "200");
     const markup = new XMLSerializer().serializeToString(clone);
     const image = new Image();
-    image.onload = () => readyRef.current(kind, image);
+    image.onload = () => readyRef.current(kind, image, markup);
     image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(markup)}`;
     return () => {
       image.onload = null;

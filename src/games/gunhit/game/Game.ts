@@ -612,6 +612,7 @@ interface Fragment {
   side?: string; edge?: string; depth?: number;
 }
 
+/** Game B's SVG, traced into real paths so hits never depend on pixel reads. */
 export interface ArtMask {
   size: number;
   /** Alpha of the target artwork, row-major, exactly as drawn on screen. */
@@ -656,6 +657,210 @@ export function buildArtMask(source: CanvasImageSource | null, span = 1, size = 
     return { size, alpha, span, maxR: (maxPx / half) * span };
   } catch {
     return null;
+  }
+}
+
+/**
+ * Rasterise the target's own SVG markup into the same alpha mask the pixel
+ * readback produces. Some browsers and WebViews hand back an empty buffer for a
+ * canvas that has had an SVG image drawn into it (SVG images can never be read
+ * back). Drawing the *paths* into our own canvas is always readable, so the
+ * boss keeps its real silhouette — hat, beard, horns, every notch — instead of
+ * falling back to a ring.
+ */
+export function buildArtMaskFromSvg(markup: string | null, span = 1, size = 384): ArtMask | null {
+  if (!markup) return null;
+  if (typeof DOMParser === 'undefined' || typeof Path2D === 'undefined') return null;
+  const doc = (() => {
+    try {
+      return new DOMParser().parseFromString(markup, 'image/svg+xml');
+    } catch {
+      return null;
+    }
+  })();
+  if (!doc) return null;
+  const root = (doc as Document).documentElement as Element | null;
+  if (!root) return null;
+  const tagOf = (el: Element) => String(el.nodeName || '').toLowerCase();
+  const svg = tagOf(root) === 'svg'
+    ? root
+    : ((doc as Document).getElementsByTagName?.('svg')[0] as Element | undefined) ?? null;
+  if (!svg) return null;
+  const vb = readViewBox(svg);
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = size;
+  const g = cv.getContext('2d');
+  if (!g) return null;
+  g.clearRect(0, 0, size, size);
+  // A world point sits at mask pixel ((w - -span*R) / (2*span*R)) * size, and the
+  // drawing is blitted into the -R..R box, so one viewBox unit is
+  // (2*R/vb.w) world px. Both scale factors fold into a single transform.
+  const kx = size / (span * vb.w);
+  const ky = size / (span * vb.h);
+  g.setTransform(kx, 0, 0, ky, -vb.x * kx + ((span - 1) * size) / (2 * span), -vb.y * ky + ((span - 1) * size) / (2 * span));
+  let inked = 0;
+  const paint = new Set(['path', 'circle', 'ellipse', 'rect', 'polygon', 'polyline', 'line']);
+  const walk = (el: Element, inherited: { fill: string | null; stroke: string | null; sw: number; alpha: number }) => {
+    const tag = tagOf(el);
+    if (SKIP_SVG.has(tag)) return;
+    const style = parseSvgStyle(el.getAttribute('style'));
+    const attr = (k: string) => {
+      const v = el.getAttribute(k);
+      return v === null || v === undefined ? style[k] ?? null : v;
+    };
+    const ownAlpha = attr('opacity');
+    const alpha = inherited.alpha * (ownAlpha === null ? 1 : clamp01(Number(ownAlpha)));
+    if (alpha <= 0.04 || (attr('display') ?? '') === 'none' || (attr('visibility') ?? '') === 'hidden') return;
+    const next = {
+      fill: attr('fill') ?? inherited.fill,
+      stroke: attr('stroke') ?? inherited.stroke,
+      sw: attr('stroke-width') === null ? inherited.sw : Number(attr('stroke-width')) || 0,
+      alpha,
+    };
+    // A group's transform applies to everything under it, so it is pushed
+    // before the shape and popped after its children.
+    g.save();
+    applySvgTransforms(g, attr('transform'));
+    if (paint.has(tag)) {
+      const path = svgShapePath(el, tag);
+      if (path) {
+        const fill = next.fill ?? 'black';
+        const stroke = next.stroke;
+        if (tag !== 'line' && fill !== 'none' && fill !== 'transparent') {
+          g.globalAlpha = clamp01((Number(attr('fill-opacity') ?? '1') || 0) * next.alpha);
+          g.fillStyle = '#000';
+          g.fill(path);
+          inked++;
+        }
+        if (stroke && stroke !== 'none' && stroke !== 'transparent' && next.sw > 0) {
+          g.globalAlpha = clamp01((Number(attr('stroke-opacity') ?? '1') || 0) * next.alpha);
+          g.strokeStyle = '#000';
+          g.lineWidth = next.sw;
+          g.lineJoin = 'round';
+          g.lineCap = 'round';
+          g.stroke(path);
+          inked++;
+        }
+      }
+    }
+    for (let i = 0; i < el.childNodes.length; i++) {
+      const child = el.childNodes[i] as Element;
+      if (child && child.nodeType === 1) walk(child, next);
+    }
+    g.restore();
+  };
+  try {
+    walk(svg, { fill: null, stroke: null, sw: 1, alpha: 1 });
+    if (!inked) return null;
+    const data = g.getImageData(0, 0, size, size).data;
+    const alpha = new Uint8Array(size * size);
+    const half = size / 2;
+    let maxPx = 0;
+    for (let i = 0, p = 3; i < alpha.length; i++, p += 4) {
+      const a = data[p];
+      alpha[i] = a;
+      if (a > 20) {
+        const x = (i % size) - half + 0.5;
+        const y = Math.floor(i / size) - half + 0.5;
+        const d = Math.hypot(x, y);
+        if (d > maxPx) maxPx = d;
+      }
+    }
+    return { size, alpha, span, maxR: (maxPx / half) * span };
+  } catch {
+    return null;
+  }
+}
+
+/** Containers whose contents are paint servers or clipping, never ink. */
+const SKIP_SVG = new Set([
+  'defs', 'clippath', 'mask', 'filter', 'symbol', 'pattern', 'lineargradient',
+  'radialgradient', 'stop', 'title', 'desc', 'metadata', 'style', 'script',
+  'foreignobject', 'marker', 'animate', 'animatetransform', 'animatemotion', 'set',
+]);
+
+function clamp01(n: number) {
+  return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 1;
+}
+
+function readViewBox(svg: Element) {
+  const raw = (svg.getAttribute('viewBox') ?? '').trim().split(/[\s,]+/).map(Number);
+  const ok = raw.length === 4 && raw.every(Number.isFinite) && raw[2] > 0 && raw[3] > 0;
+  return ok
+    ? { x: raw[0], y: raw[1], w: raw[2], h: raw[3] }
+    : { x: -100, y: -100, w: 200, h: 200 };
+}
+
+function parseSvgStyle(raw: string | null): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!raw) return out;
+  for (const part of raw.split(';')) {
+    const i = part.indexOf(':');
+    if (i < 0) continue;
+    out[part.slice(0, i).trim().toLowerCase()] = part.slice(i + 1).trim();
+  }
+  return out;
+}
+
+/** The path geometry of one SVG shape, in the shape's own coordinates. */
+function svgShapePath(el: Element, tag: string): Path2D | null {
+  const num = (k: string, d = 0) => {
+    const v = Number(el.getAttribute(k));
+    return Number.isFinite(v) ? v : d;
+  };
+  try {
+    if (tag === 'path') {
+      const d = el.getAttribute('d');
+      return d ? new Path2D(d) : null;
+    }
+    const p = new Path2D();
+    if (tag === 'circle') {
+      p.arc(num('cx'), num('cy'), Math.max(0, num('r')), 0, Math.PI * 2);
+      return p;
+    }
+    if (tag === 'ellipse') {
+      p.ellipse(num('cx'), num('cy'), Math.max(0, num('rx')), Math.max(0, num('ry')), 0, 0, Math.PI * 2);
+      return p;
+    }
+    if (tag === 'rect') {
+      p.rect(num('x'), num('y'), num('width'), num('height'));
+      return p;
+    }
+    const pts = (el.getAttribute('points') ?? '').trim().split(/[\s,]+/).map(Number).filter(Number.isFinite);
+    if (pts.length < 4) return null;
+    p.moveTo(pts[0], pts[1]);
+    for (let i = 2; i + 1 < pts.length; i += 2) p.lineTo(pts[i], pts[i + 1]);
+    if (tag === 'polygon') p.closePath();
+    return p;
+  } catch {
+    return null;
+  }
+}
+
+/** Apply an SVG `transform` attribute, left to right, exactly as SVG does. */
+function applySvgTransforms(g: CanvasRenderingContext2D, raw: string | null) {
+  if (!raw) return;
+  const re = /([a-zA-Z]+)\s*\(([^)]*)\)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(raw))) {
+    const op = m[1].toLowerCase();
+    const a = m[2].trim().split(/[\s,]+/).map(Number).filter(Number.isFinite);
+    try {
+      if (op === 'translate') g.translate(a[0] ?? 0, a[1] ?? 0);
+      else if (op === 'scale') g.scale(a[0] ?? 1, a.length > 1 ? a[1] : a[0] ?? 1);
+      else if (op === 'rotate') {
+        const deg = ((a[0] ?? 0) * Math.PI) / 180;
+        if (a.length >= 3) {
+          g.translate(a[1], a[2]);
+          g.rotate(deg);
+          g.translate(-a[1], -a[2]);
+        } else g.rotate(deg);
+      } else if (op === 'skewx') g.transform(1, 0, Math.tan(((a[0] ?? 0) * Math.PI) / 180), 1, 0, 0);
+      else if (op === 'skewy') g.transform(1, Math.tan(((a[0] ?? 0) * Math.PI) / 180), 0, 1, 0, 0);
+      else if (op === 'matrix' && a.length >= 6) g.transform(a[0], a[1], a[2], a[3], a[4], a[5]);
+    } catch {
+      /* an unparsable op leaves the rest of the chain intact */
+    }
   }
 }
 
@@ -1098,6 +1303,9 @@ export class Game {
   private bossArtProfile: number[] | null = null;
   /** Alpha mask of the on-screen target art: hits are pixel tests, not circles. */
   private artMask: ArtMask | null = null;
+  /** The current boss/wheel SVG markup, handed over by the React bridge. */
+  private wheelSvg: string | null = null;
+  /** That markup traced into paths: the collision shape without any pixel read. */
   private artMaskMaxR = 1;
   private gunEntryDelayT = 0;
   private gunEntryRate = 1;
@@ -2050,10 +2258,11 @@ export class Game {
   }
 
   /** A rasterised Game B wheel arrived for `key`. */
-  setWheelArt(key: string, image: HTMLImageElement) {
+  setWheelArt(key: string, image: HTMLImageElement, markup?: string) {
     this.wheelArtCache.set(key, image);
     if (key !== this.wheelArtKey) return; // another stage is on screen
     this.wheelImage = image;
+    if (markup) this.wheelSvg = markup;
     this.buildFace();
   }
 
@@ -2063,6 +2272,7 @@ export class Game {
     const key = source.keyFor(this.level.n);
     const image = source.get(key) ?? this.wheelArtCache.get(key) ?? null;
     const changed = key !== this.wheelArtKey || image !== this.wheelImage;
+    if (key !== this.wheelArtKey) this.wheelSvg = null;
     this.wheelArtKey = key;
     this.wheelImage = image;
     if (!image && request) source.request(this.level.n);
@@ -2616,11 +2826,19 @@ export class Game {
     const span = (R + pad) / R;
     // 384 bins keep thin rims (the boss' dark outline) inside a single sample,
     // so a round can never slip between two mask pixels and fly through.
-    const mask = this.level.boss ? buildArtMask(art, span, 384) : null;
-    // A readback that finds no ink at all (a canvas this environment refuses to
-    // hand back) is not a boss with no body: say "no mask" and let the artwork
-    // contour below stand in, so hits still land on the drawing.
-    const readable = !!mask && mask.maxR > 0.05;
+    let mask = this.level.boss ? buildArtMask(art, span, 384) : null;
+    // A readback that finds no ink at all is not a boss with no body — some
+    // browsers hand back an empty (or blocked) buffer for a canvas that had an
+    // SVG image drawn into it. Trace the markup instead: real paths, real
+    // geometry, no pixel read anywhere.
+    let readable = !!mask && mask.maxR > 0.05;
+    if (this.level.boss && !readable) {
+      const traced = buildArtMaskFromSvg(this.wheelSvg, span, 384);
+      if (traced && traced.maxR > 0.05) {
+        mask = traced;
+        readable = true;
+      }
+    }
     this.bossArtProfile = readable ? this.sampleArtProfile(art, span) : null;
     this.artMask = readable ? mask : null;
     this.artMaskMaxR = this.artMask

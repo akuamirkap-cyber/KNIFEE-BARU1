@@ -260,6 +260,8 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   // Game B's wheel artwork, rasterised on demand and handed to the engine so
   // every stage shows exactly the wheel the reference game shows.
   const wheelArtCache = useRef(new Map<string, HTMLImageElement>());
+  // The SVG the raster came from: the engine traces it for pixel-free collision.
+  const wheelSvgCache = useRef(new Map<string, string>());
   const [wheelArtJobs, setWheelArtJobs] = useState<
     { key: string; kind: TargetKind; icon?: FlatName; head?: HeadKind }[]
   >([]);
@@ -1526,11 +1528,12 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
           kind={wheelArtJobs[0].kind}
           icon={wheelArtJobs[0].icon}
           head={wheelArtJobs[0].head}
-          onReady={(_kind, image) => {
+          onReady={(_kind, image, markup) => {
             const job = wheelArtJobs[0];
             if (!job) return;
             wheelArtCache.current.set(job.key, image);
-            gameRef.current?.setWheelArt(job.key, image);
+            wheelSvgCache.current.set(job.key, markup);
+            gameRef.current?.setWheelArt(job.key, image, markup);
             setWheelArtJobs((jobs) => (jobs[0]?.key === job.key ? jobs.slice(1) : jobs));
           }}
         />
