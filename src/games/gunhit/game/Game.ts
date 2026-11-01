@@ -953,6 +953,41 @@ export function buildMaskOutline(mask: ArtMask): Path2D | null {
   return p;
 }
 
+/**
+ * The same silhouette as a *filled* shape, in mask pixels: a ray is marched
+ * from outside the mask inwards every degree, and the first solid pixel is the
+ * edge. Cached once per mask, so the collision overlay can fill the exact area
+ * the hit test uses instead of a smoothed approximation of it.
+ */
+export function buildMaskSurface(mask: ArtMask, steps = 720): Path2D | null {
+  if (typeof Path2D === 'undefined') return null;
+  const { size } = mask;
+  const p = new Path2D();
+  const half = size / 2;
+  const outer = half * 0.995;
+  let first = true;
+  for (let i = 0; i < steps; i++) {
+    const a = (i / steps) * Math.PI * 2;
+    const cos = Math.cos(a);
+    const sin = Math.sin(a);
+    let r = outer;
+    for (; r > 1; r -= 0.35) {
+      const u = Math.floor(half + cos * r);
+      const v = Math.floor(half + sin * r);
+      if (u < 0 || v < 0 || u >= size || v >= size) continue;
+      if (maskSolid(mask, u, v)) break;
+    }
+    const x = half + cos * r;
+    const y = half + sin * r;
+    if (first) {
+      p.moveTo(x, y);
+      first = false;
+    } else p.lineTo(x, y);
+  }
+  p.closePath();
+  return p;
+}
+
 /** Is this mask pixel opaque? A 3x3 neighbourhood keeps thin strokes solid. */
 function maskSolid(mask: ArtMask, x: number, y: number): boolean {
   const { size, alpha } = mask;
@@ -1387,13 +1422,17 @@ export class Game {
    * the stage fell back to a legacy ring — the exact thing to look for when
    * "the boss still feels like a wheel".
    */
-  private readonly showHitbox = (() => {
+  private readonly hitboxFlag = (() => {
     try {
       return typeof location !== 'undefined' && /(^|[?&])hitbox=1(&|$)/.test(location.search);
     } catch {
       return false;
     }
   })();
+  /** On for every boss stage: the boss' collision is drawn over its art. */
+  private get showHitbox(): boolean {
+    return this.hitboxFlag || (this.level?.boss ?? false);
+  }
   private wheelArtCache = new Map<string, HTMLImageElement>();
   private wheelArtKey = '';
   private wheelImage: HTMLImageElement | null = null;
@@ -1447,6 +1486,8 @@ export class Game {
   private burnTick = 0;
   private spikeOffT = 0;
   private targetR = 0;
+  /** The silhouette as a filled path, for the collision overlay. */
+  private maskSurface: Path2D | null = null;
   /** Radius the face bitmap was baked at (`buildFace`), for pad scaling. */
   private faceBaseR = 0;
   private faceR = 106;
@@ -2950,6 +2991,7 @@ export class Game {
     this.bossArtProfile = readable ? this.sampleArtProfile(art, span) : null;
     this.artMask = readable ? mask : null;
     this.maskOutline = this.artMask ? buildMaskOutline(this.artMask) : null;
+    this.maskSurface = this.artMask ? buildMaskSurface(this.artMask) : null;
     this.artMaskMaxR = this.artMask
       ? this.artMask.maxR
       : this.bossArtProfile ? Math.max(...this.bossArtProfile) : 1;
@@ -3009,6 +3051,7 @@ export class Game {
     this.artMaskMaxR = traced.maxR;
     this.bossArtProfile = maskProfile(traced);
     this.maskOutline = buildMaskOutline(traced);
+    this.maskSurface = buildMaskSurface(traced);
     return traced;
   }
 
@@ -3023,55 +3066,104 @@ export class Game {
    *   white   — which way that round points, and how deep it sank
    *   magenta — the centre of rotation (the point the head turns around)
    */
+  /**
+   * The boss' collision area, drawn over its art in colour — on for every boss
+   * stage, not just `?hitbox=1`:
+   *
+   *   cyan   — the artwork's exact silhouette (the alpha edge of the drawing)
+   *   green  — the same shape as a filled area: this is the collision region
+   *            (its contour is what the placement maths reads)
+   *   red    — the OLD circular hitbox (radius R), kept only to compare against.
+   *            Nothing is ever placed on it.
+   *   yellow — where each stuck round bit into the drawing, white = its heading
+   *   magenta— the centre the head turns around
+   */
   private drawHitboxDebug(c: CanvasRenderingContext2D) {
     const R = this.level.radius;
     const mask = this.artMask;
     c.save();
     c.setLineDash([]);
-    // exact silhouette
-    if (mask && this.maskOutline) {
+    // The collision region as an area: the exact silhouette, filled.
+    if (mask && this.maskSurface) {
       const k = (2 * mask.span * R) / mask.size;
       c.save();
       c.scale(k, k);
       c.translate(-mask.size / 2, -mask.size / 2);
-      c.strokeStyle = 'rgba(56,189,248,0.95)';
-      c.lineWidth = 1.6 / k;
-      c.stroke(this.maskOutline);
+      c.fillStyle = 'rgba(34,255,136,0.14)';
+      c.fill(this.maskSurface);
       c.restore();
+    } else {
+      // No artwork reached the engine: there is nothing to fill, and the red
+      // ring below is the only shape left — which is exactly the bug it flags.
+      c.fillStyle = 'rgba(255,64,64,0.16)';
+      c.beginPath();
+      c.arc(0, 0, R, 0, TAU);
+      c.fill();
     }
-    // The old circular hitbox, for comparison: if any round sat on this ring the
-    // silhouette test would be broken. Nothing is ever placed on it.
+    // `?hitbox=1` also shows the 360-bin contour the placement maths reads.
+    if (this.hitboxFlag) {
+      c.strokeStyle = 'rgba(34,255,136,0.85)';
+      c.lineWidth = 1.3;
+      c.setLineDash([6, 5]);
+      c.beginPath();
+      for (let deg = 0; deg <= 360; deg += 2) {
+        const a = (deg * Math.PI) / 180;
+        const r = this.bossRadiusAt(a);
+        const x = Math.cos(a) * r;
+        const y = Math.sin(a) * r;
+        if (deg === 0) c.moveTo(x, y);
+        else c.lineTo(x, y);
+      }
+      c.closePath();
+      c.stroke();
+      c.setLineDash([]);
+    }
+    // the old circular hitbox, for comparison
     c.save();
-    c.setLineDash([3, 6]);
-    c.strokeStyle = 'rgba(255,64,96,0.9)';
-    c.lineWidth = 1.2;
+    c.setLineDash([3, 7]);
+    c.strokeStyle = 'rgba(255,64,96,0.95)';
+    c.lineWidth = 1.4;
     c.beginPath();
     c.arc(0, 0, R, 0, TAU);
     c.stroke();
     c.restore();
-    // the contour everything else uses
-    c.strokeStyle = mask ? 'rgba(34,255,136,0.95)' : 'rgba(255,64,64,0.95)';
-    c.lineWidth = 1.6;
-    c.setLineDash([7, 5]);
-    c.beginPath();
-    for (let deg = 0; deg <= 360; deg += 3) {
-      const a = (deg * Math.PI) / 180;
-      const r = this.bossRadiusAt(a);
-      const x = Math.cos(a) * r;
-      const y = Math.sin(a) * r;
-      if (deg === 0) c.moveTo(x, y);
-      else c.lineTo(x, y);
+    // The artwork's exact edge: every pixel where the drawing stops. Cheap
+    // enough here because it only runs in the `?hitbox=1` inspection mode; the
+    // always-on overlay strokes the cached surface path instead.
+    if (mask && this.maskOutline) {
+      c.save();
+      c.setLineDash([]);
+      if (this.maskSurface) {
+        const k = (2 * mask.span * R) / mask.size;
+        c.scale(k, k);
+        c.translate(-mask.size / 2, -mask.size / 2);
+        c.strokeStyle = 'rgba(56,189,248,0.98)';
+        c.lineWidth = 2.2 / k;
+        c.stroke(this.maskSurface);
+      }
+      c.restore();
+      if (this.hitboxFlag) {
+        const k = (2 * mask.span * R) / mask.size;
+        c.save();
+        c.scale(k, k);
+        c.translate(-mask.size / 2, -mask.size / 2);
+        c.strokeStyle = 'rgba(56,189,248,0.9)';
+        c.lineWidth = 1.1 / k;
+        c.stroke(this.maskOutline);
+        c.restore();
+      }
     }
-    c.stroke();
-    c.setLineDash([]);
     // where the rounds bit in, and where they point
     for (const it of this.items) {
       if (it.px === undefined || it.py === undefined) continue;
       if (it.type !== 'bullet' && it.type !== 'old') continue;
       c.fillStyle = '#facc15';
       c.beginPath();
-      c.arc(it.px, it.py, 3, 0, TAU);
+      c.arc(it.px, it.py, 3.6, 0, TAU);
       c.fill();
+      c.strokeStyle = 'rgba(0,0,0,0.55)';
+      c.lineWidth = 1;
+      c.stroke();
       c.strokeStyle = 'rgba(255,255,255,0.9)';
       c.lineWidth = 1.2;
       c.beginPath();
@@ -3091,6 +3183,31 @@ export class Game {
     c.beginPath();
     c.arc(0, 0, 3.2, 0, TAU);
     c.stroke();
+    c.restore();
+  }
+
+  /** The colour key for the collision overlay, in screen space under the boss. */
+  private drawHitboxLegend(c: CanvasRenderingContext2D, R: number) {
+    const label = 'HITBOX = BENTUK GAMBAR';
+    const sub = 'cyan siluet - hijau area tabrakan - merah lingkaran lama';
+    const y = this.targetY + R + 26;
+    c.save();
+    c.textAlign = 'center';
+    c.font = 'bold 11px system-ui, sans-serif';
+    const w = Math.max(c.measureText(label).width, c.measureText(sub).width) + 18;
+    c.fillStyle = 'rgba(3,10,22,0.72)';
+    c.beginPath();
+    if (typeof c.roundRect === 'function') c.roundRect(CX - w / 2, y - 13, w, 33, 8);
+    else c.rect(CX - w / 2, y - 13, w, 33);
+    c.fill();
+    c.strokeStyle = 'rgba(56,189,248,0.8)';
+    c.lineWidth = 1.2;
+    c.stroke();
+    c.fillStyle = '#7dd3fc';
+    c.fillText(label, CX, y);
+    c.font = '9px system-ui, sans-serif';
+    c.fillStyle = 'rgba(190,215,245,0.92)';
+    c.fillText(sub, CX, y + 13);
     c.restore();
   }
 
@@ -8630,7 +8747,6 @@ export class Game {
       // Lapisan target berputar — bos juga berputar pelan (this.rot di update),
       // bukan terkunci diam. Kecepatan boss konstan agar tidak muter liar.
       if (this.level.mode !== 'treasure') c.rotate(this.rot);
-      if (this.showHitbox && this.level.boss) this.drawHitboxDebug(c);
       hasBusterWheelPellets = !this.rock && !this.chest && this.items.some((it) => !!it.busterPellet);
       if (hasBusterWheelPellets && typeof c.getTransform === 'function') {
         busterWheelTransform = c.getTransform() ?? null;
@@ -8998,6 +9114,21 @@ export class Game {
       c.restore();
       }
       c.restore();
+      // Above the art and the stuck rounds: the boss' collision, in colour.
+      if (this.showHitbox && this.level.boss) {
+        c.save();
+        // Same transform chain the head is drawn with: translate, scale, the
+        // boss' float/sway/breath/reaction, then the wheel angle. Anything less
+        // and the outline would sit a few pixels off the art it describes.
+        c.translate(CX + (this.elevenMotion()?.dx ?? 0), this.targetY + this.bump * 7 + (this.elevenMotion()?.dy ?? 0));
+        c.scale(1 + this.bump * 0.035, 1 + this.bump * 0.035);
+        const decor = this.bossDecorMatrix();
+        c.transform(decor.a, decor.b, decor.c, decor.d, decor.e, decor.f);
+        if (this.level.mode !== 'treasure') c.rotate(this.rot);
+        this.drawHitboxDebug(c);
+        c.restore();
+        this.drawHitboxLegend(c, R);
+      }
       if (s7w) {
         // Slide 3's lens bends what is already on screen (the gravity orb,
         // the black hole), then its `front` stuck rounds go on top.

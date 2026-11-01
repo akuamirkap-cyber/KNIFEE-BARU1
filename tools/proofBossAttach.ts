@@ -67,7 +67,6 @@ function make() {
   game.startAtLevel(5);
   game.setWheelArt('boss|pirate', image, svg);
   game.state = 'play';
-  game.showHitbox = true;
   for (let i = 0; i < 240; i++) game.update(1 / 60);
   game.items = [];
   game.projs = [];
