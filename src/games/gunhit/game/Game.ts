@@ -3,6 +3,7 @@ import { sfx, withSfxGain } from './audio';
 import { normalizeSgaSpeed, type SgaGameSpeed } from './gameSpeed';
 import { getFast2DContext, getOptimalCanvasDpr, isMobilePerfProfile } from '../utils/mobilePerf';
 import { AdaptiveCanvasDpr } from '../utils/adaptiveCanvasDpr';
+import { FrameCadence } from '../utils/frameCadence';
 import { slide2Sfx } from './slide2Audio';
 import { Slide2Fx } from './slide2Fx';
 import {
@@ -1365,6 +1366,9 @@ export class Game {
   private scale = 1;
   private dpr = 1;
   private adaptiveDpr = new AdaptiveCanvasDpr();
+  private cadence = new FrameCadence();
+  /** Milliseconds the previous animation frame spent simulating and drawing. */
+  private lastWork = 0;
   private raf = 0;
   private last = 0;
   private active = false;
@@ -2323,6 +2327,9 @@ export class Game {
     // gradually, and sustained smooth play restores it. No effects are removed.
     const baseDpr = getOptimalCanvasDpr(2);
     this.adaptiveDpr.reset(baseDpr, isMobilePerfProfile());
+    // Re-measure the cadence against the new backing store.
+    this.cadence.reset();
+    this.lastWork = 0;
     this.canvas.style.width = `${W}px`;
     this.canvas.style.height = `${H}px`;
     this.applyCanvasDpr(baseDpr);
@@ -5673,15 +5680,27 @@ export class Game {
       if (elapsed > 0) {
         const dt = Math.min(0.033, elapsed / 1000);
         this.last = now;
-        if (this.state === 'play' && !this.choosingBuff &&
-            (typeof document === 'undefined' || document.visibilityState !== 'hidden')) {
+        const live = this.state === 'play' && !this.choosingBuff &&
+          (typeof document === 'undefined' || document.visibilityState !== 'hidden');
+        if (live) {
           const dpr = this.adaptiveDpr.recordFrame(elapsed);
           if (dpr !== null) this.applyCanvasDpr(dpr);
         } else {
           this.adaptiveDpr.pause();
         }
+        const started = performance.now();
         this.update(dt);
-        this.render();
+        // A 120 Hz screen that cannot hold 8.3 ms gets uneven frames; drawing on
+        // the 60 Hz grid instead is the difference between "high fps" and
+        // "smooth". Only drawing is skipped — the simulation above always runs.
+        // The governor keeps working on its own; this never touches artwork.
+        if (live ? this.cadence.shouldRender(now, elapsed, this.lastWork) : true) {
+          this.render();
+          // Measured only on frames that really drew: a skipped render is not
+          // evidence of headroom, and feeding it back would make the lock
+          // release and re-engage in a loop.
+          this.lastWork = performance.now() - started;
+        }
       }
     }
     this.raf = requestAnimationFrame(this.loop);
@@ -8278,6 +8297,11 @@ export class Game {
 
   private forestBackdrop: HTMLCanvasElement | null = null;
   private forestBackdropKey = '';
+  private forestBackdropDensity = 0;
+  private forestBackdropCtx: CanvasRenderingContext2D | null = null;
+  private forestGlowPaint: CanvasGradient | null = null;
+  private forestGlowKey = '';
+  private forestVignettePaint: CanvasGradient | null = null;
   private specialOverlayCanvas: HTMLCanvasElement | null = null;
   private specialOverlayKey = '';
 
@@ -8428,32 +8452,50 @@ export class Game {
       }
     }
 
-    // Sky, silhouettes and target lighting do not change each frame. Cache
-    // them at retina resolution using `steadyTargetY` so Boss rise/fall never
-    // reallocates full-screen canvases every frame.
-    const steadyY = this.steadyTargetY;
+    // Sky, silhouettes and the vignette never change inside a stage, so they are
+    // rasterised once per style + raster density and blitted. The target glow is
+    // the only part that follows the radius, and it is painted live on top —
+    // baking it meant a full-screen backdrop repaint on every Grow/Shrink-Ray
+    // frame (the radius eases by fractions of a pixel every frame), measured at
+    // 34 ms per frame instead of 2.8 ms in the offline audit: a slideshow on a
+    // phone. Live glow keeps the same pixels and follows the radius smoothly.
     const density = Math.ceil(this.dpr || 1);
-    const key = `${this.level.style}:${R}:${steadyY}:${density}`;
+    const key = `${this.level.style}:${density}`;
     if (key !== this.forestBackdropKey || !this.forestBackdrop) {
-      const doc = (globalThis as { document?: Document }).document;
-      if (doc && typeof doc.createElement === 'function') {
-        const backdrop = doc.createElement('canvas');
-        backdrop.width = W * density;
-        backdrop.height = H * density;
-        const bg = backdrop.getContext('2d');
-        if (bg) {
-          bg.setTransform(density, 0, 0, density, 0, 0);
-          this.paintForestBackdrop(bg, pal, R, steadyY);
-          this.forestBackdrop = backdrop;
-          this.forestBackdropKey = key;
+      // Reuse the same surface: allocating a fresh full-screen canvas per repaint
+      // was the expensive half of the old behaviour.
+      let backdrop = this.forestBackdrop;
+      let bg = this.forestBackdropCtx;
+      if (!backdrop || this.forestBackdropDensity !== density || !bg) {
+        const doc = (globalThis as { document?: Document }).document;
+        if (doc && typeof doc.createElement === 'function') {
+          backdrop = doc.createElement('canvas');
+          backdrop.width = W * density;
+          backdrop.height = H * density;
+          bg = backdrop.getContext('2d');
+        } else {
+          backdrop = null;
+          bg = null;
         }
+      }
+      if (backdrop && bg) {
+        bg.setTransform(1, 0, 0, 1, 0, 0);
+        bg.clearRect(0, 0, backdrop.width, backdrop.height);
+        bg.setTransform(density, 0, 0, density, 0, 0);
+        this.paintForestBackdrop(bg, pal);
+        this.forestBackdrop = backdrop;
+        this.forestBackdropCtx = bg;
+        this.forestBackdropKey = key;
+        this.forestBackdropDensity = density;
       }
     }
     if (this.forestBackdrop) {
       c.drawImage(this.forestBackdrop, 0, 0, W, H);
     } else {
-      this.paintForestBackdrop(c, pal, R, steadyY);
+      this.paintForestBackdrop(c, pal);
     }
+    this.paintForestGlow(c, pal, R, this.steadyTargetY);
+    this.paintForestVignette(c);
 
     // 5. Golden fireflies still pulse individually, but their auras and cores
     // are batched instead of asking the canvas for 90 separate fills a frame.
@@ -8477,11 +8519,14 @@ export class Game {
     c.fill();
   }
 
+  /**
+   * The part of the forest that never changes inside a stage: sky gradient, far
+   * and near tree silhouettes. Cached once per style + raster density, so the
+   * radius easing of the Grow/Shrink Ray can never invalidate it.
+   */
   private paintForestBackdrop(
     c: CanvasRenderingContext2D,
     pal: (typeof STYLE_COLORS)[Style],
-    R: number,
-    glowCenterY = this.steadyTargetY,
   ) {
     // 1. Gradasi Langit Hutan 2D (+20% lebih cerah khas Knife Hit)
     const bg = c.createLinearGradient(0, 0, 0, H);
@@ -8543,20 +8588,49 @@ export class Game {
     c.moveTo(395, 440); c.quadraticCurveTo(350, 410, 300, 370); c.lineTo(306, 364); c.quadraticCurveTo(355, 402, 398, 425); c.closePath();
     c.fill();
 
-    // 4. Ambient Target Glow (Cahaya lembut di sekitar buah / target)
-    const targetGlow = c.createRadialGradient(CX, glowCenterY, 20, CX, glowCenterY, R * 2.5);
-    targetGlow.addColorStop(0, pal.glow);
-    targetGlow.addColorStop(0.6, pal.glow.replace(/[\d.]+\)$/, '0.06)'));
-    targetGlow.addColorStop(1, 'rgba(0,0,0,0)');
-    c.fillStyle = targetGlow;
-    c.fillRect(0, 0, W, H);
+  }
 
-    // A restrained bottom vignette adds depth while keeping the lower forest readable.
-    const lowerShade = c.createLinearGradient(0, H * 0.48, 0, H);
-    lowerShade.addColorStop(0, 'rgba(2, 10, 18, 0)');
-    lowerShade.addColorStop(0.58, 'rgba(2, 10, 18, 0.045)');
-    lowerShade.addColorStop(1, 'rgba(2, 10, 18, 0.12)');
-    c.fillStyle = lowerShade;
+  /**
+   * 4. Ambient target glow (cahaya lembut di sekitar buah / target).
+   *
+   * This one *does* follow the radius, so it is painted live on top of the
+   * cached art instead of being baked into it. Two full-screen fills a frame cost
+   * a fraction of a millisecond and are cheaper than repainting a whole
+   * backdrop whenever the radius eases by a fraction of a pixel. The gradient is
+   * kept while its geometry is unchanged, so growing a head does not allocate a
+   * shader per frame either.
+   */
+  private paintForestGlow(
+    c: CanvasRenderingContext2D,
+    pal: (typeof STYLE_COLORS)[Style],
+    R: number,
+    glowCenterY = this.steadyTargetY,
+  ) {
+    const outer = Math.max(24, Math.round(R * 2.5 * 2) / 2);
+    const centreY = Math.round(glowCenterY * 2) / 2;
+    const key = `${outer}:${centreY}:${pal.glow}`;
+    if (key !== this.forestGlowKey || !this.forestGlowPaint) {
+      const targetGlow = c.createRadialGradient(CX, centreY, 20, CX, centreY, outer);
+      targetGlow.addColorStop(0, pal.glow);
+      targetGlow.addColorStop(0.6, pal.glow.replace(/[\d.]+\)$/, '0.06)'));
+      targetGlow.addColorStop(1, 'rgba(0,0,0,0)');
+      this.forestGlowPaint = targetGlow;
+      this.forestGlowKey = key;
+    }
+    c.fillStyle = this.forestGlowPaint;
+    c.fillRect(0, 0, W, H);
+  }
+
+  /** A restrained bottom vignette: depth without hiding the lower forest. */
+  private paintForestVignette(c: CanvasRenderingContext2D) {
+    if (!this.forestVignettePaint) {
+      const lowerShade = c.createLinearGradient(0, H * 0.48, 0, H);
+      lowerShade.addColorStop(0, 'rgba(2, 10, 18, 0)');
+      lowerShade.addColorStop(0.58, 'rgba(2, 10, 18, 0.045)');
+      lowerShade.addColorStop(1, 'rgba(2, 10, 18, 0.12)');
+      this.forestVignettePaint = lowerShade;
+    }
+    c.fillStyle = this.forestVignettePaint;
     c.fillRect(0, 0, W, H);
   }
 
