@@ -1447,6 +1447,8 @@ export class Game {
   private burnTick = 0;
   private spikeOffT = 0;
   private targetR = 0;
+  /** Radius the face bitmap was baked at (`buildFace`), for pad scaling. */
+  private faceBaseR = 0;
   private faceR = 106;
   private portals: Portal[] = [];
   private glitchT = 0;
@@ -2891,6 +2893,10 @@ export class Game {
     const R = this.level.radius;
     const S = this.faceScale;
     const pad = this.level.boss ? 40 : 4;
+    // The bitmap is baked at this radius. The Grow Ray moves `level.radius`
+    // afterwards, so the geometry (mask, contour, impact points) is only in
+    // agreement with the art while the pad scales with it — see `facePadNow()`.
+    this.faceBaseR = R;
     const size = (R + pad) * 2;
     // Game B's own wheel artwork wins whenever it has been rasterised; the
     // canvas faces below stay as the instant fallback for the first frames.
@@ -3033,6 +3039,16 @@ export class Game {
       c.stroke(this.maskOutline);
       c.restore();
     }
+    // The old circular hitbox, for comparison: if any round sat on this ring the
+    // silhouette test would be broken. Nothing is ever placed on it.
+    c.save();
+    c.setLineDash([3, 6]);
+    c.strokeStyle = 'rgba(255,64,96,0.9)';
+    c.lineWidth = 1.2;
+    c.beginPath();
+    c.arc(0, 0, R, 0, TAU);
+    c.stroke();
+    c.restore();
     // the contour everything else uses
     c.strokeStyle = mask ? 'rgba(34,255,136,0.95)' : 'rgba(255,64,64,0.95)';
     c.lineWidth = 1.6;
@@ -4109,6 +4125,18 @@ export class Game {
    * spark, crack and burst is placed through this, so effects land on the
    * drawing instead of on a circle of radius R.
    */
+  /**
+   * The padding the face bitmap is blitted with, scaled by the same factor the
+   * wheel itself has grown. Keeping the pad proportional is what makes the art
+   * frame (mask, contour, impact points) equal to the drawn frame at any radius:
+   * the grow ray scales the head, and the collision scales with it.
+   */
+  private facePadNow(R = this.level.radius): number {
+    const pad = this.level.boss ? 40 : 4;
+    const base = this.faceBaseR || R;
+    return base > 0 ? pad * (R / base) : pad;
+  }
+
   private artToWorld(lx: number, ly: number) {
     let x = lx;
     let y = ly;
@@ -6591,7 +6619,21 @@ export class Game {
     }
     // grow ray
     if (this.targetR && this.state !== 'clear') {
+      const before = this.level.radius;
       this.level.radius += (this.targetR - this.level.radius) * Math.min(1, dt * 8);
+      const k = this.level.radius / before;
+      // The head has grown under the rounds that are already in it: their
+      // artwork-local spots (px/py) are measured in this radius' units, so they
+      // ride out with the drawing instead of drifting off it.
+      if (Math.abs(k - 1) > 1e-6) {
+        for (const it of this.items) {
+          if (it.px !== undefined && it.py !== undefined) {
+            it.px *= k;
+            it.py *= k;
+          }
+          if (it.r !== undefined) it.r *= k;
+        }
+      }
     }
     for (let i = this.portals.length - 1; i >= 0; i--) {
       this.portals[i].life -= dt;
@@ -8614,8 +8656,11 @@ export class Game {
           const sc = it.scale ?? 1;
           const totalWeaponLen = it.type === 'old' ? BLEN : (getWeapon(it.w || 'pistol').stick + 12);
           const len = totalWeaponLen;
-          // Masuk lebih dalam hingga hanya terlihat setengah (50% tertanam di dalam papan)
-          const embedDepth = totalWeaponLen * 0.5;
+          // Masuk lebih dalam hingga hanya terlihat setengah (50% tertanam di
+          // dalam papan). Di boss, Perfect Shot menanam 72 % — hanya 28 % yang
+          // menonjol keluar dari gambar (`edgeTop(a, bh * 0.28)`), sehingga
+          // peluru terbaca menancap di kepala, bukan duduk di tepi roda.
+          const embedDepth = totalWeaponLen * (this.level.boss ? 0.72 : 0.5);
           const pencilEmbedBonus = it.w === 'pencil' ? Math.sin(it.angle * 13) * 5 : 0;
           const itemR = it.px !== undefined && it.py !== undefined
             ? Math.hypot(it.px, it.py)
@@ -8766,7 +8811,7 @@ export class Game {
       // Slide 3 draws its ordinary stuck rounds before its wheel face, so the
       // part buried in the wood is hidden.
       if (s7w) s7w.drawStuck(c, R, false);
-      const facePad = this.level.boss ? 40 : 4;
+      const facePad = this.facePadNow(R);
       if (this.rock) {
         this.rock.draw(c, R, this.time);
         const sc = R / 196;
@@ -8802,6 +8847,8 @@ export class Game {
           if (it.type !== 'bullet' || !it.setTwo) continue;
           pins.push({
             a: it.angle,
+            // A boss has no rim: the pin sits at the pixel its round bit.
+            r: it.px !== undefined && it.py !== undefined ? Math.hypot(it.px, it.py) : undefined,
             hue: it.hue ?? 28,
             seed: (it.angle * 3.7) % 10,
             flash: Math.max(0, 1 - it.age * 5),
