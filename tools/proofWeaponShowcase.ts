@@ -21,7 +21,7 @@ installSilentAudio();
 g.window = Object.assign(g.window ?? {}, { setTimeout, clearTimeout, setInterval: () => 0, clearInterval: () => undefined, addEventListener: () => undefined, removeEventListener: () => undefined, devicePixelRatio: 2, innerWidth: 420, innerHeight: 760, matchMedia: () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} }) });
 
 const W = 380, H = 180, DPR = 2;
-const ids = ['pistol', 'cricket', 'ak47', 'shotgun', 'minigun', 'bazooka'] as const;
+const ids = ['pistol', 'nail', 'ak47', 'shotgun', 'minigun', 'bazooka', 'sniper', 'longbow'] as const;
 const pane = (id: string, scale: number) => {
   const cv = createCanvas(W * DPR, H * DPR);
   const ctx = cv.getContext('2d') as unknown as CanvasRenderingContext2D;
@@ -40,28 +40,33 @@ const pane = (id: string, scale: number) => {
 };
 
 const rows = ids.length;
-const sheet = createCanvas(W * 2 + 30, (H + 22) * rows + 34);
+const LABEL = 20, GAP = 4;
+const sheet = createCanvas(W * 2 + 30, 34 + rows * (LABEL + H + GAP));
 const so = sheet.getContext('2d');
 so.fillStyle = '#0b1420'; so.fillRect(0, 0, sheet.width, sheet.height);
-so.fillStyle = '#ff9a9a'; so.font = '700 15px monospace';
-so.fillText('SEBELUM — semua senjata diskalakan sama besar', 12, 22);
+so.fillStyle = '#ff9a9a'; so.font = '700 14px monospace';
+so.fillText('SEBELUM — semua sama besar', 12, 16);
 so.fillStyle = '#8dffbe';
-so.fillText('SESUDAH — ukuran asli relatif', W + 24, 22);
+so.fillText('SESUDAH — ukuran asli, besar tetap besar', W + 24, 16);
+so.fillStyle = '#ffd23f'; so.font = '700 13px monospace';
+so.fillText('AK-47 vs PISTOL: 1.00x -> ' + (() => {
+  const sp = getGunMetrics('pistol' as never).span, sa = getGunMetrics('ak47' as never).span;
+  return (sa * showcaseScale(sa, H) / (sp * showcaseScale(sp, H))).toFixed(2) + 'x';
+})(), 12, 32);
 for (const [i, id] of ids.entries()) {
   const span = getGunMetrics(id as never).span;
   const before = pane(id, (H * 0.98) / Math.max(span, 130));
   const after = pane(id, showcaseScale(span, H));
-  const y = 30 + i * (H + 22);
-  so.drawImage(before as never, 0, y, W, H);
-  so.drawImage(after as never, W + 18, y, W, H);
-  so.fillStyle = '#0b1420'; so.fillRect(0, y, W * 2 + 30, 20);
+  const top = 34 + i * (LABEL + H + GAP);
   so.fillStyle = '#cfe3ff'; so.font = '700 14px monospace';
-  const pct = ((span * showcaseScale(span, H)) / (H * 0.98) * 100).toFixed(0);
-  so.fillText(`${id.toUpperCase()} — span ${span} → ${pct}% tinggi panel`, 8, y + 15);
+  const pct = ((span * showcaseScale(span, H)) / H * 100).toFixed(0);
+  so.fillText(`${id.toUpperCase()} — span ${span} -> ${pct}% tinggi panel (dulu 98%)`, 8, top + 15);
+  so.drawImage(before as never, 0, top + LABEL, W, H);
+  so.drawImage(after as never, W + 18, top + LABEL, W, H);
 }
 writeFileSync('parity-proof/gameA-armory-showcase-scale.png', sheet.toBuffer('image/png'));
 console.log('written parity-proof/gameA-armory-showcase-scale.png');
 console.log(ids.map((id) => {
   const span = getGunMetrics(id as never).span;
-  return `${id}: span ${span} -> ${(((span * showcaseScale(span, H)) / (H * 0.98)) * 100).toFixed(0)}%`;
+  return `${id.padEnd(8)} span ${String(span).padStart(3)} -> ${(((span * showcaseScale(span, H)) / H) * 100).toFixed(0)}% of the pane`;
 }).join('\n'));

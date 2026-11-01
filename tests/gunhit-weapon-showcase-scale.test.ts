@@ -30,7 +30,7 @@ test('the armory showcase keeps the real proportions of the arsenal', () => {
   assert.ok(ak <= bazooka * 1.05, 'the AK-47 and the bazooka are both big guns');
   // A small pistol and a long rifle can no longer be the same size, which is
   // exactly what the armory was doing when every weapon filled the pane.
-  assert.ok(ak > pistol * 1.2, 'the rifle is visibly the bigger gun');
+  assert.ok(ak > pistol * 1.6, `the rifle owns the pane, the pistol does not (${(ak / pistol).toFixed(2)}x)`);
 });
 
 test('nothing is blown up past the pane and nothing is cropped worse than before', () => {
@@ -50,7 +50,7 @@ test('a longer weapon never reads smaller than a shorter one', () => {
     assert.ok(drawn(spans[i]) >= drawn(spans[i - 1]) - 1e-6, `span ${spans[i]} is not smaller than ${spans[i - 1]}`);
   }
   // Small guns keep a readable presence instead of shrinking into a dot.
-  assert.ok(drawn(spans[0]) >= PANE * 0.45, `the smallest gun still reads (${drawn(spans[0]).toFixed(1)} px)`);
+  assert.ok(drawn(spans[0]) >= PANE * 0.38, `the smallest gun still reads (${drawn(spans[0]).toFixed(1)} px)`);
   // …and the biggest fill the pane.
   assert.ok(drawn(SHOWCASE_FULL_SPAN) >= PANE * 0.95, 'a reference-sized gun fills the showcase');
 });

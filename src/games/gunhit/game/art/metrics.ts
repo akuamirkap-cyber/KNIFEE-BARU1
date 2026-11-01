@@ -48,16 +48,26 @@ export function getGunInkBox(id: WeaponId): GunInkBox | null {
 export const SHOWCASE_FULL_SPAN = 300;
 
 /**
+ * How fast the showcase size grows with `span`. 1 = strictly proportional
+ * (an AK-47 is only 1.46× a pistol's span, which still read as "same size" on
+ * a phone). Above 1 the long guns pull ahead of the short ones, so the pistol
+ * stays a small sidearm while the rifle/launcher class owns the pane.
+ */
+export const SHOWCASE_SIZE_CURVE = 1.45;
+
+/**
  * Scale that draws `span` at its own size inside a pane `h` px tall.
  *
  * `fit` is the hard ceiling (the whole drawing must stay inside the pane);
- * `relative` is the size a weapon of `SHOWCASE_FULL_SPAN` would take. Smaller
- * guns land under the ceiling and therefore read smaller, which is the point.
+ * `share` is how much of the pane a weapon of this `span` is allowed to take,
+ * curved so the big guns genuinely dominate. Small guns land far under the
+ * ceiling and therefore read small, which is the point.
  */
 export function showcaseScale(spanRaw: number, h: number, fill = 0.98): number {
   const span = Math.max(spanRaw, 130);
   const fit = (h * fill) / span;
-  const relative = (h * fill) / SHOWCASE_FULL_SPAN;
+  const share = Math.pow(span / SHOWCASE_FULL_SPAN, SHOWCASE_SIZE_CURVE);
+  const relative = (h * fill * share) / span;
   return Math.min(fit, relative);
 }
 
