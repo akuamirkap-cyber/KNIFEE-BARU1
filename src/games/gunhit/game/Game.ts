@@ -942,10 +942,9 @@ export function maskProfile(mask: ArtMask): number[] {
  */
 export function buildMaskOutline(mask: ArtMask): Path2D | null {
   if (typeof Path2D === 'undefined') return null;
-  const { size, alpha } = mask;
+  const { size } = mask;
   const p = new Path2D();
-  const solid = (x: number, y: number) =>
-    x >= 0 && y >= 0 && x < size && y < size && alpha[y * size + x] > 16;
+  const solid = (x: number, y: number) => maskSolid(mask, x, y);
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       if (!solid(x, y)) continue;
@@ -991,20 +990,19 @@ export function buildMaskSurface(mask: ArtMask, steps = 720): Path2D | null {
   return p;
 }
 
-/** Is this mask pixel opaque? A 3x3 neighbourhood keeps thin strokes solid. */
+/**
+ * Where the drawing actually is. One threshold for everything — the hit test,
+ * the collision overlay, the contour and the outline — so the blue line the
+ * player sees is *exactly* the line a round stops on: no anti-aliased halo, no
+ * 3x3 neighbourhood, nothing a few pixels outside the artwork's own edge.
+ */
+const INK_ALPHA = 96;
+
+/** Is this mask pixel part of the drawing? */
 function maskSolid(mask: ArtMask, x: number, y: number): boolean {
   const { size, alpha } = mask;
-  for (let dy = -1; dy <= 1; dy++) {
-    const py = y + dy;
-    if (py < 0 || py >= size) continue;
-    const row = py * size;
-    for (let dx = -1; dx <= 1; dx++) {
-      const px = x + dx;
-      if (px < 0 || px >= size) continue;
-      if (alpha[row + px] > 20) return true;
-    }
-  }
-  return false;
+  if (x < 0 || y < 0 || x >= size || y >= size) return false;
+  return alpha[y * size + x] > INK_ALPHA;
 }
 
 interface TargetPixels { data: Uint8ClampedArray; size: number }
@@ -5731,7 +5729,21 @@ export class Game {
       const head = nose > 0 && dist > nose
         ? { x: p.x + (p.vx / (Math.hypot(p.vx, p.vy) || 1)) * nose, y: p.y + (p.vy / (Math.hypot(p.vx, p.vy) || 1)) * nose }
         : null;
-      const hit = (head ? this.artHitAt(head.x, head.y) : null) ?? this.artHitAt(p.x, p.y);
+      // Walk the whole distance the round covered since the last frame (the
+      // caller substeps at ≤ 7 px) in 1 px steps, oldest pixel first: start a
+      // stride behind and close in. Every point further back than the substep
+      // start is a spot this round has already flown through, so it is empty
+      // space by definition — the first solid pixel found this way is the pixel
+      // the round actually met, the blue outline, not a point buried up to a
+      // stride deep inside the body.
+      const speed = Math.hypot(p.vx, p.vy) || 1;
+      const ux = p.vx / speed;
+      const uy = p.vy / speed;
+      const span = Math.min(10, speed * 0.02);
+      let hit: { r: number; x: number; y: number } | null = head ? this.artHitAt(head.x, head.y) : null;
+      for (let d = span; !hit && d >= 0; d -= 1) {
+        hit = this.artHitAt(p.x - ux * d, p.y - uy * d);
+      }
       if (hit) {
         return {
           res: 'stick',

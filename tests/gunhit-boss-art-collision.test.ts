@@ -82,7 +82,11 @@ test('every bullet tests the boss pixels before anything else', () => {
   assert.match(game, /const u = Math\.floor\(\(\(lx \/ R \/ mask\.span\) \+ 1\) \* 0\.5 \* mask\.size\);/);
   // StepProj asks the artwork and nothing else on a boss stage.
   assert.match(game, /if \(isBoss\) \{/);
-  assert.match(game, /const hit = \(head \? this\.artHitAt\(head\.x, head\.y\) : null\) \?\? this\.artHitAt\(p\.x, p\.y\);/);
+  // The whole stride the round covered is walked at 1 px from outside in, so
+  // the first pixel of the drawing is what stops it — a thin brim can never be
+  // stepped over, and the round never sinks a stride deep into the body.
+  assert.match(game, /let hit: \{ r: number; x: number; y: number \} \| null = head \? this\.artHitAt\(head\.x, head\.y\) : null;/);
+  assert.match(game, /for \(let d = span; !hit && d >= 0; d -= 1\) \{/);
   assert.match(game, /local: Math\.atan2\(hit\.y, hit\.x\),/);
   assert.match(game, /px: hit\.x,/);
   assert.match(game, /py: hit\.y,/);

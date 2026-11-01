@@ -175,10 +175,15 @@ test('the head scaled up by its laugh / angry / rage pose is still hittable', as
   let probe: { x: number; y: number; r: number } | null = null;
   for (let deg = 0; deg < 360 && !probe; deg += 5) {
     const a = (deg * Math.PI) / 180;
-    for (let r = outer; r > outer - 2; r -= 0.5) {
+    // Walk inwards until the *strict* ink test is happy: the hit test uses one
+    // exact threshold, so the outermost anti-aliased pixel is not the edge.
+    for (let r = outer; r > outer - 6; r -= 0.5) {
       const lx = Math.cos(a) * r;
       const ly = Math.sin(a) * r;
-      if (maskInk(game, lx, ly)) { probe = { x: lx, y: ly, r }; break; }
+      if (game.artHitAt(game.artToWorld(lx, ly).x, game.artToWorld(lx, ly).y)) {
+        probe = { x: lx, y: ly, r };
+        break;
+      }
     }
   }
   assert.ok(probe, 'the artwork has an outer edge');
@@ -282,4 +287,71 @@ test('a round stays on the drawing while the head grows under it', async () => {
   assert.ok((game.level.radius as number) > R0 + 12, `${kind}: the head really grew`);
   assert.ok(maskInk(game, it.px, it.py), `${kind}: the round is still on the drawing after the growth`);
   game.destroy();
+});
+
+/**
+ * The rule the stage actually plays by: a round stops on the drawn edge and on
+ * nothing else. The overlay's blue line is traced with the same threshold as the
+ * hit test, so "3 px outside the line" has to be empty space.
+ */
+test('the hitbox is the drawn edge: outside it is empty space', async () => {
+  for (const level of [5, 20]) {
+    const { game, kind } = await bossStage(level);
+    let checked = 0;
+    for (let deg = 0; deg < 360; deg += 12) {
+      const a = (deg * Math.PI) / 180;
+      const surface = game.artSurfaceLocal(a);
+      if (!surface) continue;
+      const at = (r: number) => {
+        const w = game.artToWorld(Math.cos(a) * r, Math.sin(a) * r);
+        return game.artSurfaceAt(w.x, w.y);
+      };
+      assert.notEqual(at(surface.r), null, `${kind} ${deg}deg: the line itself is the boss`);
+      assert.equal(at(surface.r + 3), null, `${kind} ${deg}deg: 3 px outside the line is empty space`);
+      assert.equal(at(surface.r + 8), null, `${kind} ${deg}deg: 8 px outside the line is empty space`);
+      checked++;
+    }
+    assert.ok(checked > 25, `${kind}: the whole outline was checked (${checked})`);
+    game.destroy();
+  }
+});
+
+/**
+ * The round has to stop on the pixel it *met*, not a stride deeper. Every
+ * substep covers up to 7 px, so a walk that closes in from the wrong end leaves
+ * the round buried inside the body — off the blue line by the width of its own
+ * stride. The check is exact and angle-free: on the stuck pixel the strict ink
+ * test says "boss", and an empty pixel is one mask pixel away.
+ */
+function edgeGap(game: Record<string, any>, lx: number, ly: number) {
+  const mask = game.ensureArtMask();
+  assert.ok(mask, 'the stage has an artwork mask');
+  for (let rr = 0.9; rr <= 3.2; rr += 0.45) {
+    for (let k = 0; k < 36; k++) {
+      const a = (k * Math.PI * 2) / 36;
+      if (!game.artSolidAtLocal(mask, lx + Math.cos(a) * rr, ly + Math.sin(a) * rr)) return rr;
+    }
+  }
+  return Number.POSITIVE_INFINITY;
+}
+
+test('a fast round stops on the first pixel of the drawing it meets', async () => {
+  for (const weapon of ['sniper', 'pistol']) {
+    const { game, kind } = await bossStage(5);
+    game.setWeapon(weapon);
+    let hits = 0;
+    for (let deg = 0; deg < 360; deg += 6) {
+      const it = shootAtLocal(game, (Math.PI * deg) / 180);
+      if (!it) continue;
+      hits++;
+      const world = game.artToWorld(it.px, it.py);
+      assert.ok(game.artHitAt(world.x, world.y),
+        `${kind}/${weapon} ${deg}deg: the round is on the drawing`);
+      const gap = edgeGap(game, it.px, it.py);
+      assert.ok(gap <= 1.8,
+        `${kind}/${weapon} ${deg}deg: the round sits on the edge, not a stride inside it (${gap.toFixed(2)} px)`);
+    }
+    assert.ok(hits >= 15, `${kind}/${weapon}: the fast rounds reached the head (${hits})`);
+    game.destroy();
+  }
 });
