@@ -53,8 +53,11 @@ test('the boss hit surface is sampled from the artwork on screen, never a circle
     (game.match(/this\.bossRadiusAt\(/g) ?? []).length >= 10,
     'all boss collision sites read the artwork contour',
   );
-  const processor = read('src/games/gunhit/game/bossAssetProcessor.ts');
-  assert.match(processor, /Math\.max\(targetRadius \* 0\.3, asset\.radii\[deg\] \* scale\)/);
+  // There is no Game A boss asset/contour processor left to fall back to: the
+  // silhouette comes from the head art on screen, and nowhere else.
+  assert.ok(!game.includes('getExactBossRadius'), 'no legacy radial boss table');
+  assert.ok(!game.includes('bossAssetProcessor'), 'no legacy boss asset pipeline');
+  assert.match(game, /private ensureArtMask\(\): ArtMask \| null \{/, 'the mask is rebuilt from the live artwork');
 });
 
 test('the alpha contour of a cut-out head follows its shape instead of filling a circle', () => {

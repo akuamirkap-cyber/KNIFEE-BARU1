@@ -1,14 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { getBossDef } from '../game/bossRoster';
 import { HeadArt } from '../../perfect-shot/play/HeadArt';
 import {
   GUN_HIT_MAP_MAX_LEVEL,
-  getGunHitMapBoss,
   getGunHitMapNodeCaption,
   getGunHitMapNodeTheme,
   getGunHitMapStage,
 } from '../game/stageMap';
-import { bossHeadFor, headInfoFor } from '../game/bossIdentity';
+import { bossHeadFor, bossProfileFor, headInfoFor } from '../game/bossIdentity';
 
 const MAP_X = [50, 31, 19, 32, 50, 69, 81, 68];
 const MAP_GAP = 96;
@@ -66,7 +64,7 @@ export default function LevelMap({
 
   const selectedType = selectedLevel === null ? null : getGunHitMapStage(selectedLevel);
   const selectedBoss = selectedType === 'boss' && selectedLevel !== null
-    ? getBossDef(getGunHitMapBoss(selectedLevel))
+    ? bossProfileFor(selectedLevel)
     : null;
 
   return (
@@ -79,7 +77,7 @@ export default function LevelMap({
         <button onClick={onBack} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-b-4 border-[#07534b] bg-gradient-to-b from-[#34d399] to-[#059669] text-2xl font-black shadow-lg active:translate-y-0.5" aria-label="Kembali ke menu">‹</button>
         <div className="min-w-0 flex-1 text-center">
           <h2 className="bg-gradient-to-b from-white to-cyan-200 bg-clip-text text-[22px] font-black leading-none tracking-[.12em] text-transparent drop-shadow">QUEST</h2>
-          <p className="mt-1 text-[10px] font-bold tracking-wider text-white/60">GUN HIT SGA · 100 STAGE · 20 BOSS</p>
+          <p className="mt-1 text-[10px] font-bold tracking-wider text-white/60">GUN HIT SGA · 100 STAGE · 20 BOSS · 11 BOS GAME B</p>
         </div>
         <div className="shrink-0 rounded-full border border-cyan-200/40 bg-black/40 px-2.5 py-1.5 text-[11px] font-black tabular-nums text-cyan-100">{highestUnlocked}/100</div>
       </header>
@@ -128,8 +126,7 @@ export default function LevelMap({
             const isActive = level === activeLevel;
             const isFinal = level === GUN_HIT_MAP_MAX_LEVEL;
             const size = isFinal ? 62 : kind === 'boss' ? 56 : 44;
-            const bossType = kind === 'boss' ? getGunHitMapBoss(level) : null;
-            const boss = bossType ? getBossDef(bossType) : null;
+            const boss = kind === 'boss' ? bossProfileFor(level) : null;
             const stageColors = {
               normal: ['#34d399', '#047857'],
               special: ['#fcd34d', '#b45309'],
@@ -149,7 +146,7 @@ export default function LevelMap({
                   {isActive && !locked && <span className="tap-hint absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-amber-300 px-2 py-0.5 text-[9px] font-black text-slate-950 shadow">KAMU DI SINI</span>}
                   <span className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-full border border-white/30" style={{ background: `linear-gradient(180deg,${stageColors[0]},${stageColors[1]})`, borderBottom: '5px solid rgba(0,0,0,.42)', boxShadow: `0 8px 16px rgba(0,0,0,.4), 0 0 13px ${kind === 'boss' ? boss?.glow ?? 'rgba(251,113,133,.4)' : kind === 'special' ? 'rgba(252,211,77,.25)' : 'rgba(52,211,153,.18)'}`, filter: locked ? 'grayscale(.8) brightness(.58)' : undefined }}>
                     <span className="pointer-events-none absolute inset-x-2 top-1 h-2 rounded-full bg-white/40 blur-[1px]" />
-                    {kind === 'boss' && bossType ? (
+                    {kind === 'boss' && boss ? (
                       <span className="relative z-10 overflow-hidden rounded-full" style={{ width: size - 12, height: size - 12 }}><BossIcon level={level} size={size - 12} /></span>
                     ) : <span className={`relative z-10 text-[20px] ${kind === 'special' ? 'tap-hint' : ''}`}>{theme.symbol}</span>}
                     {locked && <span className="absolute -bottom-1 -right-1 z-20 flex h-5 w-5 items-center justify-center rounded-full border border-white bg-slate-900 text-[10px]">🔒</span>}
@@ -173,7 +170,7 @@ export default function LevelMap({
               const kind = getGunHitMapStage(selectedLevel);
               const theme = getGunHitMapNodeTheme(selectedLevel);
               const meta = MAP_STAGE[kind];
-              const boss = kind === 'boss' ? getBossDef(getGunHitMapBoss(selectedLevel)) : null;
+              const boss = kind === 'boss' ? bossProfileFor(selectedLevel) : null;
               // The boss the stage actually fires at, named after the head art it
               // wears — the map keeps its own theme name, the fight keeps its art.
               const artBoss = kind === 'boss' ? headInfoFor(selectedLevel)?.name ?? '' : '';

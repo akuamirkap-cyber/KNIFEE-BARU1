@@ -233,6 +233,21 @@ test('a real boss stage wears Perfect Shot\'s head and collides with its pixels'
     const screen = artToScreen(game, ax, ay);
     return game.artSurfaceAt(screen.x, screen.y);
   };
+  // The hit region is the area the blue outline encloses. A head has see-through
+  // windows inside that outline (the jester's hat, the vampire's collar), so a
+  // sample can be transparent and still be boss — that is the whole point of
+  // this rule. What must never happen is ink the outline does not cover, or a
+  // hit outside the line.
+  const mask = game.ensureArtMask() as { size: number; span: number; solid: Uint8Array };
+  assert.ok(mask, 'the stage has an artwork mask');
+  assert.ok(mask.solid && mask.solid.length === mask.size * mask.size,
+    'the mask carries the solid footprint the line is stroked from');
+  const solidAt = (ax: number, ay: number) => {
+    const u = Math.floor(((ax / R / mask.span) + 1) * 0.5 * mask.size);
+    const v = Math.floor(((ay / R / mask.span) + 1) * 0.5 * mask.size);
+    if (u < 0 || v < 0 || u >= mask.size || v >= mask.size) return false;
+    return mask.solid[v * mask.size + u] === 1;
+  };
   let agree = 0;
   let solidSamples = 0;
   for (const deg of [0, 30, 45, 60, 90, 120, 135, 150, 180, 210, 225, 240, 270, 300, 315, 330]) {
@@ -240,15 +255,50 @@ test('a real boss stage wears Perfect Shot\'s head and collides with its pixels'
       const a = (deg * Math.PI) / 180;
       const ax = Math.cos(a) * R * k;
       const ay = Math.sin(a) * R * k;
-      const expected = faceInk(ax, ay);
-      if (expected === null) continue; // a borderline pixel: skip it
-      assert.equal(at(ax, ay) !== null, expected, `mask matches the drawn face at ${deg}deg / ${k}R`);
-      agree++;
-      if (expected) solidSamples++;
+      const ink = faceInk(ax, ay);
+      const solid = solidAt(ax, ay);
+      if (ink === true) {
+        assert.equal(solid, true, `the outline covers the drawing's ink at ${deg}deg / ${k}R`);
+        assert.notEqual(at(ax, ay), null, `ink is hit at ${deg}deg / ${k}R`);
+        solidSamples++;
+        agree++;
+      } else if (ink === false) {
+        assert.equal(at(ax, ay) !== null, solid,
+          `hit region is exactly the solid silhouette at ${deg}deg / ${k}R`);
+        agree++;
+      }
     }
   }
   assert.ok(agree > 60, `enough unambiguous points compared (${agree})`);
   assert.ok(solidSamples > 15, `the boss really is solid in places (${solidSamples})`);
+  // The footprint is the drawing, plus the air the drawing encloses. So every
+  // solid pixel must be connected, through solid pixels, to real ink: no island
+  // of "boss" may float in the sky, however far a see-through window reaches
+  // into the middle of the head.
+  const seen = new Uint8Array(mask.size * mask.size);
+  const queue: number[] = [];
+  for (let i = 0; i < mask.alpha.length; i++) {
+    if (mask.alpha[i] > 20 && mask.solid[i]) { seen[i] = 1; queue.push(i); }
+  }
+  while (queue.length) {
+    const i = queue.pop()!;
+    const u = i % mask.size;
+    const v = (i - u) / mask.size;
+    for (const [du, dv] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      const nu = u + du;
+      const nv = v + dv;
+      if (nu < 0 || nv < 0 || nu >= mask.size || nv >= mask.size) continue;
+      const j = nv * mask.size + nu;
+      if (seen[j] || !mask.solid[j]) continue;
+      seen[j] = 1;
+      queue.push(j);
+    }
+  }
+  for (let i = 0; i < mask.solid.length; i++) {
+    if (mask.solid[i] && !seen[i]) {
+      assert.fail(`solid footprint floats away from the art at ${i % mask.size},${Math.floor(i / mask.size)}`);
+    }
+  }
   // Every weapon used to bite the old 0.889R ring here — empty space beside the
   // pirate's cheek. The silhouette test must refuse that.
   assert.equal(at(-R * 0.889, 0), null, 'no bullet meets the boss where the drawing is empty');

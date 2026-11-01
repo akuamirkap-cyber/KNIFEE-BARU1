@@ -56,7 +56,7 @@ import { spawnPlasmaImpact, YELLOW_PLASMA_IMPACT } from '../../../../games/game-
 import { sfx2 } from './sfx2';
 import { drawKnife, knifeVariant, KNIFE_SINK } from './knifeArt';
 import { sfx as bossVoice } from '../../perfect-shot/audio/sfx';
-import { bossNameFor, bossStyleFor } from './bossIdentity';
+import { bossHeadFor, bossNameFor, bossStyleFor } from './bossIdentity';
 import { sfx3 } from './sfx3';
 import { sfx4 } from './sfx4';
 import { sfx6 } from './sfx6';
@@ -85,7 +85,7 @@ import { drawBonusCoin, TreasureChest } from './art/bonusArt';
 import { advanceTreasureCoins, throwTreasureCoins, type TreasureCoin } from './treasureShower';
 import { drawBreakerCoin } from '../../shared/coinArt';
 import { drawBreakerDiamond } from '../../shared/diamondArt';
-import { getBossDef, type BossType } from './bossRoster';
+import { bossDef, type BossAttackFamily, type BossHead } from './bossCatalog';
 import { getSpecialSunburstTheme, getWheelSunburstTheme, gunSunburstColor } from './sunburstPalette';
 import {
   drawBossMuzzleFlash,
@@ -414,7 +414,7 @@ export function bossSpinSpeed(level: number, levelTime: number) {
   return b * k;
 }
 
-export function bossRotationSpeed(type: BossType, levelTime: number) {
+export function bossRotationSpeed(type: BossAttackFamily, levelTime: number) {
   const t = Math.max(0, levelTime);
   switch (type) {
     case 'knight': {
@@ -660,6 +660,101 @@ export interface ArtMask {
   span: number;
   /** Outermost opaque pixel of the mask, in units of R. */
   maxR: number;
+  /**
+   * The boss as a solid object: `1` for every pixel a round can hit. That is
+   * the ink *plus* the see-through windows the head encloses (the jester's hat,
+   * the vampire's collar). Those windows are inside the silhouette — the player
+   * sees them framed by the drawing — so a round may not sail through the middle
+   * of the boss. Air outside the silhouette stays `0`.
+   */
+  solid: Uint8Array;
+}
+
+/**
+ * The boss' solid footprint: its ink, with the transparent windows the ink
+ * completely encloses filled in. The fill starts at the mask border and creeps
+ * through air that is not walled off by ink; whatever air it cannot reach is
+ * inside the drawing (a window in the art), and the boss is solid there.
+ * Concave notches stay open — they are part of the outside, so a round can still
+ * fly into them and only stops where the drawing itself is.
+ */
+export function buildSolidFootprint(size: number, alpha: Uint8Array): Uint8Array {
+  // 1. The wall: real ink, thickened by one pixel. Anti-aliasing and the odd
+  //    one-pixel break in a hairline stroke would otherwise leak the fill from
+  //    the sky into the middle of the head.
+  const wall = new Uint8Array(size * size);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      if (alpha[y * size + x] <= INK_ALPHA) continue;
+      const y0 = Math.max(0, y - 1);
+      const y1 = Math.min(size - 1, y + 1);
+      const x0 = Math.max(0, x - 1);
+      const x1 = Math.min(size - 1, x + 1);
+      for (let v = y0; v <= y1; v++) for (let u = x0; u <= x1; u++) wall[v * size + u] = 1;
+    }
+  }
+  // 2. Flood the sky: every pixel the outside can reach through non-wall air.
+  const open = new Uint8Array(size * size);
+  const stack: number[] = [];
+  const push = (x: number, y: number) => {
+    if (x < 0 || y < 0 || x >= size || y >= size) return;
+    const i = y * size + x;
+    if (open[i] || wall[i]) return;
+    open[i] = 1;
+    stack.push(i);
+  };
+  for (let x = 0; x < size; x++) {
+    push(x, 0);
+    push(x, size - 1);
+  }
+  for (let y = 0; y < size; y++) {
+    push(0, y);
+    push(size - 1, y);
+  }
+  while (stack.length) {
+    const i = stack.pop()!;
+    const x = i % size;
+    const y = (i - x) / size;
+    push(x - 1, y);
+    push(x + 1, y);
+    push(x, y - 1);
+    push(x, y + 1);
+  }
+  // 3. The boss: its real ink, plus the windows the ink encloses. The soft
+  //    fringe is left to the sky, so the line sits on the visible edge.
+  const touchesSky = (x: number, y: number) => {
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const u = x + dx;
+        const v = y + dy;
+        if (u < 0 || v < 0 || u >= size || v >= size) return true;
+        if (open[v * size + u]) return true;
+      }
+    }
+    return false;
+  };
+  const solid = new Uint8Array(size * size);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const i = y * size + x;
+      // Ink is boss. So is the air a drawing encloses (a window in the head) —
+      // but not the anti-aliased fringe that merely borders the sky, or the
+      // blue line would float a pixel off the art.
+      solid[i] = alpha[i] > INK_ALPHA || (!open[i] && !touchesSky(x, y)) ? 1 : 0;
+    }
+  }
+  return solid;
+}
+
+/** Assemble the mask + its solid footprint once, for both builders. */
+function finalizeArtMask(size: number, alpha: Uint8Array, span: number, maxPx: number): ArtMask {
+  return {
+    size,
+    alpha,
+    span,
+    maxR: (maxPx / (size / 2)) * span,
+    solid: buildSolidFootprint(size, alpha),
+  };
 }
 
 /**
@@ -689,7 +784,7 @@ export function buildArtMask(source: CanvasImageSource | null, span = 1, size = 
         if (d > maxPx) maxPx = d;
       }
     }
-    return { size, alpha, span, maxR: (maxPx / half) * span };
+    return finalizeArtMask(size, alpha, span, maxPx);
   } catch {
     return null;
   }
@@ -801,7 +896,7 @@ export function buildArtMaskFromSvg(markup: string | null, span = 1, size = 384)
         if (d > maxPx) maxPx = d;
       }
     }
-    return { size, alpha, span, maxR: (maxPx / half) * span };
+    return finalizeArtMask(size, alpha, span, maxPx);
   } catch {
     return null;
   }
@@ -926,7 +1021,7 @@ export function maskProfile(mask: ArtMask): number[] {
       const x = Math.floor(half + cos * r);
       const y = Math.floor(half + sin * r);
       if (x < 0 || y < 0 || x >= size || y >= size) continue;
-      if (maskSolid(mask, x, y)) {
+      if (maskInk(mask, x, y)) {
         found = r;
         break;
       }
@@ -945,7 +1040,7 @@ export function buildMaskOutline(mask: ArtMask): Path2D | null {
   if (typeof Path2D === 'undefined') return null;
   const { size } = mask;
   const p = new Path2D();
-  const solid = (x: number, y: number) => maskSolid(mask, x, y);
+  const solid = (x: number, y: number) => maskInk(mask, x, y);
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       if (!solid(x, y)) continue;
@@ -978,7 +1073,7 @@ export function buildMaskSurface(mask: ArtMask, steps = 720): Path2D | null {
       const u = Math.floor(half + cos * r);
       const v = Math.floor(half + sin * r);
       if (u < 0 || v < 0 || u >= size || v >= size) continue;
-      if (maskSolid(mask, u, v)) break;
+      if (maskInk(mask, u, v)) break;
     }
     const x = half + cos * r;
     const y = half + sin * r;
@@ -999,11 +1094,90 @@ export function buildMaskSurface(mask: ArtMask, steps = 720): Path2D | null {
  */
 export const INK_ALPHA = 96;
 
-/** Is this mask pixel part of the drawing? */
-function maskSolid(mask: ArtMask, x: number, y: number): boolean {
+/** Is this mask pixel part of the drawing's ink? Used for tracing, not hits. */
+function maskInk(mask: ArtMask, x: number, y: number): boolean {
   const { size, alpha } = mask;
   if (x < 0 || y < 0 || x >= size || y >= size) return false;
   return alpha[y * size + x] > INK_ALPHA;
+}
+
+/**
+ * Is this mask pixel inside the boss' blue outline? THIS is the hitbox.
+ *
+ * A boss is a closed object, not a set of visible pixels: its silhouette is the
+ * ink plus the transparent windows that ink encloses. A round used to sail
+ * through those windows — straight through the middle of the boss — because the
+ * test only accepted ink. Air outside the silhouette is still air, so a round
+ * that misses the blue outline keeps flying.
+ */
+function maskSolid(mask: ArtMask, x: number, y: number): boolean {
+  const { size, alpha, solid } = mask;
+  if (x < 0 || y < 0 || x >= size || y >= size) return false;
+  // A mask built by hand (tests, tooling) may not carry a footprint; the ink is
+  // then the best available shape.
+  if (!solid || !solid.length) return alpha[y * size + x] > INK_ALPHA;
+  return solid[y * size + x] === 1;
+}
+
+/**
+ * The blue line: the exact boundary of the solid footprint, traced with marching
+ * squares in mask pixel space. It follows the helmet's notch and the horns'
+ * spikes (no star-shaped bridging) and it never wanders into empty air, because
+ * every segment separates a solid pixel from an open one. Hit test and line are
+ * two views of the same bytes.
+ */
+export function buildSolidRegion(mask: ArtMask): Path2D | null {
+  if (typeof Path2D === 'undefined') return null;
+  const { size, solid } = mask;
+  const p = new Path2D();
+  for (let y = 0; y < size; y++) {
+    let x = 0;
+    while (x < size) {
+      if (!solid[y * size + x]) { x++; continue; }
+      const start = x;
+      while (x < size && solid[y * size + x]) x++;
+      p.rect(start, y, x - start, 1);
+    }
+  }
+  return p;
+}
+
+export function buildSolidOutline(mask: ArtMask): Path2D | null {
+  if (typeof Path2D === 'undefined') return null;
+  const { size, solid } = mask;
+  const at = (x: number, y: number) =>
+    x < 0 || y < 0 || x >= size || y >= size ? 0 : solid[y * size + x];
+  const p = new Path2D();
+  const seg = (x1: number, y1: number, x2: number, y2: number) => {
+    p.moveTo(x1, y1);
+    p.lineTo(x2, y2);
+  };
+  for (let y = -1; y < size; y++) {
+    for (let x = -1; x < size; x++) {
+      const a = at(x, y);
+      const b = at(x + 1, y);
+      const c = at(x + 1, y + 1);
+      const d = at(x, y + 1);
+      const code = a * 8 + b * 4 + c * 2 + d;
+      if (code === 0 || code === 15) continue;
+      const tx = x + 1, ty = y + 0.5;
+      const rx = x + 1.5, ry = y + 1;
+      const bx = x + 1, by = y + 1.5;
+      const lx = x + 0.5, ly = y + 1;
+      switch (code) {
+        case 1: case 14: seg(lx, ly, bx, by); break;
+        case 2: case 13: seg(bx, by, rx, ry); break;
+        case 3: case 12: seg(lx, ly, rx, ry); break;
+        case 4: case 11: seg(tx, ty, rx, ry); break;
+        case 6: case 9: seg(tx, ty, bx, by); break;
+        case 7: case 8: seg(lx, ly, tx, ty); break;
+        case 5: seg(tx, ty, rx, ry); seg(lx, ly, bx, by); break;
+        case 10: seg(lx, ly, tx, ty); seg(bx, by, rx, ry); break;
+        default: break;
+      }
+    }
+  }
+  return p;
 }
 
 interface TargetPixels { data: Uint8ClampedArray; size: number }
@@ -1231,7 +1405,7 @@ export function drawExtrudedWheelFragment(
 interface Flyer { x: number; y: number; vx: number; vy: number; rot: number; vr: number; kind: ItemType; w?: WeaponId; hue?: number; busterPellet?: boolean; scale?: number }
 interface Beam { x: number; y: number; life: number; max: number; rgb: string }
 interface Portal { x: number; y: number; life: number; max: number; rgb: string }
-interface BossProjectile { x: number; y: number; vx: number; vy: number; rot: number; type: BossType }
+interface BossProjectile { x: number; y: number; vx: number; vy: number; rot: number; type: BossAttackFamily; head: BossHead }
 
 interface RockFragment { x: number; y: number; vx: number; vy: number; rot: number; vr: number; size: number; seed: number; life: number; max: number }
 /** Coordinates and angle are local to a rock cell (or to the open chest). */
@@ -1277,10 +1451,8 @@ export interface LevelCfg {
   radius: number; style: Style; name: string; old: number; spikes: number; coins: number;
 }
 
-const BOSS_NAMES = ['DARK KNIGHT', 'ONI DEMON', 'MECHA CYBORG', 'PIRATE LORD'];
 /** Perfect Shot buries `Math.min(5, 3 + floor(n / 30))` knives in a boss. */
 export const bossKnifeCount = (n: number) => Math.min(5, 3 + Math.floor(n / 30));
-const BOSS_STYLES: Style[] = ['knight', 'oni', 'cyborg', 'pirate'];
 const WORLD_STYLES: Style[] = ['orange', 'wood', 'target'];
 const PRAISE = ['MANTAP!', 'KEREN!', 'SEMPURNA!', 'GACOR!', 'JAGO!', 'LUAR BIASA!'];
 
@@ -1301,19 +1473,15 @@ export function makeLevel(n: number, forcedMode?: LevelMode): LevelCfg {
   const regularAmmo = Math.min(5 + Math.floor(n * 0.5), 13);
   // Double the boss shot quota so the fight can sustain exactly twice the HP without an early ammo clear.
   const ammo = boss ? (regularAmmo + 2) * 2 : regularAmmo;
-  const bossIdx = Math.floor(n / 5) - 1;
-  // The boss on screen *is* Perfect Shot's head, so its name is read from that
-  // same artwork: stage 5 is the pirate, and calling it "DARK KNIGHT" was the
-  // HUD contradicting the drawing.
-  const style: Style = boss ? bossStyleFor(n) ?? BOSS_STYLES[Math.max(0, bossIdx) % BOSS_STYLES.length] : WORLD_STYLES[world % WORLD_STYLES.length];
+  // The boss on screen *is* Perfect Shot's head. Game A has no boss roster of
+  // its own any more: stage 5 is the pirate, 10 the jester, … 55 the sun, and
+  // the name, the colours and the attack all come from that same head.
+  const style: Style = boss
+    ? bossStyleFor(n) ?? bossDef('pirate').family
+    : WORLD_STYLES[world % WORLD_STYLES.length];
   const bossName = boss ? bossNameFor(n) : '';
-  // Boss DARK KNIGHT tampil bersih: tanpa duri jebakan & penghalang (peluru berkarat).
-  const cleanKnight = boss && style === 'knight';
-  const old = cleanKnight ? 0 : n < 2 ? 0 : Math.min(1 + Math.floor((n - 2) / 3), 5);
-  // Boss selalu memiliki duri mematikan yang DILARANG DITEMBAK!
-  const spikes = cleanKnight
-    ? 0
-    : boss
+  const old = n < 2 ? 0 : Math.min(1 + Math.floor((n - 2) / 3), 5);
+  const spikes = boss
     ? Math.min(5, 2 + Math.floor(n / 5)) // 2 sampai 5 duri jebakan mematikan di kepala boss!
     : n < 4
     ? 0
@@ -1328,7 +1496,7 @@ export function makeLevel(n: number, forcedMode?: LevelMode): LevelCfg {
     n, boss, ammo: isSpecial(mode) ? 12 : ammo, base, pattern, dir: Math.random() < 0.5 ? 1 : -1,
     radius: boss ? 122 : mode === 'boulder' || mode === 'bonus' ? ROCK_RADIUS : 106, style,
     name: boss
-      ? bossName || BOSS_NAMES[Math.max(0, bossIdx) % BOSS_NAMES.length]
+      ? bossName
       // the HUD prints the level name as-is for non-boss stages
       : '',
     // Perfect Shot's boss stage has no spikes at all: its rintangan are the 3–5
@@ -1342,7 +1510,7 @@ export function makeLevel(n: number, forcedMode?: LevelMode): LevelCfg {
 
 export interface GameEvents {
   onGameOver: (score: number, level: number, coinsToBank: number, runCoins: number) => void;
-  onBossDefeated?: (bossName: string, level: number, coinsEarned: number, bossType: BossType) => void;
+  onBossDefeated?: (bossName: string, level: number, coinsEarned: number, bossHead: BossHead) => void;
   /** The treasure counter and saved balance both grow as each flying coin reaches the HUD. */
   onTreasureCoin?: (amount: number) => void;
   /** Bank any remaining special-stage reward at its end, exactly once. */
@@ -1427,11 +1595,10 @@ export class Game {
   private wheelScale = 1;
   private wheelArtSource: WheelArtSource | null = null;
   /**
-   * `?hitbox=1` paints the boss' real collision contour over the head, in the
-   * very transform the art and the stuck weapons use. Green = the contour is
-   * read from Perfect Shot's artwork; red = the art never reached the engine and
-   * the stage fell back to a legacy ring — the exact thing to look for when
-   * "the boss still feels like a wheel".
+   * `?hitbox=1` is the *developer* inspection mode: it paints the collision
+   * contour, the old circular ring and every impact marker over the head. It is
+   * never part of a boss fight — a player only ever sees the blue edge of the
+   * drawing itself (`drawBossSilhouette`), which is the one and only hitbox.
    */
   private readonly hitboxFlag = (() => {
     try {
@@ -1440,10 +1607,6 @@ export class Game {
       return false;
     }
   })();
-  /** On for every boss stage: the boss' collision is drawn over its art. */
-  private get showHitbox(): boolean {
-    return this.hitboxFlag || (this.level?.boss ?? false);
-  }
   private wheelArtCache = new Map<string, HTMLImageElement>();
   private wheelArtKey = '';
   private wheelImage: HTMLImageElement | null = null;
@@ -1506,6 +1669,10 @@ export class Game {
   private targetR = 0;
   /** The silhouette as a filled path, for the collision overlay. */
   private maskSurface: Path2D | null = null;
+  /** Filled region a round can hit (the silhouette, windows included). */
+  private maskSolidRegion: Path2D | null = null;
+  /** The blue line itself: the exact boundary of that region. */
+  private maskSolidEdge: Path2D | null = null;
   /** Radius the face bitmap was baked at (`buildFace`), for pad scaling. */
   private faceBaseR = 0;
   private faceR = 106;
@@ -2824,9 +2991,7 @@ export class Game {
     if (!this.level.boss) place('old', this.level.old, 0.4);
     place('coin', this.level.coins, 0.32);
     // Berlian / Diamond tertancap di arena yang butuh 2x tembakan baru jatuh!
-    // (Dark Knight: penghalang berlian juga dihilangkan.)
-    const cleanKnight = this.level.boss && this.level.style === 'knight';
-    if (!cleanKnight && this.level.n >= 2 && Math.random() < 0.6) {
+    if (this.level.n >= 2 && Math.random() < 0.6) {
       place('diamond_chest', 1, 0.42);
     }
   }
@@ -2840,7 +3005,7 @@ export class Game {
     if (mood === 'laugh') {
       // Game B pops HA · HA · HA! 160 ms apart, each over its own 1 s flight.
       this.bossHa = [{ age: 0, i: 0 }, { age: -0.16, i: 1 }, { age: -0.32, i: 2 }];
-      bossVoice.bossLaugh((this.level.style as string) ?? 'pirate');
+      bossVoice.bossLaugh(bossHeadFor(this.level.n) ?? 'pirate');
     } else {
       bossVoice.bossGrowl();
     }
@@ -3009,8 +3174,12 @@ export class Game {
     // placed from the profile would sit just off the drawing.
     this.bossArtProfile = readable && mask ? maskProfile(mask) : null;
     this.artMask = readable ? mask : null;
+    this.maskSolidRegion = null;
+    this.maskSolidEdge = null;
     this.maskOutline = this.artMask ? buildMaskOutline(this.artMask) : null;
     this.maskSurface = this.artMask ? buildMaskSurface(this.artMask) : null;
+    this.maskSolidRegion = this.artMask ? buildSolidRegion(this.artMask) : null;
+    this.maskSolidEdge = this.artMask ? buildSolidOutline(this.artMask) : null;
     this.artMaskMaxR = this.artMask
       ? this.artMask.maxR
       : this.bossArtProfile ? Math.max(...this.bossArtProfile) : 1;
@@ -3051,10 +3220,14 @@ export class Game {
     if (!traced || traced.maxR <= 0.05) return null;
     this.wheelSvg = markup;
     this.artMask = traced;
+    this.maskSolidRegion = null;
+    this.maskSolidEdge = null;
     this.artMaskMaxR = traced.maxR;
     this.bossArtProfile = maskProfile(traced);
     this.maskOutline = buildMaskOutline(traced);
     this.maskSurface = buildMaskSurface(traced);
+    this.maskSolidRegion = buildSolidRegion(traced);
+    this.maskSolidEdge = buildSolidOutline(traced);
     return traced;
   }
 
@@ -3087,13 +3260,13 @@ export class Game {
     c.save();
     c.setLineDash([]);
     // The collision region as an area: the exact silhouette, filled.
-    if (mask && this.maskSurface) {
+    if (mask && (this.maskSolidRegion ?? this.maskSurface)) {
       const k = (2 * mask.span * R) / mask.size;
       c.save();
       c.scale(k, k);
       c.translate(-mask.size / 2, -mask.size / 2);
       c.fillStyle = 'rgba(34,255,136,0.14)';
-      c.fill(this.maskSurface);
+      c.fill((this.maskSolidRegion ?? this.maskSurface)!);
       c.restore();
     } else {
       // No artwork reached the engine: there is nothing to fill, and the red
@@ -3192,28 +3365,34 @@ export class Game {
     c.restore();
   }
 
-  /** The colour key for the collision overlay, in screen space under the boss. */
-  private drawHitboxLegend(c: CanvasRenderingContext2D, R: number) {
-    const label = 'HITBOX = BENTUK GAMBAR';
-    const sub = 'hijau = daerah tabrakan (tepi gambar bos)';
-    const y = this.targetY + R + 26;
+  /**
+   * The only hitbox marker a boss fight ever shows: the blue edge of the
+   * drawing, traced from the very mask the rounds are tested against.
+   *
+   * Everything else the old overlay painted — the green collision fill, the
+   * dashed contour, the red legacy ring, the impact dots, the heading lines and
+   * the old hitbox banner — belonged to the inspection overlay and is gone from
+   * play. `?hitbox=1` still paints it for development.
+   */
+  private drawBossSilhouette(c: CanvasRenderingContext2D) {
+    const mask = this.ensureArtMask();
+    const surface = this.maskSolidEdge ?? this.maskSurface;
+    if (!mask || !surface) return;
+    const R = this.level.radius;
+    const k = (2 * mask.span * R) / mask.size;
     c.save();
-    c.textAlign = 'center';
-    c.font = 'bold 11px system-ui, sans-serif';
-    const w = Math.max(c.measureText(label).width, c.measureText(sub).width) + 18;
-    c.fillStyle = 'rgba(3,10,22,0.72)';
-    c.beginPath();
-    if (typeof c.roundRect === 'function') c.roundRect(CX - w / 2, y - 13, w, 33, 8);
-    else c.rect(CX - w / 2, y - 13, w, 33);
-    c.fill();
-    c.strokeStyle = 'rgba(56,189,248,0.8)';
-    c.lineWidth = 1.2;
-    c.stroke();
-    c.fillStyle = '#7dd3fc';
-    c.fillText(label, CX, y);
-    c.font = '9px system-ui, sans-serif';
-    c.fillStyle = 'rgba(190,215,245,0.92)';
-    c.fillText(sub, CX, y + 13);
+    c.setLineDash([]);
+    c.scale(k, k);
+    c.translate(-mask.size / 2, -mask.size / 2);
+    // A soft dark pass underneath keeps the line readable over bright heads,
+    // then the blue line itself — the exact edge a round stops on.
+    c.strokeStyle = 'rgba(3,10,22,0.55)';
+    c.lineWidth = 3.6 / k;
+    c.lineJoin = 'round';
+    c.stroke(surface);
+    c.strokeStyle = 'rgba(56,189,248,0.95)';
+    c.lineWidth = 1.7 / k;
+    c.stroke(surface);
     c.restore();
   }
 
@@ -3247,9 +3426,15 @@ export class Game {
     // scaled up by its laugh / angry / rage pose, so a world-space bound would
     // cut the outer 14 % of the drawing away while it is animating.
     if (Math.hypot(lx, ly) > R * mask.maxR + 2) return null;
+    // The decision is the blue outline (`maskSolid` = inside the line). Outside
+    // it the round flies on; inside it the boss is solid, even where the head
+    // has a see-through window in the middle of its drawing.
     if (!maskSolid(mask, u, v)) return null;
-    // The radius is measured in the artwork's own frame, so it always agrees
-    // with the point that is drawn and with the frame the head turns in.
+    // The round stops on the pixel that crossed the line. That pixel is the
+    // first solid one along a ray walked in from outside, so it is always the
+    // boundary itself — the exact point the blue line is stroked through — and
+    // the radius is measured in the artwork's own frame, so it agrees with the
+    // drawing and with the frame the head turns in.
     return { r: Math.hypot(lx, ly), x: lx, y: ly };
   }
 
@@ -3383,7 +3568,7 @@ export class Game {
   private bossClipPaint(c: CanvasRenderingContext2D): boolean {
     if (!this.level.boss) return false;
     const mask = this.ensureArtMask();
-    const surface = this.maskSurface;
+    const surface = this.maskSolidRegion ?? this.maskSurface;
     const art = this.bossArtScreen;
     if (!mask || !surface || !art || typeof c.getTransform !== 'function') return false;
     const base = c.getTransform();
@@ -5935,7 +6120,7 @@ export class Game {
       return { res: 'hit' };
     }
     const isBoss = this.level.boss;
-    const bType = isBoss ? (this.level.style as BossType) : null;
+    const bType = isBoss ? (this.level.style as BossAttackFamily) : null;
     const px = p.x - CX;
     const py = p.y - this.targetY;
     const worldA = Math.atan2(py, px);
@@ -7068,9 +7253,11 @@ export class Game {
     if (this.level.boss && this.state === 'play') {
       this.bossShootTimer -= s;
       if (this.bossShootTimer <= 0) {
-        const bDef = getBossDef(this.level.style);
-        this.bossShootTimer = bossFireInterval(bDef.fireInterval, rand(-0.18, 0.22));
-        const bType = this.level.style as BossType;
+        // The boss firing is the Game B head on screen, not a Game A archetype:
+        // its own fire rhythm, pace, colour and projectile read from the head.
+        const boss = bossDef(bossHeadFor(this.level.n) ?? 'pirate');
+        this.bossShootTimer = bossFireInterval(boss.fireInterval, rand(-0.18, 0.22));
+        const bType = boss.family;
         // Boss launches projectile downward toward the player with aim spread
         const spawnY = this.targetY + this.level.radius * 0.8;
         const targetX = CX + rand(-60, 60);
@@ -7078,7 +7265,7 @@ export class Game {
         const dy = (GUN_Y + 40) - spawnY;
         const dist = Math.hypot(dx, dy);
         // Boss shots travel 1.9x faster, but retain clear telegraphing and interceptable hitboxes.
-        const spd = (160 + this.level.n * 3) * 1.9;
+        const spd = (160 + this.level.n * 3) * 1.9 * boss.shotPace;
         const shotRot = Math.atan2(dy, dx) - Math.PI / 2;
         this.bossProjs.push({
           x: CX,
@@ -7087,12 +7274,14 @@ export class Game {
           vy: (dy / dist) * spd,
           rot: shotRot,
           type: bType,
+          head: boss.head,
         });
         this.bossMuzzleFlashes.push({
           x: CX,
           y: spawnY,
           rot: shotRot,
           type: bType,
+          head: boss.head,
           age: 0,
           max: 0.28,
         });
@@ -7102,7 +7291,7 @@ export class Game {
         else if (bType === 'pirate') sfx2.pirate();
         else sfx3.keris();
         // Crisp boss-specific firing flecks + directional shockwave ring.
-        const bossRgb = bType === 'knight' ? '56,189,248' : bType === 'oni' ? '239,68,68' : bType === 'cyborg' ? '34,211,238' : '234,179,8';
+        const bossRgb = boss.rgb;
         this.particles.push({
           x: CX, y: spawnY, vx: 0, vy: 0, life: 0.24, max: 0.24,
           size: 46, color: `rgb(${bossRgb})`, kind: 'ring', rot: 0, vr: 0, g: 0,
@@ -7143,13 +7332,15 @@ export class Game {
         const tailX = x - dirx * 44;
         const tailY = y - diry * 44;
         if (Math.random() < 0.5) {
-          // Tail material/color follows each boss rather than sharing orange fire.
-          const trail = bp.type === 'knight'
-            ? { color: '56,189,248', kind: 'spark' as const }
-            : bp.type === 'oni'
-            ? { color: '239,68,68', kind: 'glow' as const }
-            : bp.type === 'cyborg'
-            ? { color: '34,211,238', kind: 'spark' as const }
+          // Tail material/colour follows the head that fired it: eleven bosses,
+          // eleven trails, even when two share a body family.
+          const firedBy = bossDef(bp.head);
+          const trail = firedBy.family === 'knight'
+            ? { color: firedBy.rgb, kind: 'spark' as const }
+            : firedBy.family === 'oni'
+            ? { color: firedBy.rgb, kind: 'glow' as const }
+            : firedBy.family === 'cyborg'
+            ? { color: firedBy.rgb, kind: 'spark' as const }
             : { color: '71,85,105', kind: 'smoke' as const };
           this.particles.push({
             x: tailX + rand(-7, 7),
@@ -8000,7 +8191,7 @@ export class Game {
         if (this.level.boss && this.events.onBossDefeated) {
           this.state = 'idle';
           this.bankedCoins += 5; // the boss reward was already included in this.coins
-          this.events.onBossDefeated(this.level.name, this.level.n, 5, this.level.style as BossType);
+          this.events.onBossDefeated(this.level.name, this.level.n, 5, bossHeadFor(this.level.n) ?? 'pirate');
         } else {
           this.loadLevel(this.level.n + 1);
         }
@@ -9025,7 +9216,8 @@ export class Game {
       }
       // Ordinary round targets keep their drop shadow. The special rock and
       // treasure chest must NOT sit on a large black disk as chunks fall away.
-      // Dark Knight juga tampil tanpa lingkaran hitam di belakangnya.
+      // A boss never gets one either: its head is drawn from Game B's art and
+      // only the blue outline may frame it.
       if (!isSpecial(this.level.mode) && !this.level.boss) {
         c.beginPath();
         c.arc(0, 10, R + 6, 0, TAU);
@@ -9414,8 +9606,10 @@ export class Game {
       c.restore();
       }
       c.restore();
-      // Above the art and the stuck rounds: the boss' collision, in colour.
-      if (this.showHitbox && this.level.boss) {
+      // Above the art and the stuck rounds: the boss' one and only hitbox.
+      // In play that is the blue edge of the drawing; `?hitbox=1` swaps in the
+      // full developer overlay (contour, old ring, impact markers).
+      if (this.level.boss) {
         c.save();
         // Same transform chain the head is drawn with: translate, scale, the
         // boss' float/sway/breath/reaction, then the wheel angle. Anything less
@@ -9426,9 +9620,9 @@ export class Game {
         const decor = this.bossDecorMatrix();
         c.transform(decor.a, decor.b, decor.c, decor.d, decor.e, decor.f);
         if (this.level.mode !== 'treasure') c.rotate(this.rot);
-        this.drawHitboxDebug(c);
+        if (this.hitboxFlag) this.drawHitboxDebug(c);
+        else this.drawBossSilhouette(c);
         c.restore();
-        this.drawHitboxLegend(c, R);
       }
       if (s7w) {
         // Slide 3's lens bends what is already on screen (the gravity orb,

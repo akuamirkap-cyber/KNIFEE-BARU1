@@ -1,3 +1,5 @@
+import { buildSolidFootprint } from '../src/games/gunhit/game/Game';
+
 /**
  * A boss stage in these tests runs on a shimmed canvas whose 2D context returns
  * no pixels, so no artwork mask can ever be read back — and Game A's boss no
@@ -24,7 +26,10 @@ export function giveBossMask(
       if (inside) alpha[y * size + x] = 255;
     }
   }
-  const mask = { size, alpha, span, maxR: (rr / half) * span };
+  // The footprint the hit test reads: same flood fill the engine runs, so a
+  // hand-made mask behaves exactly like a traced head.
+  const solid = buildSolidFootprint(size, alpha);
+  const mask = { size, alpha, span, maxR: (rr / half) * span, solid };
   game.artMask = mask;
   game.artMaskMaxR = mask.maxR;
   game.maskOutline = null;

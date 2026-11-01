@@ -1,23 +1,197 @@
-import type { BossType } from './bossRoster';
+import {
+  bossDef,
+  bossPalette,
+  type BossAttackFamily,
+  type BossHead,
+} from './bossCatalog';
 
 const TAU = Math.PI * 2;
 
+/**
+ * A boss shot. `type` is only the FX family the drawn body belongs to; `head`
+ * is the boss that fired it (one of Game B's eleven heads) and supplies the
+ * accent colour, sigil and palette. A boss can never be mistaken for another
+ * one just because two heads share a body shape.
+ */
 export interface BossProjectile {
   x: number;
   y: number;
   vx: number;
   vy: number;
   rot: number;
-  type: BossType;
+  type: BossAttackFamily;
+  head?: BossHead;
 }
 
 export interface BossMuzzleFlash {
   x: number;
   y: number;
   rot: number;
-  type: BossType;
+  type: BossAttackFamily;
+  head?: BossHead;
   age: number;
   max: number;
+}
+
+/** Body family used when a caller only names the family (older tooling). */
+const FAMILY_HEAD: Record<BossAttackFamily, BossHead> = {
+  knight: 'skeleton',
+  oni: 'oni',
+  cyborg: 'robot',
+  pirate: 'pirate',
+};
+
+const headOf = (bp: { type: BossAttackFamily; head?: BossHead }): BossHead =>
+  bp.head ?? FAMILY_HEAD[bp.type];
+
+/** `#rrggbb` + alpha → `rgba(...)`; non-hex input is returned unchanged. */
+const colorWithAlpha = (color: string, alpha: number): string => {
+  const m = /^#([0-9a-f]{6})$/i.exec(color);
+  if (!m) return color;
+  const n = parseInt(m[1], 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha.toFixed(2)})`;
+};
+
+/**
+ * The boss' own mark, in the boss' own colour, around the shot's core. Eleven
+ * heads → eleven different marks, so the attack in the air is identifiable as
+ * the head that threw it even while two share a body family.
+ */
+function drawBossSigil(c: CanvasRenderingContext2D, head: BossHead, pulse: number) {
+  const { accent } = bossPalette(head);
+  const a = 0.72 + pulse * 0.28;
+  c.save();
+  c.globalAlpha *= a;
+  c.strokeStyle = accent;
+  c.fillStyle = accent;
+  c.lineWidth = 1.5;
+  c.lineJoin = 'round';
+  c.lineCap = 'round';
+  switch (head) {
+    case 'pirate': {
+      // Trident of the seven seas.
+      c.beginPath();
+      c.moveTo(0, -9); c.lineTo(0, 9);
+      c.moveTo(-6, -6); c.lineTo(0, -9); c.lineTo(6, -6);
+      c.moveTo(-5.5, -1.5); c.lineTo(5.5, -1.5);
+      c.stroke();
+      break;
+    }
+    case 'jester': {
+      // A spinning playing card.
+      c.rotate(pulse * 1.6);
+      c.strokeRect(-5, -7, 10, 14);
+      c.beginPath();
+      c.arc(0, 0, 2.2, 0, TAU);
+      c.fill();
+      break;
+    }
+    case 'dragon': {
+      // Scaled wing arcs.
+      for (const side of [-1, 1]) {
+        c.beginPath();
+        c.moveTo(side * 1.5, 6);
+        c.quadraticCurveTo(side * 12, 2, side * 8, -8);
+        c.stroke();
+      }
+      break;
+    }
+    case 'skeleton': {
+      // Crossed bone.
+      c.beginPath();
+      c.moveTo(-6, -6); c.lineTo(6, 6);
+      c.moveTo(6, -6); c.lineTo(-6, 6);
+      c.stroke();
+      for (const [bx, by] of [[-6, -6], [6, -6], [-6, 6], [6, 6]] as const) {
+        c.beginPath();
+        c.arc(bx, by, 1.7, 0, TAU);
+        c.fill();
+      }
+      break;
+    }
+    case 'tiki': {
+      // Carved totem eye.
+      c.strokeRect(-6.5, -3.5, 13, 7);
+      c.beginPath();
+      c.arc(0, 0, 2.2, 0, TAU);
+      c.fill();
+      break;
+    }
+    case 'viking': {
+      // Rune wheel.
+      c.beginPath();
+      c.arc(0, 0, 6.5, 0, TAU);
+      for (let i = 0; i < 6; i++) {
+        const ang = (i / 6) * TAU + pulse * 0.6;
+        c.moveTo(Math.cos(ang) * 2.4, Math.sin(ang) * 2.4);
+        c.lineTo(Math.cos(ang) * 9.4, Math.sin(ang) * 9.4);
+      }
+      c.stroke();
+      break;
+    }
+    case 'oni': {
+      // Two demon horns.
+      for (const side of [-1, 1]) {
+        c.beginPath();
+        c.moveTo(side * 3, 4);
+        c.quadraticCurveTo(side * 10, -2, side * 6.5, -9);
+        c.stroke();
+      }
+      break;
+    }
+    case 'robot': {
+      // Targeting reticle.
+      c.strokeRect(-5.5, -5.5, 11, 11);
+      c.beginPath();
+      c.moveTo(-9, 0); c.lineTo(-6, 0);
+      c.moveTo(9, 0); c.lineTo(6, 0);
+      c.moveTo(0, -9); c.lineTo(0, -6);
+      c.stroke();
+      break;
+    }
+    case 'alien': {
+      // Big-headed visitor.
+      c.beginPath();
+      c.ellipse(0, -1, 5.6, 7.4, 0, 0, TAU);
+      c.stroke();
+      for (const side of [-1, 1]) {
+        c.beginPath();
+        c.ellipse(side * 2.4, -1.5, 1.5, 2.4, side * 0.5, 0, TAU);
+        c.fill();
+      }
+      break;
+    }
+    case 'vampire': {
+      // Bat silhouette.
+      c.beginPath();
+      c.moveTo(0, -1);
+      c.quadraticCurveTo(-6, -7, -10, -3);
+      c.quadraticCurveTo(-7, -1, -6, 3);
+      c.quadraticCurveTo(-3, 1, 0, 4);
+      c.quadraticCurveTo(3, 1, 6, 3);
+      c.quadraticCurveTo(7, -1, 10, -3);
+      c.quadraticCurveTo(6, -7, 0, -1);
+      c.fill();
+      break;
+    }
+    case 'sun': {
+      // Crown of rays.
+      for (let i = 0; i < 8; i++) {
+        const ang = (i / 8) * TAU + pulse * 0.3;
+        c.beginPath();
+        c.moveTo(Math.cos(ang) * 4.5, Math.sin(ang) * 4.5);
+        c.lineTo(Math.cos(ang) * (8.2 + pulse * 1.6), Math.sin(ang) * (8.2 + pulse * 1.6));
+        c.stroke();
+      }
+      c.beginPath();
+      c.arc(0, 0, 3.4, 0, TAU);
+      c.fill();
+      break;
+    }
+    default:
+      break;
+  }
+  c.restore();
 }
 
 /**
@@ -34,14 +208,14 @@ export function drawBossMuzzleFlash(c: CanvasRenderingContext2D, mf: BossMuzzleF
   c.rotate(mf.rot);
 
   const expand = 0.65 + p * 1.15;
-  const palette =
-    mf.type === 'knight'
-      ? { outer: 'rgba(56,189,248,', mid: 'rgba(186,230,253,', accent: 'rgba(251,113,133,' }
-      : mf.type === 'oni'
-      ? { outer: 'rgba(239,68,68,', mid: 'rgba(251,146,60,', accent: 'rgba(254,240,138,' }
-      : mf.type === 'cyborg'
-      ? { outer: 'rgba(34,211,238,', mid: 'rgba(165,243,252,', accent: 'rgba(255,17,51,' }
-      : { outer: 'rgba(34,197,94,', mid: 'rgba(134,239,172,', accent: 'rgba(250,204,21,' };
+  // The flash wears the firing head's own accent — eleven heads, eleven flashes.
+  const head = headOf(mf);
+  const own = bossPalette(head);
+  const palette = {
+    outer: `rgba(${own.rgb},`,
+    mid: `rgba(${own.rgb},`,
+    accent: `${own.accent}`,
+  };
 
   // 1. Directional forward crescent shockwave
   c.strokeStyle = `${palette.outer}${(a * 0.85).toFixed(2)})`;
@@ -50,7 +224,7 @@ export function drawBossMuzzleFlash(c: CanvasRenderingContext2D, mf: BossMuzzleF
   c.arc(0, 10 * expand, 24 * expand, 0.22 * Math.PI, 0.78 * Math.PI);
   c.stroke();
 
-  c.strokeStyle = `${palette.accent}${(a * 0.9).toFixed(2)})`;
+  c.strokeStyle = colorWithAlpha(palette.accent, a * 0.9);
   c.lineWidth = 2.2 * a;
   c.beginPath();
   c.arc(0, 15 * expand, 17 * expand, 0.26 * Math.PI, 0.74 * Math.PI);
@@ -611,5 +785,9 @@ export function drawBossProjectile(
     c.fill();
     c.fillRect(-2.4, 2, 4.8, 1.1);
   }
+
+  // The head that fired it, stamped in its own accent so the eleven Game B
+  // bosses stay tellable apart even when their bodies share a family.
+  drawBossSigil(c, headOf(bp), pulse);
   c.restore();
 }

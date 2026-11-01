@@ -3,14 +3,15 @@ import { sfx } from '../game/audio';
 import { sfx4 } from '../game/sfx4';
 import { HeadArt } from '../../perfect-shot/play/HeadArt';
 import { bossHeadFor } from '../game/bossIdentity';
-import { getBossDef, type BossType } from '../game/bossRoster';
+import { bossDef, type BossHead } from '../game/bossCatalog';
 import { useSlideActive } from '../../shared/SlideActivity';
 import { Burst } from '../../knife-hit/components/Effects';
 import { getSavedSgaSpeed } from '../game/gameSpeed';
 
 interface BossDefeatedModalProps {
   bossName: string;
-  bossType: BossType;
+  /** The Game B head this boss wears — the only boss identity Game A has. */
+  bossHead: BossHead;
   stage: number;
   rewardCoins: number;
   playerLevel: number;
@@ -28,7 +29,7 @@ function BossPortrait({ stage, name }: { stage: number; name: string }) {
 
 export const BossDefeatedModal = ({
   bossName,
-  bossType,
+  bossHead,
   stage,
   rewardCoins,
   playerLevel,
@@ -42,7 +43,7 @@ export const BossDefeatedModal = ({
   const [visibleXp, setVisibleXp] = useState(xpBefore);
   const continueRef = useRef(onContinue);
   continueRef.current = onContinue;
-  const boss = getBossDef(bossType);
+  const boss = bossDef(bossHead);
 
   useEffect(() => {
     if (!active) return;

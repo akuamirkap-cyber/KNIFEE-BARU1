@@ -1,9 +1,19 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { makeLevel } from '../src/games/gunhit/game/Game';
-import { getGunHitMapBoss, getGunHitMapNodeCaption, getGunHitMapNodeTheme, getGunHitMapStage, GUN_HIT_MAP_BOSS_NAMES, GUN_HIT_MAP_MAX_LEVEL } from '../src/games/gunhit/game/stageMap';
+import {
+  getGunHitMapNodeCaption,
+  getGunHitMapNodeTheme,
+  getGunHitMapStage,
+  GUN_HIT_MAP_BOSS_NAMES,
+  GUN_HIT_MAP_BOSS_ROTATION,
+  GUN_HIT_MAP_MAX_LEVEL,
+} from '../src/games/gunhit/game/stageMap';
+import { BOSS_CATALOG } from '../src/games/gunhit/game/bossCatalog';
+import { bossHeadFor } from '../src/games/gunhit/game/bossIdentity';
+import { HEAD_INFO, HEAD_KINDS } from '../src/games/perfect-shot/play/HeadArt';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const read = (file: string) => readFileSync(path.join(ROOT, file), 'utf8');
@@ -19,52 +29,78 @@ test('the 100-stage SGA map mirrors the existing normal, special, boss cycle', (
   }
 });
 
-test('the 20 map cycles use the user-provided icon and boss names exactly', () => {
+test('every boss node on the map is one of Game B\'s eleven bosses', () => {
   const rows = [
-    ['Gentong', 'Perisai', 'Goblin', 'Dark Knight'],
-    ['Bijih besi', 'Landasan', 'Prajurit', 'Iron Knight'],
-    ['Lentera gelap', 'Perisai hitam', 'Bayangan', 'Shadow Knight'],
-    ['Mahkota', 'Perisai kerajaan', 'Pengawal', 'Royal Knight'],
-    ['Kristal void', 'Perisai retak', 'Penjaga gelap', 'Void Knight'],
-    ['Lentera Jepang', 'Topeng Oni', 'Goblin samurai', 'Oni Demon'],
-    ['Arang', 'Perisai api', 'Penjaga merah', 'Flame Oni'],
-    ['Genderang', 'Tameng', 'Prajurit Oni', 'War Oni'],
-    ['Mahkota iblis', 'Segel', 'Pengawal iblis', 'Demon Emperor'],
-    ['Bendera', 'Katana', 'Samurai', 'Oni Shogun'],
-    ['Roda gigi', 'Pelat baja', 'Robot penjaga', 'Mecha Cyborg'],
-    ['Chip', 'Perisai energi', 'Drone', 'Cyber Warden'],
-    ['Inti reaktor', 'Armor berat', 'Robot tempur', 'Omega Mecha'],
-    ['Kristal energi', 'Kubah', 'Drone plasma', 'Nova Cyborg'],
-    ['Baterai', 'Armor berat', 'Robot elit', 'Final Mecha'],
-    ['Tong mesiu', 'Jangkar', 'Bajak laut', 'Pirate Lord'],
-    ['Lentera hantu', 'Jangkar karat', 'Kerangka', 'Ghost Captain'],
-    ['Kompas', 'Meriam', 'Penjaga kerangka', 'Cursed Admiral'],
-    ['Mutiara gelap', 'Karang', 'Penjaga laut', 'Abyss Pirate'],
-    ['Peti harta', 'Pedang kerajaan', 'Pengawal elite', 'Pirate King'],
+    ['Gentong', 'Perisai', 'Goblin'],
+    ['Bijih besi', 'Landasan', 'Prajurit'],
+    ['Lentera gelap', 'Perisai hitam', 'Bayangan'],
+    ['Mahkota', 'Perisai kerajaan', 'Pengawal'],
+    ['Kristal void', 'Perisai retak', 'Penjaga gelap'],
+    ['Lentera Jepang', 'Topeng Oni', 'Goblin samurai'],
+    ['Arang', 'Perisai api', 'Penjaga merah'],
+    ['Genderang', 'Tameng', 'Prajurit Oni'],
+    ['Mahkota iblis', 'Segel', 'Pengawal iblis'],
+    ['Bendera', 'Katana', 'Samurai'],
+    ['Roda gigi', 'Pelat baja', 'Robot penjaga'],
+    ['Chip', 'Perisai energi', 'Drone'],
+    ['Inti reaktor', 'Armor berat', 'Robot tempur'],
+    ['Kristal energi', 'Kubah', 'Drone plasma'],
+    ['Baterai', 'Armor berat', 'Robot elit'],
+    ['Tong mesiu', 'Jangkar', 'Bajak laut'],
+    ['Lentera hantu', 'Jangkar karat', 'Kerangka'],
+    ['Kompas', 'Meriam', 'Penjaga kerangka'],
+    ['Mutiara gelap', 'Karang', 'Penjaga laut'],
+    ['Peti harta', 'Pedang kerajaan', 'Pengawal elite'],
   ];
-  assert.equal(GUN_HIT_MAP_BOSS_NAMES.length, 20);
   rows.forEach((row, cycle) => {
     const firstStage = cycle * 5 + 1;
-    assert.deepEqual([0, 1, 2].map(offset => getGunHitMapNodeTheme(firstStage + offset).label), row.slice(0, 3));
+    assert.deepEqual([0, 1, 2].map(offset => getGunHitMapNodeTheme(firstStage + offset).label), row);
     assert.equal(getGunHitMapNodeTheme(firstStage + 3).label, 'Spesial');
-    assert.equal(getGunHitMapNodeTheme(firstStage + 4).label, row[3]);
-    assert.equal(GUN_HIT_MAP_BOSS_NAMES[cycle], row[3]);
   });
+  // Twenty boss fights, but exactly eleven bosses: every boss label is one of
+  // Game B's heads, paired with the head art that stage really wears.
+  assert.deepEqual(GUN_HIT_MAP_BOSS_NAMES, BOSS_CATALOG.map((boss) => boss.title));
+  assert.equal(GUN_HIT_MAP_BOSS_NAMES.length, 11);
+  assert.deepEqual(GUN_HIT_MAP_BOSS_ROTATION, GUN_HIT_MAP_BOSS_ROTATION.slice());
+  for (let stage = 5; stage <= 100; stage += 5) {
+    const label = getGunHitMapNodeTheme(stage).label;
+    const head = bossHeadFor(stage)!;
+    assert.ok(head, `stage ${stage} wears a Game B head`);
+    assert.equal(label, HEAD_INFO[head].name, `stage ${stage} is named after its own head`);
+    assert.equal(getGunHitMapNodeCaption(stage), `${HEAD_INFO[head].name.toUpperCase()} LV${stage}`);
+  }
+  const legacyNames = ['Dark Knight', 'Iron Knight', 'Shadow Knight', 'Royal Knight', 'Void Knight', 'Oni Demon', 'Flame Oni', 'War Oni', 'Demon Emperor', 'Oni Shogun', 'Mecha Cyborg', 'Cyber Warden', 'Omega Mecha', 'Nova Cyborg', 'Final Mecha', 'Pirate Lord', 'Ghost Captain', 'Cursed Admiral', 'Abyss Pirate', 'Pirate King'];
+  for (let stage = 5; stage <= 100; stage += 5) {
+    assert.ok(!legacyNames.includes(getGunHitMapNodeTheme(stage).label),
+      `stage ${stage}: Game A's own boss names are gone`);
+  }
   assert.equal(getGunHitMapNodeCaption(1), 'GENTONG LV1');
   assert.equal(getGunHitMapNodeCaption(3), 'GOBLIN LV3');
-  assert.equal(getGunHitMapNodeCaption(5), 'DARK KNIGHT LV5');
+  assert.match(getGunHitMapNodeCaption(5), /^KAPTEN BAJAK LAUT LV5$/);
   const map = read('src/games/gunhit/components/LevelMap.tsx');
   assert.ok(map.includes('>QUEST</h2>'));
   assert.ok(map.includes('getGunHitMapNodeTheme(level)'));
-  assert.ok(map.includes('getGunHitMapNodeCaption(level)'));
+  assert.ok(map.includes('bossProfileFor(level)'));
 });
 
-test('legacy map theme data remains available, while combat styles follow the Game B heads', () => {
-  const factions = ['knight', 'oni', 'cyborg', 'pirate'] as const;
-  for (let bossNumber = 0; bossNumber < 20; bossNumber++) {
-    assert.equal(getGunHitMapBoss((bossNumber + 1) * 5), factions[Math.floor(bossNumber / 5)]);
+test('all eleven Game B heads are bosses of Game A, and nothing else is', () => {
+  const heads = Array.from({ length: 11 }, (_, i) => bossHeadFor((i + 1) * 5));
+  assert.deepEqual(heads, HEAD_KINDS);
+  for (let head = 0; head < HEAD_KINDS.length; head++) {
+    assert.equal(BOSS_CATALOG[head].head, HEAD_KINDS[head]);
+    assert.equal(BOSS_CATALOG[head].name, HEAD_INFO[HEAD_KINDS[head]].name.toUpperCase());
   }
-  assert.deepEqual([5, 10, 15, 20, 25].map(stage => makeLevel(stage).style), ['pirate', 'pirate', 'oni', 'knight', 'oni']);
+  // Game A's own four bosses are deleted, not renamed.
+  const roots = ['src/games/gunhit/game/bossRoster.ts', 'src/games/gunhit/game/bossRenderer.ts',
+    'src/games/gunhit/game/bossAssetProcessor.ts', 'src/games/gunhit/game/bossAssetWorker.ts',
+    'src/games/gunhit/game/bossAssetPixels.ts'];
+  for (const file of roots) {
+    assert.equal(existsSync(path.join(ROOT, file)), false, `${file} must be gone`);
+  }
+  assert.equal(existsSync(path.join(ROOT, 'public/bosses')), false, 'the four Game A boss PNGs are deleted');
+  const pkg = read('src/games/gunhit/game/bossCatalog.ts');
+  assert.match(pkg, /BOSS_CATALOG/);
+  assert.ok(!read('src/games/gunhit/game/Game.ts').includes('BOSS_NAMES'));
 });
 
 test('the SGB slide is removed and its map entrance/active-node effects are reused in SGA QUEST', () => {

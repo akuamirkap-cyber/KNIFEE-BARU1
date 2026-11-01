@@ -9,6 +9,7 @@ import { levelConfig } from '../src/games/perfect-shot/play/levels';
 import { installSilentAudio } from '../tools/supportAudioSilent';
 import { setGunEffect, setGunVariant } from '../src/games/gunhit/game/art/gunVariants';
 import { INK_ALPHA } from '../src/games/gunhit/game/Game';
+import { solidOffset } from './supportBossOutline';
 
 const globals = globalThis as unknown as Record<string, any>;
 globals.Path2D ??= Path2D;
@@ -83,6 +84,15 @@ function shootAtLocal(game: Record<string, any>, theta: number) {
   return (game.items as any[]).find((it) => it.type === 'bullet') ?? null;
 }
 
+/**
+ * Signed distance (mask px, negative = inside) from an art-local point to the
+ * boss' blue outline — the one and only hitbox. Measured against the solid
+ * footprint the line is stroked from, so it is the line the player sees.
+ */
+function outlineOffset(game: Record<string, any>, lx: number, ly: number) {
+  return solidOffset(game, lx, ly);
+}
+
 /** Direct alpha lookup in the artwork's own frame — no decor, no radius. */
 function maskInk(game: Record<string, any>, lx: number, ly: number) {
   const mask = game.artMask;
@@ -108,8 +118,10 @@ test('the boss hitbox is the drawing: twelve angles, twelve different depths', a
     for (let deg = 0; deg < 360; deg += 30) {
       const it = shootAtLocal(game, (deg * Math.PI) / 180);
       if (!it) continue;
-      // the round is placed at the point it bit, and that point is the artwork
-      assert.ok(maskInk(game, it.px, it.py), `${kind} ${deg}deg: the round sits on ink`);
+      // the round is placed at the point it bit, and that point is on the line
+      const off = outlineOffset(game, it.px, it.py);
+      assert.ok(off <= 2.5 && off >= -4.5,
+        `${kind} ${deg}deg: the round sits on the blue outline (${off.toFixed(2)} px)`);
       assert.ok(Math.abs(Math.hypot(it.px, it.py) - it.r) < 0.01,
         `${kind} ${deg}deg: the stored radius is the stored point`);
       radii.push(it.r);
@@ -258,7 +270,11 @@ test('every weapon slide bites the artwork, never the old circle', async () => {
     }
     assert.ok(impacts.length >= 2, `${id}/${effect}: rounds bit into the head (${impacts.length})`);
     for (const p of impacts) {
-      assert.ok(maskInk(game, p.x, p.y), `${id}/${effect}: the round sits on ink`);
+      const off = outlineOffset(game, p.x, p.y);
+      assert.ok(off <= 2.5 && off >= -5,
+        `${id}/${effect}: the round sits on the blue outline (${off.toFixed(2)} px)`);
+      const w = game.artToWorld(p.x, p.y);
+      assert.ok(game.artHitAt(w.x, w.y), `${id}/${effect}: the impact is inside the outline`);
     }
     const depths = impacts.map((p) => Math.hypot(p.x, p.y));
     assert.ok(depths.some((d) => Math.abs(d - game.level.radius) > 6),
@@ -280,20 +296,23 @@ test('a round stays on the drawing while the head grows under it', async () => {
     if (it) break;
   }
   assert.ok(it, `${kind}: a grow round bit into the head`);
-  assert.ok(maskInk(game, it.px, it.py), `${kind}: it bit the drawing`);
+  assert.ok(game.artHitAt(game.artToWorld(it.px, it.py).x, game.artToWorld(it.px, it.py).y),
+    `${kind}: it bit the blue outline`);
   const R0 = game.level.radius as number;
   // grow the target the way the weapon does, then let the radius ease in
   game.targetR = R0 + 24;
   for (let i = 0; i < 90; i++) game.update(1 / 60);
   assert.ok((game.level.radius as number) > R0 + 12, `${kind}: the head really grew`);
-  assert.ok(maskInk(game, it.px, it.py), `${kind}: the round is still on the drawing after the growth`);
+  assert.ok(game.artHitAt(game.artToWorld(it.px, it.py).x, game.artToWorld(it.px, it.py).y),
+    `${kind}: the round is still inside the outline after the growth`);
   game.destroy();
 });
 
 /**
- * The rule the stage actually plays by: a round stops on the drawn edge and on
- * nothing else. The overlay's blue line is traced with the same threshold as the
- * hit test, so "3 px outside the line" has to be empty space.
+ * The rule the stage actually plays by: a round stops on the blue outline and
+ * on nothing else. The line and the hit region come from the same ray-marched
+ * table, so "3 px outside the line" has to be empty space and the line itself
+ * has to be boss.
  */
 test('the hitbox is the drawn edge: outside it is empty space', async () => {
   for (const level of [5, 20]) {
@@ -317,33 +336,9 @@ test('the hitbox is the drawn edge: outside it is empty space', async () => {
   }
 });
 
-/**
- * The round has to stop on the pixel it *met*, not a stride deeper. The game
- * walks its substep (<= 7 px) from the outside in at 1 px, so the pixel a round
- * reports must be an *outline* pixel: strict ink with empty space right beside
- * it. A round left a stride inside the body is ink on every side for 7-8 mask
- * pixels — this measures that distance, no tolerance picking.
- */
+/** How far (mask px) the impact sits from the blue outline it stopped on. */
 function edgeDistance(game: Record<string, any>, lx: number, ly: number) {
-  const mask = game.ensureArtMask();
-  assert.ok(mask, 'the stage has an artwork mask');
-  const R = game.level.radius as number;
-  const u = Math.floor(((lx / R / mask.span) + 1) * 0.5 * mask.size);
-  const v = Math.floor(((ly / R / mask.span) + 1) * 0.5 * mask.size);
-  const ink = (x: number, y: number) => {
-    if (x < 0 || y < 0 || x >= mask.size || y >= mask.size) return false;
-    return mask.alpha[y * mask.size + x] > INK_ALPHA;
-  };
-  if (!ink(u, v)) return -1;
-  for (let d = 1; d <= 12; d++) {
-    for (let dy = -d; dy <= d; dy++) {
-      for (let dx = -d; dx <= d; dx++) {
-        if (Math.max(Math.abs(dx), Math.abs(dy)) !== d) continue;
-        if (!ink(u + dx, v + dy)) return d;
-      }
-    }
-  }
-  return 99;
+  return Math.abs(outlineOffset(game, lx, ly));
 }
 
 /**
@@ -381,8 +376,8 @@ test('a fast round stops on the first pixel of the drawing it meets', async () =
       if (!shot) continue;
       hits++;
       const { it, edge } = shot;
-      assert.ok(edge > 0 && edge <= 2,
-        `${kind}/${weapon} ${deg}deg: the round sits on the outline (${edge < 0 ? 'not on the drawing' : `${edge} px from empty space`})`);
+      assert.ok(edge <= 4,
+        `${kind}/${weapon} ${deg}deg: the round sits on the blue outline (${edge.toFixed(2)} px off)`);
       if (edge > 1) worst = Math.max(worst, edge);
       const world = game.artToWorld(it.px, it.py);
       assert.ok(game.artHitAt(world.x, world.y),

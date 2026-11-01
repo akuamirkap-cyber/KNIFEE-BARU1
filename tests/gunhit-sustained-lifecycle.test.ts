@@ -96,8 +96,12 @@ test('destroying a slide-11 host unregisters it and closes its own audio graph e
   } finally { setElevenMuted(false); }
 });
 
-test('legacy boss image loads do not refresh Game B art, and Game.destroy disposes its slide-11 host', () => {
-  assert.ok(images.length >= 2, 'boss images were registered at module load');
+test('Game A no longer loads its own boss art, and Game.destroy disposes its slide-11 host', () => {
+  // The four legacy boss PNGs (`/bosses/dark_knight_flat.png` …) were the last
+  // Game A bosses in the build. Their loader is gone: every boss in Game A is a
+  // Game B head rasterised on demand, so nothing may register a boss image at
+  // module load any more.
+  assert.equal(images.length, 0, 'no Game A boss image is loaded at module load');
   const game = newGame();
   game.level = makeLevel(10); game.level.boss = true;
   let rebuilds = 0;
@@ -106,13 +110,10 @@ test('legacy boss image loads do not refresh Game B art, and Game.destroy dispos
   const engine = host.raw!.sfx;
   let closed = 0;
   engine.ac!.close = () => { closed++; return Promise.resolve(); };
-  images[0].onload!();
-  assert.equal(rebuilds, 0, 'legacy portrait loading cannot replace the current Game B head');
   game.destroy(); game.destroy();
   assert.equal(closed, 1);
   assert.equal(game.s11State, undefined);
-  images[1].onload!();
-  assert.equal(rebuilds, 0, 'legacy portrait loading also leaves a destroyed game alone');
+  assert.equal(rebuilds, 0, 'a destroyed game never rebuilds its face');
 });
 
 test('Black Hole previews never add particles to a paused game, while the live gun still does', () => {

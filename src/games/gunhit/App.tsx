@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProp
 import { Game, GUN_Y, GAMEPLAY_GUN_SCALE, H, makeLevel, initialGameplayWheelCenterY } from './game/Game';
 import { savedValues, storage } from './game/safeStorage';
 import { setMasterVolume, setMuted, sfx } from './game/audio';
-import type { BossType } from './game/bossRoster';
+import type { BossHead } from './game/bossCatalog';
 import { bossXpReward, getPlayerProgress } from './game/playerProgress';
 import { sfx4 } from './game/sfx4';
 import { sfx3 } from './game/sfx3';
@@ -467,7 +467,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   // Boss Defeated celebration modal state (Screenshot 2)
   const [bossDefeatedData, setBossDefeatedData] = useState<{
     name: string;
-    bossType: BossType;
+    bossHead: BossHead;
     level: number;
     coins: number;
     playerLevel: number;
@@ -723,7 +723,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       onShotFired: (count) => {
         pendingShotsRef.current += count;
       },
-      onBossDefeated: (bossName, level, coinsEarned, bossType) => {
+      onBossDefeated: (bossName, level, coinsEarned, bossHead) => {
         const totalXpBefore = num(LS.playerXp);
         const previous = getPlayerProgress(totalXpBefore);
         const xpGained = bossXpReward(level);
@@ -732,7 +732,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
         storage.setItem(LS.playerXp, String(totalXp));
         storage.setItem(LS.playerLevel, String(nextProgress.level));
         setBossDefeatedData({
-          name: bossName, bossType, level, coins: coinsEarned,
+          name: bossName, bossHead, level, coins: coinsEarned,
           playerLevel: nextProgress.level,
           xpBefore: previous.level === nextProgress.level ? previous.xp : 0,
           xpProgress: nextProgress.xp,
@@ -2204,7 +2204,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
         {bossDefeatedData && (
           <BossDefeatedModal
             bossName={bossDefeatedData.name}
-            bossType={bossDefeatedData.bossType}
+            bossHead={bossDefeatedData.bossHead}
             stage={bossDefeatedData.level}
             rewardCoins={bossDefeatedData.coins}
             playerLevel={bossDefeatedData.playerLevel}

@@ -3,9 +3,8 @@ import { Check, Crosshair, Crown, Download, Flame, Gem, LockKeyhole, MoreHorizon
 import CoinSprite from '../../shared/CoinSprite';
 import DiamondSprite from '../../shared/DiamondSprite';
 import { WEAPONS, getWeapon, RARITY_COLOR, type WeaponId, type Weapon } from '../game/weapons';
-import { getBossDef, type BossProfile } from '../game/bossRoster';
-import { bossStyleFor } from '../game/bossIdentity';
-import { HeadArt, HEAD_INFO, HEAD_KINDS, type HeadKind } from '../../perfect-shot/play/HeadArt';
+import { BOSS_CATALOG, type BossProfile } from '../game/bossCatalog';
+import { HeadArt } from '../../perfect-shot/play/HeadArt';
 import { drawBossProjectile } from '../game/bossProjectileArt';
 import { drawGunCentered } from '../game/art/drawCentered';
 import { getGunMetrics } from '../game/art/metrics';
@@ -197,13 +196,16 @@ function RarityIconForWeapon({ rarity }: { rarity: Weapon['rarity'] }) {
   return <Icon className="h-3 w-3" />;
 }
 
-type CatalogBoss = BossProfile & { head: HeadKind; stage: number };
-const GAME_B_BOSSES: CatalogBoss[] = HEAD_KINDS.map((head, index) => {
-  const stage = (index + 1) * 5;
-  const legacy = getBossDef(bossStyleFor(stage) ?? 'pirate');
-  const info = HEAD_INFO[head];
-  return { ...legacy, head, stage, name: info.name.toUpperCase(), title: info.name, desc: info.desc, accent: info.bg[0] };
-});
+/**
+ * The boss roster of Game A *is* the boss roster of Game B: eleven heads, in
+ * Perfect Shot's order, one catalog entry per stage-5 boss (5, 10, … 55).
+ * There is no Game A boss to merge a legacy profile into.
+ */
+type CatalogBoss = BossProfile & { stage: number };
+const GAME_B_BOSSES: CatalogBoss[] = BOSS_CATALOG.map((boss, index) => ({
+  ...boss,
+  stage: (index + 1) * 5,
+}));
 
 function BossAttackPreview({ boss }: { boss: CatalogBoss }) {
   const active = useSlideActive();
@@ -242,7 +244,8 @@ function BossAttackPreview({ boss }: { boss: CatalogBoss }) {
           vx: 180,
           vy: 0,
           rot: -Math.PI / 2,
-          type: boss.id,
+          type: boss.family,
+          head: boss.head,
         }, t, 0.56);
       }
       raf = requestAnimationFrame(draw);
