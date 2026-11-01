@@ -38,11 +38,7 @@ test('the weapon title re-snaps every time a weapon is picked', () => {
 });
 
 test('the showcase weapon is drawn as big as the reference’s', () => {
-  // The pose still fills the showcase — but at the weapon's own relative size:
-  // a big gun reaches the 0.98 ceiling, a pistol no longer does (see
-  // `gunhit-weapon-showcase-scale`).
-  assert.match(arsenal, /const scale = showcaseScale\(m\.span, h\);/, 'the pose is drawn from the showcase scale rule');
-  assert.match(arsenal, /import \{ getGunMetrics, showcaseScale \} from '\.\.\/game\/art\/metrics';/, 'the rule is shared with the rest of the previews');
+  assert.match(arsenal, /const scale = \(h \* 0\.98\) \/ span;/, 'the pose is drawn nearly as tall as the showcase');
   assert.match(arsenal, /style=\{\{ width: box\.w, height: box\.h \}\}/, 'the canvas is sized from the measured showcase');
   assert.match(arsenal, /const heroSectionRef = useRef<HTMLElement>\(null\);/, 'the showcase strip is the measuring stick');
   assert.match(arsenal, /new ResizeObserver\(measure\)/, 'it rescales with the pane on every screen');

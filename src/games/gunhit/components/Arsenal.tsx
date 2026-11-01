@@ -7,7 +7,7 @@ import { BOSS_ROSTER, type BossProfile } from '../game/bossRoster';
 import { renderBossHead } from '../game/bossRenderer';
 import { drawBossProjectile } from '../game/bossProjectileArt';
 import { drawGunCentered } from '../game/art/drawCentered';
-import { getGunMetrics, showcaseScale } from '../game/art/metrics';
+import { getGunMetrics } from '../game/art/metrics';
 import { sfx } from '../game/audio';
 import { sfx4 } from '../game/sfx4';
 import { useSlideActive } from '../../shared/SlideActivity';
@@ -155,12 +155,11 @@ function SpotlightGun({ weapon, variant, box }: { weapon: Weapon; variant: GunVa
 
       ctx.rotate(Math.PI / 4 + Math.sin(t * 2.2) * 0.05);
 
-      // Real proportions, not one size for everything: the pane is sized for
-      // the biggest guns, so an AK-47, a bazooka or a minigun fills it while a
-      // pistol keeps the small gun's size it should have. `showcaseScale` still
-      // caps the result at the fit scale, so nothing is ever cropped.
       const m = getGunMetrics(weapon.id, variant);
-      const scale = showcaseScale(m.span, h);
+      const span = Math.max(m.span, 130);
+      // 0.98 of the showcase height: the pose reads as large as the reference
+      // and still scales down with the pane on small screens.
+      const scale = (h * 0.98) / span;
       ctx.scale(scale, scale);
 
       drawGunCentered(ctx, weapon.id, t, 0, true, variant, true);

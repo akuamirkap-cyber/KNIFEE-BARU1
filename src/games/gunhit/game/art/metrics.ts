@@ -35,42 +35,6 @@ export function getGunInkBox(id: WeaponId): GunInkBox | null {
   return GUN_INK_BOX[id] ?? null;
 }
 
-/**
- * The measuring stick the weapon showcase uses, in the same units as `span`.
- *
- * Every preview used to scale a weapon so its own `span` filled the pane, which
- * made the whole arsenal look exactly one size: a pistol read as big as an
- * AK-47, and a bazooka as big as a bubble gun. The armory now draws each weapon
- * at its real relative size — a pistol stays small, a rifle, a bazooka or a
- * minigun reads as the big gun it is. Anything longer than this stick fills the
- * pane and is capped by the fit scale, so nothing is ever cropped.
- */
-export const SHOWCASE_FULL_SPAN = 300;
-
-/**
- * How fast the showcase size grows with `span`. 1 = strictly proportional
- * (an AK-47 is only 1.46× a pistol's span, which still read as "same size" on
- * a phone). Above 1 the long guns pull ahead of the short ones, so the pistol
- * stays a small sidearm while the rifle/launcher class owns the pane.
- */
-export const SHOWCASE_SIZE_CURVE = 1.45;
-
-/**
- * Scale that draws `span` at its own size inside a pane `h` px tall.
- *
- * `fit` is the hard ceiling (the whole drawing must stay inside the pane);
- * `share` is how much of the pane a weapon of this `span` is allowed to take,
- * curved so the big guns genuinely dominate. Small guns land far under the
- * ceiling and therefore read small, which is the point.
- */
-export function showcaseScale(spanRaw: number, h: number, fill = 0.98): number {
-  const span = Math.max(spanRaw, 130);
-  const fit = (h * fill) / span;
-  const share = Math.pow(span / SHOWCASE_FULL_SPAN, SHOWCASE_SIZE_CURVE);
-  const relative = (h * fill * share) / span;
-  return Math.min(fit, relative);
-}
-
 export interface PreviewFit {
   scale: number;
   tx: number;
