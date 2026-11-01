@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { Game, GUN_Y, GAMEPLAY_GUN_SCALE, H, makeLevel, initialGameplayWheelCenterY } from './game/Game';
 import { savedValues, storage } from './game/safeStorage';
 import { setMasterVolume, setMuted, sfx } from './game/audio';
@@ -311,6 +311,16 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   const [menuPageTransition, setMenuPageTransition] = useState<MenuPageTransition>(null);
   const [menuDeparture, setMenuDeparture] = useState<MenuDeparture>(null);
   const menuPageTransitionBusyRef = useRef(false);
+  /**
+   * The entrance choreography of a *replayed* menu.
+   *
+   * Replaying a preset remounts the whole menu, so its CSS entrance only starts
+   * a frame or two after the tap (and later still on a slow phone). The audio
+   * used to be scheduled from the tap itself, which left `menuEnter`'s letters,
+   * thuds and impact a step ahead of the picture every time a preset changed.
+   * The plan waits here instead and is played on the frame the replay paints.
+   */
+  const menuEntranceAudioRef = useRef<Plan | null>(null);
   const menuPageTransitionTimersRef = useRef<number[]>([]);
   const [playTransition, setPlayTransition] = useState<{ phase: OverlayPhase; label: string; origin: { x: number; y: number }; lens: number } | null>(null);
   const [playMenuExiting, setPlayMenuExiting] = useState(false);
@@ -850,13 +860,31 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       const nextPlan = getSharedMenuPlan() ?? resolvePlan(animStore.get(), menuPlanRef.current);
       if (replay) {
         setMenuPlan(nextPlan);
+        menuEntranceAudioRef.current = nextPlan;
         setMenuReturnKey((key) => key + 1);
+      } else if (studioSfx.ctx?.state === 'running') {
+        // The menu is already on screen and already animating: its sound is due now.
+        afterPaint(() => studioSfx.menuEnter(0, nextPlan));
       }
-      if (studioSfx.ctx?.state === 'running') studioSfx.menuEnter(0.03, nextPlan);
     };
     window.addEventListener('sans-intro-complete', onSansIntroComplete);
     return () => window.removeEventListener('sans-intro-complete', onSansIntroComplete);
   }, []);
+
+  /**
+   * Play a replayed menu's entrance on the frame its remount is painted.
+   *
+   * `menuReturnKey` is the remount key of the menu subtree, so the layout effect
+   * runs once the new DOM exists and the CSS entrance is about to start; the
+   * `afterPaint` frame is the same frame that shows the first animation step.
+   */
+  useLayoutEffect(() => {
+    const plan = menuEntranceAudioRef.current;
+    if (!plan) return;
+    menuEntranceAudioRef.current = null;
+    if (studioSfx.ctx?.state !== 'running') return;
+    afterPaint(() => studioSfx.menuEnter(0, plan));
+  }, [menuReturnKey]);
 
   // Match Perfect Shot's input lock during the 1.7s menu arrival sequence.
   useEffect(() => {
@@ -1519,8 +1547,9 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     const plan = next ?? resolvePlan(animStore.get(), menuPlanRef.current);
     publishMenuPlan(plan);
     setMenuPlan(plan);
+    // The remount below is what starts the entrance — its sound rides it.
+    menuEntranceAudioRef.current = plan;
     setMenuReturnKey((key) => key + 1);
-    studioSfx.menuEnter(0.03, plan);
   };
   const chooseAnimSpeed = (speed: number) => {
     animStore.setSpeed(speed);

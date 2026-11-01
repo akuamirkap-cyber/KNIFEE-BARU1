@@ -81,7 +81,7 @@ test('SGA uses Perfect Shot UI, page-transition and ambient audio with a separat
   assert.match(app, /from '\.\.\/perfect-shot\/audio\/useSound'/);
   assert.match(app, /studioSfx\.hover\(\)/);
   assert.match(app, /studioSfx\.tap\(\)/);
-  assert.match(app, /studioSfx\.menuEnter\(0\.03, nextPlan\)/);
+  assert.match(app, /menuEntranceAudioRef\.current = nextPlan;/);
   assert.match(app, /getSharedMenuPlan\(\) \?\? resolvePlan\(psAnimationConfig\)/);
   assert.match(app, /const freshMenuPlan = \(\) => getSharedMenuPlan\(\) \?\? resolvePlan\(animStore\.get\(\), menuPlanRef\.current\)/);
   assert.match(app, /studioSfx\.shutterClose\(/);
@@ -267,4 +267,17 @@ test('page-transition sounds fire with the phase that starts them, not from a cl
   // …and nothing may be scheduled from the tap instant again.
   assert.doesNotMatch(app, /studioSfx\.\w+\(timing\.(swapAt|lead|finishAt) \/ 1000/);
   assert.doesNotMatch(app, /studioSfx\.(playEnter|scopeAim|scopeOpen)\((mountAt|revealAt|lead) \/ 1000/);
+});
+
+test('a replayed menu preset starts its entrance sound on the frame the menu replays', () => {
+  // Changing the animation preset remounts the menu, so the CSS entrance only
+  // starts a frame or two after the tap — and later still on a slow phone. The
+  // sound is queued with the replay instead of being scheduled from the tap, so
+  // letters, thuds and the shot stay on the picture.
+  assert.match(app, /const menuEntranceAudioRef = useRef<Plan \| null>\(null\);/);
+  assert.match(app, /menuEntranceAudioRef\.current = plan;\s*\n\s*setMenuReturnKey\(\(key\) => key \+ 1\);/);
+  assert.match(app, /useLayoutEffect\(\(\) => \{[\s\S]{0,500}?afterPaint\(\(\) => studioSfx\.menuEnter\(0, plan\)\);/);
+  assert.match(app, /afterPaint\(\(\) => studioSfx\.menuEnter\(0, nextPlan\)\)/);
+  // Nothing may schedule the entrance from the tap instant again.
+  assert.doesNotMatch(app, /studioSfx\.menuEnter\(0\.03/);
 });
