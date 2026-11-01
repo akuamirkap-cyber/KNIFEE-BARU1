@@ -87,9 +87,9 @@ test('SGA uses Perfect Shot UI, page-transition and ambient audio with a separat
   assert.match(app, /studioSfx\.shutterClose\(/);
   assert.match(app, /studioSfx\.shutterOpen\(/);
   assert.match(app, /studioSfx\.menuExit\('play'/);
-  assert.match(app, /studioSfx\.playEnter\(mountAt \/ 1000, PLAY_IN, stageConfig\.boss, stageConfig\.ammo/);
-  assert.match(app, /studioSfx\.scopeAim\(lead \/ 1000\)/);
-  assert.match(app, /studioSfx\.scopeOpen\(revealAt \/ 1000\)/);
+  assert.match(app, /studioSfx\.playEnter\(0, PLAY_IN, stageConfig\.boss, stageConfig\.ammo/);
+  assert.match(app, /afterPaint\(\(\) => studioSfx\.scopeAim\(0\)\)/);
+  assert.match(app, /afterPaint\(\(\) => studioSfx\.scopeOpen\(0\)\)/);
   assert.match(app, /variant="scope"/);
   assert.match(app, /captureMenuWeaponFlight/);
   assert.match(app, /const PLAY_SCOPE = \{ menuLead: 180, questLead: 260, otherLead: 460, cover: 620, hold: 600, reveal: 680 \}/);
@@ -103,14 +103,14 @@ test('SGA uses Perfect Shot UI, page-transition and ambient audio with a separat
   const game = readFileSync(path.join(process.cwd(), 'src/games/gunhit/game/Game.ts'), 'utf8');
   assert.match(game, /startAtLevel\(\s*level: number,\s*weaponHandoff = false,/);
   assert.match(app, /studioSfx\.playExit\(0\)/);
-  assert.match(app, /studioSfx\.questEnter\(timing\.swapAt \/ 1000, QUEST_IN\)/);
-  assert.match(app, /studioSfx\.achEnter\(timing\.swapAt \/ 1000, ACH_IN/);
-  assert.match(app, /studioSfx\.lbEnter\(timing\.swapAt \/ 1000, LB_IN\)/);
+  assert.match(app, /studioSfx\.questEnter\(0, QUEST_IN\)/);
+  assert.match(app, /studioSfx\.achEnter\(0, ACH_IN/);
+  assert.match(app, /studioSfx\.lbEnter\(0, LB_IN\)/);
   assert.match(app, /beginMenuPageTransition\('cloud', 'QUEST', menuPageLead\(\)/);
   assert.match(app, /beginMenuPageTransition\('wrap', 'ACHIEVEMENT', menuPageLead\(\)/);
   assert.match(app, /beginMenuPageTransition\('podium', 'PERINGKAT', menuPageLead\(\)/);
-  assert.match(app, /studioSfx\.cloudClose\(timing\.lead \/ 1000, timing\.rate\)/);
-  assert.match(app, /studioSfx\.menuEnter\(timing\.swapAt \/ 1000, nextPlan\)/);
+  assert.match(app, /studioSfx\.cloudClose\(0, t\.rate\)/);
+  assert.match(app, /studioSfx\.menuEnter\(0, nextPlan\)/);
   assert.match(app, /phase=\{menuPageTransition\.phase\}/);
   assert.match(app, /progress=\{\{ stage: Math\.max\(1, Math\.min\(GUN_HIT_MAP_MAX_LEVEL, bestLevel\)\), stages: SGA_QUEST_STAGES \}\}/);
   assert.match(app, /className=\{`gunhit-menu[^`]*\$\{active && introReady \? '' : 'slide-paused'\}[^`]*\$\{menuReady && introReady && !menuDeparture && !settingsOpen \? '' : 'pointer-events-none'\}/);
@@ -124,7 +124,7 @@ test('SGA uses Perfect Shot UI, page-transition and ambient audio with a separat
   assert.match(app, /studioSfx\.lbExit\(0\)/);
   assert.match(app, /studioSfx\.subEnter\(/);
   assert.match(app, /studioSfx\.subExit\(/);
-  assert.match(app, /studioSfx\.shopEnter\(timing\.swapAt \/ 1000, SHOP_IN\)/);
+  assert.match(app, /studioSfx\.shopEnter\(0, SHOP_IN\)/);
   assert.match(app, /studioSfx\.shopExit\(0\)/);
   assert.match(app, /studioSfx\.startMusic\(\)/);
   assert.equal((app.match(/<MusicAmbientControl enabled=\{studioSound\.music\} onToggle=\{toggleBackgroundMusic\} \/>/g) ?? []).length, 1);
@@ -143,12 +143,12 @@ test('SGA uses Perfect Shot quest-map geometry while keeping SGA stage progress 
   assert.match(app, /const menuPageLead = \(\) => Math\.max\(300, 380 \* menuPlanRef\.current\.k\)/);
   assert.match(app, /setMenuPageTransition\(\{ \.\.\.transition, phase: 'cover' \}\)/);
   assert.match(app, /setMenuPageTransition\(\{ \.\.\.transition, phase: 'reveal' \}\)/);
-  assert.match(app, /studioSfx\.questEnter\(timing\.swapAt \/ 1000, QUEST_IN\)/);
-  assert.match(app, /studioSfx\.achEnter\(timing\.swapAt \/ 1000, ACH_IN/);
-  assert.match(app, /studioSfx\.lbEnter\(timing\.swapAt \/ 1000, LB_IN\)/);
+  assert.match(app, /studioSfx\.questEnter\(0, QUEST_IN\)/);
+  assert.match(app, /studioSfx\.achEnter\(0, ACH_IN/);
+  assert.match(app, /studioSfx\.lbEnter\(0, LB_IN\)/);
   assert.match(app, /leaving=\{mapLeaving\}/);
   assert.match(app, /beginMenuPageTransition\('cloud', 'QUEST', QUEST_OUT\.total/);
-  assert.match(app, /studioSfx\.menuEnter\(timing\.swapAt \/ 1000, nextPlan\)/);
+  assert.match(app, /studioSfx\.menuEnter\(0, nextPlan\)/);
   assert.match(app, /beginMenuPageTransition\('wrap', 'ACHIEVEMENT', ACH_OUT\.total/);
   assert.match(app, /beginMenuPageTransition\('podium', 'PERINGKAT', LB_OUT\.total/);
   assert.match(app, /opening \? menuPageLead\(\) : SHOP_OUT\.total/);
@@ -252,4 +252,19 @@ test('menu & game theme choices default to forest and expose all SGA background 
   ]) {
     assert.match(backdrop, new RegExp(`${sga}: '${id}'`), `${sga} uses the reference ${id} backdrop`);
   }
+});
+
+test('page-transition sounds fire with the phase that starts them, not from a clock started at the tap', () => {
+  // A pre-computed `lead`/`swapAt` is measured from the tap, but the page only
+  // mounts (and its CSS animations only start) after React renders and the
+  // browser paints. On a phone that gap put every entrance sound ahead of its
+  // animation: the shutter slam, the hero impact and the stage mount were heard
+  // first and seen late. Phase sounds now ride the phase itself.
+  assert.match(app, /type PhaseAudio = \{ cover\?: \(t: MenuTransitionTiming\) => void; swap\?: \(t: MenuTransitionTiming\) => void \};/);
+  assert.match(app, /const afterPaint = \(fn: \(\) => void\) => \{/);
+  assert.match(app, /if \(audio\.cover\) afterPaint\(\(\) => audio\.cover\?\.\(timing\)\);/);
+  assert.match(app, /if \(audio\.swap\) afterPaint\(\(\) => audio\.swap\?\.\(timing\)\);/);
+  // …and nothing may be scheduled from the tap instant again.
+  assert.doesNotMatch(app, /studioSfx\.\w+\(timing\.(swapAt|lead|finishAt) \/ 1000/);
+  assert.doesNotMatch(app, /studioSfx\.(playEnter|scopeAim|scopeOpen)\((mountAt|revealAt|lead) \/ 1000/);
 });

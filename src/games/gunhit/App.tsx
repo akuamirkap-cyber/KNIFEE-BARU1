@@ -56,6 +56,25 @@ type Screen = 'menu' | 'playing' | 'over';
 type MenuPageTransition = { phase: OverlayPhase; variant: OverlayVariant; label: string; rate: number } | null;
 type MenuDeparture = 'gun' | 'quest' | 'ready' | 'ranks' | 'play' | null;
 type MenuTransitionTiming = { lead: number; cover: number; hold: number; reveal: number; swapAt: number; finishAt: number; rate: number };
+/** Sounds that belong to one phase of a page transition, fired with that phase. */
+type PhaseAudio = { cover?: (t: MenuTransitionTiming) => void; swap?: (t: MenuTransitionTiming) => void };
+
+/**
+ * Run `fn` on the first frame after the state change that was just queued.
+ *
+ * Every phase sound used to be scheduled from the tap instant with a
+ * pre-computed delay, so React's mount of the incoming page plus its first
+ * paint landed *behind* the audio: the cover slam, the page entrance and the
+ * hero impact were all heard first and seen a few frames later. Firing them
+ * from the frame that actually starts the animations keeps sound and picture
+ * on the same beat, no matter how long the page takes to mount on a phone.
+ */
+const afterPaint = (fn: () => void) => {
+  let fired = false;
+  const run = () => { if (fired) return; fired = true; fn(); };
+  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
+  window.setTimeout(run, 120);
+};
 const PLAY_SCOPE = { menuLead: 180, questLead: 260, otherLead: 460, cover: 620, hold: 600, reveal: 680 };
 const MENU_EXIT_K = 0.78;
 const PAGE_OVERLAYS: Partial<Record<OverlayVariant, { cover: number; hold: number; reveal: number }>> = {
@@ -358,6 +377,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     lead: number,
     onSwap: () => void,
     departure: MenuDeparture = null,
+    audio: PhaseAudio = {},
   ): MenuTransitionTiming | null => {
     const base = PAGE_OVERLAYS[variant];
     if (!base || menuPageTransitionBusyRef.current) return null;
@@ -371,17 +391,24 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     const reveal = Math.round(base.reveal / rate);
     const swapAt = lead + cover + hold;
     const transition = { variant, label, rate };
+    const timing: MenuTransitionTiming = { lead, cover, hold, reveal, swapAt, finishAt: swapAt + reveal, rate };
     const schedule = (delay: number, callback: () => void) => {
       menuPageTransitionTimersRef.current.push(window.setTimeout(callback, delay));
     };
 
     setMenuPageTransition(null);
     setMenuDeparture(departure);
-    schedule(lead, () => setMenuPageTransition({ ...transition, phase: 'cover' }));
+    schedule(lead, () => {
+      setMenuPageTransition({ ...transition, phase: 'cover' });
+      // The cover animation starts with this commit — its sound starts here too.
+      if (audio.cover) afterPaint(() => audio.cover?.(timing));
+    });
     schedule(swapAt, () => {
       onSwap();
       setMenuDeparture(null);
       setMenuPageTransition({ ...transition, phase: 'reveal' });
+      // Same for the reveal + the incoming page's own entrance.
+      if (audio.swap) afterPaint(() => audio.swap?.(timing));
     });
     schedule(swapAt + reveal, () => {
       setMenuPageTransition(null);
@@ -390,7 +417,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       menuPageTransitionTimersRef.current = [];
     });
 
-    return { lead, cover, hold, reveal, swapAt, finishAt: swapAt + reveal, rate };
+    return timing;
   };
 
   const menuPageLead = () => Math.max(300, 380 * menuPlanRef.current.k);
@@ -411,21 +438,19 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
         }
       },
       opening ? 'gun' : null,
+      {
+        cover: (t) => studioSfx.shutterClose(0, (t.cover * 0.8) / 1000, t.rate),
+        swap: (t) => {
+          studioSfx.shutterOpen(0, t.rate);
+          if (opening) studioSfx.shopEnter(0, SHOP_IN);
+          else if (nextPlan) studioSfx.menuEnter(0, nextPlan);
+        },
+      },
     );
     if (!timing) return;
 
-    const k = timing.rate;
-    if (opening) {
-      studioSfx.menuExit('gun', 0, { ...menuPlanRef.current, k: menuPlanRef.current.k * 0.6 });
-      studioSfx.shutterClose(timing.lead / 1000, (timing.cover * 0.8) / 1000, k);
-      studioSfx.shutterOpen(timing.swapAt / 1000, k);
-      studioSfx.shopEnter(timing.swapAt / 1000, SHOP_IN);
-    } else {
-      studioSfx.shopExit(0);
-      studioSfx.shutterClose(timing.lead / 1000, (timing.cover * 0.8) / 1000, k);
-      studioSfx.shutterOpen(timing.swapAt / 1000, k);
-      if (nextPlan) studioSfx.menuEnter(timing.swapAt / 1000, nextPlan);
-    }
+    if (opening) studioSfx.menuExit('gun', 0, { ...menuPlanRef.current, k: menuPlanRef.current.k * 0.6 });
+    else studioSfx.shopExit(0);
   };
 
   // Boss Defeated celebration modal state (Screenshot 2)
@@ -1165,14 +1190,18 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       studioSfx.playExit(0);
     }
 
-    studioSfx.scopeAim(lead / 1000);
-    studioSfx.scopeOpen(revealAt / 1000);
-    studioSfx.playEnter(mountAt / 1000, PLAY_IN, stageConfig.boss, stageConfig.ammo, {
+    // The scope closes, the stage mounts and the lens opens on their own beats —
+    // their sounds are fired from those beats, not from a clock started at the tap,
+    // so a slow mount on a phone can no longer leave the audio ahead of the picture.
+    const playEnterAudio = () => studioSfx.playEnter(0, PLAY_IN, stageConfig.boss, stageConfig.ammo, {
       gun: !fromMenu,
       offset: hold,
     });
 
-    deferPageClose(lead, () => setPlayTransition({ phase: 'cover', label, origin, lens }));
+    deferPageClose(lead, () => {
+      setPlayTransition({ phase: 'cover', label, origin, lens });
+      afterPaint(() => studioSfx.scopeAim(0));
+    });
     deferPageClose(mountAt, () => {
       startingLevelRef.current = level;
       setMapOpen(false);
@@ -1189,13 +1218,17 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       if (specialMode) gameRef.current?.startSpecialStage(specialMode, gunEntryDelay, true, wheelEntryDelay, gunHiddenFor, wantsWeaponFlight);
       else gameRef.current?.startAtLevel(level, wantsWeaponFlight, gunEntryDelay, true, wheelEntryDelay, gunHiddenFor);
       setScreen('playing');
+      afterPaint(playEnterAudio);
     });
     // The instant the captured frame lands, the live canvas gun takes over, so
     // the hand-off never leaves a bitmap copy resting on top of it.
     if (wantsWeaponFlight) {
       deferPageClose(mountAt + WEAPON_FLIGHT_MS + 24, () => setWeaponFlight(null));
     }
-    deferPageClose(revealAt, () => setPlayTransition((current) => current ? { ...current, phase: 'reveal' } : current));
+    deferPageClose(revealAt, () => {
+      setPlayTransition((current) => current ? { ...current, phase: 'reveal' } : current);
+      afterPaint(() => studioSfx.scopeOpen(0));
+    });
     deferPageClose(finishAt, () => {
       setPlayTransition(null);
       setWeaponFlight(null);
@@ -1234,13 +1267,13 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   }, [screen, mapOpen, questOpen]);
 
   const openLevelMap = () => {
-    const timing = beginMenuPageTransition('cloud', 'QUEST', menuPageLead(), () => setMapOpen(true), 'quest');
+    const timing = beginMenuPageTransition('cloud', 'QUEST', menuPageLead(), () => setMapOpen(true), 'quest', {
+      cover: (t) => studioSfx.cloudClose(0, t.rate),
+      swap: (t) => { studioSfx.cloudOpen(0, t.rate); studioSfx.questEnter(0, QUEST_IN); },
+    });
     if (!timing) return;
     setMapLeaving(false);
     studioSfx.menuExit('quest', 0, { ...menuPlanRef.current, k: menuPlanRef.current.k * 0.6 });
-    studioSfx.cloudClose(timing.lead / 1000, timing.rate);
-    studioSfx.cloudOpen(timing.swapAt / 1000, timing.rate);
-    studioSfx.questEnter(timing.swapAt / 1000, QUEST_IN);
   };
 
   const closeLevelMap = () => {
@@ -1251,23 +1284,23 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       setMapLeaving(false);
       setMenuPlan(nextPlan);
       setMenuReturnKey((key) => key + 1);
+    }, null, {
+      cover: (t) => studioSfx.cloudClose(0, t.rate),
+      swap: (t) => { studioSfx.cloudOpen(0, t.rate); studioSfx.menuEnter(0, nextPlan); },
     });
     if (!timing) return;
     setMapLeaving(true);
     studioSfx.questExit(0);
-    studioSfx.cloudClose(timing.lead / 1000, timing.rate);
-    studioSfx.cloudOpen(timing.swapAt / 1000, timing.rate);
-    studioSfx.menuEnter(timing.swapAt / 1000, nextPlan);
   };
 
   const openQuestPage = () => {
-    const timing = beginMenuPageTransition('wrap', 'ACHIEVEMENT', menuPageLead(), () => setQuestOpen(true), 'ready');
+    const timing = beginMenuPageTransition('wrap', 'ACHIEVEMENT', menuPageLead(), () => setQuestOpen(true), 'ready', {
+      cover: (t) => studioSfx.wrapClose(0, t.rate),
+      swap: (t) => { studioSfx.wrapOpen(0, t.rate); studioSfx.achEnter(0, ACH_IN, readyQuestRewardCount); },
+    });
     if (!timing) return;
     setQuestLeaving(false);
     studioSfx.menuExit('ready', 0, { ...menuPlanRef.current, k: menuPlanRef.current.k * 0.6 });
-    studioSfx.wrapClose(timing.lead / 1000, timing.rate);
-    studioSfx.wrapOpen(timing.swapAt / 1000, timing.rate);
-    studioSfx.achEnter(timing.swapAt / 1000, ACH_IN, readyQuestRewardCount);
   };
 
   const closeQuestPage = () => {
@@ -1278,23 +1311,23 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       setQuestLeaving(false);
       setMenuPlan(nextPlan);
       setMenuReturnKey((key) => key + 1);
+    }, null, {
+      cover: (t) => studioSfx.wrapClose(0, t.rate),
+      swap: (t) => { studioSfx.wrapOpen(0, t.rate); studioSfx.menuEnter(0, nextPlan); },
     });
     if (!timing) return;
     setQuestLeaving(true);
     studioSfx.achExit(0);
-    studioSfx.wrapClose(timing.lead / 1000, timing.rate);
-    studioSfx.wrapOpen(timing.swapAt / 1000, timing.rate);
-    studioSfx.menuEnter(timing.swapAt / 1000, nextPlan);
   };
 
   const openLeaderboardPage = () => {
-    const timing = beginMenuPageTransition('podium', 'PERINGKAT', menuPageLead(), () => setLeaderboardOpen(true), 'ranks');
+    const timing = beginMenuPageTransition('podium', 'PERINGKAT', menuPageLead(), () => setLeaderboardOpen(true), 'ranks', {
+      cover: (t) => studioSfx.podiumClose(0, t.rate),
+      swap: (t) => { studioSfx.podiumOpen(0, t.rate); studioSfx.lbEnter(0, LB_IN); },
+    });
     if (!timing) return;
     setLeaderboardLeaving(false);
     studioSfx.menuExit('ranks', 0, { ...menuPlanRef.current, k: menuPlanRef.current.k * 0.6 });
-    studioSfx.podiumClose(timing.lead / 1000, timing.rate);
-    studioSfx.podiumOpen(timing.swapAt / 1000, timing.rate);
-    studioSfx.lbEnter(timing.swapAt / 1000, LB_IN);
   };
 
   const closeLeaderboardPage = () => {
@@ -1305,13 +1338,13 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       setLeaderboardLeaving(false);
       setMenuPlan(nextPlan);
       setMenuReturnKey((key) => key + 1);
+    }, null, {
+      cover: (t) => studioSfx.podiumClose(0, t.rate),
+      swap: (t) => { studioSfx.podiumOpen(0, t.rate); studioSfx.menuEnter(0, nextPlan); },
     });
     if (!timing) return;
     setLeaderboardLeaving(true);
     studioSfx.lbExit(0);
-    studioSfx.podiumClose(timing.lead / 1000, timing.rate);
-    studioSfx.podiumOpen(timing.swapAt / 1000, timing.rate);
-    studioSfx.menuEnter(timing.swapAt / 1000, nextPlan);
   };
 
   const openSettingsPage = () => {
@@ -1464,11 +1497,12 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       setMenuPlan(nextPlan);
       setMenuReturnKey((key) => key + 1);
       setScreen('menu');
+    }, null, {
+      cover: () => studioSfx.whoosh(0, 0.3, 2400, 400, 0.1),
+      swap: () => studioSfx.menuEnter(0, nextPlan),
     });
     if (!timing) return;
     studioSfx.playExit(0);
-    studioSfx.whoosh(timing.lead / 1000, 0.3, 2400, 400, 0.1);
-    studioSfx.menuEnter(timing.swapAt / 1000, nextPlan);
     saveQuests(questStateRef.current, true);
   };
 
