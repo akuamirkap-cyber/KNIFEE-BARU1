@@ -52,6 +52,8 @@ import { sfx as sevenSfx } from '../../../../games/game-4/src/game/audio';
 import type { Projectile as SevenShot } from '../../../../games/game-4/src/game/projectiles';
 import { spawnPlasmaImpact, YELLOW_PLASMA_IMPACT } from '../../../../games/game-4/src/game/projectiles3';
 import { sfx2 } from './sfx2';
+import { drawKnife, knifeVariant, KNIFE_SINK } from './knifeArt';
+import { sfx as bossVoice } from '../../perfect-shot/audio/sfx';
 import { sfx3 } from './sfx3';
 import { sfx4 } from './sfx4';
 import { sfx6 } from './sfx6';
@@ -433,6 +435,32 @@ export function bossFireInterval(baseInterval: number, jitter = 0) {
   return Math.max(1.05, baseInterval * 0.7 + jitter);
 }
 
+/** A 2D affine matrix, enough for the boss' idle float and its reactions. */
+type BossMat = { a: number; b: number; c: number; d: number; e: number; f: number };
+const bossMatMul = (m: BossMat, n: BossMat): BossMat => ({
+  a: m.a * n.a + m.c * n.b,
+  b: m.b * n.a + m.d * n.b,
+  c: m.a * n.c + m.c * n.d,
+  d: m.b * n.c + m.d * n.d,
+  e: m.a * n.e + m.c * n.f + m.e,
+  f: m.b * n.e + m.d * n.f + m.f,
+});
+const bossMatRot = (r: number): BossMat => ({ a: Math.cos(r), b: Math.sin(r), c: -Math.sin(r), d: Math.cos(r), e: 0, f: 0 });
+const bossMatScale = (x: number, y: number): BossMat => ({ a: x, b: 0, c: 0, d: y, e: 0, f: 0 });
+const bossMatMove = (x: number, y: number): BossMat => ({ a: 1, b: 0, c: 0, d: 1, e: x, f: y });
+const bossMatApply = (m: BossMat, x: number, y: number) => ({ x: m.a * x + m.c * y + m.e, y: m.b * x + m.d * y + m.f });
+const bossMatInvert = (m: BossMat): BossMat => {
+  const det = m.a * m.d - m.b * m.c || 1e-6;
+  return {
+    a: m.d / det,
+    b: -m.b / det,
+    c: -m.c / det,
+    d: m.a / det,
+    e: (m.c * m.f - m.d * m.e) / det,
+    f: (m.b * m.e - m.a * m.f) / det,
+  };
+};
+
 const norm = (a: number) => ((a % TAU) + TAU) % TAU;
 const angDiff = (a: number, b: number) => {
   let d = norm(a - b);
@@ -573,7 +601,7 @@ const PAINT = ['244,63,94', '250,204,21', '34,211,238', '168,85,247', '74,222,12
 
 type ItemType = 'bullet' | 'old' | 'spike' | 'coin' | 'diamond_chest';
 interface AcidStuck { blobs: AcidStuckBlob[]; dripT: number; drip: number; seed: number; hybrid?: boolean }
-interface Item { angle: number; type: ItemType; age: number; /** Exact radius (px) the round bit into the target artwork. */ r?: number; ghostVolley?: number; w?: WeaponId; scale?: number; vel?: number; harvested?: boolean; tint?: string; big?: number; hits?: number; hue?: number; flash?: number; acid?: AcidStuck; hideArt?: boolean; busterPellet?: boolean; setTwo?: boolean; s7Half?: number; s7Protrude?: number }
+interface Item { angle: number; type: ItemType; age: number; /** Game B's stuck-knife variant (boss obstacles). */ knife?: number; /** Game B's knife lean, in degrees. */ tilt?: number; /** Exact radius (px) the round bit into the target artwork. */ r?: number; ghostVolley?: number; w?: WeaponId; scale?: number; vel?: number; harvested?: boolean; tint?: string; big?: number; hits?: number; hue?: number; flash?: number; acid?: AcidStuck; hideArt?: boolean; busterPellet?: boolean; setTwo?: boolean; s7Half?: number; s7Protrude?: number }
 interface Proj { x: number; y: number; vx: number; vy: number; originX?: number; ghostAim?: boolean; ghostVolley?: number; setSix?: true; setOne?: SetOneShot; setSeven?: SevenShot; setSevenPending?: boolean; s7Ghost?: boolean; hold?: number; setNine?: NineBullet; setNinePending?: boolean; s9Ghost?: boolean; setNineBeam?: number; setEleven?: ElevenProj; setElevenPending?: boolean; s11Wait?: boolean; s11Ghost?: boolean; setTwo?: TwoRound; pierced?: number; hist?: { x: number; y: number }[]; tint?: string; big?: number; mini?: boolean; giant?: boolean; hue?: number; flash?: number; spawnDelay?: number; wob?: number; lastEcho?: number; t?: number; trail?: { x: number; y: number }[] }
 type StepRes = { res: 'none' | 'stick' | 'fail' | 'hit'; spike?: boolean; local?: number; r?: number };
 interface Light { x: number; y: number; r: number; rgb: string; life: number; max: number }
@@ -919,6 +947,8 @@ export interface LevelCfg {
 }
 
 const BOSS_NAMES = ['DARK KNIGHT', 'ONI DEMON', 'MECHA CYBORG', 'PIRATE LORD'];
+/** Perfect Shot buries `Math.min(5, 3 + floor(n / 30))` knives in a boss. */
+export const bossKnifeCount = (n: number) => Math.min(5, 3 + Math.floor(n / 30));
 const BOSS_STYLES: Style[] = ['knight', 'oni', 'cyborg', 'pirate'];
 const WORLD_STYLES: Style[] = ['orange', 'wood', 'target'];
 const PRAISE = ['MANTAP!', 'KEREN!', 'SEMPURNA!', 'GACOR!', 'JAGO!', 'LUAR BIASA!'];
@@ -963,7 +993,11 @@ export function makeLevel(n: number, forcedMode?: LevelMode): LevelCfg {
     n, boss, ammo: isSpecial(mode) ? 12 : ammo, base, pattern, dir: Math.random() < 0.5 ? 1 : -1,
     radius: boss ? 122 : mode === 'boulder' || mode === 'bonus' ? ROCK_RADIUS : 106, style,
     name: boss ? BOSS_NAMES[Math.max(0, bossIdx) % BOSS_NAMES.length] : '',
-    old: isSpecial(mode) ? 0 : old, spikes: isSpecial(mode) ? 0 : spikes, coins: isSpecial(mode) ? 0 : coins,
+    // Perfect Shot's boss stage has no spikes at all: its rintangan are the 3–5
+    // knives already buried in the head, so Game A uses exactly those.
+    old: isSpecial(mode) ? 0 : boss ? bossKnifeCount(n) : old,
+    spikes: isSpecial(mode) ? 0 : boss ? 0 : spikes,
+    coins: isSpecial(mode) ? 0 : coins,
     mode, hp: 0, maxHp: 0, // populated from the actual number of breakable chunks
   };
 }
@@ -1141,6 +1175,13 @@ export class Game {
   private bossHp = 100;
   private bossMaxHp = 100;
   private bossHpRed = 100; // Tekken-style ghost damage gauge
+  /** Game B's boss reactions: idle → laugh / angry, and the low-HP rage. */
+  private bossMood: 'idle' | 'laugh' | 'angry' = 'idle';
+  private bossMoodLeft = 0;
+  private bossMoodAge = 0;
+  private bossTauntT = 0;
+  private bossRage = false;
+  private bossHa: { age: number; i: number }[] = [];
   private lights: Light[] = [];
   private rt = 0;
   private lastShotRT = -9;
@@ -2343,6 +2384,12 @@ export class Game {
       this.bossMaxHp = this.level.ammo * 10;
       this.bossHp = this.bossMaxHp;
       this.bossHpRed = this.bossMaxHp;
+      this.bossMood = 'idle';
+      this.bossMoodLeft = 0;
+      this.bossMoodAge = 0;
+      this.bossTauntT = 0;
+      this.bossRage = false;
+      this.bossHa = [];
     }
     if (!isSpecial(this.level.mode)) this.buildFace();
     this.syncWheelArt(true);
@@ -2384,8 +2431,27 @@ export class Game {
         }
       }
     };
+    // A boss wears Perfect Shot's knives: 3–5 blades already sunk into the
+    // drawing, leaning a few degrees, exactly like the reference boss stage.
+    if (this.level.boss) {
+      for (let i = 0; i < this.level.old; i++) {
+        for (let t = 0; t < 300; t++) {
+          const a = rand(0, TAU);
+          if (this.items.every((it) => angDiff(it.angle, a) > 0.42)) {
+            this.items.push({
+              angle: a,
+              type: 'old',
+              age: 10,
+              knife: knifeVariant(this.level.n, i),
+              tilt: rand(-6, 6),
+            });
+            break;
+          }
+        }
+      }
+    }
     place('spike', this.level.spikes, 0.45);
-    place('old', this.level.old, 0.4);
+    if (!this.level.boss) place('old', this.level.old, 0.4);
     place('coin', this.level.coins, 0.32);
     // Berlian / Diamond tertancap di arena yang butuh 2x tembakan baru jatuh!
     // (Dark Knight: penghalang berlian juga dihilangkan.)
@@ -2393,6 +2459,120 @@ export class Game {
     if (!cleanKnight && this.level.n >= 2 && Math.random() < 0.6) {
       place('diamond_chest', 1, 0.42);
     }
+  }
+
+  /** Game B's boss reactions: laugh, mock the player, and the low-HP rage. */
+  private setBossMood(mood: 'laugh' | 'angry', dur: number) {
+    if (!this.level.boss) return;
+    this.bossMood = mood;
+    this.bossMoodLeft = dur;
+    this.bossMoodAge = 0;
+    if (mood === 'laugh') {
+      // Game B pops HA · HA · HA! 160 ms apart, each over its own 1 s flight.
+      this.bossHa = [{ age: 0, i: 0 }, { age: -0.16, i: 1 }, { age: -0.32, i: 2 }];
+      bossVoice.bossLaugh((this.level.style as string) ?? 'pirate');
+    } else {
+      bossVoice.bossGrowl();
+    }
+  }
+
+  /** The rage pose Game B enters when only 40 % of the boss is left. */
+  private enterBossRage(hitLocal?: number) {
+    if (this.bossRage || !this.level.boss) return;
+    this.bossRage = true;
+    this.setBossMood('angry', 1.5);
+    this.shake = Math.max(this.shake, 12);
+    bossVoice.bossRage();
+    this.pushBossKnife(hitLocal ?? rand(0, TAU));
+  }
+
+  /** Game B's rage throws one more knife, clear of everything already stuck. */
+  private pushBossKnife(hitLocal: number) {
+    const stuck = this.items.filter((it) => it.type === 'old' && it.knife !== undefined);
+    let best = norm(hitLocal + Math.PI);
+    let bestGap = -1;
+    for (let k = 0; k < 36; k++) {
+      const a = norm(hitLocal + Math.PI / 2 + (k * Math.PI) / 18);
+      if (angDiff(a, hitLocal) <= 0.7) continue;
+      const gap = Math.min(9, ...stuck.map((it) => angDiff(it.angle, a)));
+      if (gap > bestGap) {
+        bestGap = gap;
+        best = a;
+      }
+    }
+    this.items.push({ angle: best, type: 'old', age: 10, knife: 1, tilt: 0 });
+  }
+
+  /** bmLaugh / bmAngry / bm-rage sampled the way Game B's keyframes play. */
+  private bossReaction() {
+    const R = this.level.radius;
+    let sx = 1, sy = 1, rot = 0, dx = 0, dy = 0;
+    if (this.bossMood === 'laugh') {
+      const u = Math.min(1, this.bossMoodAge / 1.1);
+      const KEYS: [number, number, number, number, number][] = [
+        [0, 1, 1, 0, 0],
+        [0.1, 1.06, 0.94, 0, 0.02],
+        [0.22, 0.96, 1.06, -3, -0.04],
+        [0.34, 1.06, 0.94, 0, 0.02],
+        [0.46, 0.96, 1.06, 3, -0.04],
+        [0.58, 1.05, 0.95, 0, 0.02],
+        [0.7, 0.97, 1.04, -2, -0.03],
+        [0.84, 1.02, 0.98, 0, 0],
+        [1, 1, 1, 0, 0],
+      ];
+      for (let i = 1; i < KEYS.length; i++) {
+        const [t1, a1, b1, r1, d1] = KEYS[i];
+        const [t0, a0, b0, r0, d0] = KEYS[i - 1];
+        if (u > t1 && i < KEYS.length - 1) continue;
+        const k = t1 === t0 ? 0 : Math.max(0, Math.min(1, (u - t0) / (t1 - t0)));
+        const mix = (a: number, b: number) => a + (b - a) * k;
+        sx = mix(a0, a1);
+        sy = mix(b0, b1);
+        rot = (mix(r0, r1) * Math.PI) / 180;
+        dy = mix(d0, d1) * R * 0.5;
+        break;
+      }
+    } else if (this.bossMood === 'angry') {
+      const k = Math.max(0, 1 - this.bossMoodAge / 0.65);
+      dx = Math.sin(this.bossMoodAge * 62) * 0.04 * R * k;
+      sx = 1 + 0.06 * k;
+      sy = 1 + 0.06 * k;
+    }
+    if (this.bossRage) {
+      // bm-rage: a 0.5 s alternate scale on top of whatever the mood does.
+      const pulse = 0.5 + 0.5 * Math.sin(this.time * TAU * 0.5);
+      const s = 1 + 0.035 * pulse;
+      sx *= s;
+      sy *= s;
+      dy -= R * 0.01 * pulse;
+    }
+    return { sx, sy, rot, dx, dy };
+  }
+
+  /**
+   * Every transform the boss artwork wears this frame — the idle float, the
+   * breath, and Game B's laugh / angry / rage pose — as one matrix. The render
+   * applies it and the collision mask inverts it, so a round always meets the
+   * drawing where it actually is.
+   */
+  private bossDecorMatrix(): BossMat {
+    const t = this.time;
+    let m: BossMat = { a: 1, b: 0, c: 0, d: 1, e: Math.sin(t * 0.53) * 3.2, f: Math.sin(t * 1.15) * 3.8 };
+    const sway = Math.sin(t * 0.66 + 1.0) * 0.085;
+    m = bossMatMul(m, bossMatRot(sway));
+    const breath = 1 + Math.sin(t * 1.35) * 0.014;
+    m = bossMatMul(m, bossMatScale(breath, breath));
+    const r = this.bossReaction();
+    if (r.sx !== 1 || r.sy !== 1 || r.rot !== 0 || r.dx !== 0 || r.dy !== 0) {
+      // bmLaugh's transform-origin is 50% 85%: the chin stays put.
+      const oy = this.level.radius * 0.7;
+      m = bossMatMul(m, bossMatMove(0, oy));
+      m = bossMatMul(m, bossMatRot(r.rot));
+      m = bossMatMul(m, bossMatScale(r.sx, r.sy));
+      m = bossMatMul(m, bossMatMove(0, -oy));
+      m = bossMatMul(m, bossMatMove(r.dx, r.dy));
+    }
+    return m;
   }
 
   private buildFace() {
@@ -2404,7 +2584,9 @@ export class Game {
     // canvas faces below stay as the instant fallback for the first frames.
     const paint = (ctx: CanvasRenderingContext2D) => {
       if (this.wheelImage) ctx.drawImage(this.wheelImage, -R, -R, R * 2, R * 2);
-      else drawFace(ctx, R, this.level.style);
+      // A boss is only ever Perfect Shot's own head. Until that raster lands the
+      // canvas stays empty for a frame or two — Game A's old flat boss is gone.
+      else if (!this.level.boss) drawFace(ctx, R, this.level.style);
     };
     // `art` stays pristine — it is the shape the player sees, so it is what the
     // bullets are tested against. `cv` is the live face and gets bullet holes
@@ -2488,24 +2670,137 @@ export class Game {
     const sin = Math.sin(-this.rot);
     let lx = mx * cos - my * sin;
     let ly = mx * sin + my * cos;
-    // The boss also floats, sways and breathes on screen; undo that decoration
-    // so the test lands on the pixels the player can actually see.
+    // The boss floats, sways, breathes, laughs and rages on screen; undo every
+    // one of those transforms so the test lands on the pixels the player sees.
     if (this.level.boss) {
-      const bt = this.time;
-      const ox = lx - Math.sin(bt * 0.53) * 3.2;
-      const oy = ly - Math.sin(bt * 1.15) * 3.8;
-      const wob = Math.sin(bt * 0.66 + 1.0) * 0.085;
-      const breath = 1 + Math.sin(bt * 1.35) * 0.014;
-      const cw = Math.cos(-wob);
-      const sw = Math.sin(-wob);
-      lx = (ox * cw - oy * sw) / breath;
-      ly = (ox * sw + oy * cw) / breath;
+      const inv = bossMatInvert(this.bossDecorMatrix());
+      const p = bossMatApply(inv, lx, ly);
+      lx = p.x;
+      ly = p.y;
     }
     // Pixel-centre mapping of the padded blit: world 0 sits on the middle pixel.
     const u = Math.floor(((lx / R / mask.span) + 1) * 0.5 * mask.size);
     const v = Math.floor(((ly / R / mask.span) + 1) * 0.5 * mask.size);
     if (u < 0 || v < 0 || u >= mask.size || v >= mask.size) return null;
     return maskSolid(mask, u, v) ? dist : null;
+  }
+
+  /** Game B's red rage aura, drawn behind the boss head. */
+  private drawBossAura(c: CanvasRenderingContext2D) {
+    if (!this.level.boss || !this.bossRage || this.state === 'clear') return;
+    const R = this.level.radius;
+    const pulse = 0.5 + 0.5 * Math.sin(this.time * TAU * 0.55);
+    const rad = R * (1.5 + 0.1 * pulse);
+    const g = c.createRadialGradient(0, 0, R * 0.3, 0, 0, rad);
+    g.addColorStop(0, `rgba(239,68,68,${(0.3 + 0.14 * pulse).toFixed(3)})`);
+    g.addColorStop(0.68, 'rgba(239,68,68,0)');
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    c.fillStyle = g;
+    c.beginPath();
+    c.arc(0, 0, rad, 0, TAU);
+    c.fill();
+    c.restore();
+  }
+
+  /**
+   * Game B's boss reactions in screen space (they never rotate with the head):
+   * the HA · HA · HA! pop, the rage steam and the MARAH! ×1.35 pill.
+   */
+  private drawBossMood(c: CanvasRenderingContext2D) {
+    if (!this.level.boss || this.state === 'idle' || this.state === 'clear') return;
+    const R = this.level.radius;
+    // This layer lives in screen space, like Game B's, so it drops whatever
+    // wheel transform the renderer is standing in.
+    const k = this.scale * this.dpr;
+    c.save();
+    c.setTransform(k, 0, 0, k, 0, 0);
+    const HA_KEYS: [number, number, number, number, number][] = [
+      [0, 0, 14, 0.3, -14],
+      [0.3, 1, -6, 1.15, 6],
+      [0.7, 1, -14, 1, 0],
+      [1, 0, -30, 0.9, 0],
+    ];
+    for (const ha of this.bossHa ?? []) {
+      if (ha.age < 0) continue;
+      const u = Math.min(1, ha.age);
+      let alpha = 0, dy = 0, scl = 1, rot = 0;
+      for (let i = 1; i < HA_KEYS.length; i++) {
+        const [t1, a1, d1, s1, r1] = HA_KEYS[i];
+        const [t0, a0, d0, s0, r0] = HA_KEYS[i - 1];
+        if (u > t1 && i < HA_KEYS.length - 1) continue;
+        const k = t1 === t0 ? 0 : Math.max(0, Math.min(1, (u - t0) / (t1 - t0)));
+        const mix = (a: number, b: number) => a + (b - a) * k;
+        alpha = mix(a0, a1);
+        dy = mix(d0, d1);
+        scl = mix(s0, s1);
+        rot = (mix(r0, r1) * Math.PI) / 180;
+        break;
+      }
+      if (alpha <= 0.01) continue;
+      const x = CX + R * 1.02 + (ha.i % 2) * 16;
+      const y = this.targetY - R * 0.72 + ha.i * 30;
+      c.save();
+      c.globalAlpha = alpha;
+      c.translate(x, y + dy);
+      c.rotate(rot);
+      c.scale(scl, scl);
+      c.font = "bold 26px Impact, 'Arial Black', sans-serif";
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      c.lineJoin = 'round';
+      c.lineWidth = 6;
+      c.strokeStyle = '#7c2d12';
+      c.strokeText(ha.i === 2 ? 'HA!' : 'HA', 0, 0);
+      c.fillStyle = '#ffd23f';
+      c.fillText(ha.i === 2 ? 'HA!' : 'HA', 0, 0);
+      c.restore();
+    }
+    if (!this.bossRage) return;
+    // bm-steam: three puffs per side, drifting up and fading out.
+    for (const sgn of [-1, 1]) {
+      for (let i = 0; i < 3; i++) {
+        const phase = ((this.time * 0.95 + i * 0.35) % 1.05) / 1.05;
+        const alpha = Math.sin(Math.PI * phase) * 0.85;
+        if (alpha <= 0.02) continue;
+        const size = (22 - i * 4) * (0.55 + phase * 0.95);
+        const x = CX + sgn * (R * 1.0 + Math.abs(12 + i * 10) * phase);
+        const y = this.targetY - R * 0.3 - phase * 52;
+        c.save();
+        c.globalAlpha = alpha;
+        c.fillStyle = 'rgba(255,255,255,0.8)';
+        c.beginPath();
+        c.arc(x, y, size * 0.5, 0, TAU);
+        c.fill();
+        c.restore();
+      }
+    }
+    // MARAH! ×1.35 pill under the boss.
+    const label = 'MARAH! ×1.35';
+    c.save();
+    c.font = "bold 13px 'Russo One', Impact, sans-serif";
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    const w = c.measureText(label).width + 26;
+    const h = 22;
+    const px = CX - w / 2;
+    const py = this.targetY + R * 1.14;
+    c.fillStyle = '#dc2626';
+    c.beginPath();
+    const r = h / 2;
+    c.moveTo(px + r, py);
+    c.lineTo(px + w - r, py);
+    c.quadraticCurveTo(px + w, py, px + w, py + r);
+    c.quadraticCurveTo(px + w, py + h, px + w - r, py + h);
+    c.lineTo(px + r, py + h);
+    c.quadraticCurveTo(px, py + h, px, py + r);
+    c.quadraticCurveTo(px, py, px + r, py);
+    c.closePath();
+    c.fill();
+    c.fillStyle = '#ffffff';
+    c.fillText(label, CX, py + h / 2);
+    c.restore();
+    c.restore();
   }
 
   /** Angular radius of the on-screen art (grid placement, item seats). */
@@ -4360,6 +4655,11 @@ export class Game {
     if (this.level.boss) {
       const dmg = pts * 10;
       this.bossHp = Math.max(0, this.bossHp - dmg);
+      // Game B: every hit resets the taunt and makes the boss angry; the hit
+      // that pushes it under 40 % HP is the one that enrages it.
+      this.bossTauntT = 0;
+      if (!this.bossRage && this.bossHp > 0 && this.bossHp <= this.bossMaxHp * 0.4) this.enterBossRage(local);
+      else if (this.bossHp > 0) this.setBossMood('angry', 0.65);
       if (this.bossHp <= 0 || this.stuck >= this.level.ammo) {
         this.clearLevel();
       }
@@ -4448,6 +4748,8 @@ export class Game {
     this.burnT = 0;
     this.state = 'fail';
     this.stateT = 0;
+    // Game B's boss laughs at a miss, a beat after it happens.
+    if (this.level.boss) this.setBossMood('laugh', 1.6);
     this.projs = [];
     this.holding = false;
     this.beams = [];
@@ -5642,7 +5944,8 @@ export class Game {
       // while Cyborg and Pirate reverse smoothly on their own distinct cycles.
       if (this.level.boss) {
         const bv = bossRotationSpeed(this.level.style as BossType, this.levelTime);
-        this.rot += bv * s * slowF * aimF * freezeF;
+        // Game B's MARAH! state spins the boss 1.35x faster.
+        this.rot += bv * s * slowF * aimF * freezeF * (this.bossRage ? 1.35 : 1);
         if (bv) this.rotDir = bv < 0 ? -1 : 1;
       } else {
         const boost = s11w && !isSpecial(this.level.mode) ? s11w.boost : 0;
@@ -5650,6 +5953,24 @@ export class Game {
         if (v) this.rotDir = v < 0 ? -1 : 1;
       }
       this.slowT = Math.max(0, this.slowT - s);
+    }
+    if (this.level.boss) {
+      if (this.bossMoodLeft > 0) {
+        this.bossMoodLeft = Math.max(0, this.bossMoodLeft - dt);
+        this.bossMoodAge += dt;
+        if (this.bossMoodLeft === 0) this.bossMood = 'idle';
+      }
+      if (this.state === 'play') {
+        // Game B taunts every 5.5 s (3.2 s once enraged).
+        this.bossTauntT += dt;
+        if (this.bossTauntT > (this.bossRage ? 3.2 : 5.5)) {
+          this.bossTauntT = 0;
+          this.setBossMood('laugh', 1.1);
+        }
+        if (!this.bossRage && this.bossMaxHp > 0 && this.bossHp <= this.bossMaxHp * 0.4) this.enterBossRage();
+      }
+      for (const ha of this.bossHa) ha.age += dt;
+      this.bossHa = this.bossHa.filter((ha) => ha.age < 1);
     }
     if (this.aiming) {
       this.aimT += dt;
@@ -5940,7 +6261,11 @@ export class Game {
     if (this.wheelBurstT < this.wheelEntryDelayT + 1.75 * this.pace) this.wheelBurstT += dt;
     if (this.state === 'intro') {
       this.introT += dt;
-      if (this.introT >= this.introDuration) this.state = 'play';
+      if (this.introT >= this.introDuration) {
+        this.state = 'play';
+        // Game B's boss greets the player with a laugh the moment play starts.
+        if (this.level.boss) this.setBossMood('laugh', 1.4);
+      }
     }
     this.bannerT = Math.max(0, this.bannerT - dt);
 
@@ -7694,11 +8019,8 @@ export class Game {
       // bos TIDAK diem, tapi juga TIDAK muter/membalik. Transform visual murni;
       // this.rot tetap terkunci 0 untuk fisika proyektil & bidikan.
       if (this.level.boss) {
-        const bt = this.time;
-        c.translate(Math.sin(bt * 0.53) * 3.2, Math.sin(bt * 1.15) * 3.8);
-        c.rotate(Math.sin(bt * 0.66 + 1.0) * 0.085);
-        const breath = 1 + Math.sin(bt * 1.35) * 0.014;
-        c.scale(breath, breath);
+        const decor = this.bossDecorMatrix();
+        c.transform(decor.a, decor.b, decor.c, decor.d, decor.e, decor.f);
       }
       if (this.rock && !this.centerDiamondCollected) drawRockDiamond(c, R, this.time, this.diamondPing);
       // Lapisan target berputar — bos juga berputar pelan (this.rot di update),
@@ -7709,6 +8031,18 @@ export class Game {
         busterWheelTransform = c.getTransform() ?? null;
       }
       for (const it of this.items) {
+        // A boss stage's rintangan are Perfect Shot's knives: tip buried 30 %
+        // into the drawing, handle hanging out, leaning a few degrees.
+        if (it.type === 'old' && it.knife !== undefined) {
+          c.save();
+          c.rotate(it.angle - Math.PI / 2);
+          const kh = R * 0.72;
+          c.translate(0, this.bossRadiusAt(it.angle, R) - kh * KNIFE_SINK);
+          c.rotate(((it.tilt ?? 0) * Math.PI) / 180);
+          drawKnife(c, it.knife, kh);
+          c.restore();
+          continue;
+        }
         if (it.type === 'bullet' || it.type === 'old') {
           if (it.hideArt) continue; // slide 9 paints its own entry hole
           c.save();
@@ -7880,6 +8214,8 @@ export class Game {
         });
         c.restore();
       } else {
+        // Game B's rage aura burns behind the head, never over it.
+        this.drawBossAura(c);
         c.drawImage(this.face, -R - facePad, -R - facePad, (R + facePad) * 2, (R + facePad) * 2);
       }
       // Slide 3's decals and its wheel-space FX (clipped to the wheel), then the
@@ -8054,6 +8390,10 @@ export class Game {
         }
       }
     }
+
+    // Game B's boss reactions sit on top of the target and never rotate with
+    // it: the HA · HA · HA! bursts, the rage aura, steam and the MARAH! pill.
+    this.drawBossMood(c);
 
     // fragments: each chunk keeps the wheel artwork on top and underneath,
     // with dark, highlighted sidewalls that make its thickness obvious in flight.

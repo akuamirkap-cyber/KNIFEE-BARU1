@@ -110,7 +110,8 @@ test('the face renderer draws the reference wheel and falls back to the canvas a
   // collision mask is read back from) and the live face the renderer blits.
   assert.match(source, /const paint = \(ctx: CanvasRenderingContext2D\) => \{/);
   assert.match(source, /if \(this\.wheelImage\) ctx\.drawImage\(this\.wheelImage, -R, -R, R \* 2, R \* 2\);/);
-  assert.match(source, /else drawFace\(ctx, R, this\.level\.style\);/);
+  // A boss is only ever Perfect Shot's head: no Game A fallback face.
+  assert.match(source, /else if \(!this\.level\.boss\) drawFace\(ctx, R, this\.level\.style\);/);
   assert.match(source, /paint\(ac\);/);
   assert.match(source, /this\.syncWheelArt\(true\)/);
 });

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { bossFireInterval, bossRiseOffset, bossRotationSpeed, Game, makeLevel, SPIKE_SCALE } from '../src/games/gunhit/game/Game';
+import { bossFireInterval, bossKnifeCount, bossRiseOffset, bossRotationSpeed, Game, makeLevel, SPIKE_SCALE } from '../src/games/gunhit/game/Game';
 import { getWeapon } from '../src/games/gunhit/game/weapons';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
@@ -12,27 +12,15 @@ test('stage-board spikes on the arena and boss are rendered at twice their base 
   assert.equal(SPIKE_SCALE, 2);
 });
 
-test('boss DARK KNIGHT tampil bersih: tanpa duri jebakan & penghalang (peluru berkarat)', () => {
-  for (const n of [5, 25, 45]) {
+test('setiap boss memakai rintangan Perfect Shot: pisau tertancap, tanpa duri', () => {
+  for (const n of [5, 10, 15, 20, 25, 45]) {
     const level = makeLevel(n);
     assert.equal(level.boss, true, `level ${n} harus boss`);
-    assert.equal(level.style, 'knight', `level ${n} harus boss knight`);
-    assert.equal(level.spikes, 0, `level ${n} knight tanpa duri`);
-    assert.equal(level.old, 0, `level ${n} knight tanpa peluru berkarat penghalang`);
-    // koin tetap ada sebagai hadiah
+    assert.equal(level.spikes, 0, `level ${n} tanpa duri jebakan gaya Game A`);
+    assert.equal(level.old, bossKnifeCount(n), `level ${n} memakai jumlah pisau Game B`);
+    assert.ok(level.old >= 3 && level.old <= 5, 'Game B menanam 3–5 pisau di kepala bos');
     assert.ok(['classic'].includes(level.mode));
   }
-});
-
-test('boss lain tetap memakai duri & penghalang seperti semula', () => {
-  const oni = makeLevel(10);
-  assert.equal(oni.style, 'oni');
-  assert.equal(oni.spikes, 4);
-  assert.equal(oni.old, 3);
-  const pirate = makeLevel(20);
-  assert.equal(pirate.style, 'pirate');
-  assert.equal(pirate.spikes, 5);
-  assert.equal(pirate.old, 5);
 });
 
 test('proyektil bos menghadap arah gerak (ke pemain), tidak berputar', () => {
@@ -67,9 +55,11 @@ test('bos punya pola putaran khas yang terkontrol dan tembakan 1.9x lebih cepat'
     'bos tidak boleh dikunci diam (this.rot = 0)'
   );
   assert.ok(
-    src.includes('c.translate(Math.sin(bt * 0.53) * 3.2, Math.sin(bt * 1.15) * 3.8);'),
+    src.includes('e: Math.sin(t * 0.53) * 3.2, f: Math.sin(t * 1.15) * 3.8'),
     'bos punya gerak idle melayang (terlihat hidup)'
   );
+  assert.ok(src.includes('private bossDecorMatrix(): BossMat'), 'idle + reaksi bos satu matriks');
+  assert.ok(src.includes("this.setBossMood('laugh', 1.1)"), 'bos ketawa berkala seperti Game B');
 });
 
 // ---------------------------------------------------------------------------
@@ -90,7 +80,7 @@ function recorder(): Recorder {
         return gradient;
       }
       if (name === 'measureText') return { width: 30 };
-      if (['rotate', 'translate', 'scale', 'drawImage', 'setTransform'].includes(name)) {
+      if (['rotate', 'translate', 'scale', 'transform', 'drawImage', 'setTransform'].includes(name)) {
         events.push(`${name}(${args.map((v) => (typeof v === 'number' ? v.toFixed(3) : typeof v)).join(',')})`);
       }
       return undefined;
@@ -183,8 +173,8 @@ test('render: lapisan wajah bos ikut berputar (this.rot sampai ke kanvas) + goya
     `rotasi papan bos harus sampai ke kanvas — bos harus muter (rotate(${ADV}))`
   );
   assert.ok(
-    boss.some((e) => e.startsWith('rotate(') && e !== `rotate(${ADV.toFixed(3)})`),
-    'bos punya goyangan idle tambahan (terlihat hidup)'
+    boss.some((e) => e.startsWith('transform(') && e !== 'transform(1.000,0.000,0.000,1.000,0.000,0.000)'),
+    'bos punya goyangan idle + reaksi tambahan (terlihat hidup)'
   );
   // kontrol: target biasa (non-boss) tetap memutar lapisan target
   const r2 = recorder();

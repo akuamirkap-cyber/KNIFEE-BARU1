@@ -2,6 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createCanvas } from '@napi-rs/canvas';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { loadImage } from '@napi-rs/canvas';
+import { HeadArt } from '../src/games/perfect-shot/play/HeadArt';
 import { installSilentAudio } from '../tools/supportAudioSilent';
 import { buildArtMask, Game } from '../src/games/gunhit/game/Game';
 
@@ -82,9 +86,12 @@ test('every bullet tests the boss pixels before anything else', () => {
   // The surface test rotates into the target's own frame and reads alpha.
   assert.match(game, /const cos = Math\.cos\(-this\.rot\);/);
   assert.match(game, /return maskSolid\(mask, u, v\) \? dist : null;/);
-  // The idle float/sway/breath of the boss is undone before the pixel test.
-  assert.match(game, /const wob = Math\.sin\(bt \* 0\.66 \+ 1\.0\) \* 0\.085;/);
-  assert.match(game, /lx = \(ox \* cw - oy \* sw\) \/ breath;/);
+  // The idle float, breath AND the laugh / angry / rage pose are one matrix,
+  // and the pixel test inverts exactly that matrix.
+  assert.match(game, /const sway = Math\.sin\(t \* 0\.66 \+ 1\.0\) \* 0\.085;/);
+  assert.match(game, /const breath = 1 \+ Math\.sin\(t \* 1\.35\) \* 0\.014;/);
+  assert.match(game, /const inv = bossMatInvert\(this\.bossDecorMatrix\(\)\);/);
+  assert.match(game, /const p = bossMatApply\(inv, lx, ly\);/);
 });
 
 test('a stuck round keeps the exact spot it bit into the artwork', () => {
@@ -95,7 +102,7 @@ test('a stuck round keeps the exact spot it bit into the artwork', () => {
   assert.match(game, /const itemR = it\.r \?\? \(bType \? this\.bossRadiusAt\(it\.angle\) : this\.level\.radius\);/);
 });
 
-test('a real boss stage gets its mask from the drawn face, with no image needed', () => {
+test('a real boss stage wears Perfect Shot\'s head and collides with its pixels', async () => {
   const g = globalThis as unknown as Record<string, unknown> & { window: Record<string, unknown> };
   installSilentAudio();
   g.window = Object.assign(g.window ?? {}, {
@@ -130,12 +137,19 @@ test('a real boss stage gets its mask from the drawn face, with no image needed'
   } as unknown as HTMLCanvasElement;
 
   const game = new Game(canvas, {}) as unknown as Record<string, any>;
-  game.startAtLevel(5); // the boss stage
-  assert.equal(game.level.boss, true, 'level 5 is a boss');
-  assert.ok(game.face, 'the boss face canvas is built');
-  // The critical regression: no raster is handed over in this environment, and
-  // the stage must STILL collide with the artwork instead of a wheel circle.
-  assert.ok(game.artMask, 'the mask comes from the drawn face, not from wheelImage');
+  game.setWheelArtSource({ keyFor: () => 'boss|pirate', get: () => null, request: () => {} });
+  game.startAtLevel(20); // the pirate boss
+  assert.equal(game.level.boss, true, 'level 20 is a boss');
+  assert.equal(game.level.style, 'pirate');
+  // No raster has landed yet: the stage must NOT paint Game A's old flat boss.
+  assert.equal(game.artMask, null, 'no mask before the artwork arrives');
+
+  const svg = renderToStaticMarkup(React.createElement(HeadArt, { kind: 'pirate' as any }));
+  const image = await loadImage(Buffer.from(svg));
+  game.setWheelArt('boss|pirate', image as unknown as HTMLImageElement);
+
+  assert.ok(game.face, 'the boss face canvas is built from Game B\'s head');
+  assert.ok(game.artMask, 'the mask comes from the drawn face');
   assert.ok(game.artMask.size >= 120, 'the mask has real resolution');
   assert.ok(game.bossArtProfile && game.bossArtProfile.length === 360);
   assert.ok(game.artMaskMaxR > 0.3 && game.artMaskMaxR <= 1.35, 'outermost ink is measured');
@@ -181,7 +195,7 @@ test('a real boss stage gets its mask from the drawn face, with no image needed'
   }
   assert.ok(agree > 60, `enough unambiguous points compared (${agree})`);
   assert.ok(solidSamples > 15, `the boss really is solid in places (${solidSamples})`);
-  // Every weapon used to bite the old 0.889R ring here — empty space beside a
-  // boss whose art ends well inside it. The silhouette test must refuse that.
+  // Every weapon used to bite the old 0.889R ring here — empty space beside the
+  // pirate's cheek. The silhouette test must refuse that.
   assert.equal(at(-R * 0.889, 0), null, 'no bullet meets the boss where the drawing is empty');
 });
