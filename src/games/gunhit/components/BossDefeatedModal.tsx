@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { sfx } from '../game/audio';
 import { sfx4 } from '../game/sfx4';
-import { renderBossHead } from '../game/bossRenderer';
+import { HeadArt } from '../../perfect-shot/play/HeadArt';
+import { bossHeadFor } from '../game/bossIdentity';
 import { getBossDef, type BossType } from '../game/bossRoster';
 import { useSlideActive } from '../../shared/SlideActivity';
 import { Burst } from '../../knife-hit/components/Effects';
@@ -20,25 +21,9 @@ interface BossDefeatedModalProps {
   onContinue: () => void;
 }
 
-function BossPortrait({ type }: { type: BossType }) {
-  const ref = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    const canvas = ref.current;
-    const ctx = canvas?.getContext('2d');
-    if (!canvas || !ctx) return;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.width = 160 * dpr;
-    canvas.height = 160 * dpr;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, 160, 160);
-    ctx.save();
-    ctx.translate(80, 80);
-    renderBossHead(ctx, type, 61);
-    ctx.restore();
-  }, [type]);
-
-  return <canvas ref={ref} className="relative z-10 h-40 w-40 boss-defeat-portrait" aria-label={`${getBossDef(type).name} defeated`} />;
+function BossPortrait({ stage, name }: { stage: number; name: string }) {
+  const head = bossHeadFor(stage);
+  return head ? <div className="relative z-10 h-40 w-40 boss-defeat-portrait" role="img" aria-label={`${name} defeated`}><HeadArt kind={head} className="h-full w-full" /></div> : null;
 }
 
 export const BossDefeatedModal = ({
@@ -90,7 +75,7 @@ export const BossDefeatedModal = ({
       <div className="relative z-10 flex w-full max-w-[360px] flex-col items-center">
         <div className="relative mb-1 flex h-40 w-40 items-center justify-center">
           <div className="absolute inset-0 rounded-full blur-2xl" style={{ background: `radial-gradient(circle, ${boss.glow} 0%, transparent 72%)` }} />
-          <BossPortrait type={bossType} />
+          <BossPortrait stage={stage} name={bossName} />
           <svg className="pointer-events-none absolute inset-3 z-20 h-[136px] w-[136px] boss-crack-overlay" viewBox="0 0 136 136" aria-hidden="true">
             <path d="M72 9 63 30 74 42 57 57 69 68 50 83 60 96 53 124M64 30 46 25M74 42 91 34M57 57 37 52M69 68 91 73M50 83 31 94M60 96 79 110" fill="none" stroke="rgba(235,250,255,.82)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
           </svg>

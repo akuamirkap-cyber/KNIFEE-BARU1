@@ -1,3 +1,4 @@
+import { traceBossSegment } from './bossRaycast';
 import { advanceCosmeticTrail } from './cosmeticTrail';
 import { sfx, withSfxGain } from './audio';
 import { normalizeSgaSpeed, type SgaGameSpeed } from './gameSpeed';
@@ -55,7 +56,7 @@ import { spawnPlasmaImpact, YELLOW_PLASMA_IMPACT } from '../../../../games/game-
 import { sfx2 } from './sfx2';
 import { drawKnife, knifeVariant, KNIFE_SINK } from './knifeArt';
 import { sfx as bossVoice } from '../../perfect-shot/audio/sfx';
-import { bossNameFor } from './bossIdentity';
+import { bossNameFor, bossStyleFor } from './bossIdentity';
 import { sfx3 } from './sfx3';
 import { sfx4 } from './sfx4';
 import { sfx6 } from './sfx6';
@@ -91,7 +92,6 @@ import {
   drawBossProjectile,
   type BossMuzzleFlash,
 } from './bossProjectileArt';
-import { getExactBossRadius, onBossAssetsLoaded } from './bossAssetProcessor';
 import {
   createFirework8State,
   drawFirework8Background,
@@ -1305,7 +1305,7 @@ export function makeLevel(n: number, forcedMode?: LevelMode): LevelCfg {
   // The boss on screen *is* Perfect Shot's head, so its name is read from that
   // same artwork: stage 5 is the pirate, and calling it "DARK KNIGHT" was the
   // HUD contradicting the drawing.
-  const style: Style = boss ? BOSS_STYLES[Math.max(0, bossIdx) % BOSS_STYLES.length] : WORLD_STYLES[world % WORLD_STYLES.length];
+  const style: Style = boss ? bossStyleFor(n) ?? BOSS_STYLES[Math.max(0, bossIdx) % BOSS_STYLES.length] : WORLD_STYLES[world % WORLD_STYLES.length];
   const bossName = boss ? bossNameFor(n) : '';
   // Boss DARK KNIGHT tampil bersih: tanpa duri jebakan & penghalang (peluru berkarat).
   const cleanKnight = boss && style === 'knight';
@@ -1373,7 +1373,6 @@ export class Game {
   private last = 0;
   private active = false;
   private hasRendered = false;
-  private unlistenBossAssets: (() => void) | null = null;
   private motionPreference: MediaQueryList | null = null;
   private gunEntryT = GAMEPLAY_GUN_ENTRY_DURATION;
   private onMotionPreferenceChange = () => {
@@ -2170,11 +2169,7 @@ export class Game {
     // Paint a still frame for inactive slides; start the simulation only on focus.
     this.render();
     this.hasRendered = true;
-    this.unlistenBossAssets = onBossAssetsLoaded(() => {
-      if (this.level.boss) {
-        this.buildFace();
-      }
-    });
+
   }
 
   setGameSpeed(speed: number) {
@@ -2224,8 +2219,6 @@ export class Game {
   destroy() {
     this.setActive(false);
     this.motionPreference?.removeEventListener?.('change', this.onMotionPreferenceChange);
-    this.unlistenBossAssets?.();
-    this.unlistenBossAssets = null;
     this.s11State?.dispose();
     this.s11State = undefined;
     window.removeEventListener('resize', this.resize);
@@ -3562,9 +3555,11 @@ export class Game {
     if (this.bossArtProfile) {
       // The profile *is* the traced edge (first solid pixel along the ray), so
       // this needs no fudge factor: it lands on the drawing the player sees.
-      return Math.max(radius * 0.3, this.bossArtProfile[deg] * radius);
+      return this.bossArtProfile[deg] * radius;
     }
-    return getExactBossRadius(this.level.style as BossType, localAngle, radius);
+    // The old Game A portraits must not supply a hidden substitute hitbox.
+    // Until Game B's head is ready there is no boss surface to place on.
+    return 0;
   }
 
   private crack(a: number, tint?: string) {
@@ -4289,8 +4284,13 @@ export class Game {
       this.addText('BOOM!', CX + rand(-40, 40), GUN_Y - 40, '#9fd8ff', 26);
     }
     if (w.beam) {
-      const by = this.targetY + this.level.radius - 4;
       for (const ox of offsets) {
+        // A laser is visible immediately, before its collision carrier reaches
+        // the target. Trace the same ink used by bullets instead of stopping
+        // the visible beam at the obsolete circular radius.
+        const by = this.level.boss
+          ? traceBossSegment(CX + ox, GUN_Y, CX + ox, -80, (x, y) => this.artHitAt(x, y) !== null)?.y ?? -80
+          : this.targetY + this.level.radius - 4;
         this.beams.push({ x: CX + ox, y: by, life: 0.22, max: 0.22, rgb: w.trail });
         for (let i = 0; i < 14; i++) {
           const yy = rand(by, GUN_Y);
@@ -5966,9 +5966,6 @@ export class Game {
     // other path to a hit.
     if (isBoss) {
       const nose = shot7 ? shot7.tip : 0;
-      const head = nose > 0 && dist > nose
-        ? { x: p.x + (p.vx / (Math.hypot(p.vx, p.vy) || 1)) * nose, y: p.y + (p.vy / (Math.hypot(p.vx, p.vy) || 1)) * nose }
-        : null;
       // Walk the whole distance the round covered since the last frame (the
       // caller substeps at ≤ 7 px) in 1 px steps, oldest pixel first: start a
       // stride behind and close in. Every point further back than the substep
@@ -5982,17 +5979,17 @@ export class Game {
       // The caller hands over the exact length of the substep it just moved, so
       // the walk starts at the round's previous position and not a pixel past it.
       const span = Math.min(10, Math.max(1, stride || speed * 0.02));
-      let hit: { r: number; x: number; y: number } | null = head ? this.artHitAt(head.x, head.y) : null;
+      let hit: { r: number; x: number; y: number } | null = null;
       // The head laughs, rages and breathes: while a round is in the air the
       // drawing can grow *over* the spot it had already left, so the far end of
       // the stride is ink too. Step further back until the path is outside the
       // art again, then close in — the round still stops on the outline it met.
       let from = span;
       const limit = Math.min(48, span + 24);
-      while (from < limit && this.artHitAt(p.x - ux * from, p.y - uy * from)) from += 1;
+      while (from < limit && this.artHitAt(p.x + ux * nose - ux * from, p.y + uy * nose - uy * from)) from += 1;
       for (let d = from; !hit; d -= 1) {
         const back = Math.max(0, d);
-        hit = this.artHitAt(p.x - ux * back, p.y - uy * back);
+        hit = this.artHitAt(p.x + ux * nose - ux * back, p.y + uy * nose - uy * back);
         if (back === 0) break;
       }
       if (hit) {
@@ -6005,6 +6002,10 @@ export class Game {
         };
       }
     }
+    // On bosses the visible silhouette is the sole projectile blocker. Old
+    // knives, embedded rounds and their radial approximations cannot stop a
+    // shot in the empty space outside it.
+    if (isBoss) return { res: 'none' };
     if (isSpecial(this.level.mode)) return this.stepSpecialProjectile(p);
     const w = this.weapon;
     const R = effectiveR;
@@ -7184,34 +7185,8 @@ export class Game {
           }
         }
       });
-      // 1. Collision with player's rising projectiles (Hitbox besar 40px karena ukuran proyektil 3x!)
-      let intercepted = false;
-      for (let j = this.projs.length - 1; j >= 0; j--) {
-        const pp = this.projs[j];
-        if (Math.hypot(pp.x - bp.x, pp.y - bp.y) < 42) {
-          intercepted = true;
-          this.projs.splice(j, 1);
-          break;
-        }
-      }
-      if (intercepted) {
-        this.bossProjs.splice(i, 1);
-        sfx.clang();
-        sfx4.match();
-        this.shake = Math.max(this.shake, 7);
-        this.score += 2;
-        // AMMO KEMBALI 1 KALO BERHASIL HANCURKAN SERANGAN BOS!
-        this.ammoLeft = Math.min(this.level.ammo * this.maxAmmoMult, this.ammoLeft + 1);
-        const parryHex = bp.type === 'oni' ? '#fb923c' : bp.type === 'cyborg' ? '#22d3ee' : bp.type === 'pirate' ? '#4ade80' : '#38bdf8';
-        this.addText('💥 TANGKIS! +1 AMMO +2', bp.x, bp.y - 15, parryHex, 22);
-        this.sink.push({ x: bp.x, y: bp.y, vx: 0, vy: 0, life: 0.4, max: 0.4, size: 92, color: parryHex, kind: 'shock', rot: 0, vr: 0, g: 0 });
-        for (let k = 0; k < 10; k++) {
-          this.particles.push({
-            x: bp.x, y: bp.y, vx: rand(-210, 210), vy: rand(-210, 210), life: 0.28, max: 0.28, size: rand(2.5, 5), color: parryHex, kind: 'spark', rot: 0, vr: 0, g: 300,
-          });
-        }
-        continue;
-      }
+      // Player shots pass through boss attacks. Only the blue boss silhouette
+      // can stop a shot in a boss fight; the boss attack still reaches the gun.
 
       // 2. Boss projectile damage: only knocks player weapon or grazes (no unfair sudden deaths!)
       if (bp.y >= GUN_Y - 15 && bp.y <= GUN_Y + 70 && this.gunOffsets.some(ox => Math.abs(bp.x - (CX + ox)) < 26)) {
@@ -9775,6 +9750,23 @@ export class Game {
     }
     for (const bp of this.bossProjs) drawBossProjectile(c, bp, this.time);
 
+    // Boss stages: every splinter, spark, plume and shard a round throws belongs
+    // to the drawing it bit into. The clip is the boss' own outline, so the
+    // burst dies on the silhouette instead of hanging in the empty sky; a round
+    // that is not on the outline never produced one in the first place. The
+    // splinter layers below (slide 9, slide 11, firework) take the same clip
+    // through `withSplinterClip`, while rounds still in flight keep flying.
+    setSplinterClip(c, (fxCtx) => {
+      if (!this.level.boss) return false;
+      if (this.bossClipPaint(fxCtx)) return true;
+      // Until the boss artwork is ready there is no valid surface. Do not
+      // expose an unbounded burst for a frame (or invent a circular hitbox).
+      fxCtx.beginPath();
+      fxCtx.rect(0, 0, 0, 0);
+      fxCtx.clip();
+      return true;
+    });
+
     // Slide 5's beams, sparks and rounds go under its gun: slide 5 paints the
     // gun last (`render()`: beams, particles, bullets, aim guide, player).
     this.drawNineLayer(c);
@@ -9811,13 +9803,6 @@ export class Game {
       drawBonusCoin(c, coin.x, coin.y, coin.r * scale, this.time, coin.phase, true);
     }
 
-    // Boss stages: every splinter, spark, plume and shard a round throws belongs
-    // to the drawing it bit into. The clip is the boss' own outline, so the
-    // burst dies on the silhouette instead of hanging in the empty sky; a round
-    // that is not on the outline never produced one in the first place. The
-    // splinter layers below (slide 9, slide 11, firework) take the same clip
-    // through `withSplinterClip`, while rounds still in flight keep flying.
-    setSplinterClip(c, (fxCtx) => this.bossClipPaint(fxCtx));
     withSplinterClip(c, () => this.drawSplinters(c));
     // Damage / combo callouts are labels, not splatter: they stay legible even
     // at the very edge of the drawing.
@@ -9888,7 +9873,7 @@ export class Game {
             this.yoyoState.flash > 0.01 ||
             this.yoyoState.wpulse > 0.01)))
     ) {
-      drawYoyoSlideParticlesRingsAndStrings(c, this.getYoyoState(), CX, this.targetY, this.time);
+      withSplinterClip(c, () => drawYoyoSlideParticlesRingsAndStrings(c, this.getYoyoState(), CX, this.targetY, this.time));
     }
     if (
       this.state !== 'idle' &&
@@ -9897,7 +9882,7 @@ export class Game {
           (this.kerisState.particles.length > 0 ||
             this.kerisState.thunderFlash > 0.01)))
     ) {
-      drawKerisSlideParticlesAndArcs(c, this.getKerisState(), W, H);
+      withSplinterClip(c, () => drawKerisSlideParticlesAndArcs(c, this.getKerisState(), W, H));
     }
     if (
       this.state !== 'idle' &&
@@ -9910,7 +9895,7 @@ export class Game {
             this.diamondState.flash > 0.01 ||
             this.diamondState.wpulse > 0.01)))
     ) {
-      drawDiamondSlideForeground(c, this.getDiamondState(), CX, this.targetY);
+      withSplinterClip(c, () => drawDiamondSlideForeground(c, this.getDiamondState(), CX, this.targetY));
     }
     if (
       this.state !== 'idle' &&
@@ -9923,7 +9908,7 @@ export class Game {
             this.bazookaState.debris.length > 0 ||
             this.bazookaState.screenFlash > 0.01)))
     ) {
-      this.getBazookaState().drawForeground(c, W, H);
+      withSplinterClip(c, () => this.getBazookaState().drawForeground(c, W, H));
     }
 
     // dynamic lights (bloom-like) — pre-baked radial sprite, zero per-frame gradients

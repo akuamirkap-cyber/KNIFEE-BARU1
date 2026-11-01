@@ -392,3 +392,32 @@ test('a fast round stops on the first pixel of the drawing it meets', async () =
     game.destroy();
   }
 });
+
+
+test('all eleven Game B heads stop a beam only at actual artwork pixels', async () => {
+  const { traceBossSegment } = await import('../src/games/gunhit/game/bossRaycast');
+  for (let level = 5; level <= 55; level += 5) {
+    const { game, kind } = await bossStage(level);
+    for (const x of [130, 170, 210, 250, 290]) {
+      const ink = (px: number, py: number) => game.artHitAt(px, py) !== null;
+      const hit = traceBossSegment(x, 650, x, -80, ink);
+      if (hit) {
+        assert.ok(ink(hit.x, hit.y), `${kind}: beam ends on its drawing`);
+        assert.equal(ink(hit.x, hit.y + 2), false, `${kind}: space before the first hit stays open`);
+      }
+    }
+    game.destroy();
+  }
+});
+
+test('boss attacks do not consume a player shot outside the outline', async () => {
+  const { game } = await bossStage(5);
+  game.star = null;
+  game.bossShootTimer = 100;
+  game.projs = [{ x: 50, y: 500, vx: 0, vy: -1 }];
+  game.bossProjs = [{ x: 50, y: 500, vx: 0, vy: 0, rot: 0, type: 'pirate' }];
+  game.update(1 / 60);
+  assert.equal(game.projs.length, 1);
+  assert.equal(game.bossProjs.length, 1);
+  game.destroy();
+});

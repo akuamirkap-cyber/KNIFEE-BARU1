@@ -134,7 +134,7 @@ export default function SgaSettingsPanel({
             </div>
             <div className="mt-3">
               <div className="font-title text-[10px] tracking-[.14em] text-white/55">🎬 PRESET ANIMASI SENJATA MENU</div>
-              <p className="mt-1 text-[10px] text-white/55">Sama persis dengan game kanan — kecepatan &amp; gaya masuk senjata.</p>
+              <p className="mt-1 text-[10px] text-white/55">Kecepatan &amp; gaya masuk senjata. Tutup pengaturan untuk melihat dan mendengar animasinya.</p>
               <div className="mt-1.5 grid grid-cols-5 gap-1 rounded-xl bg-black/35 p-1">
                 {animSpeeds.map((value) => {
                   const active = Math.abs(animSpeed - value) < 1e-6;

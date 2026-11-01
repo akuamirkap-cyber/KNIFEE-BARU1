@@ -6,6 +6,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import SansStudioLoading, {
   SANS_INTRO_DEFAULTS,
+  introFrameDelta,
   stepSpring,
 } from '../src/components/SansStudioLoading';
 import {
@@ -327,4 +328,20 @@ test('Game engine and shared CSS eliminate mobile VSync frame-skipping, splice G
   );
   assert.doesNotMatch(sunburstSection, /filter:\s*blur\(/);
   assert.doesNotMatch(sunburstSection, /mix-blend-mode:\s*screen/);
+});
+
+
+test('intro duration follows real time on slow frames while springs stay stable', () => {
+  const slow = introFrameDelta(0.1, 1);
+  assert.equal(slow.timeline, 0.1);
+  assert.equal(slow.physics, 0.025);
+  assert.ok(Math.abs(Array.from({ length: 33 }, () => introFrameDelta(0.1, 1).timeline).reduce((a, b) => a + b, 0) - 3.3) < 1e-10);
+  assert.deepEqual(introFrameDelta(-1, 1), { timeline: 0, physics: 0 });
+});
+
+test('intro does not synchronously import heavy game art and can be skipped', () => {
+  const src = fs.readFileSync(path.join(ROOT, 'src/components/SansStudioLoading.tsx'), 'utf8');
+  assert.doesNotMatch(src, /from ['"]\.\.\/games\/gunhit\/game\//);
+  assert.match(src, /Lewati intro/);
+  assert.match(src, /cancelDelayedActions\(\);\s*juicyAudio\.resetScene\(\);\s*onComplete\(\);/);
 });

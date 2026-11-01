@@ -75,7 +75,7 @@ test('a clip registered for another canvas does not follow the context', () => {
 
 test('the running game clips the impact splinters to the boss it drew', () => {
   // The splinter pass is the one that carries the boss clip …
-  assert.match(game, /setSplinterClip\(c, \(fxCtx\) => this\.bossClipPaint\(fxCtx\)\);/);
+  assert.match(game, /if \(this\.bossClipPaint\(fxCtx\)\) return true;/);
   assert.match(game, /withSplinterClip\(c, \(\) => this\.drawSplinters\(c\)\);/);
   // … and the outline is the one the hit test stops rounds on, in the very
   // transform the head was painted with.

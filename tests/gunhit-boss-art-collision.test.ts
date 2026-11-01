@@ -104,9 +104,9 @@ test('every bullet tests the boss pixels before anything else', () => {
   // The whole stride the round covered is walked at 1 px from outside in, so
   // the first pixel of the drawing is what stops it — a thin brim can never be
   // stepped over, and the round never sinks a stride deep into the body.
-  assert.match(game, /let hit: \{ r: number; x: number; y: number \} \| null = head \? this\.artHitAt\(head\.x, head\.y\) : null;/);
+  assert.match(game, /let hit: \{ r: number; x: number; y: number \} \| null = null;/);
   assert.match(game, /for \(let d = from; !hit; d -= 1\) \{/);
-  assert.match(game, /while \(from < limit && this\.artHitAt\(p\.x - ux \* from, p\.y - uy \* from\)\) from \+= 1;/);
+  assert.match(game, /while \(from < limit && this\.artHitAt\(p\.x \+ ux \* nose - ux \* from, p\.y \+ uy \* nose - uy \* from\)\) from \+= 1;/);
   assert.match(game, /local: Math\.atan2\(hit\.y, hit\.x\),/);
   assert.match(game, /px: hit\.x,/);
   assert.match(game, /py: hit\.y,/);
@@ -114,6 +114,7 @@ test('every bullet tests the boss pixels before anything else', () => {
   // test for a boss at all, and the old `bossRadiusAt(local) + 1` ring is gone.
   assert.doesNotMatch(game, /const rim = bType \? this\.bossRadiusAt\(local\) \+ 1 : R;/);
   assert.match(game, /if \(!isBoss && reach <= R\) return \{ res: 'stick', local \};/);
+  assert.match(game, /if \(isBoss\) return \{ res: 'none' \};/);
   // The broad phase reaches the furthest ink so horns stay hittable.
   assert.match(game, /const phaseR = this\.artMask \? this\.level\.radius \* this\.artMaskMaxR \* 1\.4 : effectiveR;/);
   // The surface test rotates into the target's own frame and reads alpha.
@@ -193,7 +194,7 @@ test('a real boss stage wears Perfect Shot\'s head and collides with its pixels'
 
   const game = new Game(canvas, {}) as unknown as Record<string, any>;
   game.setWheelArtSource({ keyFor: () => 'boss|pirate', get: () => null, request: () => {} });
-  game.startAtLevel(20); // the pirate boss
+  game.startAtLevel(5); // Game B's pirate boss
   assert.equal(game.level.boss, true, 'level 20 is a boss');
   assert.equal(game.level.style, 'pirate');
   // No raster has landed yet: the stage must NOT paint Game A's old flat boss.
@@ -251,6 +252,10 @@ test('a real boss stage wears Perfect Shot\'s head and collides with its pixels'
   // Every weapon used to bite the old 0.889R ring here — empty space beside the
   // pirate's cheek. The silhouette test must refuse that.
   assert.equal(at(-R * 0.889, 0), null, 'no bullet meets the boss where the drawing is empty');
+  // Even a previously stuck item at this angle cannot create a hidden blocker.
+  const empty = artToScreen(game, -R * 0.889, 0);
+  game.items = [{ type: 'old', angle: Math.PI, r: R * 0.889, scale: 1 }];
+  assert.equal(game.stepProj({ x: empty.x, y: empty.y, vx: 0, vy: -500 }, 1).res, 'none');
 });
 
 

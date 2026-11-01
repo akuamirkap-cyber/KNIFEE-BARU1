@@ -96,7 +96,7 @@ test('destroying a slide-11 host unregisters it and closes its own audio graph e
   } finally { setElevenMuted(false); }
 });
 
-test('Game.destroy removes its boss listener and disposes its slide-11 host', () => {
+test('legacy boss image loads do not refresh Game B art, and Game.destroy disposes its slide-11 host', () => {
   assert.ok(images.length >= 2, 'boss images were registered at module load');
   const game = newGame();
   game.level = makeLevel(10); game.level.boss = true;
@@ -107,12 +107,12 @@ test('Game.destroy removes its boss listener and disposes its slide-11 host', ()
   let closed = 0;
   engine.ac!.close = () => { closed++; return Promise.resolve(); };
   images[0].onload!();
-  assert.equal(rebuilds, 1, 'a living boss game refreshes when an asset loads');
+  assert.equal(rebuilds, 0, 'legacy portrait loading cannot replace the current Game B head');
   game.destroy(); game.destroy();
   assert.equal(closed, 1);
   assert.equal(game.s11State, undefined);
   images[1].onload!();
-  assert.equal(rebuilds, 1, 'a removed game is no longer kept or notified by the global listener');
+  assert.equal(rebuilds, 0, 'legacy portrait loading also leaves a destroyed game alone');
 });
 
 test('Black Hole previews never add particles to a paused game, while the live gun still does', () => {

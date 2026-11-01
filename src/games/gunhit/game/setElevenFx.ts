@@ -1,3 +1,4 @@
+import { traceBossSegment } from './bossRaycast';
 /**
  * Slide-11 (`games/game-8` / Knife-Hit Arsenal FX) runtime for slide 1.
  *
@@ -1147,15 +1148,7 @@ export class SetElevenFx {
   private segmentHit(x0: number, y0: number, x1: number, y1: number) {
     const w = this.hooks.wheel() as { ink?: (x: number, y: number) => boolean };
     if (!w.ink) return null;
-    const len = Math.hypot(x1 - x0, y1 - y0);
-    const steps = Math.max(1, Math.ceil(len / 3));
-    for (let i = 1; i <= steps; i++) {
-      const t = i / steps;
-      const x = x0 + (x1 - x0) * t;
-      const y = y0 + (y1 - y0) * t;
-      if (w.ink(x, y)) return { x, y };
-    }
-    return null;
+    return traceBossSegment(x0, y0, x1, y1, w.ink);
   }
 
   /** Whether the host answers with artwork pixels (a boss stage). */

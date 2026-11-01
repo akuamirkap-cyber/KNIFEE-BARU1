@@ -1,3 +1,4 @@
+import { traceBossSegment } from './bossRaycast';
 /**
  * Slide-6 (`games/game-2` / Weapon Wheel Hit) runtime for slide 1.
  *
@@ -301,11 +302,12 @@ export class SetSixFx {
   drawBeam(c: CanvasRenderingContext2D) {
     const w = sixWeapon(this.weaponId);
     const x1 = this.gunX, y1 = this.gunY;
-    // The beam's far end is the silhouette's own bottom point on a boss.
-    const foot = (this.hooks.wheel() as { surfacePoint?: (a: number) => { x: number; y: number } })
-      .surfacePoint?.(Math.PI / 2);
-    const x2 = foot ? foot.x : this.cx;
-    const y2 = foot ? foot.y - 4 : this.cy + this.wheelR - 4;
+    // A beam follows its own path, not a radial point on an irregular head.
+    // If that path misses the silhouette, it continues offscreen.
+    const ink = (this.hooks.wheel() as { ink?: (x: number, y: number) => boolean }).ink;
+    const hit = ink ? traceBossSegment(x1, y1, x1, -80, ink) : null;
+    const x2 = ink ? x1 : this.cx;
+    const y2 = ink ? hit?.y ?? -80 : this.cy + this.wheelR - 4;
     // Slide 6's sniper keeps a laser sight lit the whole time it is armed.
     if (this.sight && w.id === 'sniper') {
       c.save();

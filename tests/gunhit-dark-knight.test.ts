@@ -195,7 +195,9 @@ test('render: lapisan wajah bos ikut berputar (this.rot sampai ke kanvas) + goya
 test('boss defeat shows the defeated boss, persistent player XP, transparent game backdrop, and auto-continue', () => {
   const modal = read('src/games/gunhit/components/BossDefeatedModal.tsx');
   const app = read('src/games/gunhit/App.tsx');
-  assert.ok(modal.includes('renderBossHead'));
+  assert.ok(modal.includes('<HeadArt kind={head}'));
+  assert.ok(modal.includes('bossHeadFor(stage)'));
+  assert.ok(!modal.includes('renderBossHead'));
   assert.ok(modal.includes('role="progressbar"'));
   assert.ok(modal.includes('LANJUT OTOMATIS'));
   assert.ok(!modal.includes('onClick={onContinue}'));
