@@ -778,6 +778,10 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       keyFor: wheelArtKeyFor,
       get: (key) => wheelArtCache.current.get(key) ?? null,
       request: requestWheelArt,
+      // The markup behind the same raster: the engine rasterises it itself when
+      // the runtime refuses to hand back the pixels of an SVG-drawn canvas, so a
+      // boss keeps its real silhouette instead of a ring.
+      markup: (key) => wheelSvgCache.current.get(key) ?? null,
     });
     return () => {
       document.removeEventListener('visibilitychange', onVisChange);

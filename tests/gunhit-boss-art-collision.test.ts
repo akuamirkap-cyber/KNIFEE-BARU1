@@ -71,26 +71,30 @@ test('every bullet tests the boss pixels before anything else', () => {
   // the same head is rasterised from its own markup instead — never a ring.
   assert.match(game, /const traced = buildArtMaskFromSvg\(this\.wheelSvg, span, 384\);/);
   assert.doesNotMatch(game, /buildArtMaskFromSvg\(this\.face/);
+  // The mask can also be rebuilt on demand, from the markup the App keeps.
+  assert.match(game, /const markup = this\.wheelSvg \?\? \(key \? this\.wheelArtSource\?\.markup\?\.\(key\) \?\? null : null\);/);
+  assert.match(game, /this\.bossArtProfile = maskProfile\(traced\);/);
   // The mask is read from the pristine art, never from the face that bullet
   // holes are painted into all stage long.
   assert.doesNotMatch(game, /buildArtMask\(cv/);
   assert.match(game, /c\.drawImage\(art, -R - pad, -R - pad\);/);
   // The padded blit is mapped back through the mask's own span.
   assert.match(game, /const u = Math\.floor\(\(\(lx \/ R \/ mask\.span\) \+ 1\) \* 0\.5 \* mask\.size\);/);
-  // StepProj runs the pixel test and returns the exact surface radius.
-  assert.match(game, /if \(this\.artMask\) \{/);
-  assert.match(game, /const surface = \(head \? this\.artSurfaceAt\(head\.x, head\.y\) : null\) \?\? this\.artSurfaceAt\(p\.x, p\.y\);/);
-  assert.match(game, /if \(surface !== null\) return \{ res: 'stick', local, r: surface \};/);
-  // No circular fallback is left on a boss stage, not even without a mask:
-  // the rim there is the artwork's own contour.
-  assert.match(game, /if \(!this\.artMask\) \{/);
-  assert.match(game, /const rim = bType \? this\.bossRadiusAt\(local\) \+ 1 : R;/);
-  assert.doesNotMatch(game, /if \(!this\.artMask && reach <= R\)/);
+  // StepProj asks the artwork and nothing else on a boss stage.
+  assert.match(game, /if \(isBoss\) \{/);
+  assert.match(game, /const hit = \(head \? this\.artHitAt\(head\.x, head\.y\) : null\) \?\? this\.artHitAt\(p\.x, p\.y\);/);
+  assert.match(game, /local: Math\.atan2\(hit\.y, hit\.x\),/);
+  assert.match(game, /px: hit\.x,/);
+  assert.match(game, /py: hit\.y,/);
+  // No circular fallback is left anywhere on a boss stage: there is no rim
+  // test for a boss at all, and the old `bossRadiusAt(local) + 1` ring is gone.
+  assert.doesNotMatch(game, /const rim = bType \? this\.bossRadiusAt\(local\) \+ 1 : R;/);
+  assert.match(game, /if \(!isBoss && reach <= R\) return \{ res: 'stick', local \};/);
   // The broad phase reaches the furthest ink so horns stay hittable.
-  assert.match(game, /const phaseR = this\.artMask \? this\.level\.radius \* this\.artMaskMaxR : effectiveR;/);
+  assert.match(game, /const phaseR = this\.artMask \? this\.level\.radius \* this\.artMaskMaxR \* 1\.4 : effectiveR;/);
   // The surface test rotates into the target's own frame and reads alpha.
   assert.match(game, /const cos = Math\.cos\(-this\.rot\);/);
-  assert.match(game, /return maskSolid\(mask, u, v\) \? dist : null;/);
+  assert.match(game, /if \(!maskSolid\(mask, u, v\)\) return null;/);
   // The idle float, breath AND the laugh / angry / rage pose are one matrix,
   // and the pixel test inverts exactly that matrix.
   assert.match(game, /const sway = Math\.sin\(t \* 0\.66 \+ 1\.0\) \* 0\.085;/);
@@ -102,9 +106,19 @@ test('every bullet tests the boss pixels before anything else', () => {
 test('a stuck round keeps the exact spot it bit into the artwork', () => {
   assert.match(game, /\/\*\* Exact radius \(px\) the round bit into the target artwork\. \*\/ r\?: number;/);
   assert.match(game, /r: surfaceR,/);
-  assert.match(game, /this\.stickAt\(r\.local \?\? norm\(Math\.PI \/ 2 - this\.rot\), p, r\.r\);/);
-  assert.match(game, /const itemR = it\.r \?\? this\.bossRadiusAt\(it\.angle, R\);/);
-  assert.match(game, /const itemR = it\.r \?\? \(bType \? this\.bossRadiusAt\(it\.angle\) : this\.level\.radius\);/);
+  // The impact point itself is stored, so the round is drawn where it bit even
+  // when no radial profile can describe that spot.
+  assert.match(game, /\/\*\* Exact impact point in the target's own frame \(art-local px\)\. \*\/ px\?: number; py\?: number;/);
+  assert.match(game, /px: hitX,/);
+  assert.match(game, /py: hitY,/);
+  assert.match(game, /this\.stickAt\(r\.local \?\? norm\(Math\.PI \/ 2 - this\.rot\), p, r\.r, r\.px, r\.py\);/);
+  assert.match(game, /const itemR = it\.px !== undefined && it\.py !== undefined\n\s*\? Math\.hypot\(it\.px, it\.py\)\n\s*: it\.r \?\? this\.bossRadiusAt\(it\.angle, R\);/);
+  // Sparks, cracks and bursts use the impact point through the same transform
+  // the artwork is drawn with — never `worldPos(local, R)`, which put every
+  // effect on a circle of radius R beside the head.
+  assert.match(game, /const impact = hitX !== undefined && hitY !== undefined\n\s*\? this\.artToWorld\(hitX, hitY\)\n\s*: this\.worldPos\(local, surfaceR \?\? R\);/);
+  assert.doesNotMatch(game, /worldPos\(local, R\)/);
+  assert.match(game, /private artToWorld\(lx: number, ly: number\)/);
 });
 
 test('a real boss stage wears Perfect Shot\'s head and collides with its pixels', async () => {

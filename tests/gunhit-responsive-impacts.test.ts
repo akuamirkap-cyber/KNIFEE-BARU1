@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { installCanvasShim } from './supportCanvas';
+import { giveBossMask } from './supportBossMask';
 import { installSilentAudio } from '../tools/supportAudioSilent';
 
 installCanvasShim();
@@ -60,6 +61,7 @@ function stage(id: string, mode: 'normal' | 'boulder' | 'bonus' | 'boss' = 'norm
   game.setWeapon(row[0]);
   if (mode === 'boulder' || mode === 'bonus') game.startSpecialStage(mode);
   else game.startAtLevel(mode === 'boss' ? 5 : 1);
+  if (mode === 'boss') giveBossMask(game);
   game.state = 'play';
   game.cooldown = 0;
   return game;

@@ -210,6 +210,12 @@ export type WheelArtSource = {
   keyFor: (level: number) => string;
   get: (key: string) => HTMLImageElement | null;
   request: (level: number) => void;
+  /**
+   * The SVG markup that raster came from. A runtime that refuses to hand back
+   * the pixels of an SVG-drawn canvas still gets the exact silhouette, because
+   * the engine rasterises these paths itself on demand.
+   */
+  markup?: (key: string) => string | null;
 };
 
 export type PerfectShotWheelEntry = {
@@ -621,9 +627,17 @@ const PAINT = ['244,63,94', '250,204,21', '34,211,238', '168,85,247', '74,222,12
 
 type ItemType = 'bullet' | 'old' | 'spike' | 'coin' | 'diamond_chest';
 interface AcidStuck { blobs: AcidStuckBlob[]; dripT: number; drip: number; seed: number; hybrid?: boolean }
-interface Item { angle: number; type: ItemType; age: number; /** Game B's stuck-knife variant (boss obstacles). */ knife?: number; /** Game B's knife lean, in degrees. */ tilt?: number; /** Exact radius (px) the round bit into the target artwork. */ r?: number; ghostVolley?: number; w?: WeaponId; scale?: number; vel?: number; harvested?: boolean; tint?: string; big?: number; hits?: number; hue?: number; flash?: number; acid?: AcidStuck; hideArt?: boolean; busterPellet?: boolean; setTwo?: boolean; s7Half?: number; s7Protrude?: number }
+interface Item { angle: number; type: ItemType; age: number; /** Game B's stuck-knife variant (boss obstacles). */ knife?: number; /** Game B's knife lean, in degrees. */ tilt?: number; /** Exact radius (px) the round bit into the target artwork. */ r?: number; /** Exact impact point in the target's own frame (art-local px). */ px?: number; py?: number; ghostVolley?: number; w?: WeaponId; scale?: number; vel?: number; harvested?: boolean; tint?: string; big?: number; hits?: number; hue?: number; flash?: number; acid?: AcidStuck; hideArt?: boolean; busterPellet?: boolean; setTwo?: boolean; s7Half?: number; s7Protrude?: number }
 interface Proj { x: number; y: number; vx: number; vy: number; originX?: number; ghostAim?: boolean; ghostVolley?: number; setSix?: true; setOne?: SetOneShot; setSeven?: SevenShot; setSevenPending?: boolean; s7Ghost?: boolean; hold?: number; setNine?: NineBullet; setNinePending?: boolean; s9Ghost?: boolean; setNineBeam?: number; setEleven?: ElevenProj; setElevenPending?: boolean; s11Wait?: boolean; s11Ghost?: boolean; setTwo?: TwoRound; pierced?: number; hist?: { x: number; y: number }[]; tint?: string; big?: number; mini?: boolean; giant?: boolean; hue?: number; flash?: number; spawnDelay?: number; wob?: number; lastEcho?: number; t?: number; trail?: { x: number; y: number }[] }
-type StepRes = { res: 'none' | 'stick' | 'fail' | 'hit'; spike?: boolean; local?: number; r?: number };
+type StepRes = {
+  res: 'none' | 'stick' | 'fail' | 'hit';
+  spike?: boolean;
+  local?: number;
+  r?: number;
+  /** Exact impact point in the target's own frame (art-local px). */
+  px?: number;
+  py?: number;
+};
 interface Light { x: number; y: number; r: number; rgb: string; life: number; max: number }
 interface Fragment {
   x: number; y: number; vx: number; vy: number; rot: number; vr: number;
@@ -882,6 +896,61 @@ function applySvgTransforms(g: CanvasRenderingContext2D, raw: string | null) {
       /* an unparsable op leaves the rest of the chain intact */
     }
   }
+}
+
+/**
+ * 360-bin silhouette radius of an alpha mask, in units of R — the contour every
+ * placement, the debug overlay and the de-wobbled hit test share. It is read
+ * from the artwork's own pixels, so it can never describe a circle that the
+ * drawing does not have.
+ */
+export function maskProfile(mask: ArtMask): number[] {
+  const { size, alpha, span } = mask;
+  const half = size / 2;
+  const raw: number[] = new Array(360).fill(0.3);
+  for (let deg = 0; deg < 360; deg++) {
+    const a = (deg * Math.PI) / 180;
+    const cos = Math.cos(a);
+    const sin = Math.sin(a);
+    let outer = 0;
+    for (let r = Math.floor(half * 0.99); r >= 2; r--) {
+      const x = Math.round(half + cos * r);
+      const y = Math.round(half + sin * r);
+      if (x >= 0 && x < size && y >= 0 && y < size && alpha[y * size + x] > 16) {
+        outer = r;
+        break;
+      }
+    }
+    raw[deg] = Math.min(1.45, Math.max(0.3, (outer / half) * span));
+  }
+  const out: number[] = new Array(360);
+  for (let deg = 0; deg < 360; deg++) {
+    let sum = 0;
+    for (let k = -2; k <= 2; k++) sum += raw[(deg + k + 360) % 360];
+    out[deg] = sum / 5;
+  }
+  return out;
+}
+
+/**
+ * The artwork's exact silhouette as a path, in mask pixels: every opaque pixel
+ * that touches a transparent one becomes a 1x1 square. `?hitbox=1` draws this
+ * so the shape on screen can be compared with the shape the engine collects.
+ */
+export function buildMaskOutline(mask: ArtMask): Path2D | null {
+  if (typeof Path2D === 'undefined') return null;
+  const { size, alpha } = mask;
+  const p = new Path2D();
+  const solid = (x: number, y: number) =>
+    x >= 0 && y >= 0 && x < size && y < size && alpha[y * size + x] > 16;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      if (!solid(x, y)) continue;
+      if (solid(x - 1, y) && solid(x + 1, y) && solid(x, y - 1) && solid(x, y + 1)) continue;
+      p.rect(x, y, 1, 1);
+    }
+  }
+  return p;
 }
 
 /** Is this mask pixel opaque? A 3x3 neighbourhood keeps thin strokes solid. */
@@ -1337,6 +1406,8 @@ export class Game {
   private bossArtProfile: number[] | null = null;
   /** Alpha mask of the on-screen target art: hits are pixel tests, not circles. */
   private artMask: ArtMask | null = null;
+  /** The artwork's exact silhouette, as a path traced from the alpha mask. */
+  private maskOutline: Path2D | null = null;
   /** The current boss/wheel SVG markup, handed over by the React bridge. */
   private wheelSvg: string | null = null;
   /** That markup traced into paths: the collision shape without any pixel read. */
@@ -2875,6 +2946,7 @@ export class Game {
     }
     this.bossArtProfile = readable ? this.sampleArtProfile(art, span) : null;
     this.artMask = readable ? mask : null;
+    this.maskOutline = this.artMask ? buildMaskOutline(this.artMask) : null;
     this.artMaskMaxR = this.artMask
       ? this.artMask.maxR
       : this.bossArtProfile ? Math.max(...this.bossArtProfile) : 1;
@@ -2910,14 +2982,122 @@ export class Game {
    * exact radius (px) of the point where the round met the drawing, or null
    * when that point is empty space beside the boss.
    */
-  private artSurfaceAt(worldX: number, worldY: number): number | null {
+  /**
+   * The collision mask of the boss that is on screen, rebuilt on demand.
+   *
+   * A boss is NEVER approximated by a radius. If the raster readback came back
+   * empty (some WebViews refuse to read a canvas that had an SVG image drawn
+   * into it) the very same head is rasterised again from Perfect Shot's own
+   * SVG markup — real paths, real geometry, no pixel read of an image — and the
+   * profile, the outline and the mask are all replaced together so nothing on
+   * the stage can keep a stale shape.
+   */
+  private ensureArtMask(): ArtMask | null {
+    if (!this.level.boss) return null;
+    if (this.artMask) return this.artMask;
+    const key = this.wheelArtKey;
+    const markup = this.wheelSvg ?? (key ? this.wheelArtSource?.markup?.(key) ?? null : null);
+    if (!markup) return null;
+    const R = this.level.radius;
+    const traced = buildArtMaskFromSvg(markup, (R + 40) / R, 384);
+    if (!traced || traced.maxR <= 0.05) return null;
+    this.wheelSvg = markup;
+    this.artMask = traced;
+    this.artMaskMaxR = traced.maxR;
+    this.bossArtProfile = maskProfile(traced);
+    this.maskOutline = buildMaskOutline(traced);
+    return traced;
+  }
+
+  /**
+   * `?hitbox=1`: the boss' collision geometry, drawn by the game itself in the
+   * frame the artwork and the stuck weapons share.
+   *
+   *   cyan    — the artwork's exact silhouette (every edge pixel of the mask)
+   *   green   — the 360-bin contour the placement and the broad phase use
+   *             (red when the art never reached the engine: a legacy shape)
+   *   yellow  — the exact point each stuck round bit into
+   *   white   — which way that round points, and how deep it sank
+   *   magenta — the centre of rotation (the point the head turns around)
+   */
+  private drawHitboxDebug(c: CanvasRenderingContext2D) {
+    const R = this.level.radius;
     const mask = this.artMask;
+    c.save();
+    c.setLineDash([]);
+    // exact silhouette
+    if (mask && this.maskOutline) {
+      const k = (2 * mask.span * R) / mask.size;
+      c.save();
+      c.scale(k, k);
+      c.translate(-mask.size / 2, -mask.size / 2);
+      c.strokeStyle = 'rgba(56,189,248,0.95)';
+      c.lineWidth = 1.6 / k;
+      c.stroke(this.maskOutline);
+      c.restore();
+    }
+    // the contour everything else uses
+    c.strokeStyle = mask ? 'rgba(34,255,136,0.95)' : 'rgba(255,64,64,0.95)';
+    c.lineWidth = 1.6;
+    c.setLineDash([7, 5]);
+    c.beginPath();
+    for (let deg = 0; deg <= 360; deg += 3) {
+      const a = (deg * Math.PI) / 180;
+      const r = this.bossRadiusAt(a);
+      const x = Math.cos(a) * r;
+      const y = Math.sin(a) * r;
+      if (deg === 0) c.moveTo(x, y);
+      else c.lineTo(x, y);
+    }
+    c.stroke();
+    c.setLineDash([]);
+    // where the rounds bit in, and where they point
+    for (const it of this.items) {
+      if (it.px === undefined || it.py === undefined) continue;
+      if (it.type !== 'bullet' && it.type !== 'old') continue;
+      c.fillStyle = '#facc15';
+      c.beginPath();
+      c.arc(it.px, it.py, 3, 0, TAU);
+      c.fill();
+      c.strokeStyle = 'rgba(255,255,255,0.9)';
+      c.lineWidth = 1.2;
+      c.beginPath();
+      c.moveTo(it.px, it.py);
+      c.lineTo(Math.cos(it.angle) * (this.bossRadiusAt(it.angle) + 26), Math.sin(it.angle) * (this.bossRadiusAt(it.angle) + 26));
+      c.stroke();
+    }
+    // centre of rotation
+    c.strokeStyle = 'rgba(255,0,200,0.95)';
+    c.lineWidth = 1.6;
+    c.beginPath();
+    c.moveTo(-9, 0);
+    c.lineTo(9, 0);
+    c.moveTo(0, -9);
+    c.lineTo(0, 9);
+    c.stroke();
+    c.beginPath();
+    c.arc(0, 0, 3.2, 0, TAU);
+    c.stroke();
+    c.restore();
+  }
+
+  private artSurfaceAt(worldX: number, worldY: number): number | null {
+    const hit = this.artHitAt(worldX, worldY);
+    return hit ? hit.r : null;
+  }
+
+  /**
+   * Where a world point lands on the artwork: the exact impact point in the
+   * boss' own frame (`x`, `y` in art-local px) and its distance from the centre.
+   * Everything downstream — the stuck round, its angle, its depth, the sparks —
+   * is placed from this point, never from a radius.
+   */
+  private artHitAt(worldX: number, worldY: number): { r: number; x: number; y: number } | null {
+    const mask = this.ensureArtMask();
     if (!mask) return null;
     const R = this.level.radius;
     const mx = worldX - CX;
     const my = worldY - this.targetY;
-    const dist = Math.hypot(mx, my);
-    if (dist > R * this.artMaskMaxR + 2) return null; // outside the outermost ink
     const cos = Math.cos(-this.rot);
     const sin = Math.sin(-this.rot);
     let lx = mx * cos - my * sin;
@@ -2934,7 +3114,14 @@ export class Game {
     const u = Math.floor(((lx / R / mask.span) + 1) * 0.5 * mask.size);
     const v = Math.floor(((ly / R / mask.span) + 1) * 0.5 * mask.size);
     if (u < 0 || v < 0 || u >= mask.size || v >= mask.size) return null;
-    return maskSolid(mask, u, v) ? dist : null;
+    // The outer bound is measured in the artwork's own frame: the head is
+    // scaled up by its laugh / angry / rage pose, so a world-space bound would
+    // cut the outer 14 % of the drawing away while it is animating.
+    if (Math.hypot(lx, ly) > R * mask.maxR + 2) return null;
+    if (!maskSolid(mask, u, v)) return null;
+    // The radius is measured in the artwork's own frame, so it always agrees
+    // with the point that is drawn and with the frame the head turns in.
+    return { r: Math.hypot(lx, ly), x: lx, y: ly };
   }
 
   /** Game B's red rage aura, drawn behind the boss head. */
@@ -3061,6 +3248,10 @@ export class Game {
     const TAU = Math.PI * 2;
     const normA = ((localAngle % TAU) + TAU) % TAU;
     const deg = Math.floor((normA * 180) / Math.PI) % 360;
+    // Placement (knives, coins, the aim hint) is read from the artwork too: if
+    // the profile has not been sampled yet but the mask exists, derive it from
+    // the mask instead of reaching for a legacy shape.
+    if (!this.bossArtProfile && this.artMask) this.bossArtProfile = maskProfile(this.artMask);
     if (this.bossArtProfile) {
       return Math.max(radius * 0.3, this.bossArtProfile[deg] * radius * 1.02);
     }
@@ -3831,6 +4022,26 @@ export class Game {
   private worldPos(local: number, r: number) {
     const wa = local + this.rot;
     return { x: CX + Math.cos(wa) * r, y: this.targetY + Math.sin(wa) * r };
+  }
+
+  /**
+   * Art-local point → world, through the exact transform the artwork is drawn
+   * with (the boss' float/sway/breath/reaction, then the wheel angle). Every
+   * spark, crack and burst is placed through this, so effects land on the
+   * drawing instead of on a circle of radius R.
+   */
+  private artToWorld(lx: number, ly: number) {
+    let x = lx;
+    let y = ly;
+    if (this.level.boss) {
+      const m = this.bossDecorMatrix();
+      const p = bossMatApply(m, lx, ly);
+      x = p.x;
+      y = p.y;
+    }
+    const cos = Math.cos(this.rot);
+    const sin = Math.sin(this.rot);
+    return { x: CX + x * cos - y * sin, y: this.targetY + x * sin + y * cos };
   }
 
   /** returns true if a save was consumed */
@@ -4608,7 +4819,7 @@ export class Game {
     c.restore();
   }
 
-  private stickAt(local: number, p?: Proj, surfaceR?: number) {
+  private stickAt(local: number, p?: Proj, surfaceR?: number, hitX?: number, hitY?: number) {
     const R = this.level.radius;
     const w = this.weapon;
     const big = p?.big ?? 0;
@@ -4668,6 +4879,9 @@ export class Game {
     // extra bursts of other slides' guns are not part of slide 3.
     const sevenHit = this.setSevenLive && !!(p?.setSeven || p?.s7Ghost || p?.setSevenPending);
     const layerFeel = elevenHit || nineHit || sevenHit;
+    const impact = hitX !== undefined && hitY !== undefined
+      ? this.artToWorld(hitX, hitY)
+      : this.worldPos(local, surfaceR ?? R);
     const hue = s2Hit ? s2Hit.hue : p?.hue ?? (w.id === 'firework' ? gunState.rocketHue : w.id === 'yoyo' ? gunState.yoyoHue : undefined);
     if (w.id === 'firework' && hue !== undefined) gunState.rocketHue = hue;
     if (w.id === 'yoyo' && hue !== undefined) gunState.yoyoHue = hue;
@@ -4679,6 +4893,11 @@ export class Game {
       type: 'bullet',
       age: 0,
       r: surfaceR,
+      // The exact point the round bit into, in the target's own frame. The
+      // renderer places the round here, so a stuck bullet can never slide onto
+      // a radius while the boss turns.
+      px: hitX,
+      py: hitY,
       ghostVolley: p?.ghostVolley,
       w: w.id,
       big,
@@ -4704,7 +4923,7 @@ export class Game {
     const ownHitFx = !layerFeel;
     // Dora airBlast hit FX (game-3)
     if (ownHitFx && w.id === 'dora') {
-      const hp = this.worldPos(local, R);
+      const hp = impact;
       this.bump = Math.max(this.bump, 18);
       this.wheelFlash = Math.max(this.wheelFlash, 0.8);
       this.wheelFlashRgb = '220,242,255';
@@ -4714,7 +4933,7 @@ export class Game {
     }
     // Pred plasmaImpact hit FX (game-3)
     if (ownHitFx && w.id === 'pred') {
-      const hp = this.worldPos(local, R);
+      const hp = impact;
       this.bump = Math.max(this.bump, 14);
       this.wheelFlash = Math.max(this.wheelFlash, 1);
       this.wheelFlashRgb = '200,235,255';
@@ -4724,7 +4943,7 @@ export class Game {
     }
     // Xeno acid splash hit FX (game-3)
     if (ownHitFx && w.id === 'xeno') {
-      const hp = this.worldPos(local, R);
+      const hp = impact;
       this.bump = Math.max(this.bump, 8);
       this.wheelFlash = Math.max(this.wheelFlash, 1);
       this.wheelFlashRgb = '200,255,128';
@@ -4761,14 +4980,14 @@ export class Game {
       // lands with slide 11's own light and blast; slide 1's shock ring and
       // white screen flash are not layered on top of it.
       if (big === 2 && !layerFeel) {
-        const hp0 = this.worldPos(local, R);
+        const hp0 = impact;
         this.sink.light(hp0.x, hp0.y, 360, '254,240,138', 0.5);
         this.sink.push({ x: hp0.x, y: hp0.y, vx: 0, vy: 0, life: 0.6, max: 0.6, size: 220, color: '125,211,252', kind: 'shock', rot: 0, vr: 0, g: 0 });
         this.flashWhite = Math.max(this.flashWhite, 0.3);
       }
     }
     if (tint) {
-      const hp0 = this.worldPos(local, R);
+      const hp0 = impact;
       // The droplet layer is batched into one path per colour now, so the burst
       // stays exactly as lush as it was: 22 droplets a hit used to mean ~900
       // fills a frame at 8 shots a second, and it is a handful of fills however
@@ -4812,7 +5031,7 @@ export class Game {
       sfx.hit();
       if (w.energy && !w.slow && !w.pullCoins && !HIT_SFX[w.id]) sfx.zap();
     }
-    const hp = this.worldPos(local, R);
+    const hp = impact;
     const hx = hp.x;
     const hy = hp.y;
     const cols = STYLE_COLORS[this.level.style].chips;
@@ -5270,18 +5489,32 @@ export class Game {
     const reach = dist - (shot7 ? shot7.tip : 0);
     // With the artwork's mask in hand the broad phase has to reach the furthest
     // piece of ink, not the angular radius, or a horn would be unhittable.
-    const phaseR = this.artMask ? this.level.radius * this.artMaskMaxR : effectiveR;
+    // A generous broad phase only has to be cheap; the artwork decides the hit.
+    // The artwork is drawn up to 1.35x during its reactions, so the gate has to
+    // cover that, or a shot dies before it can reach the head.
+    const phaseR = this.artMask ? this.level.radius * this.artMaskMaxR * 1.4 : effectiveR;
     if (reach > phaseR + L + 4 + (shot7 ? 60 : 0)) return { res: 'none' };
-    // Boss: the drawing decides. Test the round's nose (and its centre) against
-    // the artwork's own pixels, so a shot flies through the empty space beside a
-    // horn or a shoulder instead of sticking to an invisible circle.
-    if (this.artMask) {
+    // Boss: the drawing decides, and only the drawing. The round's nose (and
+    // then its centre) is tested against the artwork's own pixels, so a shot
+    // flies through the empty space beside a horn or a shoulder instead of
+    // sticking to an invisible circle. `artHitAt` rebuilds the mask from the
+    // SVG if the runtime could not read the raster back — a boss stage has no
+    // other path to a hit.
+    if (isBoss) {
       const nose = shot7 ? shot7.tip : 0;
       const head = nose > 0 && dist > nose
         ? { x: p.x + (p.vx / (Math.hypot(p.vx, p.vy) || 1)) * nose, y: p.y + (p.vy / (Math.hypot(p.vx, p.vy) || 1)) * nose }
         : null;
-      const surface = (head ? this.artSurfaceAt(head.x, head.y) : null) ?? this.artSurfaceAt(p.x, p.y);
-      if (surface !== null) return { res: 'stick', local, r: surface };
+      const hit = (head ? this.artHitAt(head.x, head.y) : null) ?? this.artHitAt(p.x, p.y);
+      if (hit) {
+        return {
+          res: 'stick',
+          local: Math.atan2(hit.y, hit.x),
+          r: hit.r,
+          px: hit.x,
+          py: hit.y,
+        };
+      }
     }
     if (isSpecial(this.level.mode)) return this.stepSpecialProjectile(p);
     const w = this.weapon;
@@ -5358,15 +5591,10 @@ export class Game {
         }
       }
     }
-    // Slide 3 lands its round the moment the tip crosses the rim. On a boss the
-    // rim is the drawing itself: if no ink was hit, the round keeps flying.
-    // Even with the mask unavailable, a boss falls back to its own contour —
-    // never to the plain wheel radius, which is the ring this stage must not
-    // have.
-    if (!this.artMask) {
-      const rim = bType ? this.bossRadiusAt(local) + 1 : R;
-      if (reach <= rim) return { res: 'stick', local };
-    }
+    // Ordinary wheels land on their rim. A boss never does: its surface is the
+    // drawing, so a round that met no ink keeps flying rather than biting an
+    // invisible ring around the head.
+    if (!isBoss && reach <= R) return { res: 'stick', local };
     return { res: 'none' };
   }
 
@@ -7188,7 +7416,7 @@ export class Game {
       }
       if (r.res === 'stick') {
         this.projs.splice(i, 1);
-        this.stickAt(r.local ?? norm(Math.PI / 2 - this.rot), p, r.r);
+        this.stickAt(r.local ?? norm(Math.PI / 2 - this.rot), p, r.r, r.px, r.py);
         if ((this.state as State) === 'clear') break;
       } else if (r.res === 'hit') {
         // Consume one projectile per stone/star hit; a star pauses further shots.
@@ -8278,24 +8506,7 @@ export class Game {
       // Lapisan target berputar — bos juga berputar pelan (this.rot di update),
       // bukan terkunci diam. Kecepatan boss konstan agar tidak muter liar.
       if (this.level.mode !== 'treasure') c.rotate(this.rot);
-      if (this.showHitbox && this.level.boss) {
-        c.save();
-        c.strokeStyle = this.artMask ? 'rgba(34,255,136,0.95)' : 'rgba(255,64,64,0.95)';
-        c.lineWidth = 2;
-        c.setLineDash([6, 5]);
-        c.beginPath();
-        for (let deg = 0; deg <= 360; deg += 3) {
-          const a = (deg * Math.PI) / 180;
-          const r = this.bossRadiusAt(a);
-          const x = Math.cos(a) * r;
-          const y = Math.sin(a) * r;
-          if (deg === 0) c.moveTo(x, y);
-          else c.lineTo(x, y);
-        }
-        c.stroke();
-        c.setLineDash([]);
-        c.restore();
-      }
+      if (this.showHitbox && this.level.boss) this.drawHitboxDebug(c);
       hasBusterWheelPellets = !this.rock && !this.chest && this.items.some((it) => !!it.busterPellet);
       if (hasBusterWheelPellets && typeof c.getTransform === 'function') {
         busterWheelTransform = c.getTransform() ?? null;
@@ -8324,7 +8535,9 @@ export class Game {
           // Masuk lebih dalam hingga hanya terlihat setengah (50% tertanam di dalam papan)
           const embedDepth = totalWeaponLen * 0.5;
           const pencilEmbedBonus = it.w === 'pencil' ? Math.sin(it.angle * 13) * 5 : 0;
-          const itemR = it.r ?? this.bossRadiusAt(it.angle, R);
+          const itemR = it.px !== undefined && it.py !== undefined
+            ? Math.hypot(it.px, it.py)
+            : it.r ?? this.bossRadiusAt(it.angle, R);
           const snowball = it.type === 'bullet' && it.w === 'snowball';
           const firework = it.type === 'bullet' && it.w === 'firework';
           const yoyo = it.type === 'bullet' && it.w === 'yoyo';
