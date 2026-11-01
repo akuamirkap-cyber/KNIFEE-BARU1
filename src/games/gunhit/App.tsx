@@ -20,6 +20,7 @@ import { MILESTONES, QUESTS, type Quest, type QuestState } from './game/quests';
 import { GUN_HIT_MAP_MAX_LEVEL, getGunHitMapNodeTheme, getGunHitMapStage } from './game/stageMap';
 import Arsenal from './components/Arsenal';
 import QuestModal from './components/QuestModal';
+import { useAllStagesOpen, toggleAllStagesOpen, isUnlockShortcut } from './game/stageUnlock';
 import SgaSettingsPanel from './components/SgaSettingsPanel';
 import SgaWeaponFlight, { WEAPON_FLIGHT_MS, type SgaWeaponFlightData } from './components/SgaWeaponFlight';
 import { Leaderboard as PerfectShotLeaderboard } from '../perfect-shot/components/Leaderboard';
@@ -282,6 +283,9 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   const screenRef = useRef<Screen>(screen);
   screenRef.current = screen;
   const [mapOpen, setMapOpen] = useState(false);
+  /** All stages open (default) — P on the quest page flips back to normal. */
+  const allStagesOpen = useAllStagesOpen();
+  const [unlockToast, setUnlockToast] = useState<string | null>(null);
   const [mapLeaving, setMapLeaving] = useState(false);
   const [questLeaving, setQuestLeaving] = useState(false);
   const [leaderboardLeaving, setLeaderboardLeaving] = useState(false);
@@ -1207,6 +1211,28 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     pageExitTimersRef.current.push(timer);
   };
 
+  useEffect(() => {
+    if (!unlockToast) return;
+    const timer = window.setTimeout(() => setUnlockToast(null), 1800);
+    return () => window.clearTimeout(timer);
+  }, [unlockToast]);
+
+  // P on the quest page: every stage open -> the earned progression -> back.
+  useEffect(() => {
+    if (screen !== 'menu' || (!mapOpen && !questOpen)) return;
+    const onKey = (ev: KeyboardEvent) => {
+      if (!isUnlockShortcut(ev)) return;
+      ev.preventDefault();
+      const now = toggleAllStagesOpen();
+      studioSfx.tap(0, 900);
+      setUnlockToast(now
+        ? 'SEMUA STAGE TERBUKA'
+        : 'PROGRES NORMAL: stage dibuka satu per satu');
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [screen, mapOpen, questOpen]);
+
   const openLevelMap = () => {
     const timing = beginMenuPageTransition('cloud', 'QUEST', menuPageLead(), () => setMapOpen(true), 'quest');
     if (!timing) return;
@@ -1872,9 +1898,24 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
           <PerfectShotQuestMap
             leaving={mapLeaving}
             progress={{ stage: Math.max(1, Math.min(GUN_HIT_MAP_MAX_LEVEL, bestLevel)), stages: SGA_QUEST_STAGES }}
+            unlockAll={allStagesOpen}
             onBack={closeLevelMap}
             onPlay={(_event, level) => beginStage(level)}
           />
+        )}
+
+        {screen === 'menu' && (mapOpen || questOpen) && (
+          <>
+            <div className="pointer-events-none absolute bottom-2 left-1/2 z-[70] -translate-x-1/2 whitespace-nowrap rounded-full border border-white/25 bg-black/55 px-3 py-1 text-[10px] font-black tracking-wide text-white/80 backdrop-blur-[2px]">
+              {allStagesOpen ? '🔓 SEMUA STAGE TERBUKA' : '🔒 PROGRES NORMAL'} · tekan <span className="mx-0.5 rounded bg-white/20 px-1">P</span>
+              {allStagesOpen ? ' untuk normal' : ' untuk buka semua'}
+            </div>
+            {unlockToast && (
+              <div key={unlockToast} className="pointer-events-none pop-in absolute left-1/2 top-[16%] z-[70] -translate-x-1/2 whitespace-nowrap rounded-xl border border-amber-200/40 bg-[#1a1206]/90 px-4 py-2 text-[12px] font-black text-amber-100 shadow-[0_10px_30px_rgba(0,0,0,.5)]">
+                {unlockToast}
+              </div>
+            )}
+          </>
         )}
 
         {/* Modals */}

@@ -33,6 +33,12 @@ type Props = {
   onPlay: (e: MouseEvent<HTMLElement>, n: number) => void;
   /** Optional host-game progress/data lets another game reuse this exact map presentation. */
   progress?: { stage: number; stars?: Record<number, number>; stages?: readonly StageBase[] };
+  /**
+   * Host-game override: every stage is playable without touching the saved
+   * progress. Locked pillars render as finished (green, tappable, no padlock) so
+   * the map still reads normally, and the real current stage keeps its marker.
+   */
+  unlockAll?: boolean;
 };
 
 /* ---------------- camera / projection ---------------- */
@@ -65,12 +71,17 @@ const capKey = (t: StageType, s: StageState) =>
   s === "current" ? "current" : s === "locked" ? (t === "boss" ? "lockB" : t === "special" ? "lockS" : "lockN") : t === "normal" ? "done" : t;
 
 /* ================================================================== */
-export function QuestMap({ leaving, onBack, onPlay, progress }: Props) {
+export function QuestMap({ leaving, onBack, onPlay, progress, unlockAll = false }: Props) {
   const g = useGame();
   const st = useSettings();
   const cur = progress?.stage ?? g.stage;
   const stages = progress?.stages ?? STAGES;
   const starsAt = (n: number) => progress ? progress.stars?.[n] ?? 0 : g.stars[n] ?? 0;
+  /** Locked only when the host game asks for the earned progression. */
+  const stateFor = (n: number): StageState => {
+    const s = stageState(n, cur);
+    return unlockAll && s === "locked" ? "done" : s;
+  };
   const boxRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 420, h: 820 });
   const [cam, setCamS] = useState(() => clampCam(focusCam(cur) - 4.2));
@@ -235,11 +246,14 @@ export function QuestMap({ leaving, onBack, onPlay, progress }: Props) {
 
   /* ---------------- actions ---------------- */
   const sel = stages[selected - 1];
-  const selState = stageState(selected, cur);
+  const selState = stateFor(selected);
+  // Open because the host game unlocked the map, not because it was finished:
+  // the detail button should offer MAIN, not ULANG.
+  const selOpenNotPlayed = unlockAll && stageState(selected, cur) === "locked";
 
   const tapStage = (b: StageBase) => {
     if (moved.current) return;
-    const s = stageState(b.n, cur);
+    const s = stateFor(b.n);
     const pan = worldX(b.n);
     if (s === "locked") {
       sfx.lockedBuzz();
@@ -373,7 +387,7 @@ export function QuestMap({ leaving, onBack, onPlay, progress }: Props) {
           const b = stages[n - 1];
           const d = n - 1 - cam;
           const p = proj(d);
-          const state = stageState(n, cur);
+          const state = stateFor(n);
           const k = Math.max(0, n - firstFinal);
           const kOut = Math.max(0, n - nStart);
           const anim = out
@@ -478,9 +492,9 @@ export function QuestMap({ leaving, onBack, onPlay, progress }: Props) {
               <span className="absolute inset-x-3 top-1 h-[38%] rounded-xl bg-white/25" />
               <span className="relative" style={{ textShadow: `0 2px 0 ${selState === "done" ? "#7c2d12" : "#0e5a26"}` }}>
                 <span className="flex items-center justify-center gap-1.5">
-                  {selState === "done" ? <Ico name="replay" className="h-5 w-5" color="#ffffff" /> : null}
-                  {selState === "done" ? "ULANG" : "MAIN"}
-                  {selState === "done" ? null : <Ico name="play" className="h-5 w-5" color="#ffffff" />}
+                  {selState === "done" && !selOpenNotPlayed ? <Ico name="replay" className="h-5 w-5" color="#ffffff" /> : null}
+                  {selState === "done" && !selOpenNotPlayed ? "ULANG" : "MAIN"}
+                  {selState === "done" && !selOpenNotPlayed ? null : <Ico name="play" className="h-5 w-5" color="#ffffff" />}
                 </span>
               </span>
             </button>
