@@ -1673,6 +1673,12 @@ export class Game {
   private maskSolidRegion: Path2D | null = null;
   /** The blue line itself: the exact boundary of that region. */
   private maskSolidEdge: Path2D | null = null;
+  /**
+   * Recent boss hits, as art-local angles. Each one lights a short piece of the
+   * blue outline for a quarter of a second, so the player sees that the round
+   * bit *the line* — the same bytes the hit test reads, not an invisible ring.
+   */
+  private bossEdgePing: { a: number; born: number }[] = [];
   /** Radius the face bitmap was baked at (`buildFace`), for pad scaling. */
   private faceBaseR = 0;
   private faceR = 106;
@@ -3374,6 +3380,51 @@ export class Game {
    * the old hitbox banner — belonged to the inspection overlay and is gone from
    * play. `?hitbox=1` still paints it for development.
    */
+  /**
+   * Clip the canvas to the boss' blue outline, in the artwork's own frame.
+   *
+   * Boss mode has no disc: the head is the surface. A hit may light up the head
+   * — it must never paint a filled circle of radius R, because that circle was
+   * the old wheel hitbox and seeing it flash on every hit is exactly what makes
+   * the collision look circular. Everything painted on a boss goes through this
+   * clip.
+   *
+   * Returns false on every non-boss stage (nothing to clip — the wheel really
+   * is a disc), and when no artwork mask exists.
+   */
+  private clipBossSurface(c: CanvasRenderingContext2D): boolean {
+    if (!this.level.boss) return false;
+    const mask = this.ensureArtMask();
+    const region = this.maskSolidRegion ?? this.maskSurface;
+    if (!mask || !region) return false;
+    const R = this.level.radius;
+    const k = (2 * mask.span * R) / mask.size;
+    const half = mask.size / 2;
+    c.scale(k, k);
+    c.translate(-half, -half);
+    c.clip(region);
+    // Undo the two transforms so the caller keeps drawing in art coordinates.
+    c.translate(half, half);
+    c.scale(1 / k, 1 / k);
+    return true;
+  }
+
+  /**
+   * Fill the target's surface: the boss' outline on a boss stage, the wheel's
+   * disc everywhere else. The caller owns the save/restore.
+   */
+  private paintTargetSurface(c: CanvasRenderingContext2D, style: string) {
+    const R = this.level.radius;
+    c.fillStyle = style;
+    if (this.clipBossSurface(c)) {
+      c.fillRect(-R * 1.5, -R * 1.5, R * 3, R * 3);
+      return;
+    }
+    c.beginPath();
+    c.arc(0, 0, R, 0, TAU);
+    c.fill();
+  }
+
   private drawBossSilhouette(c: CanvasRenderingContext2D) {
     const mask = this.ensureArtMask();
     const surface = this.maskSolidEdge ?? this.maskSurface;
@@ -3393,6 +3444,25 @@ export class Game {
     c.strokeStyle = 'rgba(56,189,248,0.95)';
     c.lineWidth = 1.7 / k;
     c.stroke(surface);
+    // The last hits flash the very piece of the line they stopped on. A wedge
+    // clip keeps the glow on the outline instead of smearing it over the face.
+    const half = mask.size / 2;
+    const now = this.time;
+    for (const ping of this.bossEdgePing) {
+      const age = now - ping.born;
+      if (age < 0 || age > 0.45) continue;
+      const fade = 1 - age / 0.45;
+      c.save();
+      c.beginPath();
+      c.moveTo(half, half);
+      c.arc(half, half, mask.size * 0.78, ping.a - 0.16, ping.a + 0.16);
+      c.closePath();
+      c.clip();
+      c.strokeStyle = `rgba(186,240,255,${(0.9 * fade).toFixed(3)})`;
+      c.lineWidth = (1.7 + 3.4 * fade) / k;
+      c.stroke(surface);
+      c.restore();
+    }
     c.restore();
   }
 
@@ -5519,6 +5589,11 @@ export class Game {
     const impact = hitX !== undefined && hitY !== undefined
       ? this.artToWorld(hitX, hitY)
       : this.worldPos(local, surfaceR ?? R);
+    if (this.level.boss && hitX !== undefined && hitY !== undefined) {
+      // Light the exact spot on the outline that just stopped this round.
+      this.bossEdgePing.push({ a: Math.atan2(hitY, hitX), born: this.time });
+      if (this.bossEdgePing.length > 12) this.bossEdgePing.shift();
+    }
     const hue = s2Hit ? s2Hit.hue : p?.hue ?? (w.id === 'firework' ? gunState.rocketHue : w.id === 'yoyo' ? gunState.yoyoHue : undefined);
     if (w.id === 'firework' && hue !== undefined) gunState.rocketHue = hue;
     if (w.id === 'yoyo' && hue !== undefined) gunState.yoyoHue = hue;
@@ -7077,6 +7152,9 @@ export class Game {
     for (let i = this.lights.length - 1; i >= 0; i--) {
       this.lights[i].life -= dt;
       if (this.lights[i].life <= 0) this.lights.splice(i, 1);
+    }
+    if (this.bossEdgePing.length && this.bossEdgePing[0].born < this.time - 0.6) {
+      this.bossEdgePing = this.bossEdgePing.filter((p) => this.time - p.born < 0.6);
     }
     this.time += s;
     // Real-time, staggered coin arrivals continue during the treasure-clear
@@ -9196,6 +9274,10 @@ export class Game {
         }
         for (const [index, wave] of wheelEntryBurst.waves.entries()) {
           if (wave.opacity <= 0) continue;
+          // A boss is not a disc: the entrance shockwave would draw two rings
+          // around the head at radius R, i.e. exactly the circle this hitbox is
+          // not. Its soft flash above still plays, so the arrival reads the same.
+          if (this.level.boss) continue;
           c.globalAlpha = wheelEntry.opacity * wave.opacity;
           c.strokeStyle = index === 1
             ? 'rgba(255,255,255,1)'
@@ -9517,21 +9599,23 @@ export class Game {
         c.save();
         c.globalCompositeOperation = 'lighter';
         c.globalAlpha = this.wheelFlash * 0.2;
-        c.beginPath();
-        c.arc(0, 0, R, 0, TAU);
-        c.fillStyle = `rgb(${this.wheelFlashRgb})`;
-        c.fill();
+        // The head lights up, not a circle around it.
+        this.paintTargetSurface(c, `rgb(${this.wheelFlashRgb})`);
         c.restore();
       }
       if (this.hitFlash > 0 && !isSpecial(this.level.mode)) {
-        c.beginPath();
-        c.arc(0, 0, R, 0, TAU);
-        // Brief surface flash: the whole circular board/boss lights up on impact.
-        c.fillStyle = `rgba(255,255,255,${this.hitFlash * 0.28})`;
-        c.fill();
+        c.save();
+        // Brief surface flash: the board — or, on a boss, the head itself —
+        // lights up on impact. Never a disc behind the head.
+        this.paintTargetSurface(c, `rgba(255,255,255,${this.hitFlash * 0.28})`);
+        c.restore();
       }
       if (this.slowT > 0) {
         const fa = Math.min(1, this.slowT / 0.3);
+        // On a boss every slow effect clings to the head: the film is clipped to
+        // the blue outline, so no ring ever forms around it.
+        c.save();
+        this.clipBossSurface(c);
         if (this.slowKind === 'water') {
           drawWetSurface(c, R, this.time, fa);
         } else {
@@ -9581,13 +9665,13 @@ export class Game {
             c.restore();
           }
         }
+        c.restore();
       }
       if (this.burnT > 0 && !this.setElevenLive) {
         const fa = Math.min(1, this.burnT / 0.4);
-        c.beginPath();
-        c.arc(0, 0, R, 0, TAU);
-        c.fillStyle = `rgba(255,100,20,${0.15 * fa + 0.05 * Math.sin(this.time * 20)})`;
-        c.fill();
+        c.save();
+        this.paintTargetSurface(c, `rgba(255,100,20,${0.15 * fa + 0.05 * Math.sin(this.time * 20)})`);
+        c.restore();
       }
       for (const it of this.items) {
         if (it.type !== 'coin' && it.type !== 'diamond_chest') continue;
