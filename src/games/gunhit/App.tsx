@@ -30,6 +30,7 @@ import { WEAPON_FLIGHT_MS } from './components/weaponFlightTiming';
 import PrivacyPage from '../../components/PrivacyPage';
 import HowToPlayPage from './components/HowToPlayPage';
 import ResetProgressDialog from './components/ResetProgressDialog';
+import { tr } from '../../i18n/strings';
 import { useLanguage } from '../../i18n/useLanguage';
 import { markHowToPlaySeen, shouldShowHowToPlay } from '../../storage/firstRun';
 import { resetProgress } from '../../storage/resetProgress';
@@ -150,6 +151,7 @@ const menuMotion = (animation: string, delay: number, duration: number, extra = 
 });
 
 function MusicAmbientControl({ enabled, onToggle }: { enabled: boolean; onToggle: () => void }) {
+  const [language] = useLanguage();
   return (
     <button
       type="button"
@@ -160,12 +162,12 @@ function MusicAmbientControl({ enabled, onToggle }: { enabled: boolean; onToggle
       <span className="flex items-center gap-2">
         <span aria-hidden="true">🎵</span>
         <span>
-          <span className="block text-[11px] font-black">MUSIK & AMBIENCE</span>
-          <span className="block text-[9px] text-white/55">Suasana lembut ala Perfect Shot</span>
+          <span className="block text-[11px] font-black">{tr(language, 'MUSIK & AMBIENCE')}</span>
+          <span className="block text-[9px] text-white/55">{tr(language, 'Suasana lembut ala Perfect Shot')}</span>
         </span>
       </span>
       <span className={`rounded-full px-2.5 py-1 text-[9px] font-black ${enabled ? 'bg-emerald-400/20 text-emerald-200' : 'bg-white/10 text-white/60'}`}>
-        {enabled ? 'AKTIF' : 'MATI'}
+        {enabled ? tr(language, 'AKTIF') : tr(language, 'MATI')}
       </span>
     </button>
   );
@@ -581,7 +583,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       });
       setCheatNonce((n) => n + 1);
       sfx.unlock();
-      setCheatToast('🔓 SEMUA GEMBOK TERBUKA!');
+      setCheatToast(tr(language, '🔓 SEMUA GEMBOK TERBUKA!'));
       window.setTimeout(() => setCheatToast(null), 2400);
     };
     window.addEventListener('keydown', onKey);
@@ -1389,7 +1391,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       const now = toggleAllStagesOpen();
       studioSfx.tap(0, 900);
       setUnlockToast(now
-        ? 'SEMUA STAGE TERBUKA'
+        ? tr(language, 'SEMUA STAGE TERBUKA')
         : 'PROGRES NORMAL: stage dibuka satu per satu');
     };
     window.addEventListener('keydown', onKey);
@@ -1451,7 +1453,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   };
 
   const openLeaderboardPage = () => {
-    const timing = beginMenuPageTransition('podium', 'PERINGKAT', menuPageLead(), () => setLeaderboardOpen(true), 'ranks', {
+    const timing = beginMenuPageTransition('podium', tr(language, 'PERINGKAT'), menuPageLead(), () => setLeaderboardOpen(true), 'ranks', {
       cover: (t) => studioSfx.podiumClose(0, t.rate),
       swap: (t) => { studioSfx.podiumOpen(0, t.rate); studioSfx.lbEnter(0, LB_IN); },
     });
@@ -1463,7 +1465,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   const closeLeaderboardPage = () => {
     if (leaderboardLeaving) return;
     const nextPlan = freshMenuPlan();
-    const timing = beginMenuPageTransition('podium', 'PERINGKAT', LB_OUT.total, () => {
+    const timing = beginMenuPageTransition('podium', tr(language, 'PERINGKAT'), LB_OUT.total, () => {
       setLeaderboardOpen(false);
       setLeaderboardLeaving(false);
       setMenuPlan(nextPlan);
@@ -1823,12 +1825,12 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
         <button
           onClick={onExit}
           className="fixed top-3 left-3 z-50 flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-neutral-900/90 hover:bg-neutral-800 text-white text-xs font-semibold backdrop-blur-md border border-white/20 shadow-xl cursor-pointer transition hover:scale-105 active:scale-95"
-          title="Kembali ke Menu Game"
+          title={tr(language, 'Kembali ke Menu Game')}
         >
           <svg className="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
           </svg>
-          <span>Pilih Game Lain</span>
+          <span>{tr(language, 'Pilih Game Lain')}</span>
         </button>
       )}
       <div ref={gameShellRef} className="relative overflow-hidden shadow-[0_0_80px_rgba(0,0,0,0.9)] w-[420px] h-[760px] flex-shrink-0">
@@ -1859,7 +1861,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
           const rarity = RARITY_COLOR[unlocked.rarity];
           const starCount = unlocked.rarity === 'LEGENDARIS' ? 3 : unlocked.rarity === 'EPIC' ? 3 : unlocked.rarity === 'LANGKA' ? 2 : 1;
           return (
-            <div key={weaponCelebration.id} className="pointer-events-none absolute inset-0 z-[60] flex items-center justify-center overflow-hidden" aria-live="polite" aria-label={`Senjata baru ${unlocked.name}`}>
+            <div key={weaponCelebration.id} className="pointer-events-none absolute inset-0 z-[60] flex items-center justify-center overflow-hidden" aria-live="polite" aria-label={`${tr(language, 'Senjata baru ')}${unlocked.name}`}>
               <Dust count={22} />
               <SparkleField count={18} spread={1.55} delay={0.12} />
               <SunburstFX size={450} color={color} intensity={1.05} speed={12} stars />
@@ -1959,7 +1961,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                   <DiamondSprite size={156} />
                 </div>
                 <div className="relative z-10 mt-4 rounded-2xl border-2 border-[#e0f4ff] bg-[#071827]/90 px-6 py-3 text-center shadow-[0_0_40px_rgba(186,230,253,0.9)]">
-                  <div className="text-[11px] font-black tracking-[0.32em] text-cyan-100">BERLIAN BESAR DIDAPAT</div>
+                  <div className="text-[11px] font-black tracking-[0.32em] text-cyan-100">{tr(language, 'BERLIAN BESAR DIDAPAT')}</div>
                   <div className="mt-1 text-3xl font-black text-white drop-shadow-[0_0_12px_#bae6fd]">+{diamondReveal.amount}</div>
                 </div>
               </div>
@@ -2084,7 +2086,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                         </div>
                       )}
                     </div>
-                    <canvas ref={previewCanvasRef} style={{ width: 'min(337px, 90vw)', height: 'min(295px, 54vh)' }} className="block cursor-pointer drop-shadow-[0_10px_20px_rgba(0,0,0,.5)] transition-transform hover:scale-105" role="button" tabIndex={0} aria-label="Buka koleksi senjata" onClick={() => startArsenalTransition(true)} onKeyDown={(event) => {
+                    <canvas ref={previewCanvasRef} style={{ width: 'min(337px, 90vw)', height: 'min(295px, 54vh)' }} className="block cursor-pointer drop-shadow-[0_10px_20px_rgba(0,0,0,.5)] transition-transform hover:scale-105" role="button" tabIndex={0} aria-label={tr(language, 'Buka koleksi senjata')} onClick={() => startArsenalTransition(true)} onKeyDown={(event) => {
                       if (event.key === 'Enter' || event.key === ' ') {
                         event.preventDefault();
                         unlockStudioAudio(true);
@@ -2225,7 +2227,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
         {screen === 'menu' && (mapOpen || questOpen) && (
           <>
             <div className="pointer-events-none absolute bottom-2 left-1/2 z-[70] -translate-x-1/2 whitespace-nowrap rounded-full border border-white/25 bg-black/55 px-3 py-1 text-[10px] font-black tracking-wide text-white/80 backdrop-blur-[2px]">
-              {allStagesOpen ? '🔓 SEMUA STAGE TERBUKA' : '🔒 PROGRES NORMAL'} · tekan <span className="mx-0.5 rounded bg-white/20 px-1">P</span>
+              {allStagesOpen ? tr(language, '🔓 SEMUA STAGE TERBUKA') : tr(language, '🔒 PROGRES NORMAL')} · {tr(language, 'tekan')} <span className="mx-0.5 rounded bg-white/20 px-1">P</span>
               {allStagesOpen ? ' untuk normal' : ' untuk buka semua'}
             </div>
             {unlockToast && (
@@ -2261,7 +2263,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                     studioSfx.subExit(0);
                     setInGameSettingsOpen(false);
                   }}
-                  aria-label="Tutup pengaturan permainan"
+                  aria-label={tr(language, 'Tutup pengaturan permainan')}
                   className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/15 bg-white/10 text-xl text-white/85 hover:bg-white/20"
                 >
                   ×
@@ -2279,7 +2281,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                     <span className="text-xl">{muted || soundVolume <= 0 ? '🔇' : '🔊'}</span>
                     <span>
                       <span className="block text-sm font-black">SUARA GAME</span>
-                      <span className="block text-[10px] text-white/55">Geser untuk atur volume efek</span>
+                      <span className="block text-[10px] text-white/55">{tr(language, 'Geser untuk atur volume efek')}</span>
                     </span>
                   </button>
                   <button
@@ -2289,7 +2291,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                       muted || soundVolume <= 0 ? 'bg-white/10 text-white/65' : 'bg-emerald-400/25 text-emerald-200'
                     }`}
                   >
-                    {muted || soundVolume <= 0 ? 'MATI' : `${Math.round(soundVolume * 100)}%`}
+                    {muted || soundVolume <= 0 ? tr(language, 'MATI') : `${Math.round(soundVolume * 100)}%`}
                   </button>
                 </div>
 
@@ -2299,7 +2301,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                     min={0}
                     max={100}
                     step={5}
-                    aria-label="Volume suara saat bermain"
+                    aria-label={tr(language, 'Volume suara saat bermain')}
                     value={muted ? 0 : Math.round(soundVolume * 100)}
                     onChange={(e) => changeSoundVolume(Number(e.target.value) / 100)}
                     className="h-2 flex-1 cursor-pointer accent-emerald-400"
@@ -2320,7 +2322,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                             : 'border-white/10 bg-white/[0.04] text-white/70 hover:bg-white/10'
                         }`}
                       >
-                        {preset === 0 ? 'MATI' : `${Math.round(preset * 100)}%`}
+                        {preset === 0 ? tr(language, 'MATI') : `${Math.round(preset * 100)}%`}
                       </button>
                     );
                   })}
@@ -2417,11 +2419,11 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
             <Overlay><GiftBoxScene
               badge="★ REWARD MILESTONE ★"
               headline={`MILESTONE ${milestoneGift.count}!`}
-              hint="🎁 Peti hadiah milestone siap dibuka!"
+              hint={tr(language, '🎁 Peti hadiah milestone siap dibuka!')}
               weapon={rewardWeapon ?? undefined}
               coins={milestoneGift.coins}
-              claimLabel={rewardWeapon ? 'PAKAI & LANJUT ➜' : 'AMBIL HADIAH ➜'}
-              declineLabel={rewardWeapon ? 'Lanjut tanpa ganti senjata' : undefined}
+              claimLabel={tr(language, rewardWeapon ? 'PAKAI & LANJUT ➜' : 'AMBIL HADIAH ➜')}
+              declineLabel={rewardWeapon ? tr(language, 'Lanjut tanpa ganti senjata') : undefined}
               onClaim={(equip) => takeMilestoneGift(equip)}
             /></Overlay>
           );
@@ -2486,7 +2488,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
 
               {/* Glassmorphism Card DIBESARKAN & TEKS 2X */}
               <div className="mt-6 w-full rounded-3xl border-2 border-white/20 bg-white/10 p-6 text-center shadow-[0_20px_50px_rgba(0,0,0,0.8)] backdrop-blur-xl">
-                <div className="text-sm font-black tracking-[0.25em] text-white/60 font-game">SKOR AKHIR</div>
+                <div className="text-sm font-black tracking-[0.25em] text-white/60 font-game">{tr(language, 'SKOR AKHIR')}</div>
 
                 {/* Score Counter Roll-up (Besar & Bergetar) */}
                 <div className="text-8xl sm:text-9xl font-black leading-none my-2 font-game text-white filter drop-shadow-[0_8px_16px_rgba(255,255,255,0.3)] animate-pulse">
@@ -2502,11 +2504,11 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                 {/* Stat Grid (Teks Diperbesar 2x) */}
                 <div className="mt-5 grid grid-cols-2 gap-3 border-t-2 border-white/15 pt-4">
                   <div className="rounded-2xl border-2 border-white/15 bg-black/60 px-3 py-3 shadow-inner">
-                    <div className="text-xs font-black tracking-wider text-white/50 font-game">REKOR TERBAIK</div>
+                    <div className="text-xs font-black tracking-wider text-white/50 font-game">{tr(language, 'REKOR TERBAIK')}</div>
                     <div className="text-3xl font-black text-amber-300 font-mono mt-1 drop-shadow">{best}</div>
                   </div>
                   <div className="rounded-2xl border-2 border-white/15 bg-black/60 px-3 py-3 shadow-inner">
-                    <div className="text-xs font-black tracking-wider text-white/50 font-game">DAPAT KOIN</div>
+                    <div className="text-xs font-black tracking-wider text-white/50 font-game">{tr(language, 'DAPAT KOIN')}</div>
                     <div className="mt-1 flex items-center justify-center gap-1 text-3xl font-black text-amber-300 font-mono drop-shadow"><span>+{result.coins}</span><CoinSprite size={30} /></div>
                   </div>
                 </div>

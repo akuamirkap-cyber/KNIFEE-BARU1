@@ -1,3 +1,5 @@
+import { getLanguage } from '../../../i18n/language';
+import { tr } from '../../../i18n/strings';
 import { traceBossSegment } from './bossRaycast';
 import { advanceCosmeticTrail } from './cosmeticTrail';
 import { sfx, withSfxGain } from './audio';
@@ -190,6 +192,10 @@ import {
   type PatternName,
   type SpecialMode,
 } from './levels';
+
+/** Teks HUD canvas memakai bahasa aktif (dibaca ulang tiap frame). */
+const T = (text: string): string => tr(getLanguage(), text);
+
 export { ROCK_RADIUS, allowsStarPowerups, bossKnifeCount, isSpecial, makeLevel };
 export type { LevelCfg, LevelMode, PatternName, SpecialMode } from './levels';
 const TWIN_SPACING = 30; // dual lebih rapat: 60px antar laras (dulu 92px)
@@ -4919,7 +4925,7 @@ export class Game {
     if (w.chronoEvery && this.perkCount % w.chronoEvery === 0) {
       sfx2.timestop();
       this.applySlow(1.2, 0, '250,220,120', 'time');
-      this.addText('⏱ STOP WAKTU!', CX, this.targetY, '#fde047', 30);
+      this.addText(T('⏱ STOP WAKTU!'), CX, this.targetY, '#fde047', 30);
       this.flashWhite = Math.max(this.flashWhite, 0.25);
     }
     if (w.spikeOff) {
@@ -5120,7 +5126,7 @@ export class Game {
       } else if (roll === 3) {
         this.spikeOffT = 1.8;
         this.addText('🦄 DURI HILANG!', hx, hy + 70, '#c4b5fd', 22);
-      } else this.transmuteOne(hx, hy, R, '🦄 JADI KOIN!');
+      } else this.transmuteOne(hx, hy, R, T('🦄 JADI KOIN!'));
       const RBC = ['248,113,113', '251,146,60', '250,204,21', '74,222,128', '96,165,250', '192,132,252'];
       for (let i = 0; i < 6; i++) this.sink.push({ x: CX, y: this.targetY, vx: 0, vy: 0, life: 0.5 + i * 0.06, max: 0.5 + i * 0.06, size: R * (1.4 + i * 0.25), color: RBC[i], kind: 'shock', rot: 0, vr: 0, g: 0 });
     }
@@ -5688,7 +5694,7 @@ export class Game {
       if (tint === this.lastPaint) {
         pts += 3;
         sfx4.match();
-        this.addText('🎨 WARNA SAMA! +3', hp0.x, hp0.y + 60, `rgb(${tint})`, 22);
+        this.addText(T('🎨 WARNA SAMA! +3'), hp0.x, hp0.y + 60, `rgb(${tint})`, 22);
       }
       this.lastPaint = tint;
     }
@@ -5874,7 +5880,7 @@ export class Game {
     sfx3.chime();
     sfx2.jackpot();
     this.shake = Math.max(this.shake, 8);
-    this.addText('BERLIAN +10! +5 APEL', x, y - 12, '#67e8f9', 22);
+    this.addText(T('BERLIAN +10! +5 APEL'), x, y - 12, '#67e8f9', 22);
     for (let i = 0; i < 26; i++) {
       const a = rand(0, TAU);
       const v = rand(120, 440);
@@ -6106,7 +6112,7 @@ export class Game {
     if (this.level.boss) {
       this.coins += 5;
       this.score += 5;
-      this.addText('BOS KALAH! +5 💰', CX, this.targetY + 20, '#ffd23f', 28);
+      this.addText(T('BOS KALAH! +5 💰'), CX, this.targetY + 20, '#ffd23f', 28);
     } else {
       this.score += 3;
     }
@@ -6414,7 +6420,7 @@ export class Game {
         return { res: 'hit' };
       }
       this.centerDiamondHits++;
-      this.addText(`BERLIAN ${this.centerDiamondHits}/3`, p.x, p.y - 26, '#a5f3fc', 22);
+      this.addText(`${T('BERLIAN')} ${this.centerDiamondHits}/3`, p.x, p.y - 26, '#a5f3fc', 22);
       this.sink.light(p.x, p.y, 90 + this.centerDiamondHits * 20, '103,232,249', 0.35);
       if (!this.elevenSpecialImpact(p, p.x, p.y)) this.specialImpact(p.x, p.y, 'diamond');
       this.burstSpecial(p.x, p.y, 'diamond', this.centerDiamondHits === 3 ? 28 : 10);
@@ -6953,11 +6959,11 @@ export class Game {
     if (mode === 'boulder') {
       this.coins += 3;
       this.score += 75;
-      this.addText('BERLIAN BERSIH! +3 APEL', CX, this.targetY + 185, '#a5f3fc', 28);
+      this.addText(T('BERLIAN BERSIH! +3 APEL'), CX, this.targetY + 185, '#a5f3fc', 28);
     } else if (mode === 'bonus') {
       this.addText(`🪙 BONUS +${this.coins - this.stageStartCoins}!`, CX, this.targetY + 185, '#fde68a', 26);
     } else if (this.treasureCoins.length) {
-      this.addText('🪙 KOIN BERTEBARAN!', CX, this.targetY + 185, '#fde68a', 26);
+      this.addText(T('🪙 KOIN BERTEBARAN!'), CX, this.targetY + 185, '#fde68a', 26);
     }
     this.payStageReward();
     this.sink.light(CX, this.targetY, 250, '255,255,255', 0.8);
@@ -7019,7 +7025,7 @@ export class Game {
           this.stateT = 0;
           this.projs = [];
           this.holding = false;
-          this.addText('WAKTU HABIS!', CX, this.targetY + 185, '#fb7185', 26);
+          this.addText(T('WAKTU HABIS!'), CX, this.targetY + 185, '#fb7185', 26);
           if (!this.setTwoVoice('fail')) sfx.fail(this.weapon?.id);
         } else this.finishSpecialStage();
       }
@@ -7438,7 +7444,7 @@ export class Game {
         sfx.clang();
         this.shake = Math.max(this.shake, 8);
         this.recoil = 1.6;
-        this.addText('SERANGAN BOS!', bp.x, GUN_Y - 20, '#ef4444', 20);
+        this.addText(T('SERANGAN BOS!'), bp.x, GUN_Y - 20, '#ef4444', 20);
         this.sink.push({ x: bp.x, y: bp.y, vx: 0, vy: 0, life: 0.35, max: 0.35, size: 50, color: '#ef4444', kind: 'shock', rot: 0, vr: 0, g: 0 });
         break;
       }
@@ -10264,7 +10270,7 @@ export class Game {
       c.fillStyle = `rgba(255,80,80,${k2})`;
       c.font = "13px 'Russo One', sans-serif";
       c.textAlign = 'center';
-      c.fillText('LEPAS UNTUK MENEMBAK', CX, this.targetY + R + rr2 * 0.55);
+      c.fillText(T('LEPAS UNTUK MENEMBAK'), CX, this.targetY + R + rr2 * 0.55);
       c.restore();
     }
     // glitch screen
@@ -10379,10 +10385,10 @@ export class Game {
     const n = this.level.n;
     c.textAlign = 'center';
     const modeLabel = this.level.mode === 'boulder' ? `💎 DIAMOND BREAKER • LV ${n}`
-      : this.level.mode === 'bonus' ? `🪙 BONUS STAGE • LV ${n}`
-      : this.level.mode === 'treasure' ? `🧰 HARTA KARUN • LV ${n}`
+      : this.level.mode === 'bonus' ? `${T('🪙 BONUS STAGE')} • LV ${n}`
+      : this.level.mode === 'treasure' ? `${T('🧰 HARTA KARUN')} • LV ${n}`
       : this.level.mode === 'double' ? `🔫🔫 DOUBLE GUN • LEVEL ${n}`
-      : this.level.boss ? `BOSS • ${this.level.name}` : `LEVEL ${n}`;
+      : this.level.boss ? `${T('BOSS')} • ${this.level.name}` : `${T('LEVEL')} ${n}`;
     c.font = font(isSpecial(this.level.mode) ? 13 : 16);
     c.fillStyle = this.level.mode === 'treasure' || this.level.mode === 'bonus' ? '#fde68a'
       : this.level.mode === 'boulder' ? '#a5f3fc' : this.level.boss ? '#ff5050' : '#ffffff';
@@ -10415,8 +10421,8 @@ export class Game {
         c.fillStyle = this.stageTime < 8 ? '#fb7185' : '#fde68a';
         c.fillText(`${timeStr}  •  KOIN ${taken}/${this.bonusCoins.length}`, CX, 42);
       } else {
-        const status = this.treasureBuff === 'double' ? '2 SENJATA'
-          : this.treasureBuff ? `BONUS ${this.treasureBuff.toUpperCase()}` : 'BERONDONG PETI!';
+        const status = this.treasureBuff === 'double' ? T('2 SENJATA')
+          : this.treasureBuff ? `${T('BONUS')} ${this.treasureBuff.toUpperCase()}` : T('BERONDONG PETI!');
         c.fillStyle = this.stageTime < 8 ? '#fb7185' : '#fde68a';
         c.fillText(`${timeStr}  •  ${status}`, CX, 42);
       }
@@ -10562,17 +10568,17 @@ export class Game {
     else if (wq.snowman) info = `⛄ ${3 - (this.perkCount % 3)} lagi`;
     else if (wq.abductEvery) info = `🛸 culik ${wq.abductEvery - (this.perkCount % wq.abductEvery)} lagi`;
     else if (wq.everyBonus) info = `🎰 lucky ${wq.everyBonus.n - (this.perkCount % wq.everyBonus.n)} lagi`;
-    else if (wq.meltEvery && wq.meltEvery > 1) info = `✏️ hapus ${wq.meltEvery - (this.perkCount % wq.meltEvery)} lagi`;
-    else if (wq.paint && this.lastPaint) info = '🎨 warna terakhir ●';
+    else if (wq.meltEvery && wq.meltEvery > 1) info = `✏️ ${T('hapus')} ${wq.meltEvery - (this.perkCount % wq.meltEvery)} ${T('lagi')}`;
+    else if (wq.paint && this.lastPaint) info = T('🎨 warna terakhir ●');
     // A gun that fires on the press (a Slide 5 / Slide 7 card) has no charge to hold for.
     // Slide 7's caster locks on by itself while held (its 2.6 s lock).
     else if (this.elevenCasterTrigger) {
-      info = this.holding && this.state === 'play' ? `🎯 kunci ${Math.round(this.s11.casterLock * 100)}%` : '🎯 tahan = kunci & luncurkan';
+      info = this.holding && this.state === 'play' ? `🎯 ${T('kunci')} ${Math.round(this.s11.casterLock * 100)}%` : T('🎯 tahan = kunci & luncurkan');
     } else if (wq.charge && !this.plainTrigger) {
       const full = this.elevenBuster ? 1.2 : 1;
-      info = this.charging ? `🔋 ${this.chargeT >= full ? 'FULL!' : Math.round(Math.min(1, this.chargeT / full) * 100) + '%'}` : '🔋 tahan untuk charge';
+      info = this.charging ? `🔋 ${this.chargeT >= full ? 'FULL!' : Math.round(Math.min(1, this.chargeT / full) * 100) + '%'}` : T('🔋 tahan untuk charge');
     }
-    else if (wq.phaseSpikes) info = '👻 kebal duri';
+    else if (wq.phaseSpikes) info = T('👻 kebal duri');
     else if (wq.notes) info = `🎶 nada ${Math.min(10, Math.max(1, this.combo))}/10`;
     if (info) {
       c.font = font(13);
@@ -10612,10 +10618,10 @@ export class Game {
         c.fillStyle = '#ffd0d0';
         c.fillText(this.level.name, 0, 20);
       } else if (isSpecial(this.level.mode)) {
-        const title = this.level.mode === 'boulder' ? '💎 DIAMOND BREAKER'
-          : this.level.mode === 'bonus' ? '🪙 BONUS STAGE' : '🧰 HARTA KARUN';
-        const hint = this.level.mode === 'boulder' ? 'Kikis batu hingga diamond bersih!'
-          : this.level.mode === 'bonus' ? 'Bidik koin yang berputar!' : '10 detik! Berondong petinya!';
+        const title = this.level.mode === 'boulder' ? `💎 ${T('DIAMOND BREAKER')}`
+          : this.level.mode === 'bonus' ? T('🪙 BONUS STAGE') : T('🧰 HARTA KARUN');
+        const hint = this.level.mode === 'boulder' ? T('Kikis batu hingga diamond bersih!')
+          : this.level.mode === 'bonus' ? T('Bidik koin yang berputar!') : T('10 detik! Berondong petinya!');
         c.font = font(27); c.lineWidth = 5; c.strokeStyle = 'rgba(0,0,0,0.9)';
         c.strokeText(title, 0, -9);
         c.fillStyle = this.level.mode === 'boulder' ? '#a5f3fc' : '#fde68a';
@@ -10634,7 +10640,7 @@ export class Game {
       if (n <= 2 && !this.sevenPlainTrigger && (this.weapon.auto || scope || charge)) {
         c.font = font(13);
         c.fillStyle = '#ffd23f';
-        const hint = charge ? 'TAP = TEMBAK, TAHAN = CHARGE x4!' : scope ? 'TAHAN = BIDIK SLOW-MO, LEPAS = TEMBAK' : this.weapon.spinup ? 'TAHAN LAYAR UNTUK MEMUTAR LARAS!' : 'TAHAN LAYAR / SPASI = AUTO-FIRE';
+        const hint = charge ? T('TAP = TEMBAK, TAHAN = CHARGE x4!') : scope ? T('TAHAN = BIDIK SLOW-MO, LEPAS = TEMBAK') : this.weapon.spinup ? T('TAHAN LAYAR UNTUK MEMUTAR LARAS!') : T('TAHAN LAYAR / SPASI = AUTO-FIRE');
         c.fillText(hint, 0, 40);
       }
       c.restore();
@@ -10695,7 +10701,7 @@ export class Game {
       c.shadowBlur = 0;
       c.font = `700 18px ${clearFont}`;
       c.fillStyle = '#fff';
-      c.fillText('BONUS +3', 0, 40);
+      c.fillText(T('BONUS +3'), 0, 40);
       c.restore();
     }
   }

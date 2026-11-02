@@ -5,9 +5,9 @@ import { useId, type CSSProperties } from "react";
    viewBox 0 0 28 84. The top ~30% sinks into the wheel.
    ===================================================================== */
 export const KNIFE_INFO = [
-  { name: "Pisau Dapur", desc: "Pisau koki tajam bergagang kayu. Rintangan paling umum — jangan tembak gagangnya!" },
-  { name: "Belati", desc: "Belati ksatria dengan pelindung emas dan gagang merah. Lebar pelindungnya bikin celah makin sempit." },
-  { name: "Kunai", desc: "Pisau lempar ninja dari baja hitam dengan cincin di ujung gagang." },
+  { name: "Kitchen Knife", desc: "A sharp chef's knife with a wooden handle. The most common obstacle — never hit the handle!" },
+  { name: "Dagger", desc: "A knight's dagger with a gold guard and red grip. The wide guard makes every gap narrower." },
+  { name: "Kunai", desc: "A black-steel ninja throwing knife with a ring at the end of the grip." },
 ] as const;
 export const KNIFE_COUNT = KNIFE_INFO.length;
 

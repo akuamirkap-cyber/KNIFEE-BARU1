@@ -76,7 +76,7 @@ test('every boss node on the map is one of Game B\'s eleven bosses', () => {
   }
   assert.equal(getGunHitMapNodeCaption(1), 'GENTONG LV1');
   assert.equal(getGunHitMapNodeCaption(3), 'GOBLIN LV3');
-  assert.match(getGunHitMapNodeCaption(5), /^KAPTEN BAJAK LAUT LV5$/);
+  assert.match(getGunHitMapNodeCaption(5), /^PIRATE CAPTAIN LV5$/);
   const map = read('src/games/gunhit/components/LevelMap.tsx');
   assert.ok(map.includes('>QUEST</h2>'));
   assert.ok(map.includes('getGunHitMapNodeTheme(level)'));

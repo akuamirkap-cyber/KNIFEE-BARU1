@@ -64,7 +64,7 @@ export function Settings({ closing, onClose, onIntro }: Props) {
 
   return (
     <div className={`absolute inset-0 z-[70] grid place-items-center px-5 ${out ? "pointer-events-none" : ""}`}>
-      <button aria-label="Tutup pengaturan" onClick={() => onClose()} className={`absolute inset-0 cursor-default bg-black/55 backdrop-blur-[2px] ${out ? "studio-fade-out" : "studio-fade-in"}`} />
+      <button aria-label="Close settings" onClick={() => onClose()} className={`absolute inset-0 cursor-default bg-black/55 backdrop-blur-[2px] ${out ? "studio-fade-out" : "studio-fade-in"}`} />
 
       <div
         className={`relative w-full max-w-[350px] rounded-[24px] border-2 border-white/15 p-3.5 shadow-[0_20px_50px_rgba(0,0,0,.6),inset_0_1px_0_rgba(255,255,255,.14)] ${out ? "st-pop-out" : "st-pop-in"}`}
@@ -74,9 +74,9 @@ export function Settings({ closing, onClose, onIntro }: Props) {
         <div className="flex items-center gap-2">
           <span className="grid h-8 w-8 place-items-center rounded-xl bg-white/10 text-lg">⚙️</span>
           <h2 className="font-title flex-1 text-[20px] leading-none tracking-wide text-white" style={{ textShadow: `0 2px 0 rgba(0,0,0,.45), 0 0 14px ${t.accent}55` }}>
-            PENGATURAN
+            SETTINGS
           </h2>
-          <button onClick={(e) => onClose(e)} onPointerEnter={hoverSfx} aria-label="Tutup" className="press grid h-9 w-9 place-items-center rounded-xl border-2 border-white/20 bg-white/10 text-base text-white">
+          <button onClick={(e) => onClose(e)} onPointerEnter={hoverSfx} aria-label="Close" className="press grid h-9 w-9 place-items-center rounded-xl border-2 border-white/20 bg-white/10 text-base text-white">
             ✕
           </button>
         </div>
@@ -84,7 +84,7 @@ export function Settings({ closing, onClose, onIntro }: Props) {
         {/* sound */}
         <div {...A(40, "mt-3 rounded-2xl border border-white/10 bg-black/35 p-2.5")}>
           <div className="flex items-center gap-2.5">
-            <button onClick={toggleMute} onPointerEnter={hoverSfx} aria-label="Bisukan" className="press grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-b from-[#38bdf8] to-[#0369a1] text-lg shadow-[0_3px_0_#0c4a6e]">
+            <button onClick={toggleMute} onPointerEnter={hoverSfx} aria-label="Mute" className="press grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-b from-[#38bdf8] to-[#0369a1] text-lg shadow-[0_3px_0_#0c4a6e]">
               {snd.volume === 0 ? "🔇" : snd.volume < 0.5 ? "🔉" : "🔊"}
             </button>
             <div className="relative h-7 flex-1">
@@ -111,7 +111,7 @@ export function Settings({ closing, onClose, onIntro }: Props) {
         {/* theme */}
         <div {...A(140, "mt-3")}>
           <div className="flex items-baseline justify-between">
-            <span className={label}>🎨 TEMA LATAR</span>
+            <span className={label}>🎨 BACKGROUND THEME</span>
             <span key={st.theme} className="a in-fade font-title text-[12px] text-white" style={v({ "--d": "0ms", "--dur": "250ms" })}>
               {st.theme === "auto" ? "🎯 OTOMATIS" : `${t.icon} ${t.name}`}
             </span>
@@ -160,7 +160,7 @@ export function Settings({ closing, onClose, onIntro }: Props) {
             className="press flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/[.05] px-3 py-2.5"
           >
             <span className="font-title flex items-center gap-2 text-[13px] text-white/85">
-              <Ico name="bolt" className="h-4 w-4" color="rgba(255,255,255,.75)" /> PENGATURAN LANJUTAN
+              <Ico name="bolt" className="h-4 w-4" color="rgba(255,255,255,.75)" /> ADVANCED SETTINGS
             </span>
             <span className={`font-title text-[13px] text-white/70 transition-transform duration-300 ${adv ? "rotate-180" : ""}`}>▾</span>
           </button>
@@ -201,9 +201,9 @@ export function Settings({ closing, onClose, onIntro }: Props) {
             className="press mt-1.5 flex w-full items-center gap-3 rounded-xl border border-white/10 bg-black/35 px-3 py-2.5 text-left"
           >
             <div className="min-w-0 flex-1">
-              <div className="font-title text-[13px] leading-tight text-white">Kembali ke Menu Cepat</div>
+              <div className="font-title text-[13px] leading-tight text-white">Fast Return to Menu</div>
               <div className="font-ui mt-0.5 text-[11px] leading-snug text-white/60">
-                {st.quickBack ? "ON · fade singkat ±0.4 dtk dari GUN, QUEST, READY & RANKS" : "OFF · animasi tema penuh (pintu baja, awan, kado, pita)"}
+                {st.quickBack ? "ON · short ±0.4 s fade from GUN, QUEST, READY & RANKS" : "OFF · full theme animation (steel doors, clouds, gifts, ribbons)"}
               </div>
             </div>
             <Toggle on={st.quickBack} />
@@ -212,7 +212,7 @@ export function Settings({ closing, onClose, onIntro }: Props) {
 
         {/* icon style */}
         <div {...A(165, "mt-3")}>
-          <div className={label}>◆ GAYA IKON</div>
+          <div className={label}>◆ ICON STYLE</div>
           <div className="mt-1.5 grid grid-cols-4 gap-1.5">
             {ICON_SETS.map((x, i) => {
               const on = st.icons === x.id;

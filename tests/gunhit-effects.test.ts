@@ -1103,7 +1103,7 @@ test('Slide #2 pentatonic sound rhythm, UI/clear/fail/start SFX, wheel 0.15->1 e
   assert.ok(gameSrc.includes('const wheelEntryTotal = this.wheelEntryDelayT + 1.16 * this.pace;'), 'every wheel plays the full Perfect Shot entrance timeline');
   assert.ok(!gameSrc.includes("this.synchronizedEntrance && this.state === 'intro'"), 'the wheel entrance is never gated behind the menu handoff');
   assert.ok(gameSrc.includes("c.fillText('STAGE CLEAR!', 0, 0);"), 'draws STAGE CLEAR! banner on canvas like Slide #2');
-  assert.ok(gameSrc.includes("c.fillText('BONUS +3', 0, 40);"), 'draws BONUS +3 subtitle on canvas like Slide #2');
+  assert.ok(gameSrc.includes("c.fillText(T('BONUS +3'), 0, 40);"), 'draws BONUS +3 subtitle on canvas like Slide #2');
   assert.ok(gameSrc.includes('c.drawImage(this.face,'), 'keeps SGA wheel face image');
 });
 

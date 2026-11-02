@@ -5,6 +5,7 @@ import type { StyleId } from '../../perfect-shot/anim/presets';
 import CoinSprite from '../../shared/CoinSprite';
 import { LANGUAGES, type Language } from '../../../i18n/language';
 import { t } from '../../../i18n/catalog';
+import { tr, trId } from '../../../i18n/strings';
 import DiamondSprite from '../../shared/DiamondSprite';
 
 type Props = {
@@ -69,7 +70,7 @@ export default function SgaSettingsPanel({
 
   return (
     <div className={`a absolute inset-0 z-[70] grid place-items-center px-5 ${closing ? 'out-fade pointer-events-none' : 'in-fade'}`} style={{ '--d': '0ms', '--dur': closing ? '380ms' : '300ms' } as CSSProperties}>
-      <button type="button" aria-label="Tutup pengaturan" onClick={onClose} className="absolute inset-0 cursor-default bg-black/55 backdrop-blur-[2px]" />
+      <button type="button" aria-label={tr(language, 'Tutup pengaturan')} onClick={onClose} className="absolute inset-0 cursor-default bg-black/55 backdrop-blur-[2px]" />
       <section
         role="dialog"
         aria-modal="true"
@@ -80,15 +81,15 @@ export default function SgaSettingsPanel({
         <header className="flex items-center gap-2">
           <span className="grid h-8 w-8 place-items-center rounded-xl bg-white/10 text-lg">⚙️</span>
           <div className="min-w-0 flex-1">
-            <h2 id="gunhit-settings-title" className="font-title text-[20px] leading-none tracking-wide text-white">PENGATURAN</h2>
-            <p className="mt-1 font-title text-[9px] tracking-[.14em] text-white/55">AUDIO · TEMA · GAME SGA</p>
+            <h2 id="gunhit-settings-title" className="font-title text-[20px] leading-none tracking-wide text-white">{tr(language, 'PENGATURAN')}</h2>
+            <p className="mt-1 font-title text-[9px] tracking-[.14em] text-white/55">{tr(language, 'AUDIO · TEMA · GAME SGA')}</p>
           </div>
-          <button type="button" onClick={onClose} aria-label="Tutup" className="press grid h-9 w-9 place-items-center rounded-xl border-2 border-white/20 bg-white/10 text-base text-white">✕</button>
+          <button type="button" onClick={onClose} aria-label={tr(language, 'Tutup')} className="press grid h-9 w-9 place-items-center rounded-xl border-2 border-white/20 bg-white/10 text-base text-white">✕</button>
         </header>
 
         <section className="mt-3 rounded-2xl border border-white/10 bg-black/35 p-2.5">
           <div className="flex items-center gap-2.5">
-            <button type="button" onClick={onMute} aria-label="Bisukan semua efek" className="press grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-b from-[#38bdf8] to-[#0369a1] text-lg shadow-[0_3px_0_#0c4a6e]">
+            <button type="button" onClick={onMute} aria-label={tr(language, 'Bisukan semua efek')} className="press grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-b from-[#38bdf8] to-[#0369a1] text-lg shadow-[0_3px_0_#0c4a6e]">
               {muted || volume === 0 ? '🔇' : volume < 0.5 ? '🔉' : '🔊'}
             </button>
             <div className="relative h-7 flex-1">
@@ -101,26 +102,26 @@ export default function SgaSettingsPanel({
           </div>
           <div className="mt-2 grid grid-cols-2 gap-2">
             <button type="button" onClick={onSfx} className="press font-title flex h-9 items-center justify-between gap-2 rounded-xl bg-white/[.06] px-3 text-[12px] text-white">
-              <span>🎯 Efek</span><Toggle on={sfxEnabled && !muted} />
+              <span>{tr(language, '🎯 Efek')}</span><Toggle on={sfxEnabled && !muted} />
             </button>
             <button type="button" onClick={onMusic} className="press font-title flex h-9 items-center justify-between gap-2 rounded-xl bg-white/[.06] px-3 text-[12px] text-white">
-              <span>🎵 Musik</span><Toggle on={musicEnabled} />
+              <span>{tr(language, '🎵 Musik')}</span><Toggle on={musicEnabled} />
             </button>
           </div>
         </section>
 
         <section className="mt-3">
           <div className="flex items-baseline justify-between">
-            <span className="font-title text-[11px] tracking-[.14em] text-white/55">TEMA LATAR</span>
-            <span className="font-title text-[11px] text-white">{selectedTheme?.icon} {selectedTheme?.label}</span>
+            <span className="font-title text-[11px] tracking-[.14em] text-white/55">{tr(language, 'TEMA LATAR')}</span>
+            <span className="font-title text-[11px] text-white">{selectedTheme?.icon} {tr(language, selectedTheme?.label ?? '')}</span>
           </div>
           <div ref={stripRef} className="no-scrollbar smooth-scroll -mx-1 mt-1.5 flex snap-x snap-proximity gap-1.5 overflow-x-auto px-1 py-1" style={{ WebkitMaskImage: 'linear-gradient(90deg,transparent,#000 10px,#000 calc(100% - 10px),transparent)', maskImage: 'linear-gradient(90deg,transparent,#000 10px,#000 calc(100% - 10px),transparent)' }}>
             {themes.map((item) => {
               const active = theme === item.id;
               return (
-                <button key={item.id} type="button" data-theme={item.id} onClick={() => onTheme(item.id)} title={item.desc} aria-pressed={active} className="press relative flex h-[58px] w-[54px] shrink-0 snap-center flex-col items-center justify-center gap-0.5 rounded-xl border-2" style={{ borderColor: active ? '#ffd23f' : 'rgba(255,255,255,.14)', background: item.swatch, boxShadow: active ? '0 0 0 2px #ffd23f44, 0 0 12px #ffd23f88' : '0 2px 0 rgba(0,0,0,.4)', transform: active ? 'translateY(-2px)' : undefined }}>
+                <button key={item.id} type="button" data-theme={item.id} onClick={() => onTheme(item.id)} title={tr(language, item.desc)} aria-pressed={active} className="press relative flex h-[58px] w-[54px] shrink-0 snap-center flex-col items-center justify-center gap-0.5 rounded-xl border-2" style={{ borderColor: active ? '#ffd23f' : 'rgba(255,255,255,.14)', background: item.swatch, boxShadow: active ? '0 0 0 2px #ffd23f44, 0 0 12px #ffd23f88' : '0 2px 0 rgba(0,0,0,.4)', transform: active ? 'translateY(-2px)' : undefined }}>
                   <span className="text-[20px] leading-none drop-shadow">{item.icon}</span>
-                  <span className="font-title text-[8px] leading-none text-white">{item.label}</span>
+                  <span className="font-title text-[8px] leading-none text-white">{tr(language, item.label)}</span>
                   {active && <span className="absolute -right-1 -top-1 grid h-4 w-4 place-items-center rounded-full bg-[#22c55e] text-[9px] text-white ring-2 ring-[#0e1519]">✓</span>}
                 </button>
               );
@@ -129,7 +130,7 @@ export default function SgaSettingsPanel({
         </section>
 
         <button type="button" onClick={() => setAdvanced((value) => !value)} className="press mt-3 flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/[.05] px-3 py-2.5">
-          <span className="font-title flex items-center gap-2 text-[12px] text-white/85"><span>⚙</span> PENGATURAN LANJUTAN</span>
+          <span className="font-title flex items-center gap-2 text-[12px] text-white/85"><span>⚙</span> {tr(language, 'PENGATURAN LANJUTAN')}</span>
           <span className={`font-title text-[13px] text-white/70 transition-transform ${advanced ? 'rotate-180' : ''}`}>▾</span>
         </button>
         {advanced && (
@@ -144,8 +145,8 @@ export default function SgaSettingsPanel({
               </div>
             </div>
             <div className="mt-3">
-              <div className="font-title text-[10px] tracking-[.14em] text-white/55">🎬 PRESET ANIMASI SENJATA MENU</div>
-              <p className="mt-1 text-[10px] text-white/55">Kecepatan &amp; gaya masuk senjata. Tutup pengaturan untuk melihat dan mendengar animasinya.</p>
+              <div className="font-title text-[10px] tracking-[.14em] text-white/55">{tr(language, '🎬 PRESET ANIMASI SENJATA MENU')}</div>
+              <p className="mt-1 text-[10px] text-white/55">{tr(language, 'Kecepatan & gaya masuk senjata. Tutup pengaturan untuk melihat dan mendengar animasinya.')}</p>
               <div className="mt-1.5 grid grid-cols-5 gap-1 rounded-xl bg-black/35 p-1">
                 {animSpeeds.map((value) => {
                   const active = Math.abs(animSpeed - value) < 1e-6;
@@ -169,34 +170,34 @@ export default function SgaSettingsPanel({
                     <button
                       key={style.id}
                       type="button"
-                      title={style.desc}
+                      title={trId(language, style.desc)}
                       aria-pressed={active}
                       onClick={() => onAnimGunStyle(style.id)}
                       className={`press font-title flex items-center gap-1 rounded-lg border px-2 py-1.5 text-[10px] leading-none transition-all ${active ? 'border-[#ffd23f] bg-[#ffd23f]/20 text-[#ffe89a] shadow-[0_0_10px_rgba(255,210,63,.45)]' : 'border-white/15 bg-white/[.05] text-white/70 hover:bg-white/10'}`}
                     >
                       <span aria-hidden="true">{style.icon}</span>
-                      {style.name}
+                      {trId(language, style.name)}
                     </button>
                   );
                 })}
               </div>
             </div>
             <div className="mt-3">
-              <div className="font-title text-[10px] tracking-[.14em] text-white/55">✦ STAGE SPESIAL</div>
-              <p className="mt-1 text-[10px] text-white/55">Pilih langsung mode bonus SGA.</p>
+              <div className="font-title text-[10px] tracking-[.14em] text-white/55">{tr(language, '✦ STAGE SPESIAL')}</div>
+              <p className="mt-1 text-[10px] text-white/55">{tr(language, 'Pilih langsung mode bonus SGA.')}</p>
               <div className="mt-1.5 grid grid-cols-3 gap-1.5">
                 <button type="button" onClick={() => onSpecial('boulder')} className="press rounded-xl border border-cyan-300/30 bg-cyan-400/10 px-1 py-2 text-center">
-                  <DiamondSprite size={22} /><span className="mt-1 block font-title text-[9px] text-cyan-100">BATU · 3</span>
+                  <DiamondSprite size={22} /><span className="mt-1 block font-title text-[9px] text-cyan-100">{tr(language, 'BATU · 3')}</span>
                 </button>
                 <button type="button" onClick={() => onSpecial('bonus')} className="press rounded-xl border border-amber-300/30 bg-amber-400/10 px-1 py-2 text-center">
-                  <CoinSprite size={22} /><span className="mt-1 block font-title text-[9px] text-amber-100">BONUS · 4</span>
+                  <CoinSprite size={22} /><span className="mt-1 block font-title text-[9px] text-amber-100">{tr(language, 'BONUS · 4')}</span>
                 </button>
                 <button type="button" onClick={() => onSpecial('treasure')} className="press rounded-xl border border-pink-300/30 bg-pink-400/10 px-1 py-2 text-center">
-                  <span className="block text-xl leading-none">🧰</span><span className="mt-1 block font-title text-[9px] text-pink-100">HARTA · 6</span>
+                  <span className="block text-xl leading-none">🧰</span><span className="mt-1 block font-title text-[9px] text-pink-100">{tr(language, 'HARTA · 6')}</span>
                 </button>
               </div>
             </div>
-            <button type="button" onClick={onReplayIntro} className="press mt-3 flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border-2 border-[#ef4444]/50 bg-[#3a0d12]/80 font-title text-[12px] text-[#fecaca]">▶ PUTAR ULANG INTRO SANS STUDIO</button>
+            <button type="button" onClick={onReplayIntro} className="press mt-3 flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border-2 border-[#ef4444]/50 bg-[#3a0d12]/80 font-title text-[12px] text-[#fecaca]">{tr(language, '▶ PUTAR ULANG INTRO SANS STUDIO')}</button>
           </div>
         )}
 
@@ -224,9 +225,9 @@ export default function SgaSettingsPanel({
           </div>
         </section>
 
-        <button type="button" onClick={onPrivacy} className="press mt-2 flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border-2 border-white/20 bg-white/5 font-title text-[12px] text-white/80">🔒 KEBIJAKAN PRIVASI</button>
+        <button type="button" onClick={onPrivacy} className="press mt-2 flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border-2 border-white/20 bg-white/5 font-title text-[12px] text-white/80">{tr(language, '🔒 KEBIJAKAN PRIVASI')}</button>
 
-        <button type="button" onClick={onClose} className="press shine font-title mt-2 h-11 w-full rounded-xl border-2 border-[#0e5a26] bg-gradient-to-b from-[#7cf06f] via-[#3fcf4a] to-[#1f9b37] text-[16px] text-white shadow-[0_4px_0_#0e5a26]" style={{ textShadow: '0 2px 0 #0e5a26' }}>SIMPAN & KEMBALI</button>
+        <button type="button" onClick={onClose} className="press shine font-title mt-2 h-11 w-full rounded-xl border-2 border-[#0e5a26] bg-gradient-to-b from-[#7cf06f] via-[#3fcf4a] to-[#1f9b37] text-[16px] text-white shadow-[0_4px_0_#0e5a26]" style={{ textShadow: '0 2px 0 #0e5a26' }}>{tr(language, 'SIMPAN & KEMBALI')}</button>
       </section>
     </div>
   );

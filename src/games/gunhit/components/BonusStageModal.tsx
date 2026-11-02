@@ -1,3 +1,5 @@
+import { tr } from '../../../i18n/strings';
+import { useLanguage } from '../../../i18n/useLanguage';
 import { useState } from 'react';
 import { sfx } from '../game/audio';
 import { sfx4 } from '../game/sfx4';
@@ -11,14 +13,15 @@ export const BonusStageModal = ({
   currentStage,
   onClaimAndContinue,
 }: BonusStageModalProps) => {
+  const [language] = useLanguage();
   const [chestOpened, setChestOpened] = useState<number[]>([]);
   const [rewards, setRewards] = useState<number[]>([]);
   const [totalWon, setTotalWon] = useState(0);
 
   const CHESTS = [
-    { id: 0, title: 'PETI EMAS I', base: 10 },
-    { id: 1, title: 'PETI BERLIAN II', base: 25 },
-    { id: 2, title: 'PETI SULTAN III', base: 50 },
+    { id: 0, title: tr(language, 'PETI EMAS I'), base: 10 },
+    { id: 1, title: tr(language, 'PETI BERLIAN II'), base: 25 },
+    { id: 2, title: tr(language, 'PETI SULTAN III'), base: 50 },
   ];
 
   const handleOpenChest = (id: number) => {
@@ -50,7 +53,7 @@ export const BonusStageModal = ({
           BONUS REWARD STAGE!
         </div>
         <div className="text-xs text-white/70 mt-1">
-          Selamat! Kamu berhasil menaklukkan Stage {currentStage}! Buka Peti Hadiah Keberuntunganmu:
+          {tr(language, 'Selamat! Kamu berhasil menaklukkan Stage')} {currentStage}{tr(language, '! Buka Peti Hadiah Keberuntunganmu:')}
         </div>
       </div>
 
@@ -82,7 +85,7 @@ export const BonusStageModal = ({
                   </div>
                 ) : (
                   <button className="rounded-xl bg-yellow-400 px-2.5 py-1 text-[11px] font-black text-black shadow">
-                    BUKA!
+                    {tr(language, 'BUKA!')}
                   </button>
                 )}
               </div>
@@ -95,7 +98,7 @@ export const BonusStageModal = ({
       <div className="w-full flex flex-col items-center gap-3">
         {totalWon > 0 && (
           <div className="text-xl font-black text-emerald-400 drop-shadow">
-            TOTAL DIDAPAT: +{totalWon} KOIN 💰
+            {tr(language, 'TOTAL DIDAPAT: +')}{totalWon}{tr(language, ' KOIN 💰')}
           </div>
         )}
 
@@ -103,7 +106,7 @@ export const BonusStageModal = ({
           onClick={handleFinish}
           className="pulse-btn w-full max-w-xs rounded-2xl border-b-4 border-emerald-800 bg-gradient-to-b from-emerald-400 via-green-500 to-emerald-600 py-4 text-xl font-black text-black shadow-[0_10px_25px_rgba(34,197,94,0.4)] transition active:translate-y-1 active:border-b-0"
         >
-          {chestOpened.length > 0 ? 'KLAIM & LANJUT ▶' : 'LEWATI & LANJUT ▶'}
+          {chestOpened.length > 0 ? tr(language, 'KLAIM & LANJUT ▶') : tr(language, 'LEWATI & LANJUT ▶')}
         </button>
       </div>
     </div>

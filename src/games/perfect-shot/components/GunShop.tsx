@@ -6,6 +6,7 @@ import { WeaponPose } from "../shop/WeaponArt";
 import {
   filterWeapons,
 
+  RARITY_LABEL,
   RARITY_LEVEL,
   RARITY_STYLE,
   TABS,
@@ -156,7 +157,7 @@ export function GunShop({ leaving, coins, gems, onBack }: Props) {
     if (isLocked(w)) {
       sfx.lockedBuzz();
       setShake({ id: w.id, n: Date.now() });
-      showToast(`${w.name} terkunci — butuh 500 diamond`, "bad", "lock");
+      showToast(`${w.name} is locked — needs 500 diamonds`, "bad", "lock");
       return;
     }
     if (w.id === selected) {
@@ -177,7 +178,7 @@ export function GunShop({ leaving, coins, gems, onBack }: Props) {
         e.preventDefault();
         sfx.denied();
         setPillShake(Date.now());
-        showToast(`Diamond tidak cukup (${gems}/500)`, "bad", "gem");
+        showToast(`Not enough diamonds (${gems}/500)`, "bad", "gem");
       } else if (e.code === "ArrowDown") gridRef.current?.scrollBy({ top: 130, behavior: "smooth" });
       else if (e.code === "ArrowUp") gridRef.current?.scrollBy({ top: -130, behavior: "smooth" });
     };
@@ -317,7 +318,7 @@ export function GunShop({ leaving, coins, gems, onBack }: Props) {
                   onPointerEnter={hoverSfx}
                   onClick={() => {
                     sfx.confirm();
-                    showToast("Toko diamond segera hadir!", "ok", "cart");
+                    showToast("Diamond store coming soon!", "ok", "cart");
                   }}
                   className="press grid h-8 w-8 place-items-center rounded-full bg-gradient-to-b from-[#7c6cff] to-[#4b3bd6] text-lg leading-none shadow-[0_2px_0_#2a1f8a]"
                 >
@@ -385,7 +386,7 @@ export function GunShop({ leaving, coins, gems, onBack }: Props) {
               </span>
               <span className={`font-title flex items-center gap-1 rounded-md px-2 py-[4px] text-[12px] leading-none ${rs.chip}`}>
                 <Ico name={RARITY_ICON[sel.rarity]} className="h-3.5 w-3.5" color="currentColor" />
-                {sel.rarity}
+                {RARITY_LABEL[sel.rarity]}
               </span>
             </div>
           </div>
@@ -419,7 +420,7 @@ export function GunShop({ leaving, coins, gems, onBack }: Props) {
                   <span className={active ? "bounce-soft" : ""}>
                     <Ico name={t.icon} className="h-[20px] w-[20px]" color={active ? "#ffffff" : TAB_COL[t.id]} />
                   </span>
-                  <span className={`font-title text-[10px] leading-none ${active ? "text-white" : "text-white/70"}`}>{t.id}</span>
+                  <span className={`font-title text-[10px] leading-none ${active ? "text-white" : "text-white/70"}`}>{RARITY_LABEL[t.id]}</span>
                 </button>
               </div>
             );
@@ -431,7 +432,7 @@ export function GunShop({ leaving, coins, gems, onBack }: Props) {
           <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-b-2xl rounded-tr-2xl border-2 border-[#7e22ce]/80 bg-gradient-to-b from-[#1e1338] to-[#140c27] shadow-[0_10px_30px_rgba(0,0,0,.5)]">
             <div className="flex items-center justify-between bg-gradient-to-r from-[#5b21b6] to-[#3b1a6e] px-3 py-2">
               <span key={tab} className="a in-left font-title text-[15px] text-white" style={v({ "--d": "0ms", "--dur": "450ms" })}>
-                {tab === "ALL" ? "SEMUA SENJATA" : `SENJATA ${tab}`}
+                {tab === "ALL" ? "ALL WEAPONS" : `${RARITY_LABEL[tab]} WEAPONS`}
               </span>
               <span className="font-title rounded-lg bg-black/40 px-2 py-1 text-[11px] text-white/85">{list.length} ITEM</span>
             </div>
@@ -466,7 +467,7 @@ export function GunShop({ leaving, coins, gems, onBack }: Props) {
                         <div className="absolute left-1.5 top-1.5 flex items-center gap-1">
                           <span className={`font-title flex items-center gap-1 rounded-md px-1.5 py-[3px] text-[11px] leading-none shadow-[0_2px_0_rgba(0,0,0,.35)] ${r.chip}`}>
                             <Ico name={RARITY_ICON[w.rarity]} className="h-3 w-3" color="currentColor" />
-                            {w.rarity}
+                            {RARITY_LABEL[w.rarity]}
                           </span>
                         </div>
                         {w.star && (
@@ -514,7 +515,7 @@ export function GunShop({ leaving, coins, gems, onBack }: Props) {
             )}
             {sc.atTop && sc.can && entered && (
               <div className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center">
-                <span className="qm-arrow font-title rounded-full bg-black/60 px-3 py-1 text-[11px] text-white/85">⌄ GESER KE BAWAH</span>
+                <span className="qm-arrow font-title rounded-full bg-black/60 px-3 py-1 text-[11px] text-white/85">⌄ SCROLL DOWN</span>
               </div>
             )}
             {sc.far && (

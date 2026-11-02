@@ -6,7 +6,7 @@ import { HeadArt } from "../play/HeadArt";
 import { Avatar } from "../rank/Avatar";
 
 /** each block of 5 stages is an island ("PULAU") */
-const ISLANDS = ["Kelapa", "Karang", "Mutiara", "Lumba-lumba", "Pasir Emas", "Penyu", "Bintang Laut", "Ombak", "Camar", "Mercusuar", "Bajak Laut", "Pelangi", "Kerang", "Gurita", "Paus", "Matahari", "Laguna", "Pirus", "Harta Karun", "Gerhana"];
+const ISLANDS = ["Coconut", "Coral", "Pearl", "Dolphin", "Golden Sand", "Sea Turtle", "Starfish", "Waves", "Seagull", "Lighthouse", "Pirate", "Rainbow", "Shell", "Octopus", "Whale", "Sun", "Lagoon", "Turquoise", "Treasure", "Eclipse"];
 import { useGame } from "../game/store";
 import { NewTarget } from "../play/TargetArt2";
 import { memo } from "react";
@@ -258,7 +258,7 @@ export function QuestMap({ leaving, onBack, onPlay, progress, unlockAll = false 
     if (s === "locked") {
       sfx.lockedBuzz();
       setShake({ n: b.n, k: Date.now() });
-      setToast({ text: `Selesaikan Stage ${cur} dulu!`, n: Date.now(), icon: "lock" });
+      setToast({ text: `Clear Stage ${cur} first!`, n: Date.now(), icon: "lock" });
       return;
     }
     sfx.pillarTap(b.n, pan);
@@ -439,7 +439,7 @@ export function QuestMap({ leaving, onBack, onPlay, progress, unlockAll = false 
           <button
             onClick={onBack}
             onPointerEnter={hoverSfx}
-            aria-label="Kembali"
+            aria-label="Back"
             data-gloss="off"
             className="press grid h-12 w-12 place-items-center rounded-full border-[3px] border-[#0f5c24] bg-gradient-to-b from-[#6ee76e] to-[#16a34a] shadow-[0_4px_0_#0f5c24,inset_0_2px_0_rgba(255,255,255,.45)]"
           >
@@ -454,7 +454,7 @@ export function QuestMap({ leaving, onBack, onPlay, progress, unlockAll = false 
       <div className="absolute inset-x-0 bottom-0 z-[4001] px-3 pb-3">
         <div {...A("in-up", QUEST_IN.bottom, "out-down", QUEST_OUT.bottom)}>
           <div className="flex items-center gap-2.5 rounded-[22px] border-2 border-white/15 bg-gradient-to-b from-black/55 to-black/75 p-2 shadow-[0_8px_24px_rgba(0,0,0,.45)] backdrop-blur-md">
-            <button data-gloss="off" onPointerEnter={hoverSfx} onClick={recenter} title="Ke stage sekarang" className="press grid h-12 w-12 shrink-0 place-items-center rounded-2xl border-2 border-white/15 bg-white/10 text-2xl">
+            <button data-gloss="off" onPointerEnter={hoverSfx} onClick={recenter} title="Jump to the current stage" className="press grid h-12 w-12 shrink-0 place-items-center rounded-2xl border-2 border-white/15 bg-white/10 text-2xl">
               <Ico name="pin" className="h-7 w-7" color="#fb7185" />
             </button>
             <div key={selected} className="a in-left min-w-0 flex-1" style={v({ "--d": "0ms", "--dur": "380ms" })}>
@@ -493,7 +493,7 @@ export function QuestMap({ leaving, onBack, onPlay, progress, unlockAll = false 
               <span className="relative" style={{ textShadow: `0 2px 0 ${selState === "done" ? "#7c2d12" : "#0e5a26"}` }}>
                 <span className="flex items-center justify-center gap-1.5">
                   {selState === "done" && !selOpenNotPlayed ? <Ico name="replay" className="h-5 w-5" color="#ffffff" /> : null}
-                  {selState === "done" && !selOpenNotPlayed ? "ULANG" : "MAIN"}
+                  {selState === "done" && !selOpenNotPlayed ? "REPLAY" : "PLAY"}
                   {selState === "done" && !selOpenNotPlayed ? null : <Ico name="play" className="h-5 w-5" color="#ffffff" />}
                 </span>
               </span>
@@ -684,7 +684,7 @@ function Pillar({ b, s, x, y, z, state, stars, theme, selected, hlKey, shakeKey,
                     <div {...avatar} style={{ ...avatar!.style, width: "100%", height: "100%" }}>
                       <div className="float relative h-full w-full">
                         <Avatar seed={999} me bg={false} className="h-full w-full drop-shadow-[0_6px_5px_rgba(0,40,70,.35)]" />
-                        <span className="qm-arrow font-title absolute -top-4 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-white px-2 py-[1px] text-[10px] leading-tight text-[#0f5c24] shadow">KAMU</span>
+                        <span className="qm-arrow font-title absolute -top-4 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-white px-2 py-[1px] text-[10px] leading-tight text-[#0f5c24] shadow">YOU</span>
                       </div>
                     </div>
                   </div>

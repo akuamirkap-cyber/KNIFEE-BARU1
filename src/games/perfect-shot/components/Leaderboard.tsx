@@ -102,7 +102,7 @@ export function Leaderboard({ leaving, onBack, stats }: Props) {
   };
   const share = async () => {
     sfx.confirm();
-    const text = `Aku peringkat #${myRank} di ${stats ? "Gun Hit SGA" : "Perfect Shot"} — sudah sampai Stage ${stats?.stage ?? g.stage} dengan ${fmt(me.score)} poin! 🎯`;
+    const text = `I am #${myRank} on ${stats ? "Gun Hit SGA" : "Perfect Shot"} — already at Stage ${stats?.stage ?? g.stage} with ${fmt(me.score)} points! 🎯`;
     try {
       if (navigator.share) await navigator.share({ title: "Perfect Shot", text });
       else {
@@ -133,13 +133,13 @@ export function Leaderboard({ leaving, onBack, stats }: Props) {
         {/* top bar */}
         <div className="relative z-10 flex items-center gap-2">
           <div {...A("in-down", LB_IN.top(0), "out-up")}>
-            <button onClick={onBack} onPointerEnter={hoverSfx} aria-label="Kembali" className="press grid h-12 w-12 place-items-center rounded-2xl border-2 border-[#7a4b00] bg-gradient-to-b from-[#ffe27a] to-[#f59e0b] shadow-[0_4px_0_#7a4b00,inset_0_2px_0_rgba(255,255,255,.5)]">
+            <button onClick={onBack} onPointerEnter={hoverSfx} aria-label="Back" className="press grid h-12 w-12 place-items-center rounded-2xl border-2 border-[#7a4b00] bg-gradient-to-b from-[#ffe27a] to-[#f59e0b] shadow-[0_4px_0_#7a4b00,inset_0_2px_0_rgba(255,255,255,.5)]">
               <Ico name="right" className="h-7 w-7 rotate-180" color="#ffffff" />
             </button>
           </div>
           <div {...A("in-down", LB_IN.top(1), "out-up", "flex-1 text-center")}>
             <div className="font-title text-[26px] leading-none text-white" style={STROKE("#140d3a", 2)}>
-              {view === "congrats" ? "PERINGKAT" : "LEADERBOARD"}
+              {view === "congrats" ? "RANKING" : "LEADERBOARD"}
             </div>
           </div>
           <div {...A("in-down", LB_IN.top(2), "out-up")}>
@@ -208,7 +208,7 @@ export function Leaderboard({ leaving, onBack, stats }: Props) {
 
             <div {...A("in-up", LB_IN.score, "out-fade", "relative mt-2 text-center")}>
               <div className="font-title text-[24px] leading-none text-white" style={STROKE("#140d3a", 1.5)}>
-                PERINGKAT #{myRank}
+                RANK #{myRank}
               </div>
               <div className="mt-2 flex justify-center">
                 <Score n={me.score} size={26} />
@@ -222,17 +222,17 @@ export function Leaderboard({ leaving, onBack, stats }: Props) {
                   <div className="flex items-center justify-between">
                     <span className="font-title text-[16px] text-white">#{myRank}</span>
                     <span className="font-ui text-[15px] text-white/80">
-                      <b className="font-title text-[#fde68a]">{fmt(ahead.score - me.score)}</b> poin lagi
+                      <b className="font-title text-[#fde68a]">{fmt(ahead.score - me.score)}</b> points to go
                     </span>
                     <span className="font-title text-[16px] text-[#fde68a]">#{myRank - 1}</span>
                   </div>
                   <div className="mt-1.5 h-3.5 overflow-hidden rounded-full border border-black/40 bg-black/50">
                     <div className="h-full rounded-full bg-gradient-to-r from-[#22c55e] via-[#a3e635] to-[#fde047] transition-[width] duration-1000" style={{ width: `${prog * 100}%` }} />
                   </div>
-                  <div className="font-ui mt-1.5 text-center text-[14px] text-white/70">untuk menyalip <b className="text-white">{ahead.name}</b></div>
+                  <div className="font-ui mt-1.5 text-center text-[14px] text-white/70">to overtake <b className="text-white">{ahead.name}</b></div>
                 </>
               ) : (
-                <div className="font-title text-center text-[16px] text-[#fde68a]">KAMU JUARA! PERTAHANKAN!</div>
+                <div className="font-title text-center text-[16px] text-[#fde68a]">YOU'RE THE CHAMPION! KEEP IT UP!</div>
               )}
             </div>
 
@@ -240,8 +240,8 @@ export function Leaderboard({ leaving, onBack, stats }: Props) {
             <div {...A("in-up", LB_IN.btn(0), "out-fade", "relative mt-2.5 grid w-full grid-cols-3 gap-2")}>
               {[
                 { ic: "map" as const, l: "STAGE", v: String(g.stage), c: "#86efac" },
-                { ic: "star" as const, l: "BINTANG", v: String(Object.values(g.stars).reduce((a, b) => a + b, 0)), c: "#fde047" },
-                { ic: "coinbag" as const, l: "KOIN", v: fmt(g.coins), c: "#fbbf24" },
+                { ic: "star" as const, l: "STARS", v: String(Object.values(g.stars).reduce((a, b) => a + b, 0)), c: "#fde047" },
+                { ic: "coinbag" as const, l: "COINS", v: fmt(g.coins), c: "#fbbf24" },
               ].map((x) => (
                 <div key={x.l} className="flex flex-col items-center rounded-2xl border border-white/10 bg-white/[.06] py-2">
                   <Ico name={x.ic} className="h-6 w-6" color={x.c} />
@@ -256,7 +256,7 @@ export function Leaderboard({ leaving, onBack, stats }: Props) {
                 <StripeBtn label="LEADERBOARD" icon="trophy" onClick={goBoard} c={["#c084fc", "#7e22ce"]} edge="#3b0764" />
               </div>
               <div {...A("go-btn-in", LB_IN.btn(1))}>
-                <StripeBtn label="BAGIKAN" icon="right" onClick={share} c={["#67e8f9", "#0891b2"]} edge="#0e5a70" />
+                <StripeBtn label="SHARE" icon="right" onClick={share} c={["#67e8f9", "#0891b2"]} edge="#0e5a70" />
               </div>
             </div>
           </div>
@@ -276,7 +276,7 @@ export function Leaderboard({ leaving, onBack, stats }: Props) {
                   }}
                   className={`font-title h-10 rounded-xl text-[15px] transition-all ${scope === s ? "bg-gradient-to-b from-[#ffe27a] to-[#f59e0b] text-[#4a2a00] shadow-[0_3px_0_#9a5b00]" : "text-white/70"}`}
                 >
-                  {s === "global" ? "GLOBAL" : "MINGGU INI"}
+                  {s === "global" ? "GLOBAL" : "THIS WEEK"}
                 </button>
               ))}
             </div>
@@ -298,7 +298,7 @@ export function Leaderboard({ leaving, onBack, stats }: Props) {
                         style={{ borderColor: c.ring, background: `linear-gradient(180deg, ${c.card[0]}, ${c.card[1]})`, boxShadow: `0 0 22px ${c.glow}, 0 10px 18px rgba(0,0,0,.45)` }}
                       >
                         <ProfileCircle seed={p.seed} me={p.me} country={p.country} size={big ? 84 : 66} ring={`linear-gradient(180deg, #ffffff, ${c.ring})`} />
-                        <div className={`font-title mt-2 w-full truncate text-center leading-none text-white ${big ? "text-[16px]" : "text-[14px]"}`}>{p.me ? "KAMU" : p.name.split(" ")[0].toUpperCase()}</div>
+                        <div className={`font-title mt-2 w-full truncate text-center leading-none text-white ${big ? "text-[16px]" : "text-[14px]"}`}>{p.me ? "YOU" : p.name.split(" ")[0].toUpperCase()}</div>
                         <div className="mt-1 flex items-center gap-1">
                           <Flag c={p.country} className="h-[10px] w-[15px]" />
                           <span className="font-title text-[10px] leading-none text-white/70">{COUNTRY_CODE[p.country]}</span>
@@ -349,7 +349,7 @@ function Row({ p, rank, sticky = false }: { p: Player; rank: number; sticky?: bo
       <ProfileCircle seed={p.seed} me={p.me} country={p.country} size={48} ring={p.me ? "linear-gradient(180deg,#fff3b0,#f5b82e)" : "linear-gradient(180deg,#ffffff,#8b7cf6)"} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
-          <span className={`font-title truncate text-[16px] leading-tight ${p.me ? "text-[#fde68a]" : "text-white"}`}>{p.me ? "KAMU" : p.name}</span>
+          <span className={`font-title truncate text-[16px] leading-tight ${p.me ? "text-[#fde68a]" : "text-white"}`}>{p.me ? "YOU" : p.name}</span>
         </div>
         <div className="mt-1 flex items-center gap-2">
           <span className="font-title shrink-0 rounded-md bg-black/30 px-1.5 py-[2px] text-[10px] leading-none text-white/80">{COUNTRY_CODE[p.country]}</span>

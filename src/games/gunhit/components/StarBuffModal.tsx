@@ -1,4 +1,6 @@
 import type { BuffKind } from '../game/Game';
+import { tr } from '../../../i18n/strings';
+import { useLanguage } from '../../../i18n/useLanguage';
 
 interface StarBuffModalProps {
   treasure?: boolean;
@@ -20,13 +22,14 @@ const TREASURE_OPTIONS: typeof OPTIONS = [
 ];
 
 export default function StarBuffModal({ onPick, treasure = false }: StarBuffModalProps) {
+  const [language] = useLanguage();
   return (
     <div className="pop-in absolute inset-0 z-40 flex flex-col items-center justify-center bg-black/75 px-5 backdrop-blur-sm">
       <div className="mb-1 text-6xl drop-shadow-[0_0_20px_#facc15]">★</div>
       <div className="text-2xl font-black tracking-wide text-amber-300 drop-shadow-[0_3px_0_rgba(0,0,0,0.8)] font-game">
-        {treasure ? 'BONUS HARTA KARUN!' : 'POWER UP!'}
+        {tr(language, treasure ? 'BONUS HARTA KARUN!' : 'POWER UP!')}
       </div>
-      <div className="mb-5 text-xs text-white/70">Waktu berhenti sejenak. Pilih satu kekuatan:</div>
+      <div className="mb-5 text-xs text-white/70">{tr(language, 'Waktu berhenti sejenak. Pilih satu kekuatan:')}</div>
 
       <div className="flex w-full max-w-xs flex-col gap-2.5">
         {(treasure ? TREASURE_OPTIONS : OPTIONS).map((o, i) => (
@@ -46,9 +49,9 @@ export default function StarBuffModal({ onPick, treasure = false }: StarBuffModa
             </div>
             <div className="flex-1">
               <div className="text-lg font-black leading-none font-game" style={{ color: o.color }}>
-                {o.title}
+                {tr(language, o.title)}
               </div>
-              <div className="mt-0.5 text-[11px] text-white/70">{o.sub}</div>
+              <div className="mt-0.5 text-[11px] text-white/70">{tr(language, o.sub)}</div>
             </div>
             <div className="text-xl text-white/40">▶</div>
           </button>

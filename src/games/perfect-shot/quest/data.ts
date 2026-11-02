@@ -7,8 +7,8 @@ export type StageBase = { n: number; type: StageType; name: string; icon: FlatNa
 
 export const TOTAL = 100;
 
-const NORMALS: string[] = ["Gentong", "Perisai", "Goblin", "Bijih Besi", "Semangka", "Tong Kayu", "Botol", "Labu", "Kristal", "Bom", "Apel", "Tengkorak"];
-const SPECIALS: [string, FlatName][] = [["Bintang", "star"], ["Harta", "coinbag"], ["Pelangi", "sparkle"], ["Kilat", "bolt"]];
+const NORMALS: string[] = ["Jar", "Shield", "Goblin", "Iron Ore", "Watermelon", "Wood Barrel", "Bottle", "Pumpkin", "Crystal", "Bomb", "Apple", "Skull"];
+const SPECIALS: [string, FlatName][] = [["Star", "star"], ["Treasure", "coinbag"], ["Rainbow", "sparkle"], ["Lightning", "bolt"]];
 /** boss rotation (stage 5, 10, 15 …) — each boss has its own head medallion */
 export const BOSS_ORDER: HeadKind[] = [
   "pirate", "jester", "dragon", "skeleton", "tiki", "viking", "oni", "robot", "alien", "vampire", // stage 5 … 50

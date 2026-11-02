@@ -24,9 +24,9 @@ const CLASSIC: Record<GroupId, [string, string]> = {
 const SIZE: Record<GroupId, number> = { gun: 1, buttons: 0.7, nav: 0.45, title: 0.5 };
 
 const MODES: { id: Mode; label: string; icon: string; desc: string }[] = [
-  { id: "fixed", label: "FIXED", icon: "📌", desc: "Selalu memakai gaya yang dipilih" },
-  { id: "auto", label: "AUTO", icon: "🎲", desc: "Gaya berganti otomatis setiap masuk menu" },
-  { id: "mix", label: "MIX", icon: "🎨", desc: "Tiap elemen dapat gaya acak yang berbeda" },
+  { id: "fixed", label: "FIXED", icon: "📌", desc: "Always uses the selected style" },
+  { id: "auto", label: "AUTO", icon: "🎲", desc: "Picks a new style every time the menu opens" },
+  { id: "mix", label: "MIX", icon: "🎨", desc: "Every element gets its own random style" },
 ];
 
 type Props = {
@@ -122,8 +122,8 @@ export function AnimStudio({ closing, plan, onClose, onPreviewIn, onPreviewCycle
           {/* quick actions */}
           <div className="grid grid-cols-3 gap-2">
             {[
-              { l: "AUTO SEMUA", i: "🎲", f: () => animStore.setAllMode("auto"), c: "from-[#8b5cf6] to-[#6d28d9] shadow-[0_4px_0_#4c1d95]" },
-              { l: "MIX SEMUA", i: "🎨", f: () => animStore.setAllMode("mix"), c: "from-[#f472b6] to-[#db2777] shadow-[0_4px_0_#9d174d]" },
+              { l: "ALL AUTO", i: "🎲", f: () => animStore.setAllMode("auto"), c: "from-[#8b5cf6] to-[#6d28d9] shadow-[0_4px_0_#4c1d95]" },
+              { l: "ALL MIX", i: "🎨", f: () => animStore.setAllMode("mix"), c: "from-[#f472b6] to-[#db2777] shadow-[0_4px_0_#9d174d]" },
               { l: "RESET", i: "↺", f: () => animStore.reset(), c: "from-[#64748b] to-[#475569] shadow-[0_4px_0_#1e293b]" },
             ].map((b) => (
               <button

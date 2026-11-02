@@ -1,3 +1,5 @@
+import { tr } from '../../../i18n/strings';
+import { useLanguage } from '../../../i18n/useLanguage';
 import { useRef, useState } from 'react';
 import { WEAPONS } from '../game/weapons';
 import {
@@ -25,6 +27,7 @@ export default function DefaultExportModal({ onClose, onJumpToWeapon, onChanged 
   const markedOrChangedCount = getWeaponDefaultExportEntries('marked_or_changed', WEAPONS).length;
   const allCount = getWeaponDefaultExportEntries('all', WEAPONS).length;
 
+  const [language] = useLanguage();
   const [scope, setScope] = useState<DefaultExportScope>(() =>
     markedOrChangedCount > 0 ? 'marked_or_changed' : 'all',
   );
@@ -112,26 +115,26 @@ export default function DefaultExportModal({ onClose, onJumpToWeapon, onChanged 
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Export data default senjata massal"
+      aria-label={tr(language, 'Export data default senjata massal')}
       className="absolute inset-0 z-50 flex flex-col bg-gradient-to-b from-[#1d103d] via-[#100826] to-[#070312] px-3.5 py-3 text-white font-game select-none"
     >
       {/* Header */}
       <div className="flex items-start justify-between gap-2">
         <div>
           <div className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-300">
-            ★ EXPORT DEFAULT MASSAL
+            {tr(language, '★ EXPORT DEFAULT MASSAL')}
           </div>
           <h2 className="mt-0.5 text-lg font-black leading-tight text-white">
-            DATA PILIHAN DEFAULT SENJATA
+            {tr(language, 'DATA PILIHAN DEFAULT SENJATA')}
           </h2>
           <p className="mt-0.5 text-[10.5px] leading-snug text-indigo-200">
-            Copy data di bawah lalu paste langsung ke chat agar diset permanen sebagai default game.
+            {tr(language, 'Copy data di bawah lalu paste langsung ke chat agar diset permanen sebagai default game.')}
           </p>
         </div>
         <button
           type="button"
           onClick={onClose}
-          aria-label="Tutup export default"
+          aria-label={tr(language, 'Tutup export default')}
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/30 bg-white/10 text-xl font-bold hover:bg-white/20"
         >
           ×
@@ -143,15 +146,15 @@ export default function DefaultExportModal({ onClose, onJumpToWeapon, onChanged 
         {([
           {
             id: 'marked_or_changed' as const,
-            label: `DIUBAH / ★ (${markedOrChangedCount})`,
+            label: `${tr(language, 'DIUBAH / ★ (')}${markedOrChangedCount})`,
           },
           {
             id: 'marked_only' as const,
-            label: `HANYA ★ (${markedCount})`,
+            label: `${tr(language, 'HANYA ★ (')}${markedCount})`,
           },
           {
             id: 'all' as const,
-            label: `SEMUA (${allCount})`,
+            label: `${tr(language, 'SEMUA (')}${allCount})`,
           },
         ]).map((tab) => {
           const active = scope === tab.id;
@@ -178,13 +181,13 @@ export default function DefaultExportModal({ onClose, onJumpToWeapon, onChanged 
       {/* Quick Visual Summary List */}
       <div className="mt-2 max-h-[145px] shrink-0 overflow-y-auto rounded-xl border border-purple-400/30 bg-[#150b2e] p-2">
         <div className="mb-1 flex items-center justify-between text-[9.5px] font-black uppercase tracking-wider text-purple-200">
-          <span>RINGKASAN ({entries.length} SENJATA)</span>
-          <span>KLIK BARIS UNTUK EDIT</span>
+          <span>{tr(language, 'RINGKASAN (')}{entries.length}{tr(language, ' SENJATA)')}</span>
+          <span>{tr(language, 'KLIK BARIS UNTUK EDIT')}</span>
         </div>
         {entries.length === 0 ? (
           <div className="py-3 text-center text-[10.5px] text-indigo-200/80">
-            Belum ada senjata di kategori ini. Buka <b>PILIH DESAIN</b> pada senjata lalu klik{' '}
-            <b>★ TANDAI SEBAGAI DEFAULT</b>, atau pilih tab <b>SEMUA ({allCount})</b>.
+            {tr(language, 'Belum ada senjata di kategori ini. Buka')} <b>{tr(language, 'PILIH DESAIN')}</b> {tr(language, 'pada senjata lalu klik')}{' '}
+            <b>★ {tr(language, 'TANDAI SEBAGAI DEFAULT')}</b>{tr(language, ', atau pilih tab')} <b>{tr(language, 'SEMUA (')}{allCount})</b>.
           </div>
         ) : (
           <div className="flex flex-col gap-1">
@@ -203,7 +206,7 @@ export default function DefaultExportModal({ onClose, onJumpToWeapon, onChanged 
                   </span>
                 </span>
                 <span className="shrink-0 font-mono text-[9.5px] font-bold text-cyan-200">
-                  Skin #{item.skinNo}/{item.skinTotal} · Efek #{item.effectNo}/{item.effectTotal}
+                  {tr(language, 'Skin #')}{item.skinNo}/{item.skinTotal} · {tr(language, 'Efek #')}{item.effectNo}/{item.effectTotal}
                 </span>
               </button>
             ))}
@@ -214,15 +217,15 @@ export default function DefaultExportModal({ onClose, onJumpToWeapon, onChanged 
       {/* Raw Copy-Paste Textarea */}
       <div className="mt-2 flex min-h-0 flex-1 flex-col">
         <div className="mb-1 flex items-center justify-between text-[9.5px] font-black uppercase tracking-wider text-amber-200">
-          <span>DATA EXPORT (SIAP COPAS KE CHAT):</span>
+          <span>{tr(language, 'DATA EXPORT (SIAP COPAS KE CHAT):')}</span>
           <span className="font-mono text-[9px] text-indigo-300">
-            {exportText.split('\n').length} baris
+            {exportText.split('\n').length}{tr(language, ' baris')}
           </span>
         </div>
         <textarea
           ref={textRef}
           readOnly
-          aria-label="Teks data export default senjata"
+          aria-label={tr(language, 'Teks data export default senjata')}
           value={exportText}
           onFocus={(e) => e.currentTarget.select()}
           className="min-h-[120px] w-full flex-1 resize-none rounded-xl border border-cyan-300/35 bg-[#090418] p-2.5 font-mono text-[10px] leading-relaxed text-emerald-200 focus:border-amber-300 focus:outline-none select-text"
@@ -241,8 +244,8 @@ export default function DefaultExportModal({ onClose, onJumpToWeapon, onChanged 
           }`}
         >
           {copied
-            ? '✓ BERHASIL DICOPY! TINGGAL PASTE KE CHAT'
-            : `📋 COPY DATA MASSAL (${entries.length} SENJATA)`}
+            ? tr(language, '✓ BERHASIL DICOPY! TINGGAL PASTE KE CHAT')
+            : `${tr(language, '📋 COPY DATA MASSAL (')}${entries.length})`}
         </button>
 
         <div className="grid grid-cols-3 gap-1.5">
@@ -251,14 +254,14 @@ export default function DefaultExportModal({ onClose, onJumpToWeapon, onChanged 
             onClick={handleDownloadTxt}
             className="rounded-xl border border-cyan-300/40 bg-cyan-950/60 py-1.5 text-[9.5px] font-black text-cyan-100 transition hover:bg-cyan-900/70 active:scale-95"
           >
-            ⬇ UNDUH .TXT
+            {tr(language, '⬇ UNDUH .TXT')}
           </button>
           <button
             type="button"
             onClick={handleMarkAllChanged}
             className="rounded-xl border border-amber-300/40 bg-amber-950/50 py-1.5 text-[9.5px] font-black text-amber-200 transition hover:bg-amber-900/60 active:scale-95"
           >
-            ★ TANDAI DIUBAH
+            {tr(language, '★ TANDAI DIUBAH')}
           </button>
           <button
             type="button"
@@ -269,7 +272,7 @@ export default function DefaultExportModal({ onClose, onJumpToWeapon, onChanged 
                 : 'border-rose-400/35 bg-rose-950/50 text-rose-200 hover:bg-rose-900/60'
             }`}
           >
-            {confirmReset ? 'YAKIN RESET?' : '↺ RESET TANDA'}
+            {confirmReset ? tr(language, 'YAKIN RESET?') : tr(language, '↺ RESET TANDA')}
           </button>
         </div>
       </div>

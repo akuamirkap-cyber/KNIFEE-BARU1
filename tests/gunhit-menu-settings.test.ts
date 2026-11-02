@@ -108,7 +108,7 @@ test('SGA uses Perfect Shot UI, page-transition and ambient audio with a separat
   assert.match(app, /studioSfx\.lbEnter\(0, LB_IN\)/);
   assert.match(app, /beginMenuPageTransition\('cloud', 'QUEST', menuPageLead\(\)/);
   assert.match(app, /beginMenuPageTransition\('wrap', 'ACHIEVEMENT', menuPageLead\(\)/);
-  assert.match(app, /beginMenuPageTransition\('podium', 'PERINGKAT', menuPageLead\(\)/);
+  assert.match(app, /beginMenuPageTransition\('podium', tr\(language, 'PERINGKAT'\), menuPageLead\(\)/);
   assert.match(app, /studioSfx\.cloudClose\(0, t\.rate\)/);
   assert.match(app, /studioSfx\.menuEnter\(0, nextPlan\)/);
   assert.match(app, /phase=\{menuPageTransition\.phase\}/);
@@ -150,7 +150,7 @@ test('SGA uses Perfect Shot quest-map geometry while keeping SGA stage progress 
   assert.match(app, /beginMenuPageTransition\('cloud', 'QUEST', QUEST_OUT\.total/);
   assert.match(app, /studioSfx\.menuEnter\(0, nextPlan\)/);
   assert.match(app, /beginMenuPageTransition\('wrap', 'ACHIEVEMENT', ACH_OUT\.total/);
-  assert.match(app, /beginMenuPageTransition\('podium', 'PERINGKAT', LB_OUT\.total/);
+  assert.match(app, /beginMenuPageTransition\('podium', tr\(language, 'PERINGKAT'\), LB_OUT\.total/);
   assert.match(app, /opening \? menuPageLead\(\) : SHOP_OUT\.total/);
   assert.match(app, /const MENU_EXIT_K = 0\.78/);
   assert.match(app, /planStyleMotion\(menuPlan\.title\[i\], TL\.letter\(i\), \['in-letter', 'out-letter'\]/);

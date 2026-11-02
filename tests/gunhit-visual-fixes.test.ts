@@ -124,7 +124,7 @@ test('every coin and diamond in Game A is the Diamond Breaker art', () => {
   // No emoji stand-ins left wherever a coin or diamond is used as an icon.
   const settings = read('src/games/gunhit/components/SgaSettingsPanel.tsx');
   const picker = read('src/games/gunhit/components/WeaponPicker.tsx');
-  assert.match(settings, /<CoinSprite size=\{22\} \/><span className="mt-1 block font-title text-\[9px\] text-amber-100">BONUS · 4<\/span>/);
+  assert.match(settings, /<CoinSprite size=\{22\} \/><span className="mt-1 block font-title text-\[9px\] text-amber-100">\{tr\(language, 'BONUS · 4'\)\}<\/span>/);
   assert.doesNotMatch(settings, /🪙/);
   assert.match(picker, /if \(id === 'coingun'\) return <CoinSprite size=\{size\}/);
   assert.match(picker, /if \(id === 'diamond'\) return <DiamondSprite size=\{size\}/);

@@ -10,17 +10,17 @@ export type HeadKind = "pirate" | "jester" | "dragon" | "skeleton" | "tiki" | "v
 export const HEAD_KINDS: HeadKind[] = ["pirate", "jester", "dragon", "skeleton", "tiki", "viking", "oni", "robot", "alien", "vampire", "sun"];
 
 export const HEAD_INFO: Record<HeadKind, { name: string; icon: FlatName; desc: string; bg: [string, string] }> = {
-  pirate: { name: "Kapten Bajak Laut", icon: "skull", desc: "Penguasa tujuh samudra. Satu mata ditutup, tapi bidikannya tidak pernah meleset.", bg: ["#3a9be0", "#0b2e4f"] },
-  jester: { name: "Jester Gila", icon: "party", desc: "Badut istana yang tertawa sambil berputar tak menentu. Jangan tertipu senyumnya!", bg: ["#d946ef", "#3b0764"] },
-  dragon: { name: "Kepala Naga", icon: "dragon", desc: "Naga api bertanduk dengan sisik sekeras baja. Berputar cepat lalu berbalik arah.", bg: ["#ff9a4d", "#7c1d06"] },
-  skeleton: { name: "Raja Tengkorak", icon: "skull", desc: "Bangkit dari kuburan tua. Matanya menyala merah di kegelapan.", bg: ["#4ade80", "#06180d"] },
-  tiki: { name: "Tiki Totem", icon: "golem", desc: "Totem kayu kuno penjaga pulau tropis. Seringainya membawa kutukan.", bg: ["#2dd4bf", "#064e3b"] },
-  viking: { name: "Viking Utara", icon: "knight", desc: "Pejuang dari negeri es dengan helm bertanduk dan janggut kepang.", bg: ["#93d8fd", "#0c4a6e"] },
-  oni: { name: "Topeng Oni", icon: "demon", desc: "Iblis merah bertaring dari legenda timur. Amarahnya membuat roda berputar gila.", bg: ["#4b5563", "#030712"] },
-  robot: { name: "Robot X", icon: "robot", desc: "Mesin tempur dengan visor LED. Polanya presisi seperti dihitung komputer.", bg: ["#22d3ee", "#082f49"] },
-  alien: { name: "Alien Zorg", icon: "alien", desc: "Pengunjung dari galaksi jauh dengan mata hitam raksasa yang menghipnotis.", bg: ["#a855f7", "#140628"] },
-  vampire: { name: "Count Vampir", icon: "vampire", desc: "Bangsawan malam berkerah tinggi. Hanya muncul saat bulan merah.", bg: ["#dc2626", "#1a0505"] },
-  sun: { name: "Raja Matahari", icon: "sun", desc: "Penguasa tata surya — Bulan, Mars, Jupiter & Pluto tunduk padanya. Lidah apinya membakar segalanya!", bg: ["#7c1d06", "#1c0503"] },
+  pirate: { name: "Pirate Captain", icon: "skull", desc: "Ruler of the seven seas. One eye is shut, but his aim never misses.", bg: ["#3a9be0", "#0b2e4f"] },
+  jester: { name: "Mad Jester", icon: "party", desc: "A court clown who laughs while spinning wildly. Do not trust that smile!", bg: ["#d946ef", "#3b0764"] },
+  dragon: { name: "Dragon Head", icon: "dragon", desc: "A horned fire dragon with steel-hard scales. It spins fast, then reverses direction.", bg: ["#ff9a4d", "#7c1d06"] },
+  skeleton: { name: "Skull King", icon: "skull", desc: "Risen from an old graveyard. His eyes burn red in the dark.", bg: ["#4ade80", "#06180d"] },
+  tiki: { name: "Tiki Totem", icon: "golem", desc: "An ancient wooden totem guarding a tropical island. Its grin carries a curse.", bg: ["#2dd4bf", "#064e3b"] },
+  viking: { name: "Northern Viking", icon: "knight", desc: "A warrior from the land of ice with a horned helmet and braided beard.", bg: ["#93d8fd", "#0c4a6e"] },
+  oni: { name: "Oni Mask", icon: "demon", desc: "A fanged red demon from eastern legend. His rage sends the wheel spinning madly.", bg: ["#4b5563", "#030712"] },
+  robot: { name: "Robot X", icon: "robot", desc: "A combat machine with an LED visor. Its pattern is precise, as if computed.", bg: ["#22d3ee", "#082f49"] },
+  alien: { name: "Alien Zorg", icon: "alien", desc: "A visitor from a distant galaxy with huge hypnotic black eyes.", bg: ["#a855f7", "#140628"] },
+  vampire: { name: "Count Vampire", icon: "vampire", desc: "A high-collared noble of the night. He only appears under a red moon.", bg: ["#dc2626", "#1a0505"] },
+  sun: { name: "Sun King", icon: "sun", desc: "Ruler of the solar system — Moon, Mars, Jupiter and Pluto all bow to him. His fiery tongue burns everything!", bg: ["#7c1d06", "#1c0503"] },
 };
 
 /* ---------------- helpers ---------------- */

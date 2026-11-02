@@ -35,7 +35,7 @@ test('every boss is named after the head it actually wears', () => {
 test('stage 5 is the pirate, not the dark knight', () => {
   assert.equal(bossHeadFor(5), 'pirate');
   const name = makeLevel(5).name;
-  assert.equal(name, 'KAPTEN BAJAK LAUT');
+  assert.equal(name, 'PIRATE CAPTAIN');
   assert.ok(!/KNIGHT|DARK/i.test(name), 'no knight name over a pirate head');
 });
 
@@ -52,7 +52,7 @@ test('the QUEST dialog names the boss after the art too', () => {
   // The map keeps its own theme label, but the boss line the player reads has
   // to come from the head Perfect Shot puts on that stage.
   assert.match(map, /const artBoss = kind === 'boss' \? headInfoFor\(selectedLevel\)\?\.name \?\? '' : '';/);
-  assert.match(map, /`BOSS \$\{artBoss \|\| theme\.label\}/);
+  assert.match(map, /`\$\{tr\(language, 'BOSS '\)\}\$\{trId\(language, artBoss \|\| theme\.label\)\}/);
   assert.doesNotMatch(map, /Nama boss peta/);
 });
 

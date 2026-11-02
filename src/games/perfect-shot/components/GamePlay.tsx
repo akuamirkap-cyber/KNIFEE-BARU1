@@ -794,13 +794,13 @@ export function GamePlay({ leaving, stage, seamless = false, handoff = false, en
                 ...STROKE(result.fail ? "#5f0f0f" : "#7c2d12", 2),
               }}
             >
-              {result.fail ? "MELESET!" : L.boss ? "BOSS KALAH!" : "STAGE CLEAR!"}
+              {result.fail ? "MISSED!" : L.boss ? "BOSS DOWN!" : "STAGE CLEAR!"}
             </div>
             <div className="rounded-[26px] border-[3px] border-[#0b1f5c] bg-gradient-to-b from-[#2f6fe0] to-[#1d4ed8] px-5 pt-10 pb-5 shadow-[0_8px_0_#0b1f5c,0_20px_40px_rgba(0,0,0,.5)]">
               {result.fail ? (
                 <div className="flex flex-col items-center text-center">
                   <span className="text-6xl">💥</span>
-                  <p className="font-ui mt-2 text-base text-white">Peluru menabrak peluru lain!</p>
+                  <p className="font-ui mt-2 text-base text-white">Your bullet hit another bullet!</p>
                   <p className="font-title mt-1 text-sm text-white/70">
                     Sisa target: {ammo + 1} peluru
                   </p>
@@ -836,7 +836,7 @@ export function GamePlay({ leaving, stage, seamless = false, handoff = false, en
                 >
                   <span className="absolute inset-x-3 top-1 h-[38%] rounded-xl bg-white/25" />
                   <span className="relative" style={{ textShadow: "0 2px 0 #0e5a26" }}>
-                    {result.fail ? "↻ ULANG" : "LANJUT ▶"}
+                    {result.fail ? "↻ RETRY" : "CONTINUE ▶"}
                   </span>
                 </button>
               </div>
@@ -858,8 +858,8 @@ export function GamePlay({ leaving, stage, seamless = false, handoff = false, en
               Level {n} · {L.name}
             </div>
             {[
-              { l: "▶ LANJUT", c: "from-[#7cf06f] to-[#1f9b37] border-[#0e5a26]", f: () => (sfx.confirm(), setPaused(false)) },
-              { l: "↻ ULANG", c: "from-[#ffd25a] to-[#ea580c] border-[#7c2d12]", f: retry },
+              { l: "▶ CONTINUE", c: "from-[#7cf06f] to-[#1f9b37] border-[#0e5a26]", f: () => (sfx.confirm(), setPaused(false)) },
+              { l: "↻ RETRY", c: "from-[#ffd25a] to-[#ea580c] border-[#7c2d12]", f: retry },
             ].map((b) => (
               <button key={b.l} onPointerEnter={hoverSfx} onClick={b.f} className={`press font-title h-12 rounded-2xl border-2 bg-gradient-to-b text-lg text-white shadow-[0_4px_0_rgba(0,0,0,.45)] ${b.c}`}>
                 {b.l}

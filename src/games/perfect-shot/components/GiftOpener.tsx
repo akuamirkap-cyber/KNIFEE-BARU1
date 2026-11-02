@@ -29,7 +29,7 @@ const BANNER: [string, string, string][] = [
   ["#f3e8ff", "#9333ea", "#3b0764"],
   ["#fff6b0", "#f59e0b", "#7c2d12"],
 ];
-const HEAD = ["HADIAH!", "LANGKA!", "EPIK!", "LEGENDARIS!"];
+const HEAD = ["REWARD!", "RARE!", "EPIC!", "LEGENDARY!"];
 
 function CoinPile({ big = false }: { big?: boolean }) {
   const spots = big
@@ -157,7 +157,7 @@ export function GiftOpener({ mode, tone = "gold", title, reward, fx, fy, closing
             </div>
             <div key={taps} className="gf-title-pop mt-3">
               <div className="go-tap-hint font-title text-[30px] leading-none text-white" style={STROKE("#4c0519", 2.5)}>
-                {phase === "opening" ? "MEMBUKA..." : taps === 0 ? "TAP UNTUK BUKA!" : taps === 1 ? "LAGI!" : "SEKALI LAGI!!"}
+                {phase === "opening" ? "OPENING..." : taps === 0 ? "TAP TO OPEN!" : taps === 1 ? "AGAIN!" : "ONE MORE!!"}
               </div>
             </div>
             <div className="mt-3 flex gap-2.5">
@@ -276,13 +276,13 @@ export function GiftOpener({ mode, tone = "gold", title, reward, fx, fy, closing
                   +{shown}
                 </div>
                 <div className="font-title mt-1 rounded-full bg-black/45 px-4 py-1 text-[15px] tracking-[0.2em] text-white">
-                  {reward.kind === "coin" ? (reward.amount >= 500 ? "JACKPOT KOIN" : "KOIN") : "DIAMOND"}
+                  {reward.kind === "coin" ? (reward.amount >= 500 ? "COIN JACKPOT" : "COINS") : "DIAMONDS"}
                 </div>
               </div>
             ) : (
               <div className="go-amount -mt-1 flex flex-col items-center" style={{ animationDelay: "700ms" }}>
                 <div className="font-title text-[28px] leading-none" style={{ color: reward.dup ? "#ffd23f" : "#86efac", ...STROKE(reward.dup ? "#7c2d12" : "#14532d", 2.5) }}>
-                  {reward.dup ? "DUPLIKAT!" : "SENJATA BARU!"}
+                  {reward.dup ? "DUPLICATE!" : "NEW WEAPON!"}
                 </div>
                 {reward.dup && (
                   <div className="font-title mt-1.5 flex items-center gap-1.5 rounded-full bg-black/45 px-3 py-1 text-[15px] text-white">

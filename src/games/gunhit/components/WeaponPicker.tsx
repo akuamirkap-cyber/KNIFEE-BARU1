@@ -1,3 +1,5 @@
+import { rarityLabel, tr } from '../../../i18n/strings';
+import { useLanguage } from '../../../i18n/useLanguage';
 import { useEffect, useRef } from 'react';
 import { drawGun, drawProjectile } from '../game/weaponDraw';
 import { getWeapon, RARITY_COLOR, WEAPONS, type WeaponId } from '../game/weapons';
@@ -116,6 +118,7 @@ export default function WeaponPicker({
   value,
   onChange,
 }: WeaponPickerProps) {
+  const [language] = useLanguage();
   const idx = WEAPONS.findIndex((w) => w.id === value);
   const w = WEAPONS[idx];
   const go = (d: number) => onChange(WEAPONS[(idx + d + WEAPONS.length) % WEAPONS.length].id);
@@ -161,7 +164,7 @@ export default function WeaponPicker({
             style={{ background: rc }}
           >
             {w.rarity === 'LEGENDARIS' ? '★ ' : ''}
-            {w.rarity}
+            {rarityLabel(w.rarity, language)}
           </div>
           <div className="text-lg font-bold leading-tight drop-shadow font-game text-white flex items-center justify-center gap-1.5">
             <CurrencyGlyph id={w.id} size={20} />
@@ -223,14 +226,14 @@ export default function WeaponPicker({
       <div className="mb-2 flex items-center justify-between rounded-xl bg-white/5 px-2.5 py-1.5 border border-white/10 text-[10px]">
         <span className="text-emerald-400 font-bold flex items-center gap-1">
           <span>✓</span>
-          <span>TERBUKA & SIAP PAKAI</span>
+          <span>{tr(language, 'TERBUKA & SIAP PAKAI')}</span>
         </span>
-        <span className="text-amber-300 font-bold">{w.perk}</span>
+        <span className="text-amber-300 font-bold">{tr(language, w.perk)}</span>
       </div>
 
       {/* Stats */}
       <div className="relative space-y-1">
-        <Bar label="KECEPATAN" v={w.stats.speed} color={accent} />
+        <Bar label={tr(language, 'KECEPATAN')} v={w.stats.speed} color={accent} />
         <Bar label="RATE" v={w.stats.rate} color={accent} />
         <Bar label="POWER" v={w.stats.power} color={accent} />
       </div>
@@ -241,9 +244,9 @@ export default function WeaponPicker({
           className="shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold text-black"
           style={{ background: accent }}
         >
-          {w.perk}
+          {tr(language, w.perk)}
         </span>
-        <span className="truncate">{w.desc}</span>
+        <span className="truncate">{tr(language, w.desc)}</span>
       </div>
     </div>
   );

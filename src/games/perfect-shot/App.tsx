@@ -72,9 +72,9 @@ const LABELS: Record<Screen, string> = {
   play: "LOADING",
   quest: "QUEST",
   gun: "ARMORY",
-  ranks: "PERINGKAT",
+  ranks: "RANKING",
   ready: "ACHIEVEMENT",
-  setting: "SETTING",
+  setting: "SETTINGS",
 };
 
 function planSummary(p: Plan): string | null {

@@ -118,20 +118,20 @@ const LIST: [string, Kind][][] = [
 const RARS: Rarity[] = ["UMUM", "RARE", "EPIC", "LEGEND", "SKIN", "BOSS"];
 
 const STAT: Record<Kind, string> = {
-  pistol: "SEIMBANG",
-  rifle: "CEPAT",
+  pistol: "BALANCED",
+  rifle: "FAST",
   smg: "BRUTAL",
-  crossbow: "SENYAP",
-  plasma: "ENERGI",
-  laser: "PRESISI",
-  shotgun: "KUAT",
-  sniper: "JARAK JAUH",
-  revolver: "MEMATIKAN",
-  minigun: "GANAS",
-  bazooka: "LEDAKAN",
-  blaster: "UNIK",
+  crossbow: "SILENT",
+  plasma: "ENERGY",
+  laser: "PRECISION",
+  shotgun: "POWERFUL",
+  sniper: "LONG RANGE",
+  revolver: "DEADLY",
+  minigun: "SAVAGE",
+  bazooka: "EXPLOSIVE",
+  blaster: "UNIQUE",
   launcher: "AREA",
-  flamer: "MEMBAKAR",
+  flamer: "BURNING",
 };
 
 // locked set: Plasma Gun, Laser Beam, 2 more RARE, 4 EPIC, 8 LEGEND, all 8 BOSS → 24 locked / 66 open
@@ -180,6 +180,11 @@ export const OPEN_COUNT = WEAPONS.filter((w) => !w.locked).length;
 export const STAR_COUNT = WEAPONS.filter((w) => w.star).length;
 
 export type TabId = "ALL" | Rarity;
+/** English label for every tab/rarity id. The ids stay unchanged: saves and
+ *  filters key off them, only the visible word changes. */
+export const RARITY_LABEL: Record<TabId, string> = {
+  ALL: "ALL", UMUM: "COMMON", RARE: "RARE", EPIC: "EPIC", LEGEND: "LEGEND", SKIN: "SKIN", BOSS: "BOSS",
+};
 export const TABS: { id: TabId; icon: FlatName }[] = [
   { id: "ALL", icon: "crown" },
   { id: "UMUM", icon: "shield" },

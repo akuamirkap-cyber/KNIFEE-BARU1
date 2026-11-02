@@ -76,7 +76,7 @@ test('SGA menu shares Perfect Shot choreography while keeping SGA art, backgroun
   assert.match(menu, /<GameIcon name="quest"/);
   assert.match(menu, /<NavFrame set=\{perfectShotIconSet\}/);
   assert.match(menu, /font-ui relative flex h-\[54px\]/);
-  assert.match(menu, /role="button" tabIndex=\{0\} aria-label="Buka koleksi senjata" onClick=\{\(\) => startArsenalTransition\(true\)\} onKeyDown/);
+  assert.match(menu, /role=\"button\" tabIndex=\{0\} aria-label=\{tr\(language, 'Buka koleksi senjata'\)\} onClick=\{\(\) => startArsenalTransition\(true\)\} onKeyDown/);
   assert.doesNotMatch(css, /\.gunhit-menu \.menu-motion \{ animation: none !important/);
   const psMotionCss = readFileSync('src/games/perfect-shot/index.css', 'utf8');
   assert.match(psMotionCss, /\.st-in-combo \{ animation-name: stInCombo/);

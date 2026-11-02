@@ -30,24 +30,24 @@ export const subscribeMenuPlan = (listener: (plan: Plan) => void) => {
 };
 
 export const STYLES: { id: StyleId; name: string; icon: string; desc: string }[] = [
-  { id: "classic", name: "Classic", icon: "⭐", desc: "Animasi original" },
-  { id: "combo", name: "Preset 1", icon: "🎯", desc: "Drop Up → Vortex Spin ↻ → Pop Blast (3 detik)" },
-  { id: "pop", name: "Pop Blast", icon: "💥", desc: "Meledak dari titik + gelombang kejut" },
-  { id: "rise", name: "Drop Up", icon: "🚀", desc: "Melesat dari bawah, squash & stretch" },
-  { id: "fall", name: "Drop Fall", icon: "☄️", desc: "Jatuh dari langit & memantul" },
-  { id: "storm", name: "Slide Storm", icon: "🌪️", desc: "Menyapu dari samping dengan motion blur" },
-  { id: "spin", name: "Vortex Spin", icon: "🌀", desc: "Berputar dari pusaran" },
-  { id: "flip", name: "Flip 3D", icon: "🃏", desc: "Membalik seperti kartu" },
-  { id: "jelly", name: "Jelly Bounce", icon: "🍮", desc: "Kenyal elastis" },
-  { id: "glitch", name: "Glitch Warp", icon: "👾", desc: "Distorsi digital" },
+  { id: "classic", name: "Classic", icon: "⭐", desc: "The original animation" },
+  { id: "combo", name: "Preset 1", icon: "🎯", desc: "Drop Up → Vortex Spin ↻ → Pop Blast (3 s)" },
+  { id: "pop", name: "Pop Blast", icon: "💥", desc: "Blasts out of a point + shockwave" },
+  { id: "rise", name: "Drop Up", icon: "🚀", desc: "Shoots up from below, squash & stretch" },
+  { id: "fall", name: "Drop Fall", icon: "☄️", desc: "Falls from the sky & bounces" },
+  { id: "storm", name: "Slide Storm", icon: "🌪️", desc: "Sweeps in from the side with motion blur" },
+  { id: "spin", name: "Vortex Spin", icon: "🌀", desc: "Spins out of a vortex" },
+  { id: "flip", name: "Flip 3D", icon: "🃏", desc: "Flips over like a card" },
+  { id: "jelly", name: "Jelly Bounce", icon: "🍮", desc: "Wobbly elastic bounce" },
+  { id: "glitch", name: "Glitch Warp", icon: "👾", desc: "Digital distortion" },
 ];
 export const STYLE_MAP = Object.fromEntries(STYLES.map((s) => [s.id, s])) as Record<StyleId, (typeof STYLES)[number]>;
 
 export const GROUPS: { id: GroupId; name: string; icon: string; count: number }[] = [
-  { id: "gun", name: "Visual Senjata", icon: "🔫", count: 1 },
-  { id: "buttons", name: "Tombol Utama", icon: "🎮", count: 2 },
-  { id: "nav", name: "Tombol Menu Bawah", icon: "📱", count: 4 },
-  { id: "title", name: "Logo Judul", icon: "🔠", count: 11 },
+  { id: "gun", name: "Weapon", icon: "🔫", count: 1 },
+  { id: "buttons", name: "Main Buttons", icon: "🎮", count: 2 },
+  { id: "nav", name: "Bottom Nav", icon: "📱", count: 4 },
+  { id: "title", name: "Title Logo", icon: "🔠", count: 11 },
 ];
 
 export const SPEEDS = [0.5, 0.75, 1, 1.5, 2];

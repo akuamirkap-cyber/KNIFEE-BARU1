@@ -160,7 +160,7 @@ export function Achievement({ leaving, onBack, onGo }: Props) {
       const m = MILESTONES.find((x) => x.at === before + 1);
       if (m) {
         sfx.milestoneReady(0.05);
-        showToast(`Peti ${m.label} siap dibuka!`, "ok", "gift");
+        showToast(`${m.label} chest ready to open!`, "ok", "gift");
       }
     }, 950);
   };
@@ -185,13 +185,13 @@ export function Achievement({ leaving, onBack, onGo }: Props) {
   const tapChest = (m: Milestone, el: Element | null) => {
     if (g.chests.includes(m.at)) {
       sfx.tap();
-      showToast("Hadiah milestone ini sudah diambil", "ok", "check");
+      showToast("This milestone reward was already claimed", "ok", "check");
       return;
     }
     if (done < m.at) {
       sfx.lockedBuzz();
       setPoke({ at: m.at, n: Date.now() });
-      showToast(`Butuh ${m.at - done} achievement lagi`, "bad", "lock");
+      showToast(`${m.at - done} more achievements needed`, "bad", "lock");
       return;
     }
     const pool = WEAPONS.filter((w) => w.rarity === m.rarity);
@@ -199,23 +199,23 @@ export function Achievement({ leaving, onBack, onGo }: Props) {
     const w = (fresh.length ? fresh : pool)[Math.floor(Math.random() * (fresh.length ? fresh : pool).length)];
     const reward: GiftReward = { kind: "weapon", weapon: w, dup: !fresh.length, tier: RARITY_LEVEL[m.rarity] >= 3 ? 3 : RARITY_LEVEL[m.rarity] };
     sfx.confirm();
-    setOpener({ src: "chest", at: m.at, tone: m.tone, title: `PETI ${m.label} · ${m.at} ACHIEVEMENT`, reward, ...originOf(el), closing: false, n: Date.now() });
+    setOpener({ src: "chest", at: m.at, tone: m.tone, title: `${m.label} CHEST · ${m.at} ACHIEVEMENTS`, reward, ...originOf(el), closing: false, n: Date.now() });
   };
 
   const tapGift = (at: number, el: Element | null) => {
     if (g.giftStops.includes(at)) {
       sfx.tap();
-      showToast("Kado ini sudah dibuka", "ok", "check");
+      showToast("This gift was already opened", "ok", "check");
       return;
     }
     if (done < at) {
       sfx.lockedBuzz();
       setPoke({ at, n: Date.now() });
-      showToast(`Kado kejutan terbuka di ${at} achievement (${at - done} lagi)`, "bad", "gift");
+      showToast(`Surprise gift unlocks at ${at} achievements (${at - done} to go)`, "bad", "gift");
       return;
     }
     sfx.confirm();
-    setOpener({ src: "gift", at, title: `KADO KEJUTAN · ${at} ACHIEVEMENT`, reward: rollReward(g.owned), ...originOf(el), closing: false, n: Date.now() });
+    setOpener({ src: "gift", at, title: `SURPRISE GIFT · ${at} ACHIEVEMENTS`, reward: rollReward(g.owned), ...originOf(el), closing: false, n: Date.now() });
   };
 
   const takeOpener = (rect: DOMRect | null) => {
@@ -231,7 +231,7 @@ export function Achievement({ leaving, onBack, onGo }: Props) {
       if (op.src === "gift") window.setTimeout(() => game.addCoins(amt), 900);
       if (from) sfx.coinRain(spawn(from, "coin", Math.min(12, 5 + Math.round(amt / 60))));
       window.setTimeout(() => setBump((b) => ({ ...b, coin: Date.now() })), 900);
-      if (r.kind === "weapon") showToast(`${r.weapon.name} sudah dimiliki · +${DUP_COINS} koin`, "ok", "coinbag");
+      if (r.kind === "weapon") showToast(`${r.weapon.name} already owned · +${DUP_COINS} coins`, "ok", "coinbag");
     } else if (r.kind === "gem") {
       if (from) sfx.coinRain(spawn(from, "gem", Math.min(8, Math.max(3, r.amount))), true);
       window.setTimeout(() => {
@@ -241,7 +241,7 @@ export function Achievement({ leaving, onBack, onGo }: Props) {
     } else if (r.kind === "weapon") {
       if (op.src === "gift") game.grantWeapon(r.weapon.id);
       sfx.goldChord(0.05, 0.04);
-      showToast(`${r.weapon.name} terbuka di ARMORY!`, "ok", "unlock");
+      showToast(`${r.weapon.name} unlocked in the ARMORY!`, "ok", "unlock");
     }
     window.setTimeout(() => setOpener((o) => o && { ...o, closing: true }), 650);
     window.setTimeout(() => setOpener(null), 1000);
@@ -256,7 +256,7 @@ export function Achievement({ leaving, onBack, onGo }: Props) {
     setDayPoke(d);
     setDayPokeK(Date.now());
     const [h, m] = timer.split(":").map(Number);
-    showToast(`DAY ${d} terbuka dalam ${h + (d - 2) * 24}j ${m}m`, "bad", "lock");
+    showToast(`DAY ${d} unlocks in ${h + (d - 2) * 24}h ${m}m`, "bad", "lock");
   };
 
   const switchTab = (t: AchTab, i: number) => {
@@ -325,7 +325,7 @@ export function Achievement({ leaving, onBack, onGo }: Props) {
                 {done}
                 <span className="text-xs text-white/60">/{ACHS.length}</span>
               </span>
-              <span className="font-title text-[10px] tracking-widest text-white/75">SELESAI</span>
+              <span className="font-title text-[10px] tracking-widest text-white/75">DONE</span>
             </div>
           </div>
         </div>
@@ -348,7 +348,7 @@ export function Achievement({ leaving, onBack, onGo }: Props) {
               <button
                 onClick={onBack}
                 onPointerEnter={hoverSfx}
-                aria-label="Tutup"
+                aria-label="Close"
                 className="press grid h-10 w-10 place-items-center rounded-full border-[3px] border-[#7f1d1d] bg-gradient-to-b from-[#ff7a7a] to-[#dc2626] shadow-[0_4px_0_#7f1d1d,inset_0_2px_0_rgba(255,255,255,.45)]"
               >
                 <svg viewBox="0 0 24 24" className="h-5 w-5">
@@ -435,7 +435,7 @@ export function Achievement({ leaving, onBack, onGo }: Props) {
                           key={poke?.at === m.at ? poke.n : 0}
                           onPointerEnter={hoverSfx}
                           onClick={(e) => tapChest(m, e.currentTarget)}
-                          aria-label={`Peti ${m.at}`}
+                          aria-label={`Chest ${m.at}`}
                           className={`press relative block ${poke?.at === m.at ? "ac-poke" : ""}`}
                           style={{ width: size }}
                         >
@@ -476,7 +476,7 @@ export function Achievement({ leaving, onBack, onGo }: Props) {
                           key={poke?.at === at ? poke.n : 0}
                           onPointerEnter={hoverSfx}
                           onClick={(e) => tapGift(at, e.currentTarget)}
-                          aria-label={`Kado ${at}`}
+                          aria-label={`Gift ${at}`}
                           className={`press relative block w-[38px] ${poke?.at === at ? "ac-poke" : ""}`}
                         >
                           <div className={ready ? "tg-ready" : ""} style={{ filter: opened ? "grayscale(1) brightness(.75)" : done < at ? "saturate(.55) brightness(.85)" : undefined }}>
@@ -490,7 +490,7 @@ export function Achievement({ leaving, onBack, onGo }: Props) {
                   );
                 })}
               </div>
-              <p className="font-ui flex items-center justify-center gap-1 text-center text-[11px] text-white/70"><Ico name="gift" className="h-3.5 w-3.5" color="rgba(255,255,255,.7)" /> Kado kejutan di sepanjang jalur · Peti berisi senjata</p>
+              <p className="font-ui flex items-center justify-center gap-1 text-center text-[11px] text-white/70"><Ico name="gift" className="h-3.5 w-3.5" color="rgba(255,255,255,.7)" /> Surprise gifts along the track · Chests hold weapons</p>
             </div>
 
             {/* ---------- tabs ---------- */}
@@ -544,7 +544,7 @@ export function Achievement({ leaving, onBack, onGo }: Props) {
                         }}
                         onDone={() => {
                           sfx.tap(0, 800);
-                          showToast("Sudah diklaim", "ok", "check");
+                          showToast("Already claimed", "ok", "check");
                         }}
                       />
                     </div>
@@ -659,19 +659,19 @@ export function Achievement({ leaving, onBack, onGo }: Props) {
         <div className="absolute inset-0 z-50 grid place-items-center px-6" onClick={() => (sfx.back(), setInfo(false))}>
           <div className="studio-fade-in absolute inset-0 bg-black/60 backdrop-blur-[2px]" />
           <div className="gp-panel-in relative w-full max-w-[320px] rounded-[24px] border-[3px] border-[#0b1f5c] bg-gradient-to-b from-[#3b82f6] to-[#1d4ed8] p-4 text-white shadow-[0_8px_0_#0b1f5c,0_20px_40px_rgba(0,0,0,.5)]">
-            <div className="font-title mb-2 text-center text-xl" style={STROKE("#0b1f5c")}>CARA MAIN</div>
+            <div className="font-title mb-2 text-center text-xl" style={STROKE("#0b1f5c")}>HOW TO PLAY</div>
             {[
-              ["target", "Selesaikan misi DAILY & SKILL lalu tekan CLAIM untuk koin & diamond."],
-              ["gift", "Kado kejutan & peti di jalur milestone berisi koin, diamond, atau senjata."],
-              ["calendar", "Misi DAY berikutnya terbuka setiap reset harian."],
-              ["bolt", "Misi yang belum selesai: tekan GO untuk langsung ke Quest."],
+              ["target", "Finish DAILY & SKILL missions, then press CLAIM for coins & diamonds."],
+              ["gift", "Surprise gifts & chests on the milestone track hold coins, diamonds or weapons."],
+              ["calendar", "The next DAY mission unlocks on every daily reset."],
+              ["bolt", "Unfinished mission? Press GO to jump straight into Quest."],
             ].map(([ic, t]) => (
               <div key={t} className="mb-1.5 flex items-start gap-2 rounded-xl bg-black/20 p-2">
                 <IcoTile name={ic as FlatName} bg={["#60a5fa", "#1e40af"]} size={30} radius={9} />
                 <span className="font-ui text-[12.5px] leading-snug">{t}</span>
               </div>
             ))}
-            <div className="font-title mt-2 text-center text-[11px] text-white/70">Tap di mana saja untuk menutup</div>
+            <div className="font-title mt-2 text-center text-[11px] text-white/70">Tap anywhere to close</div>
           </div>
         </div>
       )}
@@ -782,7 +782,7 @@ function Row({
       </span>
       <span className="flex w-[92px] shrink-0 flex-col items-center justify-center gap-0.5 border-l-2 border-[#0f2a6b] bg-[#163275]">
         <span className="grid h-7 w-7 place-items-center rounded-full bg-gradient-to-b from-[#4ade80] to-[#16a34a] shadow-[0_2px_0_#14532d]"><Ico name="check" className="h-4 w-4" color="#ffffff" /></span>
-        <span className="font-title text-[10px] text-[#86efac]">SELESAI</span>
+        <span className="font-title text-[10px] text-[#86efac]">DONE</span>
       </span>
     </button>
   );

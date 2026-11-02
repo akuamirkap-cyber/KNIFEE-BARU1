@@ -1,3 +1,5 @@
+import { rarityLabel, tr, trId } from '../../../i18n/strings';
+import { useLanguage } from '../../../i18n/useLanguage';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Check, Crosshair, Crown, Download, Flame, Gem, LockKeyhole, MoreHorizontal, Palette, Shield, Skull, Star, Zap } from 'lucide-react';
 import CoinSprite from '../../shared/CoinSprite';
@@ -208,6 +210,7 @@ const GAME_B_BOSSES: CatalogBoss[] = BOSS_CATALOG.map((boss, index) => ({
 }));
 
 function BossAttackPreview({ boss }: { boss: CatalogBoss }) {
+  const [language] = useLanguage();
   const active = useSlideActive();
   const ref = useRef<HTMLCanvasElement>(null);
 
@@ -254,7 +257,7 @@ function BossAttackPreview({ boss }: { boss: CatalogBoss }) {
     return () => cancelAnimationFrame(raf);
   }, [active, boss.id, boss.accent]);
 
-  return <div className="relative h-24 w-40 shrink-0"><canvas ref={ref} aria-label={`Demo serangan ${boss.name}`} className="h-24 w-40 rounded-xl" /><div className="pointer-events-none absolute left-[10px] top-[31px] h-[34px] w-[34px]"><HeadArt kind={boss.head} className="h-full w-full" /></div></div>;
+  return <div className="relative h-24 w-40 shrink-0"><canvas ref={ref} aria-label={`${tr(language, 'Demo serangan ')}${trId(language, boss.name)}`} className="h-24 w-40 rounded-xl" /><div className="pointer-events-none absolute left-[10px] top-[31px] h-[34px] w-[34px]"><HeadArt kind={boss.head} className="h-full w-full" /></div></div>;
 }
 
 export default function Arsenal({
@@ -268,6 +271,7 @@ export default function Arsenal({
   onPick,
   onClose,
 }: ArsenalProps) {
+  const [language] = useLanguage();
   const [tab, setTab] = useState<Tab>('ALL');
   const [grid, setGrid] = useState<{ phase: 'in' | 'out'; key: number }>({ phase: 'in', key: 0 });
   const gridBusyRef = useRef(false);
@@ -391,7 +395,7 @@ export default function Arsenal({
       const allRare = WEAPONS.filter(w => w.rarity === 'LANGKA');
       const remaining = allRare.filter(w => !ownedRare.includes(w.id));
       if (remaining.length === 0) {
-        setBulkUnlockMessage('Semua senjata LANGKA sudah dibeli.');
+        setBulkUnlockMessage(tr(language, 'Semua senjata LANGKA sudah dibeli.'));
         return;
       }
       const purchased = onUnlockAll();
@@ -399,10 +403,10 @@ export default function Arsenal({
         setOwnedRare(ids => [...new Set([...ids, ...purchased])]);
         const stillLocked = remaining.length - purchased.length;
         setBulkUnlockMessage(stillLocked
-          ? `${purchased.length} dibeli · ${stillLocked} masih terkunci. Per senjata: 500 diamond.`
-          : `Semua ${allRare.length} senjata LANGKA terbuka · biaya 500 diamond per senjata.`);
+          ? `${purchased.length}${tr(language, ' dibeli · ')}${stillLocked}${tr(language, ' masih terkunci. Per senjata: 500 diamond.')}`
+          : `${tr(language, 'Semua ')}${allRare.length}${tr(language, ' senjata LANGKA terbuka · biaya 500 diamond per senjata.')}`);
       } else {
-        setBulkUnlockMessage('Diamond belum cukup. Senjata LANGKA berharga 500 diamond masing-masing.');
+        setBulkUnlockMessage(tr(language, 'Diamond belum cukup. Senjata LANGKA berharga 500 diamond masing-masing.'));
       }
     };
     window.addEventListener('keydown', handleSpace, true);
@@ -471,7 +475,7 @@ export default function Arsenal({
   };
 
   const RarityIcon = selectedGun.rarity === 'UMUM' ? Shield : selectedGun.rarity === 'LANGKA' ? Gem : selectedGun.rarity === 'EPIC' ? Zap : Flame;
-  const rarityLabel = (rarity: Weapon['rarity']) => rarity === 'LANGKA' ? 'RARE' : rarity === 'LEGENDARIS' ? 'LEGEND' : rarity;
+  const rarityName = (rarity: Weapon['rarity']) => rarityLabel(rarity, language);
   const tabItems = [
     { id: 'ALL' as Tab, label: 'ALL', Icon: Crown, color: '#fde68a' },
     { id: 'UMUM' as Tab, label: 'UMUM', Icon: Shield, color: '#cbd5e1' },
@@ -481,12 +485,12 @@ export default function Arsenal({
     { id: 'DESAIN' as Tab, label: 'SKIN', Icon: Palette, color: '#f9a8d4' },
     { id: 'BOSS' as Tab, label: 'BOSS', Icon: Skull, color: '#fca5a5' },
   ];
-  const panelTitle = tab === 'ALL' ? 'SEMUA SENJATA'
+  const panelTitle = tab === 'ALL' ? tr(language, 'SEMUA SENJATA')
     : tab === 'DESAIN' ? 'CUSTOM SKINS'
-    : tab === 'EPIC' ? 'SENJATA EPIC'
-    : tab === 'LANGKA' ? 'SENJATA RARE'
-    : tab === 'LEGENDARIS' ? 'SENJATA LEGEND'
-    : tab === 'UMUM' ? 'SENJATA UMUM'
+    : tab === 'EPIC' ? tr(language, 'SENJATA EPIC')
+    : tab === 'LANGKA' ? tr(language, 'SENJATA RARE')
+    : tab === 'LEGENDARIS' ? tr(language, 'SENJATA LEGEND')
+    : tab === 'UMUM' ? tr(language, 'SENJATA UMUM')
     : 'BOSS';
 
   return (
@@ -513,9 +517,9 @@ export default function Arsenal({
           <div className="font-arsenal-title truncate text-[22px] leading-none text-white [text-shadow:0_2px_0_#2a1650,0_0_14px_rgba(192,132,252,.55)]">ARMORY</div>
           <div className="mt-1 flex items-center gap-1 text-[10px] tracking-wide text-[#c4b5fd]">
             <Crosshair className="h-3.5 w-3.5 shrink-0" />
-            <span className="font-arsenal-title whitespace-nowrap">{unlockedCount}/{WEAPONS.length} TERBUKA</span>
+            <span className="font-arsenal-title whitespace-nowrap">{unlockedCount}/{WEAPONS.length}{tr(language, ' TERBUKA')}</span>
             <span className="h-1 w-10 overflow-hidden rounded-full bg-black/50"><span className="block h-full rounded-full bg-gradient-to-r from-[#c084fc] to-[#f0abfc]" style={{ width: `${unlockPercent}%` }} /></span>
-            <button type="button" aria-label="Alat Arsenal" title="Alat Arsenal" onClick={() => setShowTools((open) => !open)} className="press grid h-5 w-5 shrink-0 place-items-center rounded-full bg-white/10 text-white/75"><MoreHorizontal className="h-4 w-4" /></button>
+            <button type="button" aria-label={tr(language, 'Alat Arsenal')} title={tr(language, 'Alat Arsenal')} onClick={() => setShowTools((open) => !open)} className="press grid h-5 w-5 shrink-0 place-items-center rounded-full bg-white/10 text-white/75"><MoreHorizontal className="h-4 w-4" /></button>
           </div>
         </div>
         {/* Wallet: same coin/diamond sizes and type scale as the main menu HUD
@@ -527,14 +531,14 @@ export default function Arsenal({
           <span className="h-6 w-px bg-white/20" />
           <DiamondSprite size={24} />
           <span className="min-w-[26px] text-lg font-black tabular-nums leading-none">{diamonds}</span>
-          <button onClick={() => sfx.coin()} aria-label="Tambah mata uang" className="press grid h-9 w-9 place-items-center rounded-full bg-gradient-to-b from-[#7c6cff] to-[#4b3bd6] text-xl leading-none shadow-[0_2px_0_#2a1f8a]">+</button>
+          <button onClick={() => sfx.coin()} aria-label={tr(language, 'Tambah mata uang')} className="press grid h-9 w-9 place-items-center rounded-full bg-gradient-to-b from-[#7c6cff] to-[#4b3bd6] text-xl leading-none shadow-[0_2px_0_#2a1f8a]">+</button>
         </div>
         {showTools && <div className="a in-pop absolute right-0 top-[calc(100%+6px)] z-[90] w-48 rounded-xl border border-[#c084fc]/45 bg-[#1e1338]/95 p-2 shadow-[0_12px_28px_rgba(0,0,0,.65)] backdrop-blur">
-          <div className="font-arsenal-title mb-1 px-1 text-[9px] text-white/55">ARSENAL · TOOLS</div>
+          <div className="font-arsenal-title mb-1 px-1 text-[9px] text-white/55">{tr(language, 'ARSENAL · TOOLS')}</div>
           <button type="button" onClick={() => { handleRandomToggle(); setShowTools(false); }} className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-[10px] font-bold text-white/90 hover:bg-white/10">USE ALL <span className={`flex h-4 w-7 items-center rounded-full p-0.5 ${useRandom ? 'bg-fuchsia-600' : 'bg-white/20'}`}><span className={`h-3 w-3 rounded-full bg-white transition-transform ${useRandom ? 'translate-x-3' : ''}`} /></span></button>
           <a href={`${import.meta.env.BASE_URL}gun-hit-sga-weapons-svg.zip`} download="gun-hit-sga-weapons-svg.zip" target="_blank" rel="noopener" onClick={() => setShowTools(false)} className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-[10px] font-bold text-cyan-100 hover:bg-white/10"><Download className="h-3.5 w-3.5" /> SVG ZIP · {WEAPONS.length}</a>
           <button type="button" onClick={() => { setShowExportModal(true); setShowTools(false); sfx.unlock(); }} className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[10px] font-bold text-amber-100 hover:bg-white/10">↗ EXPORT{exportableCount > 0 ? ` · ${exportableCount}` : ''}</button>
-          <div className="mt-1 border-t border-white/10 px-2 pt-1.5 text-[8px] leading-snug text-white/45">SPACE · borong senjata RARE, 500 diamond per senjata</div>
+          <div className="mt-1 border-t border-white/10 px-2 pt-1.5 text-[8px] leading-snug text-white/45">{tr(language, 'SPACE · borong senjata RARE, 500 diamond per senjata')}</div>
         </div>}
       </header>
 
@@ -577,10 +581,10 @@ export default function Arsenal({
       <div className="relative z-20 mt-1.5 flex min-h-[42px] shrink-0 items-center justify-center gap-2">
         <div key={`plate-${selectedGunId}-${heroKey}`} {...A('in-slam', heroKey === 0 ? SHOP_IN.plate : { d: 260, dur: 460 }, 'out-up', SHOP_OUT.plate, 'flex max-w-[82%] items-center gap-2 rounded-2xl border-2 border-[#ffd23f]/30 bg-gradient-to-b from-[#2a1d48] to-[#140b26] px-4 py-2 shadow-[0_6px_16px_rgba(0,0,0,.5),inset_0_1px_0_rgba(255,255,255,.12)]')}>
           <span className="font-arsenal-title truncate text-[24px] leading-none text-[#ffd23f] [text-shadow:0_2px_0_#9c5a10,0_0_12px_rgba(255,210,63,.35)]">{selectedGun.name.toUpperCase()}</span>
-          <span className={`font-arsenal-title flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[12px] leading-none ${RARITY_CHIP[selectedGun.rarity]}`}><RarityIcon className="h-3 w-3" />{rarityLabel(selectedGun.rarity)}</span>
+          <span className={`font-arsenal-title flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[12px] leading-none ${RARITY_CHIP[selectedGun.rarity]}`}><RarityIcon className="h-3 w-3" />{rarityName(selectedGun.rarity)}</span>
         </div>
         {canChooseGunDesign(selectedGunId) && selectedPos && (
-          <button {...A('in-pop', SHOP_IN.pill, 'out-up', { d: 30, dur: 360 }, 'press relative grid h-12 w-12 shrink-0 place-items-center rounded-2xl border-2 border-[#c084fc]/60 bg-gradient-to-b from-[#7c3aed] to-[#4c1d95] text-white shadow-[0_4px_0_#2e1065]')} type="button" onClick={() => setEditingDesign(true)} aria-label={`Bandingkan desain ${selectedGun.name}`} title="Ganti desain dan efek"><Palette className="h-5 w-5" /><span className="font-arsenal-title absolute -bottom-1.5 -right-1.5 rounded-full bg-[#fbbf24] px-1.5 py-[1px] text-[8px] leading-none text-[#4a2a00] ring-2 ring-[#140b26]">{selectedPos.skinNo}/{selectedPos.skinTotal}</span></button>
+          <button {...A('in-pop', SHOP_IN.pill, 'out-up', { d: 30, dur: 360 }, 'press relative grid h-12 w-12 shrink-0 place-items-center rounded-2xl border-2 border-[#c084fc]/60 bg-gradient-to-b from-[#7c3aed] to-[#4c1d95] text-white shadow-[0_4px_0_#2e1065]')} type="button" onClick={() => setEditingDesign(true)} aria-label={`${tr(language, 'Bandingkan desain ')}${selectedGun.name}`} title={tr(language, 'Ganti desain dan efek')}><Palette className="h-5 w-5" /><span className="font-arsenal-title absolute -bottom-1.5 -right-1.5 rounded-full bg-[#fbbf24] px-1.5 py-[1px] text-[8px] leading-none text-[#4a2a00] ring-2 ring-[#140b26]">{selectedPos.skinNo}/{selectedPos.skinTotal}</span></button>
         )}
       </div>
 
@@ -589,12 +593,12 @@ export default function Arsenal({
           <button type="button" onClick={() => {
             if (diamonds < 500) { sfx.coin(); return; }
             if (onBuyRare(selectedGun.id)) setOwnedRare((ids) => ids.includes(selectedGun.id) ? ids : [...ids, selectedGun.id]);
-          }} className={`rounded-xl border px-3 py-1 text-[9px] font-black shadow-lg transition active:scale-95 ${diamonds >= 500 ? 'border-cyan-100 bg-gradient-to-r from-cyan-500 to-blue-600 text-white' : 'border-white/20 bg-slate-900/90 text-white/55'}`}><LockKeyhole className="mr-1 inline h-3 w-3" /> BELI · 500 <DiamondSprite size={14} className="inline align-middle" /> {diamonds < 500 ? `(kurang ${500 - diamonds})` : ''}</button>
+          }} className={`rounded-xl border px-3 py-1 text-[9px] font-black shadow-lg transition active:scale-95 ${diamonds >= 500 ? 'border-cyan-100 bg-gradient-to-r from-cyan-500 to-blue-600 text-white' : 'border-white/20 bg-slate-900/90 text-white/55'}`}><LockKeyhole className="mr-1 inline h-3 w-3" /> {tr(language, 'BELI · 500')} <DiamondSprite size={14} className="inline align-middle" /> {diamonds < 500 ? `(${tr(language, 'kurang ')}${500 - diamonds})` : ''}</button>
         </div>
       )}
 
       {/* The seven icon tabs mirror Perfect Shot; SGA's filtering and catalog stay intact. */}
-      <nav className="relative z-20 mt-3 grid shrink-0 grid-cols-7 gap-1" aria-label="Kategori senjata">
+      <nav className="relative z-20 mt-3 grid shrink-0 grid-cols-7 gap-1" aria-label={tr(language, 'Kategori senjata')}>
         {tabItems.map(({ id, label, Icon, color }, i) => {
           const active = tab === id;
           return <div key={id} {...A('in-pop', SHOP_IN.tab(i), 'out-down', SHOP_OUT.tab(i))}><button type="button" aria-pressed={active} onClick={() => changeTab(id)} className={`press flex w-full flex-col items-center gap-0.5 rounded-t-xl border-x-2 border-t-2 px-0.5 pt-1.5 pb-1 transition-all duration-300 ${active ? '-translate-y-1 border-[#f0abfc]/70 bg-gradient-to-b from-[#c026d3] to-[#7e22ce] shadow-[0_-4px_14px_rgba(192,38,211,.45)]' : 'border-white/10 bg-gradient-to-b from-[#3a2d5c] to-[#271c42]'}`}>
@@ -613,7 +617,7 @@ export default function Arsenal({
           {tab !== 'BOSS' && <span className="font-arsenal-title rounded-lg bg-black/40 px-2 py-1 text-[11px] text-white/85">{filteredWeapons.length} ITEM</span>}
         </div>
         {tab !== 'BOSS' ? (
-          <div ref={gridRef} aria-label="Senjata, gulir untuk melihat semua" className="arsenal-scroll-area relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-2.5 pb-5 pt-2.5">
+          <div ref={gridRef} aria-label={tr(language, 'Senjata, gulir untuk melihat semua')} className="arsenal-scroll-area relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-2.5 pb-5 pt-2.5">
             {bulkUnlockMessage && <div role="status" className="a in-down absolute inset-x-3 top-3 z-30 rounded-lg border border-emerald-300/40 bg-[#123324]/95 px-2 py-1.5 text-center text-[9px] font-bold text-emerald-100 shadow-lg">{bulkUnlockMessage}</div>}
             <div key={grid.key} className="grid grid-cols-3 items-start gap-2.5">
               {filteredWeapons.map((w, index) => {
@@ -624,8 +628,8 @@ export default function Arsenal({
                 return (
                   <button key={w.id} type="button" onClick={() => handleSelectGun(w)} aria-pressed={isSelected} className={`${ca.className} press relative block aspect-[0.9] w-full overflow-hidden rounded-2xl border-2 text-left transition-all ${isSelected ? 'sh-sel z-10 border-[#ffe066]' : 'border-black/40 hover:border-white/30'}`} style={{ ...ca.style, background: locked ? 'linear-gradient(180deg,#2a2f3a,#161a22)' : `radial-gradient(circle at 50% 42%, ${rc}3d, transparent 65%), linear-gradient(180deg,#555b67,#292c36)` }}>
                     <span className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/15 to-transparent" />
-                    <span className="font-arsenal-title absolute left-1.5 top-1.5 z-10 flex items-center gap-1 rounded-md px-1.5 py-1 text-[9px] leading-none text-black shadow-[0_2px_0_rgba(0,0,0,.35)]" style={{ background: rc }}><RarityIconForWeapon rarity={w.rarity} />{rarityLabel(w.rarity)}</span>
-                    {isGunDefaultMarked(w.id) && <span title="Default tersimpan" className="absolute left-1.5 top-7 z-10 grid h-5 w-5 place-items-center rounded-md bg-[#ffd23f] text-[#7a4300] shadow-[0_2px_0_#9a5b00]"><Star className="h-3.5 w-3.5 fill-current" /></span>}
+                    <span className="font-arsenal-title absolute left-1.5 top-1.5 z-10 flex items-center gap-1 rounded-md px-1.5 py-1 text-[9px] leading-none text-black shadow-[0_2px_0_rgba(0,0,0,.35)]" style={{ background: rc }}><RarityIconForWeapon rarity={w.rarity} />{rarityName(w.rarity)}</span>
+                    {isGunDefaultMarked(w.id) && <span title={tr(language, 'Default tersimpan')} className="absolute left-1.5 top-7 z-10 grid h-5 w-5 place-items-center rounded-md bg-[#ffd23f] text-[#7a4300] shadow-[0_2px_0_#9a5b00]"><Star className="h-3.5 w-3.5 fill-current" /></span>}
                     {(hasSlide11Update(w.id) || hasSlide9Update(w.id) || hasSlide6Update(w.id) || hasSlide7Update(w.id)) && <span className="font-arsenal-title absolute right-1.5 top-7 z-10 rounded-full border border-[#3fdc72] bg-[#0f3b1f] px-1.5 py-1 text-[7px] leading-none text-[#4ade80]">NEW</span>}
                     {isSelected && <span className="absolute right-1.5 top-1.5 z-20 grid h-5 w-5 place-items-center rounded-full bg-[#22c55e] text-white shadow ring-2 ring-[#0f3b1f]"><Check className="h-3.5 w-3.5" /></span>}
                     <div className={`absolute inset-x-1 top-7 bottom-8 grid place-items-center transition-[filter] ${locked ? 'brightness-[.18] grayscale' : 'drop-shadow-[0_6px_6px_rgba(0,0,0,.52)]'}`}>
@@ -637,7 +641,7 @@ export default function Arsenal({
                 );
               })}
             </div>
-            <div className="font-arsenal-title mt-4 pb-2 text-center text-[9px] tracking-wider text-white/35">— {filteredWeapons.length} SENJATA · AKHIR DAFTAR —</div>
+            <div className="font-arsenal-title mt-4 pb-2 text-center text-[9px] tracking-wider text-white/35">— {filteredWeapons.length}{tr(language, ' SENJATA · AKHIR DAFTAR —')}</div>
           </div>
         ) : (
           <div className="arsenal-scroll-area min-h-0 flex-1 space-y-2 overflow-y-auto px-2.5 pb-4 pt-2.5">
@@ -647,7 +651,7 @@ export default function Arsenal({
               </div>
               <div className="min-w-0 flex-1"><div className="font-arsenal-title text-sm" style={{ color: selectedBoss.accent }}>{selectedBoss.name}</div><div className="text-[10px] font-bold text-white/70">{selectedBoss.title}</div><div className="mt-0.5 text-[8px] leading-tight text-white/50">{selectedBoss.desc}</div></div>
             </div>
-            <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-[#110a24]/90 p-2"><BossAttackPreview boss={selectedBoss} /><div className="min-w-0"><div className="font-arsenal-title text-[8px] tracking-[.16em] text-white/55">DEMO SERANGAN BOS</div><div className="mt-1 text-[10px] font-black" style={{ color: selectedBoss.accent }}>{selectedBoss.projectileEmoji} {selectedBoss.projectileName}</div><div className="mt-1 text-[8px] leading-tight text-white/55">Senjata dan efek bergerak sesuai karakter boss.</div></div></div>
+            <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-[#110a24]/90 p-2"><BossAttackPreview boss={selectedBoss} /><div className="min-w-0"><div className="font-arsenal-title text-[8px] tracking-[.16em] text-white/55">{tr(language, 'DEMO SERANGAN BOS')}</div><div className="mt-1 text-[10px] font-black" style={{ color: selectedBoss.accent }}>{selectedBoss.projectileEmoji} {selectedBoss.projectileName}</div><div className="mt-1 text-[8px] leading-tight text-white/55">{tr(language, 'Senjata dan efek bergerak sesuai karakter boss.')}</div></div></div>
             <div className="grid grid-cols-2 gap-2">{GAME_B_BOSSES.map((boss, idx) => { const beaten = highestLevel >= (idx + 1) * 5; const isSel = selectedBoss.head === boss.head; return <button key={boss.head} type="button" onClick={() => { setSelectedBoss(boss); sfx.unlock(); }} className={`flex items-center gap-2 rounded-xl border p-2 text-left transition ${isSel ? 'border-amber-300 bg-[#2d1656]' : 'border-purple-500/20 bg-[#1e1038] hover:bg-[#27144a]'}`}><span className="grid h-9 w-9 place-items-center rounded-full bg-white/5 text-2xl" style={{ color: boss.accent }}><HeadArt kind={boss.head} className="h-9 w-9" /></span><span><span className="block text-[10px] font-bold leading-none text-white">{boss.name}</span><span className="mt-1 block text-[8px] text-white/50">LEVEL {(idx + 1) * 5} {beaten ? '✓' : ''}</span></span></button>; })}</div>
           </div>
         )}

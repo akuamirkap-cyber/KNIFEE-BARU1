@@ -57,15 +57,15 @@ export function Codex({ closing, onClose }: Props) {
 
       {/* ---------- header ---------- */}
       <div className="relative flex items-center gap-2.5 px-3 pt-3">
-        <button onClick={onClose} onPointerEnter={hoverSfx} aria-label="Kembali" className="press grid h-11 w-11 place-items-center rounded-2xl border-2 border-[#7a4b00] bg-gradient-to-b from-[#ffe27a] to-[#f59e0b] shadow-[0_4px_0_#7a4b00,inset_0_2px_0_rgba(255,255,255,.5)]">
+        <button onClick={onClose} onPointerEnter={hoverSfx} aria-label="Back" className="press grid h-11 w-11 place-items-center rounded-2xl border-2 border-[#7a4b00] bg-gradient-to-b from-[#ffe27a] to-[#f59e0b] shadow-[0_4px_0_#7a4b00,inset_0_2px_0_rgba(255,255,255,.5)]">
           <Ico name="right" className="h-6 w-6 rotate-180" color="#ffffff" />
         </button>
         <div className="min-w-0 flex-1">
           <div className="font-title flex items-center gap-1.5 text-[22px] leading-none text-white" style={{ textShadow: "0 2px 0 #1a1238, 0 0 14px rgba(253,230,138,.45)" }}>
-            <Ico name="book" className="h-6 w-6" color="#fde68a" /> KAMUS GAME
+            <Ico name="book" className="h-6 w-6" color="#fde68a" /> GAME CODEX
           </div>
           <div className="font-title mt-1 text-[11px] tracking-wider text-[#c4b5fd]">
-            {foundCount}/{total} DITEMUKAN · {CODEX_WHEELS.length} RODA · {CODEX_BOSSES.length} BOS · {CODEX_OBSTACLES.length} RINTANGAN
+            {foundCount}/{total} FOUND · {CODEX_WHEELS.length} WHEELS · {CODEX_BOSSES.length} BOSSES · {CODEX_OBSTACLES.length} OBSTACLES
           </div>
         </div>
       </div>
@@ -101,7 +101,7 @@ export function Codex({ closing, onClose }: Props) {
             </div>
             <p className="font-ui mt-1 text-[12px] leading-snug text-white/80">{e.desc}</p>
             <div className="mt-1.5 flex flex-wrap gap-1">
-              {[`Muncul: Stage ${e.first || "-"}`, ...e.facts].map((f) => (
+              {[`Appears: Stage ${e.first || "-"}`, ...e.facts].map((f) => (
                 <span key={f} className="font-ui rounded-full bg-black/35 px-2 py-[2px] text-[10.5px] text-white/85">
                   {f}
                 </span>
@@ -115,9 +115,9 @@ export function Codex({ closing, onClose }: Props) {
       <div className="relative mx-3 mt-3 grid grid-cols-3 gap-2">
         {(
           [
-            { t: "wheel", l: "RODA", n: CODEX_WHEELS.length, ic: "target", c: "from-[#4ade80] to-[#16a34a] border-[#0e5a26] shadow-[0_4px_0_#0e5a26]" },
-            { t: "boss", l: "BOS", n: CODEX_BOSSES.length, ic: "skull", c: "from-[#ff7a7a] to-[#dc2626] border-[#5f0f0f] shadow-[0_4px_0_#5f0f0f]" },
-            { t: "obstacle", l: "PISAU", n: CODEX_OBSTACLES.length, ic: "swords", c: "from-[#cbd5e1] to-[#64748b] border-[#1e293b] shadow-[0_4px_0_#1e293b]" },
+            { t: "wheel", l: "WHEELS", n: CODEX_WHEELS.length, ic: "target", c: "from-[#4ade80] to-[#16a34a] border-[#0e5a26] shadow-[0_4px_0_#0e5a26]" },
+            { t: "boss", l: "BOSSES", n: CODEX_BOSSES.length, ic: "skull", c: "from-[#ff7a7a] to-[#dc2626] border-[#5f0f0f] shadow-[0_4px_0_#5f0f0f]" },
+            { t: "obstacle", l: "KNIVES", n: CODEX_OBSTACLES.length, ic: "swords", c: "from-[#cbd5e1] to-[#64748b] border-[#1e293b] shadow-[0_4px_0_#1e293b]" },
           ] as const
         ).map((x, i) => {
           const on = tab === x.t;
