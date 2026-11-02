@@ -111,7 +111,12 @@ export default function ShotEffectCanvas({ weapon, effect }: { weapon: Weapon; e
             }
             // Hybrid cards preview the same visual layers as the live carrier.
             if (weapon.id === 'ironman_hand' && effect === 'ironman_combo') {
-              drawIronmanCombo(c, 0, -22, t, () => drawSetSevenShotShell(c, 'gauntlet', 0.06, 22));
+              // Effect #5's round (slide 9's repulsor) under effect #3's beam;
+              // the card loops slide-6's own repulsor trigger interval (0.45 s):
+              // burst and beam fade out completely, then the card re-fires.
+              drawIronmanCombo(c, 0, -26, t,
+                () => drawSetNineShotShell(c, setNineIdFor('gauntlet_cannon')!, 0.06, 26),
+                { x: 0, y: 40, born: t - (t % 0.45) });
               c.restore();
               if (active) frame = requestAnimationFrame(paint);
               return;

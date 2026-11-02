@@ -22,7 +22,9 @@ test('boss cycles contain three normal stages, one random special, then the boss
   for (const n of [4, 9, 14]) {
     const level = makeLevel(n);
     assert.equal(level.old + level.spikes + level.coins, 0);
-    assert.equal(level.ammo, 12); // renewable magazine on special stages
+    // Renewable magazine on special stages; Diamond Breaker deliberately
+    // carries a half-size one so shots must be saved (requested challenge).
+    assert.equal(level.ammo, level.mode === 'boulder' ? 6 : 12);
   }
   assert.equal(makeLevel(4, 'boulder').radius, 166);
   assert.equal(makeLevel(4, 'bonus').radius, 166);
@@ -123,7 +125,7 @@ test('star upgrades pause the game until chosen and affect either type of stage'
   Object.assign(game, { level: makeLevel(3, 'boulder'), weapon: getWeapon('pistol'), choosingBuff: true, ammoLeft: 4, maxAmmoMult: 1, treasureBuff: null });
   game.applyBuff('ammo');
   assert.equal(game.choosingBuff, false);
-  assert.equal(game.ammoLeft, 16);
+  assert.equal(game.ammoLeft, 10, '4 left plus Diamond Breaker\'s 6-round magazine');
   assert.equal(game.maxAmmoMult, 2);
 
   Object.assign(game, { level: makeLevel(6, 'treasure'), choosingBuff: true });

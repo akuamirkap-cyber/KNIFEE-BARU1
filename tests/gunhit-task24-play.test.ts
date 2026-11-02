@@ -235,21 +235,27 @@ test('twin Firework rockets start in mirrored tubes and the Slide-3 rockets land
   }
 });
 
-test('combined Ironman and Crystal carriers each score once and retain their effect-4/3 wheel art', () => {
-  for (const [weapon, skin, effect, shot] of [
-    ['ironman_hand', 'set11', 'ironman_combo', 'gauntlet'],
-    ['crystal', 'set7', 'set7', 'crystal'],
-  ]) {
-    const game = stage(weapon, skin, effect);
-    shootFresh(game);
-    assert.equal(game.projs.length, 1);
-    assert.equal(game.projs[0].setSeven.weapon, shot);
-    land(game);
-    assert.equal(game.stuck, 1, `${weapon} scores one hit`);
-    assert.equal(game.s7.stuck.length, 1);
-    assert.equal(game.s7.stuck[0].weapon, shot, 'the imported wheel mark remains');
-    game.destroy();
-  }
+test('combined Deadblast and Crystal carriers each score once and keep their layer wheel art', () => {
+  // Deadblast's combo rides slide 9's repulsor round (effect #5) under slide
+  // 6's beam (effect #3): one carrier, one scored hit, slide-9 entry mark.
+  const dead = stage('ironman_hand', 'set11', 'ironman_combo');
+  shootFresh(dead);
+  assert.equal(dead.projs.length, 1);
+  assert.ok(dead.projs[0].setNine, 'the combo carrier is slide 9\'s repulsor round');
+  assert.ok(dead.projs[0].comboBeam, 'the combo carries its effect-3 beam anchor');
+  land(dead);
+  assert.equal(dead.stuck, 1, 'Deadblast scores one hit');
+  assert.equal(dead.s9.marks.length, 1, 'slide 9\'s entry mark remains');
+  dead.destroy();
+  const crys = stage('crystal', 'set7', 'set7');
+  shootFresh(crys);
+  assert.equal(crys.projs.length, 1);
+  assert.equal(crys.projs[0].setSeven.weapon, 'crystal');
+  land(crys);
+  assert.equal(crys.stuck, 1, 'Crystal scores one hit');
+  assert.equal(crys.s7.stuck.length, 1);
+  assert.equal(crys.s7.stuck[0].weapon, 'crystal', 'the imported wheel mark remains');
+  crys.destroy();
 });
 
 test('Xenomorph effect 4 retains effect-2 liquid and exactly one scored impact', () => {

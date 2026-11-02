@@ -69,7 +69,7 @@ import { drawPreciseWeaponDecal } from './art/decalSystem';
 import { drawBehindWheelSunburst, drawGlow, drawRgbGlowSprite, drawScreenTintWash } from './art/glowSprite';
 import { drawForestFireflies } from './art/forestFireflies';
 import { AcidFluid, type AcidStuckBlob } from './acidFluid';
-import { drawCrystalEffectTwo, drawIronmanCombo } from './art/combinedShots';
+import { drawCrystalEffectTwo, drawIronmanCombo, type ComboBeam } from './art/combinedShots';
 import { drawXenoCorrosion, drawXenoHybridFlight, drawXenoSpecialPuddle } from './art/xenoHybrid';
 import { GHOST_HAND_X, GHOST_HAND_Y, type GhostHand } from './art/ghostSpiritGun';
 import { fireworkMouth } from './art/fireworkTubes';
@@ -648,7 +648,7 @@ const PAINT = ['244,63,94', '250,204,21', '34,211,238', '168,85,247', '74,222,12
 type ItemType = 'bullet' | 'old' | 'spike' | 'coin' | 'diamond_chest';
 interface AcidStuck { blobs: AcidStuckBlob[]; dripT: number; drip: number; seed: number; hybrid?: boolean }
 interface Item { angle: number; type: ItemType; age: number; /** Game B's stuck-knife variant (boss obstacles). */ knife?: number; /** Game B's knife lean, in degrees. */ tilt?: number; /** Exact radius (px) the round bit into the target artwork. */ r?: number; /** Exact impact point in the target's own frame (art-local px). */ px?: number; py?: number; ghostVolley?: number; w?: WeaponId; scale?: number; vel?: number; harvested?: boolean; tint?: string; big?: number; hits?: number; hue?: number; flash?: number; acid?: AcidStuck; hideArt?: boolean; busterPellet?: boolean; setTwo?: boolean; s7Half?: number; s7Protrude?: number }
-interface Proj { x: number; y: number; vx: number; vy: number; originX?: number; ghostAim?: boolean; ghostVolley?: number; setSix?: true; setOne?: SetOneShot; setSeven?: SevenShot; setSevenPending?: boolean; s7Ghost?: boolean; hold?: number; setNine?: NineBullet; setNinePending?: boolean; s9Ghost?: boolean; setNineBeam?: number; setEleven?: ElevenProj; setElevenPending?: boolean; s11Wait?: boolean; s11Ghost?: boolean; setTwo?: TwoRound; pierced?: number; hist?: { x: number; y: number }[]; tint?: string; big?: number; mini?: boolean; giant?: boolean; hue?: number; flash?: number; spawnDelay?: number; wob?: number; lastEcho?: number; t?: number; trail?: { x: number; y: number }[] }
+interface Proj { x: number; y: number; vx: number; vy: number; originX?: number; ghostAim?: boolean; ghostVolley?: number; setSix?: true; setOne?: SetOneShot; setSeven?: SevenShot; setSevenPending?: boolean; s7Ghost?: boolean; comboBeam?: ComboBeam; hold?: number; setNine?: NineBullet; setNinePending?: boolean; s9Ghost?: boolean; setNineBeam?: number; setEleven?: ElevenProj; setElevenPending?: boolean; s11Wait?: boolean; s11Ghost?: boolean; setTwo?: TwoRound; pierced?: number; hist?: { x: number; y: number }[]; tint?: string; big?: number; mini?: boolean; giant?: boolean; hue?: number; flash?: number; spawnDelay?: number; wob?: number; lastEcho?: number; t?: number; trail?: { x: number; y: number }[] }
 type StepRes = {
   res: 'none' | 'stick' | 'fail' | 'hit';
   spike?: boolean;
@@ -1436,6 +1436,10 @@ export type TreasureBuff = 'rapid' | 'double' | 'mini' | 'giant';
 export type BuffKind = 'speed' | 'ammo' | 'power' | TreasureBuff;
 
 const STAGE_SECONDS: Record<'boulder' | SpecialMode, number> = { boulder: 65, bonus: 45, treasure: 10 };
+/** Diamond Breaker: how many shots the core diamond takes before it is won. */
+const BOULDER_DIAMOND_HITS = 4;
+/** Diamond Breaker's rock spins this much faster than an ordinary wheel. */
+const BOULDER_SPIN_MULT = 1.6;
 
 const PATTERNS: Record<PatternName, (t: number, b: number, d: number) => number> = {
   constant: (_t, b, d) => b * d,
@@ -1908,11 +1912,14 @@ export class Game {
 
   /** The slide-9 weapon behind the equipped slide-1 gun, if any. */
   private get setNineId(): NineId | null {
+    // DEADBLAST's combined shot rides slide 9's repulsor round (effect #5).
+    if (this.weapon.id === 'ironman_hand') return setNineIdFor('gauntlet_cannon');
     return setNineIdFor(this.weapon.id);
   }
 
   /** True when the equipped gun must fire slide 9's own shot. */
   private get setNineLive(): boolean {
+    if (this.weapon.id === 'ironman_hand') return getGunEffect(this.weapon.id) === 'ironman_combo';
     return this.setNineId !== null && getGunEffect(this.weapon.id) === 'set9';
   }
 
@@ -2081,7 +2088,7 @@ export class Game {
 
   /** The slide-3 weapon (SET 1..7) behind the equipped slide-1 gun, if any. */
   private get setSevenId(): SlideThreeId | null {
-    return this.weapon.id === 'ironman_hand' ? 'gauntlet' : slideThreeIdFor(this.weapon.id);
+    return slideThreeIdFor(this.weapon.id);
   }
 
   /**
@@ -2093,7 +2100,6 @@ export class Game {
   private get setSevenLive(): boolean {
     const id = this.weapon.id;
     if (this.setSevenId === null) return false;
-    if (id === 'ironman_hand') return getGunEffect(id) === 'ironman_combo';
     if (setOneIdFor(id)) return getGunEffect(id) === 'new' && !this.slide2Void;
     return getGunEffect(id) === 'set7';
   }
@@ -4034,6 +4040,9 @@ export class Game {
         else if (asBeam) proj.setNineBeam = delay;
         else if (plan[i].first) proj.setNinePending = true;
         else proj.s9Ghost = true;
+        // DEADBLAST's combo: slide-6's repulsor beam (effect #3) is anchored at
+        // the muzzle slide 9 spawned its round from, and ages on the shot clock.
+        if (own && w.id === 'ironman_hand') proj.comboBeam = { x: own.x, y: own.y, born: this.time };
         this.projs.push(proj);
       }
       // Slide 9's recoil punch lives in its own artwork, and slide 9 has no
@@ -5449,7 +5458,12 @@ export class Game {
       this.s9State.draw(c);
       for (const p of this.projs) {
         if (p.setNine && this.s9State.isCarried(p.setNine)) {
-          this.drawCarriedRound(c, p, () => this.s9.drawShot(c, p.setNine!));
+          this.drawCarriedRound(c, p, () => {
+            // DEADBLAST: slide-6's repulsor beam (effect #3) rides under
+            // slide-9's own round (effect #5), muzzle to round.
+            if (p.comboBeam) drawIronmanCombo(c, p.x, p.y, this.time, () => this.s9.drawShot(c, p.setNine!), p.comboBeam);
+            else this.s9.drawShot(c, p.setNine!);
+          });
         }
       }
     } catch {
@@ -6450,12 +6464,12 @@ export class Game {
         return { res: 'hit' };
       }
       this.centerDiamondHits++;
-      this.addText(`${T('BERLIAN')} ${this.centerDiamondHits}/3`, p.x, p.y - 26, '#a5f3fc', 22);
+      this.addText(`${T('BERLIAN')} ${this.centerDiamondHits}/${BOULDER_DIAMOND_HITS}`, p.x, p.y - 26, '#a5f3fc', 22);
       this.sink.light(p.x, p.y, 90 + this.centerDiamondHits * 20, '103,232,249', 0.35);
       if (!this.elevenSpecialImpact(p, p.x, p.y)) this.specialImpact(p.x, p.y, 'diamond');
-      this.burstSpecial(p.x, p.y, 'diamond', this.centerDiamondHits === 3 ? 28 : 10);
+      this.burstSpecial(p.x, p.y, 'diamond', this.centerDiamondHits === BOULDER_DIAMOND_HITS ? 28 : 10);
       sfx3.chime();
-      if (this.centerDiamondHits >= 3) {
+      if (this.centerDiamondHits >= BOULDER_DIAMOND_HITS) {
         this.centerDiamondCollected = true;
         this.diamondHoldUntil = this.time + 3.1; // let the flight + reward burst finish before the next stage
         this.events.onDiamondCollected?.(50, true, { x: p.x, y: p.y });
@@ -7174,8 +7188,11 @@ export class Game {
 
     if (this.state !== 'clear') {
       this.levelTime += s;
-      const v = this.state === 'idle' ? 1.1 : this.level.mode === 'bonus' ? this.level.dir * 1.05
+      const patternV = this.state === 'idle' ? 1.1 : this.level.mode === 'bonus' ? this.level.dir * 1.05
         : this.level.mode === 'treasure' ? 0 : PATTERNS[this.level.pattern](this.levelTime, this.level.base, this.level.dir);
+      // Diamond Breaker's rock spins faster than an ordinary wheel: a tighter
+      // aim window, so saved shots are what reach the diamond in time.
+      const v = patternV * (this.level.mode === 'boulder' ? BOULDER_SPIN_MULT : 1);
       const f0 = this.slowF;
       const slowF = this.slowT > 0 ? f0 + (1 - f0) * Math.max(0, (0.3 - this.slowT) / 0.3) : 1;
       const aimF = this.aiming ? 0.28 : 1;
@@ -9865,8 +9882,7 @@ export class Game {
         p.setSeven.x = p.x;
         p.setSeven.y = p.y;
         this.drawCarriedRound(c, p, () => {
-          if (wid === 'ironman_hand') drawIronmanCombo(c, p.x, p.y, this.time, () => p.setSeven!.draw(c));
-          else if (wid === 'crystal') drawCrystalEffectTwo(c, p.x, p.y, this.time);
+          if (wid === 'crystal') drawCrystalEffectTwo(c, p.x, p.y, this.time);
           else p.setSeven!.draw(c);
         });
         continue;
@@ -10650,7 +10666,7 @@ export class Game {
       } else if (isSpecial(this.level.mode)) {
         const title = this.level.mode === 'boulder' ? `💎 ${T('DIAMOND BREAKER')}`
           : this.level.mode === 'bonus' ? T('🪙 BONUS STAGE') : T('🧰 HARTA KARUN');
-        const hint = this.level.mode === 'boulder' ? T('Kikis batu hingga diamond bersih!')
+        const hint = this.level.mode === 'boulder' ? T('Kikis batu, lalu tembak diamond 4x untuk mengambilnya!')
           : this.level.mode === 'bonus' ? T('Bidik koin yang berputar!') : T('10 detik! Berondong petinya!');
         c.font = font(27); c.lineWidth = 5; c.strokeStyle = 'rgba(0,0,0,0.9)';
         c.strokeText(title, 0, -9);

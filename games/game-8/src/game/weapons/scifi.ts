@@ -712,7 +712,7 @@ function drawIron(ctx: C, _g: Game, s: WeaponState) {
 }
 
 export const ironWeapon: Weapon = {
-  id: 'ironman', name: 'Repulsor Laser', tag: 'Sci-Fi', sub: 'Gauntlet Iron Man',
+  id: 'ironman', name: 'Repulsor Laser', tag: 'Sci-Fi', sub: 'Gauntlet Deadblast',
   accent: '#8fe8ff',
   desc: 'Telapak sarung tangan merah-emas memuntahkan sinar repulsor putih-biru, cincin kejut berlari di sepanjang sinar dan kawah heksagon bercahaya.',
   hint: 'Tahan = sinar repulsor',

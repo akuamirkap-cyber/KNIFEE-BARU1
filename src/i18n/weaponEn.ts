@@ -275,8 +275,8 @@ export const WEAPON_EN: Record<string, string> = {
     'IRON FIST',
   'Meriam telapak tangan robotik raksasa! Meluncurkan tinju gauntlet berenergi surya dengan hantaman super kuat, 3 poin.':
     'A giant robotic palm cannon! Launches a solar-powered gauntlet punch with a super-heavy impact, 3 points.',
-  'Tangan lapis baja Ironman meluncurkan tinju berenergi dan semburan repulsor, 3 poin!':
-    'An Ironman armored hand that fires energy punches and repulsor blasts, 3 points!',
+  'Tangan lapis baja DEADBLAST meluncurkan tinju berenergi dan semburan repulsor, 3 poin!':
+    'The DEADBLAST armored hand that fires energy punches and repulsor blasts, 3 points!',
   'TEMBAK LISTRIK':
     'ELECTRIC SHOT',
   'Senapan pulsa listrik futuristik! Tembakan listrik cepat dengan kilatan biru elektrik.':

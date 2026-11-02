@@ -132,7 +132,7 @@ export function isElevenId(id: string): id is ElevenId {
 /** Slide-1 id -> slide-11 weapon id (null when slide 1 owns nothing for it). */
 export function setElevenIdFor(slide1Id: string): ElevenId | null {
   // Gauntlet keeps the old Slide-5 *effect* as an effect-only alias; the
-  // corresponding design now belongs exclusively to Ironman Hand.
+  // corresponding design now belongs exclusively to Deadblast.
   return slide1Id === 'gauntlet_cannon' ? 'ironman' : SET_ELEVEN_BY_SLIDE1_ID[slide1Id] ?? null;
 }
 
@@ -153,7 +153,7 @@ export function slide1IdForEleven(id: ElevenId): string {
  */
 const ELEVEN_INK: Record<ElevenId, { len: number; wid: number; cx: number; cy: number }> = {
   'tripod': { len: 456, wid: 239, cx: 10, cy: 215 },
-  'ironman': { len: 306, wid: 150, cx: -1, cy: 129 },
+  'ironman': { len: 285, wid: 132, cx: 0, cy: 141 },
   'xenomorph': { len: 429, wid: 183, cx: -46, cy: 207 },
   'mega-buster': { len: 375, wid: 103, cx: -1, cy: 179 },
   'harmonic': { len: 412, wid: 156, cx: 12, cy: 153 },

@@ -291,6 +291,7 @@ const CORE_EN: Record<string, string> = {
   '🪙 BONUS STAGE': '🪙 BONUS STAGE',
   '🧰 HARTA KARUN': '🧰 TREASURE',
   'Kikis batu hingga diamond bersih!': 'Chip the boulder until the diamonds are clear!',
+  'Kikis batu, lalu tembak diamond 4x untuk mengambilnya!': 'Chip the rock, then hit the diamond 4 times to claim it!',
   'Bidik koin yang berputar!': 'Aim at the spinning coins!',
   'TAP = TEMBAK, TAHAN = CHARGE x4!': 'TAP = SHOOT, HOLD = CHARGE x4!',
   'TAHAN = BIDIK SLOW-MO, LEPAS = TEMBAK': 'HOLD = SLOW-MO AIM, RELEASE = SHOOT',

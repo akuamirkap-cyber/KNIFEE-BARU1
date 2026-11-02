@@ -165,100 +165,112 @@ export const tripodWeapon2: Weapon = {
 /* ================================================================================= */
 function drawIron2(ctx: C, _g: Game, s: WeaponState) {
   const t = s.t, ch = s.chan;
+  // DEADBLAST Mark II: same red-gold armour, a brand-new silhouette — a fist
+  // cannon: layered chevron plates, claw fins at the wrist, four knuckle
+  // barrels around one centre palm repulsor.
   const RED = ['#ff7a72', '#e01c28', '#9a0c18', '#4a0610'];
+  const PLATE = ['#ff8a82', '#e8202c', '#a30e1a', '#560712'];
+  const RING = ['#fff3b8', '#e2ac3c', '#8a5a14', '#4a2c06'];
+  const OUT = 'rgba(40,0,6,.92)';
+  const GLINE = 'rgba(255,214,120,.9)';
   const CY = '#8fe8ff';
   ctx.lineJoin = 'round'; ctx.lineCap = 'round';
   ctx.save();
   ctx.translate(rand(-1, 1) * ch * 1.1, rand(-1, 1) * ch * 1.1);
 
-  /* upper forearm base */
-  ctx.beginPath(); ctx.moveTo(-6, -40); ctx.lineTo(130, -34); ctx.lineTo(176, -46); ctx.lineTo(212, -46); ctx.lineTo(212, 46); ctx.lineTo(176, 46); ctx.lineTo(130, 34); ctx.lineTo(-6, 40); ctx.closePath();
-  ctx.fillStyle = vgrad(ctx, -46, 46, RED); ctx.fill();
-  ctx.strokeStyle = 'rgba(40,0,6,.95)'; ctx.lineWidth = 2.2; ctx.stroke();
-  /* three overlapping plates */
-  for (let i = 0; i < 3; i++) {
-    const x0 = 8 + i * 48, w = 58, h = 34 - i * 1.5 + i * 4;
-    ctx.beginPath(); ctx.moveTo(x0, -h); ctx.lineTo(x0 + w, -h - 3); ctx.lineTo(x0 + w + 8, 0); ctx.lineTo(x0 + w, h + 3); ctx.lineTo(x0, h); ctx.lineTo(x0 + 6, 0); ctx.closePath();
-    ctx.fillStyle = vgrad(ctx, -h, h, ['#ff8a82', '#e8202c', '#a30e1a', '#560712']); ctx.fill();
-    ctx.strokeStyle = 'rgba(40,0,6,.9)'; ctx.lineWidth = 1.6; ctx.stroke();
-    ctx.strokeStyle = 'rgba(255,214,120,.9)'; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.moveTo(x0 + w + 8, 0); ctx.lineTo(x0 + w, h + 3); ctx.moveTo(x0 + w + 8, 0); ctx.lineTo(x0 + w, -h - 3); ctx.stroke();
-    ctx.fillStyle = 'rgba(255,255,255,.28)'; ctx.fillRect(x0 + 8, -h + 4, w - 16, 4);
-  }
-  /* gold trim along both edges */
-  for (const sg of [-1, 1]) {
-    ctx.fillStyle = vgrad(ctx, sg < 0 ? -50 : 36, sg < 0 ? -34 : 52, GOLD);
-    ctx.beginPath(); ctx.moveTo(10, sg * 41); ctx.lineTo(166, sg * 38); ctx.lineTo(176, sg * 48); ctx.lineTo(210, sg * 48); ctx.lineTo(210, sg * 40); ctx.lineTo(176, sg * 40); ctx.lineTo(160, sg * 30); ctx.lineTo(12, sg * 32); ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = 'rgba(80,40,0,.8)'; ctx.lineWidth = 1.2; ctx.stroke();
-  }
-  /* glowing power channel */
-  ctx.fillStyle = '#05121c'; rr(ctx, 26, -6, 138, 12, 6); ctx.fill();
-  add(ctx);
-  const cg = ctx.createLinearGradient(28, 0, 164, 0);
-  cg.addColorStop(0, rgba('#2a7bff', 0.5)); cg.addColorStop(1, rgba(CY, 0.8 + 0.2 * ch));
-  ctx.fillStyle = cg; rr(ctx, 28, -4, 134, 8, 4); ctx.fill();
-  for (let i = 0; i < 3; i++) drawGlow(ctx, 28 + (((t * 0.9 + i / 3) % 1) * 134), 0, 12, '#ffffff', 0.7);
-  drawGlow(ctx, 100, 0, 80, CY, 0.12 + 0.2 * ch);
-  norm(ctx);
-  /* forearm fins (gauntlet blades) */
-  for (const sg of [-1, 1]) {
-    ctx.fillStyle = vgrad(ctx, sg < 0 ? -76 : 40, sg < 0 ? -40 : 76, RED);
-    ctx.beginPath(); ctx.moveTo(136, sg * 40); ctx.lineTo(214, sg * 46); ctx.lineTo(226, sg * 74); ctx.lineTo(186, sg * 58); ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = 'rgba(40,0,6,.9)'; ctx.lineWidth = 1.8; ctx.stroke();
-    ctx.strokeStyle = 'rgba(255,214,120,.9)'; ctx.lineWidth = 1.6;
-    ctx.beginPath(); ctx.moveTo(214, sg * 46); ctx.lineTo(226, sg * 74); ctx.stroke();
-    add(ctx); ctx.fillStyle = rgba(CY, 0.35 + 0.4 * ch); ctx.beginPath(); ctx.moveTo(176, sg * 47); ctx.lineTo(208, sg * 51); ctx.lineTo(214, sg * 62); ctx.closePath(); ctx.fill(); norm(ctx);
-  }
-  /* wrist ring */
-  metalBox(ctx, 208, -52, 24, 104, 9, ['#fff3b8', '#e2ac3c', '#8a5a14', '#4a2c06'], 0.55);
-  ctx.strokeStyle = 'rgba(80,40,0,.7)'; ctx.lineWidth = 1;
-  for (const x of [215, 224]) { ctx.beginPath(); ctx.moveTo(x, -50); ctx.lineTo(x, 50); ctx.stroke(); }
+  /* rear thrust collar (gold) */
+  ctx.beginPath(); ctx.moveTo(-8, -26); ctx.lineTo(16, -22); ctx.lineTo(16, 22); ctx.lineTo(-8, 26); ctx.closePath();
+  ctx.fillStyle = vgrad(ctx, -26, 26, GOLD); ctx.fill();
+  ctx.strokeStyle = 'rgba(80,40,0,.85)'; ctx.lineWidth = 1.6; ctx.stroke();
+  ctx.fillStyle = '#2a0a10'; rr(ctx, -8, -18, 8, 36, 3); ctx.fill();
 
-  /* hand: open palm toward the target, fingers fanned either side */
+  /* forearm armour body: tapered hexagon */
+  ctx.beginPath(); ctx.moveTo(12, -30); ctx.lineTo(120, -26); ctx.lineTo(152, -36); ctx.lineTo(152, 36); ctx.lineTo(120, 26); ctx.lineTo(12, 30); ctx.closePath();
+  ctx.fillStyle = vgrad(ctx, -36, 36, RED); ctx.fill();
+  ctx.strokeStyle = OUT; ctx.lineWidth = 2.2; ctx.stroke();
+  /* layered chevron plates along both flanks */
   for (const sg of [-1, 1]) {
     for (let i = 0; i < 3; i++) {
-      ctx.save();
-      ctx.translate(236 + i * 6, sg * (34 + i * 12));
-      ctx.rotate(sg * (0.02 + i * 0.1));
-      const L = 40 - i * 4, W = 12 - i * 1.2;
-      ctx.fillStyle = vgrad(ctx, -W, W, RED);
-      rr(ctx, 0, -W, L, W * 2, 6); ctx.fill();
-      ctx.strokeStyle = 'rgba(40,0,6,.9)'; ctx.lineWidth = 1.5; ctx.stroke();
-      ctx.fillStyle = vgrad(ctx, -W, W, GOLD); rr(ctx, L - 11, -W, 11, W * 2, 5); ctx.fill(); ctx.strokeStyle = 'rgba(80,40,0,.8)'; ctx.stroke();
-      ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.fillRect(4, -W + 2, L - 18, 2.6);
-      ctx.restore();
+      const x0 = 18 + i * 40;
+      ctx.beginPath();
+      ctx.moveTo(x0, sg * 27); ctx.lineTo(x0 + 34, sg * 24); ctx.lineTo(x0 + 44, sg * 40); ctx.lineTo(x0 + 8, sg * 43); ctx.closePath();
+      ctx.fillStyle = vgrad(ctx, sg * 24, sg * 43, PLATE); ctx.fill();
+      ctx.strokeStyle = 'rgba(40,0,6,.85)'; ctx.lineWidth = 1.6; ctx.stroke();
+      ctx.strokeStyle = GLINE; ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.moveTo(x0 + 8, sg * 43); ctx.lineTo(x0 + 44, sg * 40); ctx.stroke();
     }
   }
-  ctx.beginPath(); ctx.moveTo(232, -40); ctx.lineTo(262, -34); ctx.lineTo(276, -22); ctx.lineTo(276, 22); ctx.lineTo(262, 34); ctx.lineTo(232, 40); ctx.closePath();
-  ctx.fillStyle = vgrad(ctx, -40, 40, RED); ctx.fill();
-  ctx.strokeStyle = 'rgba(40,0,6,.95)'; ctx.lineWidth = 2; ctx.stroke();
-  /* palm repulsor */
-  ctx.fillStyle = vgrad(ctx, -32, 32, GOLD);
-  ctx.beginPath(); ctx.ellipse(270, 0, 17, 32, 0, 0, TAU); ctx.fill();
+  /* glowing power channel along the spine */
+  ctx.fillStyle = '#05121c'; rr(ctx, 24, -6, 116, 12, 6); ctx.fill();
+  add(ctx);
+  const cg = ctx.createLinearGradient(26, 0, 138, 0);
+  cg.addColorStop(0, rgba('#2a7bff', 0.5)); cg.addColorStop(1, rgba(CY, 0.8 + 0.2 * ch));
+  ctx.fillStyle = cg; rr(ctx, 26, -4, 112, 8, 4); ctx.fill();
+  for (let i = 0; i < 3; i++) drawGlow(ctx, 26 + (((t * 0.9 + i / 3) % 1) * 112), 0, 12, '#ffffff', 0.7);
+  drawGlow(ctx, 84, 0, 70, CY, 0.12 + 0.2 * ch);
+  norm(ctx);
+
+  /* wrist claw fins sweeping forward */
+  for (const sg of [-1, 1]) {
+    ctx.fillStyle = vgrad(ctx, sg * 34, sg * 66, RED);
+    ctx.beginPath(); ctx.moveTo(150, sg * 34); ctx.lineTo(196, sg * 40); ctx.lineTo(232, sg * 66); ctx.lineTo(204, sg * 60); ctx.lineTo(170, sg * 46); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = OUT; ctx.lineWidth = 1.8; ctx.stroke();
+    ctx.strokeStyle = GLINE; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(196, sg * 40); ctx.lineTo(232, sg * 66); ctx.stroke();
+    add(ctx); ctx.fillStyle = rgba(CY, 0.3 + 0.35 * ch);
+    ctx.beginPath(); ctx.moveTo(176, sg * 44); ctx.lineTo(206, sg * 56); ctx.lineTo(196, sg * 58); ctx.closePath(); ctx.fill(); norm(ctx);
+  }
+
+  /* gold wrist band */
+  metalBox(ctx, 150, -46, 20, 92, 8, RING, 0.55);
+  ctx.strokeStyle = 'rgba(80,40,0,.7)'; ctx.lineWidth = 1;
+  for (const x of [156, 164]) { ctx.beginPath(); ctx.moveTo(x, -44); ctx.lineTo(x, 44); ctx.stroke(); }
+
+  /* four knuckle barrels around the palm */
+  for (const by of [-44, -26, 26, 44]) {
+    ctx.fillStyle = vgrad(ctx, by - 8, by + 8, RED);
+    rr(ctx, 214, by - 8, 54, 16, 7); ctx.fill();
+    ctx.strokeStyle = OUT; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.fillStyle = vgrad(ctx, by - 8, by + 8, GOLD); rr(ctx, 262, by - 8, 10, 16, 4); ctx.fill();
+    ctx.strokeStyle = 'rgba(80,40,0,.8)'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.fillRect(220, by - 6, 34, 2.4);
+    if (ch > 0.05) { add(ctx); drawGlow(ctx, 270, by, 6 + 10 * ch, CY, 0.5 * ch); norm(ctx); }
+  }
+
+  /* fist block */
+  ctx.fillStyle = vgrad(ctx, -34, 34, RED);
+  rr(ctx, 168, -34, 52, 68, 12); ctx.fill();
+  ctx.strokeStyle = OUT; ctx.lineWidth = 2; ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,214,120,.55)'; ctx.lineWidth = 1.2;
+  for (const x of [182, 196, 210]) { ctx.beginPath(); ctx.moveTo(x, -30); ctx.lineTo(x, 30); ctx.stroke(); }
+
+  /* palm repulsor core */
+  ctx.fillStyle = vgrad(ctx, -26, 26, GOLD);
+  ctx.beginPath(); ctx.ellipse(262, 0, 15, 21, 0, 0, TAU); ctx.fill();
   ctx.strokeStyle = 'rgba(80,40,0,.95)'; ctx.lineWidth = 1.8; ctx.stroke();
-  ctx.fillStyle = '#04121a'; ctx.beginPath(); ctx.ellipse(271, 0, 12, 25, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#04121a'; ctx.beginPath(); ctx.ellipse(263, 0, 10, 15, 0, 0, TAU); ctx.fill();
   add(ctx);
   const base = 0.5 + 0.15 * Math.sin(t * 4) + 0.5 * ch;
-  const rg = ctx.createRadialGradient(272, 0, 0, 272, 0, 26);
+  const rg = ctx.createRadialGradient(264, 0, 0, 264, 0, 26);
   rg.addColorStop(0, 'rgba(255,255,255,1)'); rg.addColorStop(0.4, `rgba(143,232,255,${Math.min(1, base)})`); rg.addColorStop(1, 'rgba(60,160,255,0)');
-  ctx.save(); ctx.translate(272, 0); ctx.scale(0.55, 1); ctx.translate(-272, 0);
-  ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(272, 0, 26, 0, TAU); ctx.fill(); ctx.restore();
+  ctx.save(); ctx.translate(264, 0); ctx.scale(0.55, 1); ctx.translate(-264, 0);
+  ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(264, 0, 26, 0, TAU); ctx.fill(); ctx.restore();
   for (let i = 0; i < 3; i++) {
-    ctx.save(); ctx.translate(272, 0); ctx.scale(0.5, 1); ctx.rotate(t * (2 + i) + i * 2);
+    ctx.save(); ctx.translate(264, 0); ctx.scale(0.5, 1); ctx.rotate(t * (2 + i) + i * 2);
     ctx.strokeStyle = rgba('#d8f6ff', 0.55 + 0.35 * ch); ctx.lineWidth = 1.3;
     ctx.beginPath(); ctx.arc(0, 0, 8 + i * 6, 0, 2.2); ctx.stroke();
     ctx.restore();
   }
-  drawGlow(ctx, 274, 0, 30 + 56 * ch, CY, 0.45 + 0.5 * ch);
-  drawGlow(ctx, 274, 0, 9 + 8 * ch, '#ffffff', 0.6 + 0.4 * ch);
+  drawGlow(ctx, 266, 0, 30 + 56 * ch, CY, 0.45 + 0.5 * ch);
+  drawGlow(ctx, 266, 0, 9 + 8 * ch, '#ffffff', 0.6 + 0.4 * ch);
   norm(ctx);
   ctx.restore();
 }
 
 export const ironWeapon2: Weapon = {
   ...ironWeapon,
-  name: 'Iron Man Repulsor', sub: 'Gauntlet Repulsor Laser', isNew: true,
-  desc: 'Sarung tangan lapis baja merah-emas dengan sirip dan saluran daya biru. Telapak memancarkan sinar repulsor putih-biru dengan cincin kejut dan kawah heksagon bercahaya.',
+  name: 'Deadblast Repulsor', sub: 'Gauntlet Repulsor Laser', isNew: true,
+  desc: 'Sarung tinju kanon merah-emas: pelat chevron berlapis, sirip cakar di pergelangan, empat laras knuckle mengelilingi satu repulsor telapak, dan saluran daya biru menyala.',
   muzzle: 276, muzzleY: 0,
   draw: drawIron2,
 };
