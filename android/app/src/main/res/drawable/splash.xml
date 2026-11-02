@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Legacy splash (Android 7–11). Android 12+ draws its own splash from
+  Theme.SplashScreen (see values/styles.xml); both use the same background and
+  the same artwork, so the hand-off between them is invisible.
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/splash_background" />
+    <item
+        android:width="168dp"
+        android:height="168dp"
+        android:gravity="center">
+        <bitmap
+            android:gravity="fill"
+            android:src="@drawable/splash_logo"
+            android:filter="true" />
+    </item>
+</layer-list>
