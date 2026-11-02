@@ -8,6 +8,7 @@ import { sfx4 } from './game/sfx4';
 import { sfx3 } from './game/sfx3';
 import { getWeapon, isWeaponUnlocked, RARITY_COLOR, WEAPONS, type WeaponId } from './game/weapons';
 import { useSlideActive } from '../shared/SlideActivity';
+import { useAndroidBack } from '../../utils/androidBack';
 import { Burst, Dust, Flare, Shockwave, SparkleField, SunburstFX } from '../knife-hit/components/Effects';
 import { gunSunburstColor } from './game/sunburstPalette';
 import { drawGunCentered } from './game/art/drawCentered';
@@ -1617,6 +1618,28 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     );
     return sx === undefined ? motion : { ...motion, style: { ...motion.style, '--sx': sx } as CSSProperties };
   };
+
+  /**
+   * Android back, top of the pile first: the newest overlay closes, then a live
+   * run pauses into the same settings panel as the gear button, and the result
+   * screen returns to the menu. Anything this pane does not use is left to the
+   * hub (which leaves the app) instead of killing a run by accident.
+   */
+  useAndroidBack(() => {
+    if (inGameSettingsOpen) { setInGameSettingsOpen(false); return true; }
+    if (arsenalOpen) { startArsenalTransition(false); return true; }
+    if (questOpen) { closeQuestPage(); return true; }
+    if (leaderboardOpen) { closeLeaderboardPage(); return true; }
+    if (starBuffOpen) { setStarBuffOpen(false); return true; }
+    if (mapOpen) { setMapOpen(false); return true; }
+    if (settingsOpen) { setSettingsOpen(false); return true; }
+    // A reward is being opened: swallow the press so the app never vanishes
+    // from under a modal that still has to be claimed.
+    if (bonusStageOpen || bossDefeatedData || milestoneGift || weaponCelebration) return true;
+    if (screen === 'playing') { setInGameSettingsOpen(true); return true; }
+    if (screen === 'over') { goToMainMenuFromPlay(); return true; }
+    return false;
+  }, active);
 
   return (
     <div

@@ -2,6 +2,7 @@ import { Component, lazy, Suspense, useCallback, useEffect, useRef, useState, ty
 import ScaledFrame from './components/ScaledFrame';
 import { SlideActivityProvider } from './games/shared/SlideActivity';
 import { juicyAudio } from './utils/juicyAudio';
+import { useAndroidBack, installAndroidBack, exitAndroidApp } from './utils/androidBack';
 import { sfx as studioSfx } from './games/perfect-shot/audio/sfx';
 
 // Keep the entry bundle small; preload SGA behind the intro so parsing does not
@@ -78,6 +79,31 @@ export default function App() {
     document.addEventListener('visibilitychange', updateVisibility);
     return () => document.removeEventListener('visibilitychange', updateVisibility);
   }, []);
+
+  // Android back: the press belongs to whatever is on top. Anything a screen
+  // did not consume lands here and leaves the app, exactly like a native game.
+  useEffect(() => {
+    let disposed = false;
+    let remove: (() => void) | undefined;
+    void installAndroidBack(() => {
+      void exitAndroidApp();
+    }).then((off) => {
+      if (disposed) off();
+      else remove = off;
+    });
+    return () => {
+      disposed = true;
+      remove?.();
+    };
+  }, []);
+
+  // With both panes mounted, "back" on the second game returns to Game A before
+  // it is allowed to close the app.
+  useAndroidBack(() => {
+    if (activeGame === 'sga') return false;
+    selectGame('sga');
+    return true;
+  }, !loading);
 
   // Allow replaying the SANS STUDIO 2D Game Intro anytime from SGA Settings
   useEffect(() => {

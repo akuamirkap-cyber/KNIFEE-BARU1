@@ -246,10 +246,13 @@ test('App plays the SANS STUDIO intro before booting SGA and keeps replay non-de
   assert.ok(appSrc.includes('sans-replay-intro'), 'App listens for sans-replay-intro to replay the intro');
 });
 
-test('HTML shows a boot indicator before JavaScript and does not block first paint on remote fonts', () => {
+test('HTML shows a boot indicator before JavaScript and ships its fonts instead of fetching them', () => {
   const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
   assert.ok(html.includes('class="boot-screen"'), 'static boot UI is present before React starts');
-  assert.ok(html.includes('media="print" onload="this.media=\'all\'"'), 'Google Fonts load without blocking initial paint');
+  // Fonts are bundled through src/fonts.css: an offline APK must never fall back
+  // to a system face, so no remote stylesheet may come back here.
+  assert.ok(!html.includes('fonts.googleapis.com'), 'no remote font stylesheet');
+  assert.ok(!html.includes('fonts.gstatic.com'), 'no remote font files');
 });
 
 test('mobilePerf calibrates mobile DPR and suppresses expensive Canvas2D shadowBlur passes', () => {
