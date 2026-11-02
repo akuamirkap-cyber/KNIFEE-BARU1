@@ -209,8 +209,8 @@ const CORE_EN: Record<string, string> = {
 
   // ---------------------------------------------------------- level map
   'STAGE SPESIAL': 'SPECIAL STAGE',
-  'GUN HIT SGA · 100 STAGE · 20 BOSS · 11 BOS GAME B':
-    'GUN HIT SGA · 100 STAGES · 20 BOSSES · 11 GAME B BOSSES',
+  'GUN HIT SGA · 100 STAGE · 11 BOS':
+    'GUN HIT SGA · 100 STAGES · 11 BOSSES',
   'MULAI · STAGE 1': 'START · STAGE 1',
   ' terkunci': ' locked',
   'KAMU DI SINI': 'YOU ARE HERE',
@@ -303,7 +303,6 @@ const CORE_EN: Record<string, string> = {
   'RINGKASAN (': 'SUMMARY (',
   'SEMUA STAGE TERBUKA': 'ALL STAGES OPEN',
   'MENYIAPKAN SGA': 'LOADING SGA',
-  'MEMUAT PERFECT SHOT': 'LOADING PERFECT SHOT',
   'MEMUAT INTRO': 'LOADING INTRO',
   'SPACE · borong senjata RARE, 500 diamond per senjata': 'SPACE · buy every RARE weapon, 500 diamonds each',
   'DEFAULT: SKIN #': 'DEFAULT: SKIN #',
@@ -352,7 +351,8 @@ const CORE_EN: Record<string, string> = {
   KEMBALI: 'BACK',
   'MULAI LEVEL ': 'START LEVEL ',
   'BOSS ': 'BOSS ',
-  'Pertarungan memakai boss Game B.': 'The fight uses Game B bosses.',
+  'Bos besar dengan pola serangan khusus dan tiga fase amukan.':
+    'A large boss with its own attack pattern and three rage phases.',
   'Musuh dan aturan stage tetap memakai sistem SGA.':
     'Enemies and stage rules still use the SGA system.',
   ' SENJATA · AKHIR DAFTAR —': ' WEAPONS · END OF LIST —',
@@ -371,8 +371,8 @@ const CORE_EN: Record<string, string> = {
   ' milestone reward': ' milestone reward',
   'Selamat! Kamu berhasil menaklukkan Stage': 'Congrats! You cleared Stage',
   '! Buka Peti Hadiah Keberuntunganmu:': '! Open your lucky reward chests:',
-  'Boss ${artBoss || theme.label}. Pertarungan memakai boss Game B.':
-    'Boss ${artBoss || theme.label}. The fight uses Game B bosses.',
+  'Boss ${artBoss || theme.label}. Bos besar dengan pola serangan khusus dan tiga fase amukan.':
+    'Boss ${artBoss || theme.label}. A large boss with its own attack pattern and three rage phases.',
   'Tema ikon peta: ': 'Map icon theme: ',
   'Tema ikon peta: ${theme.label}. Musuh dan aturan stage tetap memakai sistem SGA.':
     'Map icon theme: ${theme.label}. Enemies and stage rules still use the SGA system.',
@@ -429,12 +429,12 @@ const CORE_EN: Record<string, string> = {
 export const EN: Record<string, string> = { ...CORE_EN, ...WEAPON_EN, ...DATA_EN };
 
 /**
- * Inggris → Indonesia, untuk teks yang *sumbernya* sudah Inggris: data Game B
- * (nama bos, gaya animasi, preset) dipakai bersama oleh kedua game, jadi Game A
- * perlu arah sebaliknya untuk mode Indonesia.
+ * Inggris → Indonesia, untuk teks yang *sumbernya* sudah Inggris: data art
+ * bersama (nama bos, gaya animasi, preset) ditulis dalam bahasa Inggris, jadi
+ * Game A perlu arah sebaliknya untuk mode Indonesia.
  */
 export const ID: Record<string, string> = {
-  // nama bos (Game B sekarang berbahasa Inggris)
+  // nama bos (data art bersama berbahasa Inggris)
   'Pirate Captain': 'Kapten Bajak Laut',
   'Mad Jester': 'Jester Gila',
   'Dragon Head': 'Kepala Naga',
@@ -492,7 +492,7 @@ export function tr(language: Language, text: string): string {
   return EN[text] ?? text;
 }
 
-/** Kebalikannya: teks (dari data Game B) sudah Inggris, mode ID butuh Indonesia. */
+/** Kebalikannya: teks data art bersama sudah Inggris, mode ID butuh Indonesia. */
 export function trId(language: Language, text: string): string {
   if (language !== 'id') return text;
   return ID[text] ?? text;

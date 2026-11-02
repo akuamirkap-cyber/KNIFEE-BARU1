@@ -1,11 +1,14 @@
-# Game Arcade Hub
+# Game Arcade Hub — GUN HIT (SGA)
 
-Dua game arkade dalam satu aplikasi Android (Capacitor + Vite + React + TypeScript):
+Satu game arkade Android (Capacitor + Vite + React + TypeScript):
 
-| Pane | Game | Isi |
-|---|---|---|
-| A | **GUN HIT** (SGA) | 100 stage, 11 bos Game B, 90 senjata, stage spesial, misi & achievement |
-| B | **PERFECT SHOT** | roda berputar, 30 pisau (3 skin), codex, achievement |
+| Game | Isi |
+|---|---|
+| **GUN HIT** (SGA) | 100 stage, 11 bos, 90 senjata, stage spesial, misi & achievement |
+
+Game B (PERFECT SHOT) sudah **dihapus**; aset visual & audio bersamanya
+(`HeadArt`, `TargetArt`, `levels`, `FlatIcons`, `sfx`, `themes`, `GiftArt`,
+`index.css`) tetap dipakai Game A dan karena itu dipertahankan.
 
 Aplikasi berjalan **offline**: tanpa iklan, tanpa akun, tanpa SDK analitik, tanpa
 pengiriman data. Paket rilis: `com.gamearcade.hub`, nama tampil "Game Arcade Hub".
@@ -44,7 +47,7 @@ Detail keystore, signing, ikon & splash: **`BUILD-APK.md`**.
 
 | Berkas | Isi |
 |---|---|
-| `GAMES.md` | peta dua game, sumber referensi, alur layar |
+| `GAMES.md` | penamaan game, catatan penghapusan Game B, alur layar |
 | `BUILD-APK.md` | build APK/AAB, keystore, ikon & splash, langkah Play Console |
 | `docs/SAVE-DATA.md` | format simpanan, versi skema, migrasi, checksum, keputusan leaderboard lokal |
 | `docs/ANALYTICS.md` | funnel & event telemetri (default: tidak mengirim apa pun) |
@@ -55,7 +58,7 @@ Detail keystore, signing, ikon & splash: **`BUILD-APK.md`**.
 
 ```
 src/games/gunhit/       Game A: App, komponen, engine (game/Game.ts), art
-src/games/perfect-shot/ Game B: App, komponen, data quest/ach/codex/shop
+src/games/perfect-shot/ aset bersama (art, ikon, sfx, tema, index.css) — bukan game lagi
 src/games/knife-hit/    efek & komponen bersama
 src/i18n/               katalog teks id/en (strings, weaponEn, dataEn)
 src/storage/            simpanan berversi + checksum + leaderboard lokal
@@ -63,6 +66,7 @@ src/telemetry/          analytics no-op, session, error hooks
 tools/                  build Android, render aset, audit performa
 tests/                  node:test (660 tes)
 store/                  aset & teks Play Console
+references/             zip referensi visual (arsip, tidak ikut bundel)
 ```
 
 ## CI

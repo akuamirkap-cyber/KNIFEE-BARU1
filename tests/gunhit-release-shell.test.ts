@@ -96,5 +96,5 @@ test('Android back di Game A: tutup panel → pause run → hasil balik ke menu'
 
   const hub = read('src/App.tsx');
   assert.match(hub, /installAndroidBack\(\(\) => \{\s*void exitAndroidApp\(\);/);
-  assert.match(hub, /if \(activeGame === 'sga'\) return false;/, 'pane B kembali ke pane A sebelum keluar app');
+  assert.doesNotMatch(hub, /activeGame|game-pair/, 'hub satu game: tidak ada lagi perpindahan pane sebelum keluar app');
 });

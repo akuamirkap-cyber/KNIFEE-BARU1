@@ -2,12 +2,15 @@
 
 Salinan siap tempel untuk Play Console (English / default listing).
 
+Aplikasi ini berisi **satu game**: GUN HIT (SGA). Game B (PERFECT SHOT) sudah
+dihapus, jadi seluruh teks listing hanya boleh menjual satu game.
+
 | Field | Limit | Value |
 |---|---|---|
 | App name | 30 | `Game Arcade Hub` |
-| Short description | 80 | `Two offline arcade games in one app: gun shooting and knife throws.` (69) |
-| Full description | 4000 | lihat di bawah (~2.3k) |
-| What's new | 500 | lihat di bawah (231) |
+| Short description | 80 | `Offline arcade shooter: 100 stages, 11 bosses, 90 guns. Aim, shoot, clear.` (74) |
+| Full description | 4000 | lihat di bawah (~1.9k) |
+| What's new | 500 | lihat di bawah (lihat blok) |
 | Category | — | Games → Arcade |
 | Tags | 5 | Arcade, Shooting, Casual, Single player, Offline |
 | Contact email | — | akuamirkap2@gmail.com |
@@ -18,27 +21,21 @@ Salinan siap tempel untuk Play Console (English / default listing).
 ## Short description
 
 ```
-Two offline arcade games in one app: gun shooting and knife throws.
+Offline arcade shooter: 100 stages, 11 bosses, 90 guns. Aim, shoot, clear.
 ```
 
 ## Full description
 
 ```
-Two complete arcade games, one download, zero internet.
+One complete arcade shooter, one download, zero internet.
 
 GUN HIT — aim, shoot, clear
 • Tap to fire, hold to auto-fire, and clear the spinning wheel before the timer runs out
 • 100 stages: fruit wheels, armoured shields, boulders, crates and coin treasure
-• Eleven bosses — pirate captain, jester, dragon, skeleton and more — each with its own attack
+• Eleven bosses — pirate captain, jester, dragon, skeleton and more — each with its own attack pattern and rage phases
 • Special stages: Diamond Breaker, Bonus Stage and Treasure, with stars that power you up mid-run
 • 90 guns with unlockable skins and shot effects: pistol, AK-47, plasma, laser, fish gun, black hole cannon…
 • Boss gift boxes, daily missions, skill achievements and a hall of fame for your best runs
-
-PERFECT SHOT — precision throwing
-• Throw knives at the spinning wheel and hit the target dead centre
-• 30 knives with three skins each, plus a full game codex to complete
-• Boss heads, obstacles and hazards that change how you aim
-• Achievements, milestones and reward boxes
 
 BUILT FOR PLAYING OFFLINE
 • No ads, no accounts, no sign-in, no internet needed
@@ -56,15 +53,14 @@ Ready? Pick a gun, find the wheel, and take the shot.
 
 ```
 First release.
-• Two arcade games: Gun Hit and Perfect Shot
-• 100 stages, 11 bosses, 90 guns and 30 knives
+• Gun Hit: 100 stages, 11 bosses and 90 guns in one offline arcade shooter
 • Special stages, boss gift boxes, missions and achievements
 • Offline play, no ads, Indonesian and English
 ```
 
 ## ASO keywords (not shown to users, for your own notes)
 
-`arcade, offline game, shooting game, target practice, knife throwing, boss fight, no wifi games, casual arcade, gun game, precision`
+`arcade, offline game, shooting game, target practice, boss fight, no wifi games, casual arcade, gun game, precision`
 
 ---
 

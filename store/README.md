@@ -6,7 +6,7 @@ Semua yang perlu diunggah ke Play Console, plus cara membuatnya ulang.
 |---|---|---|
 | `icon-512.png` | 512×512 PNG | App icon (hi-res) Play Console |
 | `feature-graphic-1024x500.png` | 1024×500 PNG | Feature graphic (wajib) |
-| `screenshots/phone-01…04.png` | 1080×1920 PNG | Screenshot ponsel (minimal 2, maksimal 8) |
+| `screenshots/phone-01…04.png` | 1080×1920 PNG | Screenshot ponsel (minimal 2, maksimal 8) — satu game saja, tidak ada pane Game B |
 | `listing-id.md`, `listing-en.md` | — | Nama, deskripsi singkat, deskripsi lengkap, “yang baru” |
 | `fonts/*.ttf` | — | Font yang dipakai saat merender (OFL, lihat `fonts/LICENSE.md`) |
 
@@ -19,7 +19,7 @@ npx tsx tools/make-store-assets.ts      # tulis ulang semua aset di atas
 Yang dirender **bukan mockup**: `tools/make-store-assets.ts` menjalankan mesin
 game yang sebenarnya (`Game` di atas kanvas Skia `@napi-rs/canvas`), mengambil
 satu frame, lalu menempelkannya ke latar pemasaran. Artwork roda dan kepala bos
-diambil dari komponen Game B (`TargetArt`) yang dirasterisasi ke SVG → PNG, jadi
+diambil dari komponen art bersama (`TargetArt`) yang dirasterisasi ke SVG → PNG, jadi
 bos yang tampil di screenshot adalah bos yang sama dengan di aplikasi.
 
 Karena itu:

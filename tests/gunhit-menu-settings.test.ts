@@ -5,11 +5,9 @@ import path from 'node:path';
 
 const app = readFileSync(path.join(process.cwd(), 'src/games/gunhit/App.tsx'), 'utf8');
 
-test('Vortex ring, combo ghost, and combo glow are disabled in both SGA and Perfect Shot', () => {
-  const perfectShotMenu = readFileSync(path.join(process.cwd(), 'src/games/perfect-shot/components/MainMenu.tsx'), 'utf8');
+test('Vortex ring, combo ghost, and combo glow stay disabled in SGA', () => {
   const perfectShotCss = readFileSync(path.join(process.cwd(), 'src/games/perfect-shot/index.css'), 'utf8');
   assert.doesNotMatch(app, /sga-vortex-anchor|sga-vortex-ring|vortexAnchorRef/);
-  assert.doesNotMatch(perfectShotMenu, /combo-ghost|combo-glow/);
   assert.match(perfectShotCss, /\.st-in-combo::before \{ content: none !important; animation: none !important; \}/);
   assert.doesNotMatch(perfectShotCss, /@keyframes comboVortex2|@keyframes comboGlow|@keyframes comboGhost/);
   assert.match(app, /SunburstFX size=\{430\}/, 'the separate rarity Sunburst stays in SGA');

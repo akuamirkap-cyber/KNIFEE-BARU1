@@ -159,7 +159,7 @@ function makeGameCanvas(): Canvas {
 }
 
 /**
- * Game B's wheel artwork is an SVG component, so the engine expects the React
+ * The wheel artwork is an SVG component, so the engine expects the React
  * side to hand it a raster. Offline we rasterise that same component with
  * `renderToStaticMarkup` + Skia's SVG loader, which is why a boss keeps its real
  * head and a fruit stage keeps its real wheel instead of a placeholder disc.
@@ -233,7 +233,7 @@ interface ShotSpec {
 const SHOT_SPECS: ShotSpec[] = [
   {
     file: 'phone-01.png',
-    eyebrow: 'GAME A · GUN HIT',
+    eyebrow: 'GUN HIT · SGA',
     title: 'AIM, SHOOT, CLEAR',
     subtitle: 'Tap to fire at the spinning wheel — one clean hit at a time.',
     bullets: ['Auto-fire', 'Timer', 'Combos'],
@@ -262,7 +262,7 @@ const SHOT_SPECS: ShotSpec[] = [
     file: 'phone-04.png',
     eyebrow: 'ARSENAL',
     title: `${WEAPONS.length} WEAPONS`,
-    subtitle: `${WEAPONS.length} guns, three skins each, and a codex to fill in.`,
+    subtitle: `${WEAPONS.length} guns, three skins each, unlocked by playing.`,
     bullets: ['3 skins each', '11 boss heads', 'Achievements'],
     accent: '#a855f7',
     scene: { stage: 7, weapon: 'plasma', frames: 70 },
@@ -434,13 +434,13 @@ async function makeFeatureGraphic() {
   ctx.fillText('GAME ARCADE HUB', textX, 186);
 
   ctx.fillStyle = GOLD;
-  const tagline = 'TWO ARCADE GAMES · ONE APP';
+  const tagline = 'ONE OFFLINE ARCADE SHOOTER';
   const taglineSize = fitFont(ctx, tagline, '"Russo One"', 30, maxWidth);
   ctx.font = `${taglineSize}px "Russo One"`;
   ctx.fillText(tagline, textX, 246);
 
   ctx.fillStyle = '#cbd5e1';
-  const facts = `GUN HIT + PERFECT SHOT · ${WEAPONS.length} GUNS · 11 BOSSES · OFFLINE`;
+  const facts = `GUN HIT · ${WEAPONS.length} GUNS · 11 BOSSES · OFFLINE`;
   const factsSize = fitFont(ctx, facts, 'Fredoka', 27, maxWidth);
   ctx.font = `${factsSize}px Fredoka`;
   ctx.fillText(facts, textX, 300);

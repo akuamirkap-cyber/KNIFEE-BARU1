@@ -80,7 +80,7 @@ export default function LevelMap({
         <button onClick={onBack} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-b-4 border-[#07534b] bg-gradient-to-b from-[#34d399] to-[#059669] text-2xl font-black shadow-lg active:translate-y-0.5" aria-label={tr(language, 'Kembali ke menu')}>‹</button>
         <div className="min-w-0 flex-1 text-center">
           <h2 className="bg-gradient-to-b from-white to-cyan-200 bg-clip-text text-[22px] font-black leading-none tracking-[.12em] text-transparent drop-shadow">QUEST</h2>
-          <p className="mt-1 text-[10px] font-bold tracking-wider text-white/60">{tr(language, 'GUN HIT SGA · 100 STAGE · 20 BOSS · 11 BOS GAME B')}</p>
+          <p className="mt-1 text-[10px] font-bold tracking-wider text-white/60">{tr(language, 'GUN HIT SGA · 100 STAGE · 11 BOS')}</p>
         </div>
         <div className="shrink-0 rounded-full border border-cyan-200/40 bg-black/40 px-2.5 py-1.5 text-[11px] font-black tabular-nums text-cyan-100">{highestUnlocked}/100</div>
       </header>
@@ -189,7 +189,7 @@ export default function LevelMap({
                 </div>
                 <p className="mt-3 text-[12px] leading-relaxed text-white/65">
                   {kind === 'boss'
-                    ? `${tr(language, 'BOSS ')}${trId(language, artBoss || theme.label)}. ${tr(language, 'Pertarungan memakai boss Game B.')}`
+                    ? `${tr(language, 'BOSS ')}${trId(language, artBoss || theme.label)}. ${tr(language, 'Bos besar dengan pola serangan khusus dan tiga fase amukan.')}`
                     : kind === 'special'
                       ? tr(language, 'Stage spesial SGA: sistem tetap memilih Batu, Bonus, atau Harta Karun sesuai aturan stage yang sudah ada.')
                       : `${tr(language, 'Tema ikon peta: ')}${tr(language, theme.label)}. ${tr(language, 'Musuh dan aturan stage tetap memakai sistem SGA.')}`}

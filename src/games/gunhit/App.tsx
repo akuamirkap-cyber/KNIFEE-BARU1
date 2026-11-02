@@ -50,7 +50,7 @@ const Arsenal = lazy(() => import('./components/Arsenal'));
 const QuestModal = lazy(() => import('./components/QuestModal'));
 const SgaSettingsPanel = lazy(() => import('./components/SgaSettingsPanel'));
 const SgaWeaponFlight = lazy(() => import('./components/SgaWeaponFlight'));
-const PerfectShotLeaderboard = lazy(() =>
+const RankBoardPage = lazy(() =>
   import('../perfect-shot/components/Leaderboard').then((m) => ({ default: m.Leaderboard })));
 const BossDefeatedModal = lazy(() =>
   import('./components/BossDefeatedModal').then((m) => ({ default: m.BossDefeatedModal })));
@@ -59,7 +59,7 @@ const BossGiftBoxModal = lazy(() =>
 const GiftBoxScene = lazy(() =>
   import('./components/BossGiftBoxModal').then((m) => ({ default: m.GiftBoxScene })));
 const StarBuffModal = lazy(() => import('./components/StarBuffModal'));
-const PerfectShotQuestMap = lazy(() =>
+const StageMapPage = lazy(() =>
   import('../perfect-shot/components/QuestMap').then((m) => ({ default: m.QuestMap })));
 import type { StageBase } from '../perfect-shot/quest/data';
 import { levelConfig, type TargetKind } from '../perfect-shot/play/levels';
@@ -2249,7 +2249,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
         )}
 
         {screen === 'menu' && mapOpen && (
-          <Overlay><PerfectShotQuestMap
+          <Overlay><StageMapPage
             leaving={mapLeaving}
             progress={{ stage: Math.max(1, Math.min(GUN_HIT_MAP_MAX_LEVEL, bestLevel)), stages: SGA_QUEST_STAGES }}
             unlockAll={allStagesOpen}
@@ -2464,7 +2464,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
         })()}
 
         {screen === 'menu' && leaderboardOpen && (
-          <Overlay><PerfectShotLeaderboard
+          <Overlay><RankBoardPage
             leaving={leaderboardLeaving}
             stats={{ stage: bestLevel, score: best, coins: totalCoins }}
             rivals={leaderboardRivals}

@@ -92,9 +92,9 @@ test('the store tool, the checker and the CI job exist and are wired', () => {
   assert.match(ci, /check-store-assets\.ts/);
 });
 
-test('the device test plan covers installation, both games and settings', () => {
+test('the device test plan covers installation, the game and settings', () => {
   const plan = read('docs/TEST-PLAN.md');
-  for (const topic of ['Instalasi', 'GUN HIT', 'PERFECT SHOT', 'Ganti bahasa', 'reset progres', 'cold start', 'back']) {
+  for (const topic of ['Instalasi', 'GUN HIT', 'Ganti bahasa', 'reset progres', 'cold start', 'back']) {
     assert.ok(plan.toLowerCase().includes(topic.toLowerCase()), `test plan mentions ${topic}`);
   }
   assert.match(plan, /RESET PROGRES/);

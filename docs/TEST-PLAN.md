@@ -5,7 +5,7 @@ otomatis atau emulator. Jalankan sekali sebelum setiap rilis, dan ulangi bagian
 yang tersentuh perubahan.
 
 - Waktu: ±90 menit untuk satu perangkat (semua bagian).
-- Hasil dicatat di tabel §7 (boleh di issue GitHub atau spreadsheet).
+- Hasil dicatat di tabel §6 (boleh di issue GitHub atau spreadsheet).
 - Bug yang ditemukan: tulis perangkat + langkah reproduksi + tangkapan layar.
 
 ---
@@ -47,15 +47,10 @@ menengah dan modern.
 - [ ] Ganti senjata di Arsenal: senjata terpasang bertahan setelah app ditutup.
 - [ ] Quest/misi & milestone: klaim menambah koin, tombol klaim hilang.
 - [ ] PERINGKAT: daftar TOP RUNS terisi setelah satu run selesai.
+- [ ] Hanya ada **satu** game: setelah intro, tidak ada tombol/pane pemilih game
+      (Game B PERFECT SHOT sudah dihapus); geser layar tidak memunculkan game lain.
 
-## 4. Alur inti Game B (PERFECT SHOT)
-
-- [ ] Semua layar berbahasa Inggris, tidak ada teks Indonesia tersisa.
-- [ ] Quest map: pilih stage, main, kembali.
-- [ ] Lempar pisau: hit, miss, dan wajib tepat sesuai aturan stage.
-- [ ] Codex, achievement, dan shop terbuka tanpa error.
-
-## 5. Pengaturan, bahasa, aksesibilitas
+## 4. Pengaturan, bahasa, aksesibilitas
 
 - [ ] Ganti bahasa ID ⇄ EN: teks berubah **tanpa reload** (menu, HUD kanvas,
       peta, quest, arsenal, pengaturan).
@@ -66,7 +61,7 @@ menengah dan modern.
 - [ ] RESET PROGRES: progres hilang, **pengaturan (bahasa/volume/tema) tetap**.
 - [ ] Kebijakan privasi terbuka dari dalam game dan bisa digulir sampai akhir.
 
-## 6. Ketahanan & performa
+## 5. Ketahanan & performa
 
 - [ ] Cold start ke menu < 5 s di perangkat low-end.
 - [ ] Gameplay stabil ≥ 50 fps; tidak ada lonjakan memori terus-menerus
@@ -82,22 +77,22 @@ menengah dan modern.
 - [ ] Main 15 menit nonstop: tidak ada panas berlebih/thermal throttling parah,
       baterai wajar.
 
-## 7. Format catatan hasil
+## 6. Format catatan hasil
 
 | Perangkat | Android | Bagian | Hasil | Catatan |
 |---|---|---|---|---|
-| Galaxy A05 | 13 | 2–6 | PASS | — |
-| Redmi 9A | 10 | 2–6 | FAIL §6 | fps 38 saat bos: lihat #12 |
-| Pixel 8 | 15 | 2–6 | PASS | — |
+| Galaxy A05 | 13 | 2–5 | PASS | — |
+| Redmi 9A | 10 | 2–5 | FAIL §5 | fps 38 saat bos: lihat #12 |
+| Pixel 8 | 15 | 2–5 | PASS | — |
 
-## 8. Yang tidak perlu diuji manual (sudah otomatis)
+## 7. Yang tidak perlu diuji manual (sudah otomatis)
 
-`npm test` (652 tes) dan `npx tsc --noEmit` di CI sudah mencakup: i18n lengkap,
+`npm test` (660 tes) dan `npx tsc --noEmit` di CI sudah mencakup: i18n lengkap,
 migrasi simpanan + checksum, papan skor lokal, privasi/izin, telemetri no-op,
 penamaan bos, alur menu, dan geometri peta. Jalankan `npm run build` sebelum
 menyerahkan build ke penguji.
 
-## 9. Rilis cepat (smoke 10 menit)
+## 8. Rilis cepat (smoke 10 menit)
 
 Kalau waktu sangat terbatas, minimal ini:
 

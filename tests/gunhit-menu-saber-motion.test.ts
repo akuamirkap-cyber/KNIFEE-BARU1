@@ -55,7 +55,7 @@ const effects = ['original', 'new', 'set7', 'set9'] as const;
 const near = (value: number, expected: number) => Math.abs(value - expected) < 1e-7;
 const ageForTest = 0.1;
 
-test('SGA menu shares Perfect Shot choreography while keeping SGA art, background and currency', () => {
+test('SGA menu keeps its intro choreography, art, background and currency', () => {
   const app = readFileSync('src/games/gunhit/App.tsx', 'utf8');
   const css = readFileSync('src/index.css', 'utf8');
   const menu = app.slice(app.indexOf("{screen === 'menu' && !mapOpen && !questOpen"), app.indexOf("{screen === 'menu' && settingsOpen && ("));
@@ -86,8 +86,6 @@ test('SGA menu shares Perfect Shot choreography while keeping SGA art, backgroun
   assert.match(psMotionCss, /\.menu-pop-ray[\s\S]*?animation: menuPopRay/);
   assert.match(psMotionCss, /\.st-in-combo::after \{ content: none !important; animation: none !important; \}/);
   assert.match(app, /menuPlan\.gun === 'combo'[\s\S]*?menu-pop-burst/);
-  const psMenu = readFileSync('src/games/perfect-shot/components/MainMenu.tsx', 'utf8');
-  assert.match(psMenu, /plan\.gun === "combo"[\s\S]*?menu-pop-burst/);
   assert.match(app, /subscribeMenuPlan\(setMenuPlan\)/);
   assert.match(app, /initialGameplayWheelCenterY\(stageConfig\.boss, Boolean\(specialMode\)\) \/ H/);
   assert.match(app, /origin=\{playTransition\.origin\}/);

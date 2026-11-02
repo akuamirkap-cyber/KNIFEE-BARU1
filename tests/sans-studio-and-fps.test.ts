@@ -241,7 +241,7 @@ test('App plays the SANS STUDIO intro before booting SGA and keeps replay non-de
   assert.ok(appSrc.includes('studioSfx.startMusic()'), 'the shared ambient music starts on a user gesture');
   assert.ok(appSrc.includes('<Suspense fallback={<GameBootFallback />}'), 'lazy loading always shows a visible boot state');
   assert.ok(appSrc.includes('SansStudioLoading'), 'the studio intro is available at startup and for replay');
-  assert.ok(appSrc.includes("active={pageVisible && !loading && activeGame === 'sga'}"), 'SGA pauses during the intro and while its side-by-side page is offscreen');
+  assert.ok(appSrc.includes('active={pageVisible && !loading}'), 'SGA pauses during the intro and while the tab is offscreen');
   assert.ok(appSrc.includes('<GunHitGame introReady={hasBooted && !loading} />'), 'SGA receives intro readiness directly so a lazy-load race cannot freeze its menu');
   assert.ok(appSrc.includes('sans-replay-intro'), 'App listens for sans-replay-intro to replay the intro');
 });

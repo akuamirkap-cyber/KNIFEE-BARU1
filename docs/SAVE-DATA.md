@@ -114,8 +114,8 @@ Yang ditampilkan di layar `PERINGKAT`:
 - sepuluh run terbaik pemain (`skor`, `stage`, `koin`, waktu) dari `gunhit_runs_v1`;
 - baris pemain sendiri selalu ada, diurutkan bersama run tersebut;
 - label `TOP RUNS · OFFLINE` supaya jelas papan ini milik perangkat ini;
-- Game B (`PERFECT SHOT`) memakai pesaing simulasi dan diberi label
-  `SIMULATED RIVALS · OFFLINE` — bukan pemain online.
+- Game B sudah dihapus, jadi `SIMULATED RIVALS · OFFLINE` tidak pernah tampil
+  lagi; layar `PERINGKAT` hanya berisi run pemain di perangkat ini.
 
 Kalau suatu hari papan online diinginkan, urutan kerjanya: layanan backend
 terpisah → identitas anonim (bukan nama asli) → moderasi nama → pembaruan
