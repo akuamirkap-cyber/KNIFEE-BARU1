@@ -3,8 +3,8 @@ import { MILESTONES, QUESTS, type Quest, type QuestState } from '../game/quests'
 import { sfx } from '../game/audio';
 import { sfx4 } from '../game/sfx4';
 import CoinSprite from '../../shared/CoinSprite';
+import MilestoneGift from './MilestoneGift';
 import DiamondSprite from '../../shared/DiamondSprite';
-import { Chest } from '../../perfect-shot/components/Bits';
 import { GiftBox } from '../../perfect-shot/gift/GiftArt';
 import { Ico, IcoTile, type FlatName } from '../../perfect-shot/ui/FlatIcons';
 import { ACH_IN, ACH_OUT } from '../../perfect-shot/ach/data';
@@ -179,7 +179,7 @@ export default function QuestModal({ state, ownedCount, coins, diamonds, onClaim
                   </div>
                   <div className="absolute flex -translate-x-1/2 flex-col items-center" style={{ left, transform: 'translateX(-50%)', ...chestPosition }}>
                     <button data-gloss="off" onClick={() => milestoneClaim(m.count)} aria-label={`${m.rarity} milestone reward`} className="press relative block" style={{ width: chestSize, filter: reached && !taken ? 'drop-shadow(0 0 7px rgba(255,210,63,.72))' : undefined }}>
-                      <Chest tone={tones[m.rarity]} open={taken} className="w-full drop-shadow-[0_4px_3px_rgba(0,0,0,.38)]" />
+                      <MilestoneGift tone={tones[m.rarity]} open={taken} className="w-full drop-shadow-[0_4px_3px_rgba(0,0,0,.38)]" />
                       {reached && !taken && <span className="font-title absolute -top-2 left-1/2 -translate-x-1/2 rounded-full bg-[#ef4444] px-1.5 py-[2px] text-[8px] leading-none text-white ring-2 ring-white">KLAIM</span>}
                     </button>
                     <span className={`font-title mt-0.5 whitespace-nowrap rounded-md px-1.5 py-[2px] text-[8px] leading-none shadow ${m.rarity === 'UMUM' ? 'bg-[#22c55e] text-white' : m.rarity === 'EPIC' ? 'bg-[#a855f7] text-white' : 'bg-[#fbbf24] text-[#482900]'}`}>{m.rarity === 'LEGENDARIS' ? 'LEGEND' : m.rarity}</span>
@@ -189,7 +189,7 @@ export default function QuestModal({ state, ownedCount, coins, diamonds, onClaim
             })}
             {[3, 8, 14, 17].map((at) => <span key={`gift-${at}`} aria-hidden="true" className="pointer-events-none absolute z-10" style={{ left: `${(at / 20) * 100}%`, top: at > 5 && at < 10 ? 36 : 98, transform: 'translateX(-50%)' }}><GiftBox className="w-[34px] drop-shadow-[0_4px_3px_rgba(0,0,0,.4)]" /></span>)}
           </div>
-          <p className="font-ui flex items-center justify-center gap-1 text-center text-[9px] leading-none text-white/70"><Ico name="gift" className="h-3.5 w-3.5" color="rgba(255,255,255,.7)" /> Hadiah milestone di sepanjang jalur · Peti berisi senjata</p>
+          <p className="font-ui flex items-center justify-center gap-1 text-center text-[9px] leading-none text-white/70"><Ico name="gift" className="h-3.5 w-3.5" color="rgba(255,255,255,.7)" /> Hadiah milestone di sepanjang jalur · Kado berisi senjata</p>
         </div>
 
         {/* DAILY / SKILL tabs */}

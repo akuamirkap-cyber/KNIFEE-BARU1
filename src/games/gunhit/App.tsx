@@ -6,7 +6,7 @@ import type { BossHead } from './game/bossCatalog';
 import { bossXpReward, getPlayerProgress } from './game/playerProgress';
 import { sfx4 } from './game/sfx4';
 import { sfx3 } from './game/sfx3';
-import { getWeapon, isWeaponUnlocked, WEAPONS, type WeaponId } from './game/weapons';
+import { getWeapon, isWeaponUnlocked, RARITY_COLOR, WEAPONS, type WeaponId } from './game/weapons';
 import { useSlideActive } from '../shared/SlideActivity';
 import { Burst, Dust, Flare, Shockwave, SparkleField, SunburstFX } from '../knife-hit/components/Effects';
 import { gunSunburstColor } from './game/sunburstPalette';
@@ -1687,6 +1687,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
         {weaponCelebration && (() => {
           const unlocked = getWeapon(weaponCelebration.weaponId);
           const color = gunSunburstColor(unlocked.rarity);
+          const rarity = RARITY_COLOR[unlocked.rarity];
           const starCount = unlocked.rarity === 'LEGENDARIS' ? 3 : unlocked.rarity === 'EPIC' ? 3 : unlocked.rarity === 'LANGKA' ? 2 : 1;
           return (
             <div key={weaponCelebration.id} className="pointer-events-none absolute inset-0 z-[60] flex items-center justify-center overflow-hidden" aria-live="polite" aria-label={`Senjata baru ${unlocked.name}`}>
@@ -1699,11 +1700,52 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                 <Flare width={480} color={color} />
                 <Burst count={30} distance={250} size={14} colors={['#ffffff', '#fde68a', '#7dd3fc', '#f0abfc']} />
               </div>
-              <div className="relative z-10 flex flex-col items-center rounded-2xl border border-white/60 bg-slate-950/80 px-7 py-4 text-center shadow-[0_0_40px_rgba(186,230,253,.55)] backdrop-blur-sm">
-                <div className="mb-1 text-[11px] font-black tracking-[.32em] text-cyan-100">★ SENJATA BARU ★</div>
-                <div className="text-5xl drop-shadow-[0_0_16px_rgba(255,255,255,.8)]">{unlocked.emoji}</div>
-                <div className="mt-1 text-xl font-black text-white">{unlocked.name}</div>
-                <div className="mt-1 text-xl leading-none text-yellow-300 drop-shadow-[0_0_8px_#fde047]">{'★'.repeat(starCount)}</div>
+              {/* Unlock card: a glossy blue plate in the game's own gold frame
+                  instead of the flat black slab, with the rarity colour on the
+                  weapon badge and a gold banner across the top. */}
+              <div className="relative z-10 w-[268px] drop-shadow-[0_16px_30px_rgba(0,0,0,.6)]">
+                <div className="rounded-[26px] border-[3px] border-[#7c2d12] bg-gradient-to-b from-[#ffe27a] via-[#ffa62b] to-[#f97316] p-[3px] shadow-[0_6px_0_#7c2d12]">
+                  <div
+                    className="relative overflow-hidden rounded-[22px] border-2 border-[#0b1f5c] px-5 pb-4 pt-8 text-center shadow-[inset_0_2px_0_rgba(255,255,255,.35)]"
+                    style={{ background: 'linear-gradient(180deg,#1d3d78 0%,#12295a 46%,#0a1730 100%)' }}
+                  >
+                    <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-white/25 to-transparent" />
+                    <div
+                      className="pointer-events-none absolute inset-0 opacity-30"
+                      style={{
+                        backgroundImage: 'linear-gradient(rgba(255,255,255,.09) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.09) 1px, transparent 1px)',
+                        backgroundSize: '18px 18px',
+                      }}
+                    />
+                    <div
+                      className="relative mx-auto grid h-[104px] w-[104px] place-items-center rounded-full"
+                      style={{
+                        background: `radial-gradient(circle at 50% 34%, #fff8d8 0%, ${rarity}77 52%, rgba(6,15,32,.92) 100%)`,
+                        boxShadow: `0 0 0 3px #0b1f5c, 0 0 0 6px ${rarity}, inset 0 0 22px ${rarity}aa, 0 8px 18px rgba(0,0,0,.45)`,
+                      }}
+                    >
+                      <span className="text-[52px] leading-none drop-shadow-[0_6px_10px_rgba(0,0,0,.5)]">{unlocked.emoji}</span>
+                    </div>
+                    <div
+                      className="font-arsenal-title relative mt-3 text-[26px] leading-none text-white"
+                      style={{ textShadow: '0 3px 0 #0b1f5c, 0 0 18px rgba(125,211,252,.45)' }}
+                    >
+                      {unlocked.name}
+                    </div>
+                    <div className="relative mt-2.5 flex items-center justify-center gap-2">
+                      <span
+                        className="rounded-full border-2 border-[#0b1f5c] px-2.5 py-[2px] text-[10px] font-black tracking-[.12em] text-[#0b1220] shadow-[0_2px_0_#0b1f5c]"
+                        style={{ background: rarity }}
+                      >
+                        {unlocked.rarity === 'LEGENDARIS' ? 'LEGEND' : unlocked.rarity}
+                      </span>
+                      <span className="text-[15px] leading-none text-yellow-300 drop-shadow-[0_0_10px_#fde047]">{'★'.repeat(starCount)}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="font-arsenal-title absolute -top-4 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border-2 border-[#7c2d12] bg-gradient-to-b from-[#fff3a0] to-[#f59e0b] px-4 py-[5px] text-[12px] leading-none tracking-[.18em] text-[#5a2a00] shadow-[0_3px_0_#7c2d12]">
+                  ★ SENJATA BARU ★
+                </div>
               </div>
             </div>
           );
