@@ -136,7 +136,20 @@ export default function LevelMap({
               boss: [boss?.accent ?? '#fb7185', '#881337'],
             }[kind];
             return (
-              <div key={level} className="absolute" style={{ left: `${nodeX(index)}%`, top: nodeY(index), transform: 'translate(-50%,-50%)' }}>
+              <div
+                key={level}
+                className="absolute"
+                style={{
+                  left: `${nodeX(index)}%`,
+                  top: nodeY(index),
+                  transform: 'translate(-50%,-50%)',
+                  // 100 nodes, each with its own gradient, glow and entrance
+                  // animation: let the browser skip layout/paint for the ones
+                  // off the scroll viewport instead of doing all 100 on open.
+                  contentVisibility: 'auto',
+                  containIntrinsicSize: `${size + 26}px ${size + 26}px`,
+                }}
+              >
                 <div className="fade-up relative" style={{ animationDelay: `${Math.min(index * 0.008, 0.4)}s` }}>
                 <button
                   type="button"

@@ -927,6 +927,12 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
         // boss keeps its real silhouette instead of a ring.
         markup: (key) => wheelSvgCache.current.get(key) ?? null,
       });
+      // First-use costs (refraction scratch surface, HUD font shaping) are paid
+      // here, while the menu is idle, instead of on the frame a run begins.
+      const warm = () => { if (!cancelled) g?.prewarm(); };
+      const idle = (globalThis as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
+      if (typeof idle === 'function') idle(warm, { timeout: 900 });
+      else window.setTimeout(warm, 120);
       // A run asked for before the chunk landed starts now.
       for (const start of engineQueue.current.splice(0)) start(g);
     };
@@ -1313,6 +1319,10 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   const beginStage = (level: number, specialMode?: 'boulder' | 'bonus' | 'treasure', fromSettings = false) => {
     if (playTransitionBusyRef.current || (mapOpen && mapLeaving)) return;
     playTransitionBusyRef.current = true;
+    // The wheel is an SVG raster: request it now so the decode happens during
+    // the cover/hold beats that follow this tap, not on the frame the wheel is
+    // meant to drop in. Without it a boss head arrives a few frames late.
+    requestWheelArt(level);
     const fromMap = mapOpen;
     const fromMenu = screenRef.current === 'menu' && !fromMap && !settingsOpen && !fromSettings;
     const wantsWeaponFlight = fromMenu && captureMenuWeaponFlight();

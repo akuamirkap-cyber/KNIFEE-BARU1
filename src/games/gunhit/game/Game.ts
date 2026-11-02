@@ -2561,6 +2561,36 @@ export class Game {
     if (changed) this.buildFace();
   }
 
+  /**
+   * First-use costs that would otherwise land on the frame a run starts.
+   *
+   * Nothing here draws to the visible canvas: the refraction scratch surface is
+   * allocated and the HUD's fonts are shaped once into a throwaway 2x2 canvas so
+   * the browser has already parsed `Russo One` at every size the HUD asks for.
+   * Called while the engine sits idle on the menu, it removes a visible hitch
+   * from the first shot of a stage without changing a single pixel.
+   */
+  prewarm() {
+    this.s7State?.prewarmLens();
+    try {
+      const doc = (globalThis as { document?: Document }).document;
+      if (!doc || typeof doc.createElement !== 'function') return;
+      const scratch = doc.createElement('canvas');
+      scratch.width = 2;
+      scratch.height = 2;
+      const c = scratch.getContext('2d');
+      if (!c) return;
+      const font = (size: number) => `${size}px 'Russo One', sans-serif`;
+      c.textBaseline = 'middle';
+      for (const size of [16, 13, 29, 40]) {
+        c.font = font(size);
+        c.fillText('0123456789 COMBO x BOSS', 0, 0);
+      }
+    } catch {
+      // A blocked offscreen context is not an error worth interrupting the menu.
+    }
+  }
+
   start() { this.startRun(1); }
 
   /** Start an existing SGA level directly from the level map without changing its stage rules. */
