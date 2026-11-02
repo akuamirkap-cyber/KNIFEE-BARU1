@@ -1,33 +1,66 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
-import { Game, GUN_Y, GAMEPLAY_GUN_SCALE, H, makeLevel, initialGameplayWheelCenterY } from './game/Game';
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import type { Game } from './game/Game';
+import { GAMEPLAY_GUN_SCALE, GUN_Y, H, initialGameplayWheelCenterY } from './game/layout';
+import { makeLevel } from './game/levels';
 import { savedValues, storage } from './game/safeStorage';
 import { setMasterVolume, setMuted, sfx } from './game/audio';
-import type { BossType } from './game/bossRoster';
+import type { BossHead } from './game/bossCatalog';
 import { bossXpReward, getPlayerProgress } from './game/playerProgress';
 import { sfx4 } from './game/sfx4';
 import { sfx3 } from './game/sfx3';
-import { getWeapon, isWeaponUnlocked, WEAPONS, type WeaponId } from './game/weapons';
+import { getWeapon, isWeaponUnlocked, RARITY_COLOR, WEAPONS, type WeaponId } from './game/weapons';
 import { useSlideActive } from '../shared/SlideActivity';
+import { useAndroidBack } from '../../utils/androidBack';
 import { Burst, Dust, Flare, Shockwave, SparkleField, SunburstFX } from '../knife-hit/components/Effects';
 import { gunSunburstColor } from './game/sunburstPalette';
-import { drawGunCentered } from './game/art/drawCentered';
-import { getGunMetrics } from './game/art/metrics';
-import { gunState } from './game/art/kit';
+/**
+ * Weapon artwork for the menu showcase: a dynamic import, so the title screen
+ * does not wait for every gun's art to be parsed before it can paint.
+ */
+type MenuGunArt = typeof import('./game/menuGunArt');
+let menuGunArtPromise: Promise<MenuGunArt> | null = null;
+const loadMenuGunArt = () => (menuGunArtPromise ??= import('./game/menuGunArt'));
 import { juicyAudio } from '../../utils/juicyAudio';
 import DiamondSprite from '../shared/DiamondSprite';
 import CoinSprite from '../shared/CoinSprite';
 import { MILESTONES, QUESTS, type Quest, type QuestState } from './game/quests';
 import { GUN_HIT_MAP_MAX_LEVEL, getGunHitMapNodeTheme, getGunHitMapStage } from './game/stageMap';
-import Arsenal from './components/Arsenal';
-import QuestModal from './components/QuestModal';
 import { useAllStagesOpen, toggleAllStagesOpen, isUnlockShortcut } from './game/stageUnlock';
-import SgaSettingsPanel from './components/SgaSettingsPanel';
-import SgaWeaponFlight, { WEAPON_FLIGHT_MS, type SgaWeaponFlightData } from './components/SgaWeaponFlight';
-import { Leaderboard as PerfectShotLeaderboard } from '../perfect-shot/components/Leaderboard';
-import { BossDefeatedModal } from './components/BossDefeatedModal';
-import { BossGiftBoxModal, GiftBoxScene } from './components/BossGiftBoxModal';
-import StarBuffModal from './components/StarBuffModal';
-import { QuestMap as PerfectShotQuestMap } from '../perfect-shot/components/QuestMap';
+import { WEAPON_FLIGHT_MS } from './components/weaponFlightTiming';
+import PrivacyPage from '../../components/PrivacyPage';
+import HowToPlayPage from './components/HowToPlayPage';
+import ResetProgressDialog from './components/ResetProgressDialog';
+import { tr } from '../../i18n/strings';
+import { useLanguage } from '../../i18n/useLanguage';
+import { markHowToPlaySeen, shouldShowHowToPlay } from '../../storage/firstRun';
+import { resetProgress } from '../../storage/resetProgress';
+import { bootSave } from '../../storage/saveState';
+import type { Player } from '../perfect-shot/rank/data';
+import { getLanguage } from '../../i18n/language';
+import { readRuns, recordRun, type RunRecord } from '../../storage/leaderboard';
+import { currentRun, trackRunEnd, trackStageClear, trackStageStart } from '../../telemetry/gameAnalytics';
+import type { SgaWeaponFlightData } from './components/SgaWeaponFlight';
+
+/**
+ * Everything behind a tap is loaded on demand: the armory, the quest page, the
+ * settings sheet, the results overlays. None of it is needed for the title
+ * screen to paint, and each one drags its own artwork with it.
+ */
+const Arsenal = lazy(() => import('./components/Arsenal'));
+const QuestModal = lazy(() => import('./components/QuestModal'));
+const SgaSettingsPanel = lazy(() => import('./components/SgaSettingsPanel'));
+const SgaWeaponFlight = lazy(() => import('./components/SgaWeaponFlight'));
+const RankBoardPage = lazy(() =>
+  import('../perfect-shot/components/Leaderboard').then((m) => ({ default: m.Leaderboard })));
+const BossDefeatedModal = lazy(() =>
+  import('./components/BossDefeatedModal').then((m) => ({ default: m.BossDefeatedModal })));
+const BossGiftBoxModal = lazy(() =>
+  import('./components/BossGiftBoxModal').then((m) => ({ default: m.BossGiftBoxModal })));
+const GiftBoxScene = lazy(() =>
+  import('./components/BossGiftBoxModal').then((m) => ({ default: m.GiftBoxScene })));
+const StarBuffModal = lazy(() => import('./components/StarBuffModal'));
+const StageMapPage = lazy(() =>
+  import('../perfect-shot/components/QuestMap').then((m) => ({ default: m.QuestMap })));
 import type { StageBase } from '../perfect-shot/quest/data';
 import { levelConfig, type TargetKind } from '../perfect-shot/play/levels';
 import type { FlatName } from '../perfect-shot/ui/FlatIcons';
@@ -53,6 +86,18 @@ import { animClass, animStore, getSharedMenuPlan, gunTiming, publishMenuPlan, re
 import { OVERLAY_RATE } from '../perfect-shot/anim/speed';
 
 type Screen = 'menu' | 'playing' | 'over';
+
+/**
+ * The engine — art for every weapon, every ported slide, the boss catalogue and
+ * all the FX — is by far the largest module in this app. Pulling it in as its
+ * own chunk lets the menu paint (and accept taps) without waiting for it; the
+ * chunk is requested on mount, so it is normally warm long before a run starts.
+ * Anything that must start a run before it lands is queued in `engineQueue`.
+ */
+const loadEngine = () => import('./game/Game');
+
+/** An overlay whose chunk is still in flight simply is not on screen yet. */
+const Overlay = ({ children }: { children: ReactNode }) => <Suspense fallback={null}>{children}</Suspense>;
 type MenuPageTransition = { phase: OverlayPhase; variant: OverlayVariant; label: string; rate: number } | null;
 type MenuDeparture = 'gun' | 'quest' | 'ready' | 'ranks' | 'play' | null;
 type MenuTransitionTiming = { lead: number; cover: number; hold: number; reveal: number; swapAt: number; finishAt: number; rate: number };
@@ -110,6 +155,7 @@ const menuMotion = (animation: string, delay: number, duration: number, extra = 
 });
 
 function MusicAmbientControl({ enabled, onToggle }: { enabled: boolean; onToggle: () => void }) {
+  const [language] = useLanguage();
   return (
     <button
       type="button"
@@ -120,12 +166,12 @@ function MusicAmbientControl({ enabled, onToggle }: { enabled: boolean; onToggle
       <span className="flex items-center gap-2">
         <span aria-hidden="true">🎵</span>
         <span>
-          <span className="block text-[11px] font-black">MUSIK & AMBIENCE</span>
-          <span className="block text-[9px] text-white/55">Suasana lembut ala Perfect Shot</span>
+          <span className="block text-[11px] font-black">{tr(language, 'MUSIK & AMBIENCE')}</span>
+          <span className="block text-[9px] text-white/55">{tr(language, 'Suasana lembut ala Perfect Shot')}</span>
         </span>
       </span>
       <span className={`rounded-full px-2.5 py-1 text-[9px] font-black ${enabled ? 'bg-emerald-400/20 text-emerald-200' : 'bg-white/10 text-white/60'}`}>
-        {enabled ? 'AKTIF' : 'MATI'}
+        {enabled ? tr(language, 'AKTIF') : tr(language, 'MATI')}
       </span>
     </button>
   );
@@ -145,6 +191,32 @@ function MenuBullet() {
     </div>
   );
 }
+
+/**
+ * Baris papan skor dari run yang benar-benar disimpan di perangkat ini.
+ *
+ * PERINGKAT dulu menampilkan pesaing karangan (skor bot tetap, nama asing).
+ * Sekarang isinya run pemain sendiri: skor, stage dan waktunya nyata, dan
+ * semua tetap di HP — tidak ada leaderboard online (lihat docs/SAVE-DATA.md).
+ */
+function runsToRivals(runs: RunRecord[]): Player[] {
+  return runs.map((run, index) => ({
+    id: `run-${run.at}-${index}`,
+    name: `${tr(getLanguage(), 'RUN #')}${index + 1}`,
+    country: 'ID' as const,
+    score: run.score,
+    stage: run.stage,
+    trend: 0,
+    seed: 400 + index,
+  }));
+}
+
+/**
+ * Migrasi + verifikasi checksum simpanan sebelum layar pertama membaca progres.
+ * Modul ini dievaluasi sebelum komponen mana pun merender, jadi `useState`
+ * pertama sudah melihat nilai yang sudah dirapikan.
+ */
+const saveReport = bootSave(storage);
 
 const LS = {
   best: 'gunhit_best',
@@ -277,6 +349,29 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   const weaponPivotRef = useRef<HTMLDivElement>(null);
   const gameShellRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Game | null>(null);
+  // Runs asked for while the engine chunk is still in flight.
+  const engineQueue = useRef<((engine: Game) => void)[]>([]);
+  // Latest "is the engine allowed to simulate" flag, so a late engine starts
+  // in the right state instead of waiting for the next dependency change.
+  const activeRef = useRef(false);
+  // Gun art for the menu showcase, once its chunk has landed.
+  const [gunArt, setGunArt] = useState<MenuGunArt | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void loadMenuGunArt().then((mod) => {
+      if (alive) setGunArt(mod);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  /** Start a run now, or the moment the engine chunk lands. */
+  const whenEngine = (start: (engine: Game) => void) => {
+    const engine = gameRef.current;
+    if (engine) start(engine);
+    else engineQueue.current.push(start);
+  };
   // Game B's wheel artwork, rasterised on demand and handed to the engine so
   // every stage shows exactly the wheel the reference game shows.
   const wheelArtCache = useRef(new Map<string, HTMLImageElement>());
@@ -375,12 +470,23 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   const [gameSpeed, setGameSpeed] = useSgaGameSpeed();
   const [menuTheme, setMenuTheme] = useSgaBgTheme();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Kebijakan privasi: halaman in-app yang teksnya sama dengan docs/PRIVACY.md.
+  const [privacyOpen, setPrivacyOpen] = useState(false);
+  // CARA MAIN: tampil sendiri sekali, lalu bisa dibuka lagi dari Pengaturan.
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [helpIsFirstRun, setHelpIsFirstRun] = useState(false);
+  const [resetDone, setResetDone] = useState(false);
+  const resetReloadRef = useRef<number | null>(null);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [language, changeLanguage] = useLanguage();
   const [settingsClosing, setSettingsClosing] = useState(false);
   const [inGameSettingsOpen, setInGameSettingsOpen] = useState(false);
   const [arsenalOpen, setArsenalOpen] = useState(false);
   const [menuReturnKey, setMenuReturnKey] = useState(0);
   const [questOpen, setQuestOpen] = useState(false);
   const [leaderboardOpen, setLeaderboardOpen] = useState(false);
+  // Papan skor lokal: diisi ulang setiap kali halaman PERINGKAT dibuka.
+  const [leaderboardRivals, setLeaderboardRivals] = useState<Player[]>([]);
 
   const beginMenuPageTransition = (
     variant: OverlayVariant,
@@ -467,7 +573,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   // Boss Defeated celebration modal state (Screenshot 2)
   const [bossDefeatedData, setBossDefeatedData] = useState<{
     name: string;
-    bossType: BossType;
+    bossHead: BossHead;
     level: number;
     coins: number;
     playerLevel: number;
@@ -509,7 +615,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       });
       setCheatNonce((n) => n + 1);
       sfx.unlock();
-      setCheatToast('🔓 SEMUA GEMBOK TERBUKA!');
+      setCheatToast(tr(language, '🔓 SEMUA GEMBOK TERBUKA!'));
       window.setTimeout(() => setCheatToast(null), 2400);
     };
     window.addEventListener('keydown', onKey);
@@ -681,8 +787,16 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
 
   // Create one engine per mounted slide. Quest/coin updates must not destroy a live run.
   useEffect(() => {
-    const g = new Game(canvasRef.current!, {
+    let cancelled = false;
+    let g: Game | null = null;
+    const boot = async () => {
+      const { Game: Engine } = await loadEngine();
+      if (cancelled || !canvasRef.current) return;
+      g = new Engine(canvasRef.current, {
       onGameOver: (score, level, coins, runCoins) => {
+        // Funnel: the run is over, record how far it got and how long it lasted.
+        trackRunEnd({ outcome: 'game_over', stage: level, score, coins: runCoins });
+        recordRun({ score, stage: level, coins: runCoins });
         const prevBest = num(LS.best);
         const newBest = score > prevBest;
         if (newBest) storage.setItem(LS.best, String(score));
@@ -707,7 +821,8 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
         setStarBuffTreasure(treasure);
         setStarBuffOpen(true);
       },
-      onStageCleared: (level) => {
+      onStageCleared: (level, boss) => {
+        trackStageClear({ stage: level, boss });
         const unlocked = Math.max(1, num(LS.bestLevel), level + 1);
         if (unlocked > num(LS.bestLevel)) {
           storage.setItem(LS.bestLevel, String(unlocked));
@@ -723,7 +838,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       onShotFired: (count) => {
         pendingShotsRef.current += count;
       },
-      onBossDefeated: (bossName, level, coinsEarned, bossType) => {
+      onBossDefeated: (bossName, level, coinsEarned, bossHead) => {
         const totalXpBefore = num(LS.playerXp);
         const previous = getPlayerProgress(totalXpBefore);
         const xpGained = bossXpReward(level);
@@ -732,7 +847,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
         storage.setItem(LS.playerXp, String(totalXp));
         storage.setItem(LS.playerLevel, String(nextProgress.level));
         setBossDefeatedData({
-          name: bossName, bossType, level, coins: coinsEarned,
+          name: bossName, bossHead, level, coins: coinsEarned,
           playerLevel: nextProgress.level,
           xpBefore: previous.level === nextProgress.level ? previous.xp : 0,
           xpProgress: nextProgress.xp,
@@ -790,12 +905,38 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
         const current = questStateRef.current;
         saveQuests({
           ...current,
-          highestScore: Math.max(current.highestScore, g.score),
+          highestScore: Math.max(current.highestScore, gameRef.current?.score ?? 0),
           highestLevel: Math.max(current.highestLevel, level),
           totalCoinsCollected: current.totalCoinsCollected + unbankedCoins,
         });
       },
     });
+      g.setWeapon(getWeapon(storage.getItem(LS.weapon) || 'pistol').id);
+      g.setGameSpeed(getSavedSgaSpeed());
+      g.setBackgroundTheme(getSavedSgaBgTheme());
+      gameRef.current = g;
+      // The mount effects that ran while the chunk was in flight could not touch
+      // the engine; replay their state once it exists.
+      g.setActive(activeRef.current);
+      g.setWheelArtSource({
+        keyFor: wheelArtKeyFor,
+        get: (key) => wheelArtCache.current.get(key) ?? null,
+        request: requestWheelArt,
+        // The markup behind the same raster: the engine rasterises it itself when
+        // the runtime refuses to hand back the pixels of an SVG-drawn canvas, so a
+        // boss keeps its real silhouette instead of a ring.
+        markup: (key) => wheelSvgCache.current.get(key) ?? null,
+      });
+      // First-use costs (refraction scratch surface, HUD font shaping) are paid
+      // here, while the menu is idle, instead of on the frame a run begins.
+      const warm = () => { if (!cancelled) g?.prewarm(); };
+      const idle = (globalThis as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
+      if (typeof idle === 'function') idle(warm, { timeout: 900 });
+      else window.setTimeout(warm, 120);
+      // A run asked for before the chunk landed starts now.
+      for (const start of engineQueue.current.splice(0)) start(g);
+    };
+
     const flushShotsToStorage = () => {
       if (questWriteTimerRef.current !== undefined) {
         window.clearTimeout(questWriteTimerRef.current);
@@ -810,23 +951,14 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     };
     document.addEventListener('visibilitychange', onVisChange);
     window.addEventListener('pagehide', flushShotsToStorage);
-    g.setWeapon(getWeapon(storage.getItem(LS.weapon) || 'pistol').id);
-    g.setGameSpeed(getSavedSgaSpeed());
-    g.setBackgroundTheme(getSavedSgaBgTheme());
-    gameRef.current = g;
-    g.setWheelArtSource({
-      keyFor: wheelArtKeyFor,
-      get: (key) => wheelArtCache.current.get(key) ?? null,
-      request: requestWheelArt,
-      // The markup behind the same raster: the engine rasterises it itself when
-      // the runtime refuses to hand back the pixels of an SVG-drawn canvas, so a
-      // boss keeps its real silhouette instead of a ring.
-      markup: (key) => wheelSvgCache.current.get(key) ?? null,
-    });
+    void boot();
+
     return () => {
+      cancelled = true;
       document.removeEventListener('visibilitychange', onVisChange);
       window.removeEventListener('pagehide', flushShotsToStorage);
-      g.destroy();
+      engineQueue.current.length = 0;
+      g?.destroy();
       gameRef.current = null;
       flushShotsToStorage();
     };
@@ -957,14 +1089,17 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   // The menu, results and modal screens use their own lightweight effects;
   // the heavy level canvas has nothing to simulate behind those overlays.
   const gameplayModalOpen = inGameSettingsOpen || arsenalOpen || questOpen || leaderboardOpen || starBuffOpen || bonusStageOpen || Boolean(bossDefeatedData);
+  const simulate = active && screen === 'playing' && !gameplayModalOpen;
+  activeRef.current = simulate;
   useEffect(() => {
     if (screen !== 'playing' && inGameSettingsOpen) setInGameSettingsOpen(false);
     if (screen === 'menu') gameRef.current?.toIdle();
-    gameRef.current?.setActive(active && screen === 'playing' && !gameplayModalOpen);
-  }, [active, screen, gameplayModalOpen, inGameSettingsOpen]);
+    gameRef.current?.setActive(simulate);
+  }, [simulate, screen, inGameSettingsOpen]);
 
   // Upright weapon preview on the main menu (-10% from 374x328 -> 337x295, native VSync FPS)
   useEffect(() => {
+    if (!gunArt) return;
     if (screen !== 'menu' || arsenalOpen || questOpen || leaderboardOpen || mapOpen || settingsOpen) return;
     const cv = previewCanvasRef.current;
     if (!cv) return;
@@ -977,6 +1112,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     if (!ctx) return;
 
     const curW = getWeapon(weapon);
+    const { drawGunCentered, getGunMetrics, gunState } = gunArt;
 
     const drawStill = () => {
       // Keep SGA's exact weapon art still in the showcase. The menu's shared
@@ -1055,7 +1191,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     } catch {
       // Some low-end canvas contexts disable readback; fall back to the shared frame center.
     }
-  }, [screen, weapon, arsenalOpen, questOpen, leaderboardOpen, mapOpen, settingsOpen]);
+  }, [gunArt, screen, weapon, arsenalOpen, questOpen, leaderboardOpen, mapOpen, settingsOpen]);
 
   // Roll up score only while the slide is active; pause at the current number.
   useEffect(() => {
@@ -1084,7 +1220,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
         setTransitionStep(2);
       } else {
         setTransitioning(false);
-        gameRef.current?.startAtLevel(startingLevelRef.current);
+        whenEngine((engine) => engine.startAtLevel(startingLevelRef.current));
         setScreen('playing');
         setTransitionStep(0);
       }
@@ -1095,7 +1231,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   const captureMenuWeaponFlight = (): boolean => {
     const source = previewCanvasRef.current;
     const shell = gameShellRef.current;
-    if (!source || !shell || !shell.clientWidth || !shell.clientHeight) return false;
+    if (!gunArt || !source || !shell || !shell.clientWidth || !shell.clientHeight) return false;
     try {
       const shellRect = shell.getBoundingClientRect();
       const sourceRect = source.getBoundingClientRect();
@@ -1150,7 +1286,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       const dpr = source.width / 337;
       const sourceScaleX = source.width / sourceRect.width;
       const sourceScaleY = source.height / sourceRect.height;
-      const metric = getGunMetrics(weapon);
+      const metric = gunArt.getGunMetrics(weapon);
       const previewScale = (295 * 0.78) / Math.max(metric.span, 130);
       const gameScaleX = shell.clientWidth / 420;
       const gameScaleY = shell.clientHeight / 760;
@@ -1183,6 +1319,10 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   const beginStage = (level: number, specialMode?: 'boulder' | 'bonus' | 'treasure', fromSettings = false) => {
     if (playTransitionBusyRef.current || (mapOpen && mapLeaving)) return;
     playTransitionBusyRef.current = true;
+    // The wheel is an SVG raster: request it now so the decode happens during
+    // the cover/hold beats that follow this tap, not on the frame the wheel is
+    // meant to drop in. Without it a boss head arrives a few frames late.
+    requestWheelArt(level);
     const fromMap = mapOpen;
     const fromMenu = screenRef.current === 'menu' && !fromMap && !settingsOpen && !fromSettings;
     const wantsWeaponFlight = fromMenu && captureMenuWeaponFlight();
@@ -1191,6 +1331,8 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       setMenuDeparture('play');
     }
     const stageConfig = makeLevel(level, specialMode);
+    // Funnel: a stage is about to start (this also opens a new run if none is live).
+    trackStageStart({ stage: level, mode: stageConfig.mode, weapon, boss: stageConfig.boss });
     const lead = fromMenu || fromSettings ? PLAY_SCOPE.menuLead : fromMap ? PLAY_SCOPE.questLead : PLAY_SCOPE.otherLead;
     const mountAt = lead + PLAY_SCOPE.cover;
     // The rival wheel plays Perfect Shot's own drop -> squash -> pop entrance, but
@@ -1246,8 +1388,10 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       // The flying menu frame is the only weapon until it lands: the live gun
       // stays hidden for the flight's own duration, then appears in place.
       const gunHiddenFor = wantsWeaponFlight ? WEAPON_FLIGHT_MS / 1000 : 0;
-      if (specialMode) gameRef.current?.startSpecialStage(specialMode, gunEntryDelay, true, wheelEntryDelay, gunHiddenFor, wantsWeaponFlight);
-      else gameRef.current?.startAtLevel(level, wantsWeaponFlight, gunEntryDelay, true, wheelEntryDelay, gunHiddenFor);
+      whenEngine((engine) => {
+        if (specialMode) engine.startSpecialStage(specialMode, gunEntryDelay, true, wheelEntryDelay, gunHiddenFor, wantsWeaponFlight);
+        else engine.startAtLevel(level, wantsWeaponFlight, gunEntryDelay, true, wheelEntryDelay, gunHiddenFor);
+      });
       setScreen('playing');
       afterPaint(playEnterAudio);
     });
@@ -1290,7 +1434,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       const now = toggleAllStagesOpen();
       studioSfx.tap(0, 900);
       setUnlockToast(now
-        ? 'SEMUA STAGE TERBUKA'
+        ? tr(language, 'SEMUA STAGE TERBUKA')
         : 'PROGRES NORMAL: stage dibuka satu per satu');
     };
     window.addEventListener('keydown', onKey);
@@ -1352,7 +1496,8 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   };
 
   const openLeaderboardPage = () => {
-    const timing = beginMenuPageTransition('podium', 'PERINGKAT', menuPageLead(), () => setLeaderboardOpen(true), 'ranks', {
+    setLeaderboardRivals(runsToRivals(readRuns(storage)));
+    const timing = beginMenuPageTransition('podium', tr(language, 'PERINGKAT'), menuPageLead(), () => setLeaderboardOpen(true), 'ranks', {
       cover: (t) => studioSfx.podiumClose(0, t.rate),
       swap: (t) => { studioSfx.podiumOpen(0, t.rate); studioSfx.lbEnter(0, LB_IN); },
     });
@@ -1364,7 +1509,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   const closeLeaderboardPage = () => {
     if (leaderboardLeaving) return;
     const nextPlan = freshMenuPlan();
-    const timing = beginMenuPageTransition('podium', 'PERINGKAT', LB_OUT.total, () => {
+    const timing = beginMenuPageTransition('podium', tr(language, 'PERINGKAT'), LB_OUT.total, () => {
       setLeaderboardOpen(false);
       setLeaderboardLeaving(false);
       setMenuPlan(nextPlan);
@@ -1530,6 +1675,11 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   };
 
   const goToMainMenuFromPlay = () => {
+    // Leaving mid-run (pause → menu) ends the funnel with "abandoned" instead of
+    // "game_over", so a quit is never counted as a death.
+    if (currentRun()) {
+      trackRunEnd({ outcome: 'abandoned', stage: currentRun()!.stage, score: gameRef.current?.score ?? 0, coins: 0 });
+    }
     const nextPlan = freshMenuPlan();
     const timing = beginMenuPageTransition('fade', 'MENU', PLAY_OUT.total, () => {
       setInGameSettingsOpen(false);
@@ -1618,6 +1768,71 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     return sx === undefined ? motion : { ...motion, style: { ...motion.style, '--sx': sx } as CSSProperties };
   };
 
+  /**
+   * Android back, top of the pile first: the newest overlay closes, then a live
+   * run pauses into the same settings panel as the gear button, and the result
+   * screen returns to the menu. Anything this pane does not use is left to the
+   * hub (which leaves the app) instead of killing a run by accident.
+   */
+  // Sekali saja: begitu menu siap, tampilkan CARA MAIN untuk pemain baru.
+  useEffect(() => {
+    if (!active || !menuReady) return;
+    if (!shouldShowHowToPlay(storage)) return;
+    setHelpIsFirstRun(true);
+    setHelpOpen(true);
+  }, [active, menuReady]);
+
+  /** Tutup CARA MAIN dan tandai sudah pernah dilihat. */
+  const closeHelp = () => {
+    setHelpOpen(false);
+    setHelpIsFirstRun(false);
+    markHowToPlaySeen(storage);
+  };
+
+  /**
+   * RESET PROGRES: hapus save, lalu muat ulang aplikasi. Reload adalah satu-satunya
+   * cara yang dijamin membuat semua layar (menu, peta, arsenal, quest) membaca
+   * save yang sudah kosong, tanpa menyentuh belasan state satu per satu.
+   */
+  const confirmResetProgress = () => {
+    resetProgress(storage);
+    // Tampilkan konfirmasi singkat, baru reload: kalau jendela langsung hilang,
+    // pemain tidak tahu apakah tombolnya bekerja atau aplikasinya crash.
+    setResetDone(true);
+    if (resetReloadRef.current !== null) window.clearTimeout(resetReloadRef.current);
+    resetReloadRef.current = window.setTimeout(() => window.location.reload(), 800);
+  };
+
+  useEffect(
+    () => () => {
+      if (resetReloadRef.current !== null) window.clearTimeout(resetReloadRef.current);
+    },
+    [],
+  );
+
+  useAndroidBack(() => {
+    if (helpOpen) { closeHelp(); return true; }
+    if (resetOpen) {
+      // Setelah progres dihapus dialognya menunggu reload — jangan ditutup.
+      if (!resetDone) setResetOpen(false);
+      return true;
+    }
+    if (privacyOpen) { setPrivacyOpen(false); return true; }
+    if (inGameSettingsOpen) { setInGameSettingsOpen(false); return true; }
+    if (arsenalOpen) { startArsenalTransition(false); return true; }
+    if (questOpen) { closeQuestPage(); return true; }
+    if (leaderboardOpen) { closeLeaderboardPage(); return true; }
+    if (starBuffOpen) { setStarBuffOpen(false); return true; }
+    if (mapOpen) { setMapOpen(false); return true; }
+    if (settingsOpen) { setSettingsOpen(false); return true; }
+    // A reward is being opened: swallow the press so the app never vanishes
+    // from under a modal that still has to be claimed.
+    if (bonusStageOpen || bossDefeatedData || milestoneGift || weaponCelebration) return true;
+    if (screen === 'playing') { setInGameSettingsOpen(true); return true; }
+    if (screen === 'over') { goToMainMenuFromPlay(); return true; }
+    return false;
+  }, active);
+
   return (
     <div
       className="gunhit-sga font-game flex h-full w-full select-none items-center justify-center bg-[#071318] relative"
@@ -1654,12 +1869,12 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
         <button
           onClick={onExit}
           className="fixed top-3 left-3 z-50 flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-neutral-900/90 hover:bg-neutral-800 text-white text-xs font-semibold backdrop-blur-md border border-white/20 shadow-xl cursor-pointer transition hover:scale-105 active:scale-95"
-          title="Kembali ke Menu Game"
+          title={tr(language, 'Kembali ke Menu Game')}
         >
           <svg className="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
           </svg>
-          <span>Pilih Game Lain</span>
+          <span>{tr(language, 'Pilih Game Lain')}</span>
         </button>
       )}
       <div ref={gameShellRef} className="relative overflow-hidden shadow-[0_0_80px_rgba(0,0,0,0.9)] w-[420px] h-[760px] flex-shrink-0">
@@ -1687,9 +1902,10 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
         {weaponCelebration && (() => {
           const unlocked = getWeapon(weaponCelebration.weaponId);
           const color = gunSunburstColor(unlocked.rarity);
+          const rarity = RARITY_COLOR[unlocked.rarity];
           const starCount = unlocked.rarity === 'LEGENDARIS' ? 3 : unlocked.rarity === 'EPIC' ? 3 : unlocked.rarity === 'LANGKA' ? 2 : 1;
           return (
-            <div key={weaponCelebration.id} className="pointer-events-none absolute inset-0 z-[60] flex items-center justify-center overflow-hidden" aria-live="polite" aria-label={`Senjata baru ${unlocked.name}`}>
+            <div key={weaponCelebration.id} className="pointer-events-none absolute inset-0 z-[60] flex items-center justify-center overflow-hidden" aria-live="polite" aria-label={`${tr(language, 'Senjata baru ')}${unlocked.name}`}>
               <Dust count={22} />
               <SparkleField count={18} spread={1.55} delay={0.12} />
               <SunburstFX size={450} color={color} intensity={1.05} speed={12} stars />
@@ -1699,11 +1915,52 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                 <Flare width={480} color={color} />
                 <Burst count={30} distance={250} size={14} colors={['#ffffff', '#fde68a', '#7dd3fc', '#f0abfc']} />
               </div>
-              <div className="relative z-10 flex flex-col items-center rounded-2xl border border-white/60 bg-slate-950/80 px-7 py-4 text-center shadow-[0_0_40px_rgba(186,230,253,.55)] backdrop-blur-sm">
-                <div className="mb-1 text-[11px] font-black tracking-[.32em] text-cyan-100">★ SENJATA BARU ★</div>
-                <div className="text-5xl drop-shadow-[0_0_16px_rgba(255,255,255,.8)]">{unlocked.emoji}</div>
-                <div className="mt-1 text-xl font-black text-white">{unlocked.name}</div>
-                <div className="mt-1 text-xl leading-none text-yellow-300 drop-shadow-[0_0_8px_#fde047]">{'★'.repeat(starCount)}</div>
+              {/* Unlock card: a glossy blue plate in the game's own gold frame
+                  instead of the flat black slab, with the rarity colour on the
+                  weapon badge and a gold banner across the top. */}
+              <div className="relative z-10 w-[268px] drop-shadow-[0_16px_30px_rgba(0,0,0,.6)]">
+                <div className="rounded-[26px] border-[3px] border-[#7c2d12] bg-gradient-to-b from-[#ffe27a] via-[#ffa62b] to-[#f97316] p-[3px] shadow-[0_6px_0_#7c2d12]">
+                  <div
+                    className="relative overflow-hidden rounded-[22px] border-2 border-[#0b1f5c] px-5 pb-4 pt-8 text-center shadow-[inset_0_2px_0_rgba(255,255,255,.35)]"
+                    style={{ background: 'linear-gradient(180deg,#1d3d78 0%,#12295a 46%,#0a1730 100%)' }}
+                  >
+                    <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-white/25 to-transparent" />
+                    <div
+                      className="pointer-events-none absolute inset-0 opacity-30"
+                      style={{
+                        backgroundImage: 'linear-gradient(rgba(255,255,255,.09) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.09) 1px, transparent 1px)',
+                        backgroundSize: '18px 18px',
+                      }}
+                    />
+                    <div
+                      className="relative mx-auto grid h-[104px] w-[104px] place-items-center rounded-full"
+                      style={{
+                        background: `radial-gradient(circle at 50% 34%, #fff8d8 0%, ${rarity}77 52%, rgba(6,15,32,.92) 100%)`,
+                        boxShadow: `0 0 0 3px #0b1f5c, 0 0 0 6px ${rarity}, inset 0 0 22px ${rarity}aa, 0 8px 18px rgba(0,0,0,.45)`,
+                      }}
+                    >
+                      <span className="text-[52px] leading-none drop-shadow-[0_6px_10px_rgba(0,0,0,.5)]">{unlocked.emoji}</span>
+                    </div>
+                    <div
+                      className="font-arsenal-title relative mt-3 text-[26px] leading-none text-white"
+                      style={{ textShadow: '0 3px 0 #0b1f5c, 0 0 18px rgba(125,211,252,.45)' }}
+                    >
+                      {unlocked.name}
+                    </div>
+                    <div className="relative mt-2.5 flex items-center justify-center gap-2">
+                      <span
+                        className="rounded-full border-2 border-[#0b1f5c] px-2.5 py-[2px] text-[10px] font-black tracking-[.12em] text-[#0b1220] shadow-[0_2px_0_#0b1f5c]"
+                        style={{ background: rarity }}
+                      >
+                        {unlocked.rarity === 'LEGENDARIS' ? 'LEGEND' : unlocked.rarity}
+                      </span>
+                      <span className="text-[15px] leading-none text-yellow-300 drop-shadow-[0_0_10px_#fde047]">{'★'.repeat(starCount)}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="font-arsenal-title absolute -top-4 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border-2 border-[#7c2d12] bg-gradient-to-b from-[#fff3a0] to-[#f59e0b] px-4 py-[5px] text-[12px] leading-none tracking-[.18em] text-[#5a2a00] shadow-[0_3px_0_#7c2d12]">
+                  ★ SENJATA BARU ★
+                </div>
               </div>
             </div>
           );
@@ -1748,7 +2005,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                   <DiamondSprite size={156} />
                 </div>
                 <div className="relative z-10 mt-4 rounded-2xl border-2 border-[#e0f4ff] bg-[#071827]/90 px-6 py-3 text-center shadow-[0_0_40px_rgba(186,230,253,0.9)]">
-                  <div className="text-[11px] font-black tracking-[0.32em] text-cyan-100">BERLIAN BESAR DIDAPAT</div>
+                  <div className="text-[11px] font-black tracking-[0.32em] text-cyan-100">{tr(language, 'BERLIAN BESAR DIDAPAT')}</div>
                   <div className="mt-1 text-3xl font-black text-white drop-shadow-[0_0_12px_#bae6fd]">+{diamondReveal.amount}</div>
                 </div>
               </div>
@@ -1873,7 +2130,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                         </div>
                       )}
                     </div>
-                    <canvas ref={previewCanvasRef} style={{ width: 'min(337px, 90vw)', height: 'min(295px, 54vh)' }} className="block cursor-pointer drop-shadow-[0_10px_20px_rgba(0,0,0,.5)] transition-transform hover:scale-105" role="button" tabIndex={0} aria-label="Buka koleksi senjata" onClick={() => startArsenalTransition(true)} onKeyDown={(event) => {
+                    <canvas ref={previewCanvasRef} style={{ width: 'min(337px, 90vw)', height: 'min(295px, 54vh)' }} className="block cursor-pointer drop-shadow-[0_10px_20px_rgba(0,0,0,.5)] transition-transform hover:scale-105" role="button" tabIndex={0} aria-label={tr(language, 'Buka koleksi senjata')} onClick={() => startArsenalTransition(true)} onKeyDown={(event) => {
                       if (event.key === 'Enter' || event.key === ' ') {
                         event.preventDefault();
                         unlockStudioAudio(true);
@@ -1938,8 +2195,24 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
           </div>
         )}
 
+        {helpOpen && (
+          <Overlay><HowToPlayPage firstRun={helpIsFirstRun} onClose={closeHelp} /></Overlay>
+        )}
+
+        {resetOpen && (
+          <Overlay><ResetProgressDialog
+            done={resetDone}
+            onCancel={() => setResetOpen(false)}
+            onConfirm={confirmResetProgress}
+          /></Overlay>
+        )}
+
+        {privacyOpen && (
+          <Overlay><PrivacyPage onClose={() => setPrivacyOpen(false)} /></Overlay>
+        )}
+
         {screen === 'menu' && settingsOpen && (
-          <SgaSettingsPanel
+          <Overlay><SgaSettingsPanel
             closing={settingsClosing}
             muted={muted}
             volume={soundVolume}
@@ -1973,24 +2246,32 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
               window.dispatchEvent(new CustomEvent('sans-replay-intro'));
             }}
             onSpecial={startSpecial}
+            onPrivacy={() => setPrivacyOpen(true)}
+            language={language}
+            onLanguage={changeLanguage}
+            onHelp={() => setHelpOpen(true)}
+            onReset={() => {
+              setResetDone(false);
+              setResetOpen(true);
+            }}
             formatSpeed={formatSgaSpeed}
-          />
+          /></Overlay>
         )}
 
         {screen === 'menu' && mapOpen && (
-          <PerfectShotQuestMap
+          <Overlay><StageMapPage
             leaving={mapLeaving}
             progress={{ stage: Math.max(1, Math.min(GUN_HIT_MAP_MAX_LEVEL, bestLevel)), stages: SGA_QUEST_STAGES }}
             unlockAll={allStagesOpen}
             onBack={closeLevelMap}
             onPlay={(_event, level) => beginStage(level)}
-          />
+          /></Overlay>
         )}
 
         {screen === 'menu' && (mapOpen || questOpen) && (
           <>
             <div className="pointer-events-none absolute bottom-2 left-1/2 z-[70] -translate-x-1/2 whitespace-nowrap rounded-full border border-white/25 bg-black/55 px-3 py-1 text-[10px] font-black tracking-wide text-white/80 backdrop-blur-[2px]">
-              {allStagesOpen ? '🔓 SEMUA STAGE TERBUKA' : '🔒 PROGRES NORMAL'} · tekan <span className="mx-0.5 rounded bg-white/20 px-1">P</span>
+              {allStagesOpen ? tr(language, '🔓 SEMUA STAGE TERBUKA') : tr(language, '🔒 PROGRES NORMAL')} · {tr(language, 'tekan')} <span className="mx-0.5 rounded bg-white/20 px-1">P</span>
               {allStagesOpen ? ' untuk normal' : ' untuk buka semua'}
             </div>
             {unlockToast && (
@@ -2026,7 +2307,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                     studioSfx.subExit(0);
                     setInGameSettingsOpen(false);
                   }}
-                  aria-label="Tutup pengaturan permainan"
+                  aria-label={tr(language, 'Tutup pengaturan permainan')}
                   className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/15 bg-white/10 text-xl text-white/85 hover:bg-white/20"
                 >
                   ×
@@ -2044,7 +2325,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                     <span className="text-xl">{muted || soundVolume <= 0 ? '🔇' : '🔊'}</span>
                     <span>
                       <span className="block text-sm font-black">SUARA GAME</span>
-                      <span className="block text-[10px] text-white/55">Geser untuk atur volume efek</span>
+                      <span className="block text-[10px] text-white/55">{tr(language, 'Geser untuk atur volume efek')}</span>
                     </span>
                   </button>
                   <button
@@ -2054,7 +2335,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                       muted || soundVolume <= 0 ? 'bg-white/10 text-white/65' : 'bg-emerald-400/25 text-emerald-200'
                     }`}
                   >
-                    {muted || soundVolume <= 0 ? 'MATI' : `${Math.round(soundVolume * 100)}%`}
+                    {muted || soundVolume <= 0 ? tr(language, 'MATI') : `${Math.round(soundVolume * 100)}%`}
                   </button>
                 </div>
 
@@ -2064,7 +2345,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                     min={0}
                     max={100}
                     step={5}
-                    aria-label="Volume suara saat bermain"
+                    aria-label={tr(language, 'Volume suara saat bermain')}
                     value={muted ? 0 : Math.round(soundVolume * 100)}
                     onChange={(e) => changeSoundVolume(Number(e.target.value) / 100)}
                     className="h-2 flex-1 cursor-pointer accent-emerald-400"
@@ -2085,7 +2366,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                             : 'border-white/10 bg-white/[0.04] text-white/70 hover:bg-white/10'
                         }`}
                       >
-                        {preset === 0 ? 'MATI' : `${Math.round(preset * 100)}%`}
+                        {preset === 0 ? tr(language, 'MATI') : `${Math.round(preset * 100)}%`}
                       </button>
                     );
                   })}
@@ -2148,7 +2429,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
           </div>
         )}
         {screen === 'menu' && arsenalOpen && (
-          <Arsenal
+          <Overlay><Arsenal
             current={weapon}
             highestLevel={bestLevel}
             totalCoins={totalCoins}
@@ -2158,11 +2439,11 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
             onUnlockAll={unlockAllAffordableWeapons}
             onPick={chooseWeapon}
             onClose={() => startArsenalTransition(false)}
-          />
+          /></Overlay>
         )}
 
         {screen === 'menu' && questOpen && (
-          <QuestModal
+          <Overlay><QuestModal
             state={questState}
             ownedCount={ownedWeaponIds().length}
             coins={totalCoins}
@@ -2171,7 +2452,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
             onClaimMilestone={handleClaimMilestone}
             onClose={closeQuestPage}
             leaving={questLeaving}
-          />
+          /></Overlay>
         )}
 
         {/* Kado peti milestone di halaman reward: adegan buka kado yang sama
@@ -2179,32 +2460,34 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
         {milestoneGift && (() => {
           const rewardWeapon = milestoneGift.weaponId ? getWeapon(milestoneGift.weaponId) : null;
           return (
-            <GiftBoxScene
+            <Overlay><GiftBoxScene
               badge="★ REWARD MILESTONE ★"
               headline={`MILESTONE ${milestoneGift.count}!`}
-              hint="🎁 Peti hadiah milestone siap dibuka!"
+              hint={tr(language, '🎁 Peti hadiah milestone siap dibuka!')}
               weapon={rewardWeapon ?? undefined}
               coins={milestoneGift.coins}
-              claimLabel={rewardWeapon ? 'PAKAI & LANJUT ➜' : 'AMBIL HADIAH ➜'}
-              declineLabel={rewardWeapon ? 'Lanjut tanpa ganti senjata' : undefined}
+              claimLabel={tr(language, rewardWeapon ? 'PAKAI & LANJUT ➜' : 'AMBIL HADIAH ➜')}
+              declineLabel={rewardWeapon ? tr(language, 'Lanjut tanpa ganti senjata') : undefined}
               onClaim={(equip) => takeMilestoneGift(equip)}
-            />
+            /></Overlay>
           );
         })()}
 
         {screen === 'menu' && leaderboardOpen && (
-          <PerfectShotLeaderboard
+          <Overlay><RankBoardPage
             leaving={leaderboardLeaving}
             stats={{ stage: bestLevel, score: best, coins: totalCoins }}
+            rivals={leaderboardRivals}
+            subtitle={tr(language, 'TOP RUNS · OFFLINE')}
             onBack={closeLeaderboardPage}
-          />
+          /></Overlay>
         )}
 
         {/* BOSS DEFEATED Modal Celebration (Exact Screenshot 2!) */}
         {bossDefeatedData && (
-          <BossDefeatedModal
+          <Overlay><BossDefeatedModal
             bossName={bossDefeatedData.name}
-            bossType={bossDefeatedData.bossType}
+            bossHead={bossDefeatedData.bossHead}
             stage={bossDefeatedData.level}
             rewardCoins={bossDefeatedData.coins}
             playerLevel={bossDefeatedData.playerLevel}
@@ -2213,28 +2496,28 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
             xpGained={bossDefeatedData.xpGained}
             leveledUp={bossDefeatedData.leveledUp}
             onContinue={handleContinueAfterBoss}
-          />
+          /></Overlay>
         )}
 
         {/* PILIHAN POWER UP DARI BINTANG */}
         {starBuffOpen && (
-          <StarBuffModal
+          <Overlay><StarBuffModal
             treasure={starBuffTreasure}
             onPick={(kind) => {
               gameRef.current?.applyBuff(kind);
               setStarBuffOpen(false);
             }}
-          />
+          /></Overlay>
         )}
 
         {/* BONUS STAGE: KOTAK HADIAH ala Knife Boss 100 Lv — efek kotak + senjata baru Gun Hit */}
         {bonusStageOpen && (
-          <BossGiftBoxModal
+          <Overlay><BossGiftBoxModal
             bossName={bonusAfterBoss.bossName}
             stage={bonusAfterBoss.stage}
             currentWeaponId={weapon}
             onClaim={handleGiftBoxClaim}
-          />
+          /></Overlay>
         )}
 
         {/* Game Over Screen (DIBESARKAN TEKSNYA 2X + ANIMASI MEWAH!) */}
@@ -2251,7 +2534,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
 
               {/* Glassmorphism Card DIBESARKAN & TEKS 2X */}
               <div className="mt-6 w-full rounded-3xl border-2 border-white/20 bg-white/10 p-6 text-center shadow-[0_20px_50px_rgba(0,0,0,0.8)] backdrop-blur-xl">
-                <div className="text-sm font-black tracking-[0.25em] text-white/60 font-game">SKOR AKHIR</div>
+                <div className="text-sm font-black tracking-[0.25em] text-white/60 font-game">{tr(language, 'SKOR AKHIR')}</div>
 
                 {/* Score Counter Roll-up (Besar & Bergetar) */}
                 <div className="text-8xl sm:text-9xl font-black leading-none my-2 font-game text-white filter drop-shadow-[0_8px_16px_rgba(255,255,255,0.3)] animate-pulse">
@@ -2267,11 +2550,11 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                 {/* Stat Grid (Teks Diperbesar 2x) */}
                 <div className="mt-5 grid grid-cols-2 gap-3 border-t-2 border-white/15 pt-4">
                   <div className="rounded-2xl border-2 border-white/15 bg-black/60 px-3 py-3 shadow-inner">
-                    <div className="text-xs font-black tracking-wider text-white/50 font-game">REKOR TERBAIK</div>
+                    <div className="text-xs font-black tracking-wider text-white/50 font-game">{tr(language, 'REKOR TERBAIK')}</div>
                     <div className="text-3xl font-black text-amber-300 font-mono mt-1 drop-shadow">{best}</div>
                   </div>
                   <div className="rounded-2xl border-2 border-white/15 bg-black/60 px-3 py-3 shadow-inner">
-                    <div className="text-xs font-black tracking-wider text-white/50 font-game">DAPAT KOIN</div>
+                    <div className="text-xs font-black tracking-wider text-white/50 font-game">{tr(language, 'DAPAT KOIN')}</div>
                     <div className="mt-1 flex items-center justify-center gap-1 text-3xl font-black text-amber-300 font-mono drop-shadow"><span>+{result.coins}</span><CoinSprite size={30} /></div>
                   </div>
                 </div>
@@ -2306,7 +2589,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
         {playTransition && (
           <TransitionOverlay phase={playTransition.phase} origin={playTransition.origin} label={playTransition.label} variant="scope" lens={playTransition.lens} />
         )}
-        {weaponFlight && <SgaWeaponFlight key={weaponFlight.id} flight={weaponFlight} />}
+        {weaponFlight && <Overlay><SgaWeaponFlight key={weaponFlight.id} flight={weaponFlight} /></Overlay>}
       </div>
     </div>
   );

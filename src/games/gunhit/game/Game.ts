@@ -1,3 +1,5 @@
+import { getLanguage } from '../../../i18n/language';
+import { tr } from '../../../i18n/strings';
 import { traceBossSegment } from './bossRaycast';
 import { advanceCosmeticTrail } from './cosmeticTrail';
 import { sfx, withSfxGain } from './audio';
@@ -48,7 +50,7 @@ import { setTwoGunFx, setTwoIdFor, type TwoWeapon } from './setTwoArt';
 import type { Bullet as NineBullet } from '../../../../games/game-6/src/game/types';
 import { newAnim, type StuckItem } from '../../../../games/game-4/src/game/weapons';
 import { drawStuckItem } from '../../../../games/game-4/src/game/art';
-import { RECOIL_ROT } from '../../../../games/game-4/src/game/Game';
+import { RECOIL_ROT } from '../../../../games/game-4/src/game/recoil';
 import { drawSprite, glowSprite } from '../../../../games/game-4/src/game/core';
 import { sfx as sevenSfx } from '../../../../games/game-4/src/game/audio';
 import type { Projectile as SevenShot } from '../../../../games/game-4/src/game/projectiles';
@@ -56,7 +58,7 @@ import { spawnPlasmaImpact, YELLOW_PLASMA_IMPACT } from '../../../../games/game-
 import { sfx2 } from './sfx2';
 import { drawKnife, knifeVariant, KNIFE_SINK } from './knifeArt';
 import { sfx as bossVoice } from '../../perfect-shot/audio/sfx';
-import { bossNameFor, bossStyleFor } from './bossIdentity';
+import { bossHeadFor, bossNameFor, bossStyleFor } from './bossIdentity';
 import { sfx3 } from './sfx3';
 import { sfx4 } from './sfx4';
 import { sfx6 } from './sfx6';
@@ -78,14 +80,15 @@ import { drawClassicBeam, drawLaserBeam, drawVoidTether } from './art/beamEffect
 import { getGunEffect, getGunVariant } from './art/gunVariants';
 import { drawWetSurface } from './art/waterSurface';
 import { drawFace, STYLE_COLORS, type Style } from './faces';
-import { drawGun, drawProjectile, WEAPONS, getWeapon, type Weapon, type WeaponId, type ProjKind } from './weapons';
+import { drawGun, drawProjectile } from './weaponDraw';
+import { WEAPONS, getWeapon, type Weapon, type WeaponId, type ProjKind } from './weapons';
 import { drawStar, drawRockFragment } from './art/boulder';
 import { DiamondRock, drawRockDiamond, type BrokenRockCell } from './art/diamondRock';
 import { drawBonusCoin, TreasureChest } from './art/bonusArt';
 import { advanceTreasureCoins, throwTreasureCoins, type TreasureCoin } from './treasureShower';
 import { drawBreakerCoin } from '../../shared/coinArt';
 import { drawBreakerDiamond } from '../../shared/diamondArt';
-import { getBossDef, type BossType } from './bossRoster';
+import { bossDef, type BossAttackFamily, type BossHead } from './bossCatalog';
 import { getSpecialSunburstTheme, getWheelSunburstTheme, gunSunburstColor } from './sunburstPalette';
 import {
   drawBossMuzzleFlash,
@@ -166,18 +169,35 @@ import {
   type SgaBackgroundTheme,
 } from './backgroundThemes';
 
-export const W = 420;
-export const H = 760;
-const CX = W / 2;
-export const BASE_WHEEL_CY = 255;
-export const CY = Math.round(BASE_WHEEL_CY * (1 - 0.28)); // 28% higher wheel position (184)
-export const SPECIAL_CY = CY; // Bonus / Special stage wheel sits at the same vertical position as the normal wheel.
-export function initialGameplayWheelCenterY(boss = false, special = false) {
-  if (special) return SPECIAL_CY;
-  return boss ? CY + 36 : CY;
-}
-const ROCK_RADIUS = 166; // ~80% of the 420px screen, as on Diamond Breaker's 480px screen.
-export const GAMEPLAY_GUN_SCALE = 1.08; // -10% from 1.2x (1.2 * 0.9 = 1.08)
+import {
+  BASE_WHEEL_CY,
+  CX,
+  CY,
+  GAMEPLAY_GUN_SCALE,
+  GUN_Y,
+  H,
+  SPECIAL_CY,
+  W,
+  initialGameplayWheelCenterY,
+} from './layout';
+export { BASE_WHEEL_CY, CY, GAMEPLAY_GUN_SCALE, GUN_Y, H, SPECIAL_CY, W, initialGameplayWheelCenterY };
+import {
+  ROCK_RADIUS,
+  allowsStarPowerups,
+  bossKnifeCount,
+  isSpecial,
+  makeLevel,
+  type LevelCfg,
+  type LevelMode,
+  type PatternName,
+  type SpecialMode,
+} from './levels';
+
+/** Teks HUD canvas memakai bahasa aktif (dibaca ulang tiap frame). */
+const T = (text: string): string => tr(getLanguage(), text);
+
+export { ROCK_RADIUS, allowsStarPowerups, bossKnifeCount, isSpecial, makeLevel };
+export type { LevelCfg, LevelMode, PatternName, SpecialMode } from './levels';
 const TWIN_SPACING = 30; // dual lebih rapat: 60px antar laras (dulu 92px)
 const SINGLE_BARREL = [0] as const;
 const TWIN_BARRELS = [-TWIN_SPACING, TWIN_SPACING] as const;
@@ -188,7 +208,6 @@ const EMBED = 21; // tertancap setengah (50% masuk ke dalam)
 const L = TOTAL_LEN - EMBED; // hanya terlihat setengah (50% di luar)
 const BLEN = TOTAL_LEN;
 // projectile speed depends on weapon
-export const GUN_Y = H - Math.round(185 * GAMEPLAY_GUN_SCALE); // muzzle tip raised so +20% gun never clips bottom
 const TAU = Math.PI * 2;
 
 // A new run brings the weapon in from beneath the screen. This is only a
@@ -414,7 +433,7 @@ export function bossSpinSpeed(level: number, levelTime: number) {
   return b * k;
 }
 
-export function bossRotationSpeed(type: BossType, levelTime: number) {
+export function bossRotationSpeed(type: BossAttackFamily, levelTime: number) {
   const t = Math.max(0, levelTime);
   switch (type) {
     case 'knight': {
@@ -660,6 +679,101 @@ export interface ArtMask {
   span: number;
   /** Outermost opaque pixel of the mask, in units of R. */
   maxR: number;
+  /**
+   * The boss as a solid object: `1` for every pixel a round can hit. That is
+   * the ink *plus* the see-through windows the head encloses (the jester's hat,
+   * the vampire's collar). Those windows are inside the silhouette — the player
+   * sees them framed by the drawing — so a round may not sail through the middle
+   * of the boss. Air outside the silhouette stays `0`.
+   */
+  solid: Uint8Array;
+}
+
+/**
+ * The boss' solid footprint: its ink, with the transparent windows the ink
+ * completely encloses filled in. The fill starts at the mask border and creeps
+ * through air that is not walled off by ink; whatever air it cannot reach is
+ * inside the drawing (a window in the art), and the boss is solid there.
+ * Concave notches stay open — they are part of the outside, so a round can still
+ * fly into them and only stops where the drawing itself is.
+ */
+export function buildSolidFootprint(size: number, alpha: Uint8Array): Uint8Array {
+  // 1. The wall: real ink, thickened by one pixel. Anti-aliasing and the odd
+  //    one-pixel break in a hairline stroke would otherwise leak the fill from
+  //    the sky into the middle of the head.
+  const wall = new Uint8Array(size * size);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      if (alpha[y * size + x] <= INK_ALPHA) continue;
+      const y0 = Math.max(0, y - 1);
+      const y1 = Math.min(size - 1, y + 1);
+      const x0 = Math.max(0, x - 1);
+      const x1 = Math.min(size - 1, x + 1);
+      for (let v = y0; v <= y1; v++) for (let u = x0; u <= x1; u++) wall[v * size + u] = 1;
+    }
+  }
+  // 2. Flood the sky: every pixel the outside can reach through non-wall air.
+  const open = new Uint8Array(size * size);
+  const stack: number[] = [];
+  const push = (x: number, y: number) => {
+    if (x < 0 || y < 0 || x >= size || y >= size) return;
+    const i = y * size + x;
+    if (open[i] || wall[i]) return;
+    open[i] = 1;
+    stack.push(i);
+  };
+  for (let x = 0; x < size; x++) {
+    push(x, 0);
+    push(x, size - 1);
+  }
+  for (let y = 0; y < size; y++) {
+    push(0, y);
+    push(size - 1, y);
+  }
+  while (stack.length) {
+    const i = stack.pop()!;
+    const x = i % size;
+    const y = (i - x) / size;
+    push(x - 1, y);
+    push(x + 1, y);
+    push(x, y - 1);
+    push(x, y + 1);
+  }
+  // 3. The boss: its real ink, plus the windows the ink encloses. The soft
+  //    fringe is left to the sky, so the line sits on the visible edge.
+  const touchesSky = (x: number, y: number) => {
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const u = x + dx;
+        const v = y + dy;
+        if (u < 0 || v < 0 || u >= size || v >= size) return true;
+        if (open[v * size + u]) return true;
+      }
+    }
+    return false;
+  };
+  const solid = new Uint8Array(size * size);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const i = y * size + x;
+      // Ink is boss. So is the air a drawing encloses (a window in the head) —
+      // but not the anti-aliased fringe that merely borders the sky, or the
+      // blue line would float a pixel off the art.
+      solid[i] = alpha[i] > INK_ALPHA || (!open[i] && !touchesSky(x, y)) ? 1 : 0;
+    }
+  }
+  return solid;
+}
+
+/** Assemble the mask + its solid footprint once, for both builders. */
+function finalizeArtMask(size: number, alpha: Uint8Array, span: number, maxPx: number): ArtMask {
+  return {
+    size,
+    alpha,
+    span,
+    maxR: (maxPx / (size / 2)) * span,
+    solid: buildSolidFootprint(size, alpha),
+  };
 }
 
 /**
@@ -689,7 +803,7 @@ export function buildArtMask(source: CanvasImageSource | null, span = 1, size = 
         if (d > maxPx) maxPx = d;
       }
     }
-    return { size, alpha, span, maxR: (maxPx / half) * span };
+    return finalizeArtMask(size, alpha, span, maxPx);
   } catch {
     return null;
   }
@@ -801,7 +915,7 @@ export function buildArtMaskFromSvg(markup: string | null, span = 1, size = 384)
         if (d > maxPx) maxPx = d;
       }
     }
-    return { size, alpha, span, maxR: (maxPx / half) * span };
+    return finalizeArtMask(size, alpha, span, maxPx);
   } catch {
     return null;
   }
@@ -926,7 +1040,7 @@ export function maskProfile(mask: ArtMask): number[] {
       const x = Math.floor(half + cos * r);
       const y = Math.floor(half + sin * r);
       if (x < 0 || y < 0 || x >= size || y >= size) continue;
-      if (maskSolid(mask, x, y)) {
+      if (maskInk(mask, x, y)) {
         found = r;
         break;
       }
@@ -945,7 +1059,7 @@ export function buildMaskOutline(mask: ArtMask): Path2D | null {
   if (typeof Path2D === 'undefined') return null;
   const { size } = mask;
   const p = new Path2D();
-  const solid = (x: number, y: number) => maskSolid(mask, x, y);
+  const solid = (x: number, y: number) => maskInk(mask, x, y);
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       if (!solid(x, y)) continue;
@@ -978,7 +1092,7 @@ export function buildMaskSurface(mask: ArtMask, steps = 720): Path2D | null {
       const u = Math.floor(half + cos * r);
       const v = Math.floor(half + sin * r);
       if (u < 0 || v < 0 || u >= size || v >= size) continue;
-      if (maskSolid(mask, u, v)) break;
+      if (maskInk(mask, u, v)) break;
     }
     const x = half + cos * r;
     const y = half + sin * r;
@@ -999,11 +1113,90 @@ export function buildMaskSurface(mask: ArtMask, steps = 720): Path2D | null {
  */
 export const INK_ALPHA = 96;
 
-/** Is this mask pixel part of the drawing? */
-function maskSolid(mask: ArtMask, x: number, y: number): boolean {
+/** Is this mask pixel part of the drawing's ink? Used for tracing, not hits. */
+function maskInk(mask: ArtMask, x: number, y: number): boolean {
   const { size, alpha } = mask;
   if (x < 0 || y < 0 || x >= size || y >= size) return false;
   return alpha[y * size + x] > INK_ALPHA;
+}
+
+/**
+ * Is this mask pixel inside the boss' blue outline? THIS is the hitbox.
+ *
+ * A boss is a closed object, not a set of visible pixels: its silhouette is the
+ * ink plus the transparent windows that ink encloses. A round used to sail
+ * through those windows — straight through the middle of the boss — because the
+ * test only accepted ink. Air outside the silhouette is still air, so a round
+ * that misses the blue outline keeps flying.
+ */
+function maskSolid(mask: ArtMask, x: number, y: number): boolean {
+  const { size, alpha, solid } = mask;
+  if (x < 0 || y < 0 || x >= size || y >= size) return false;
+  // A mask built by hand (tests, tooling) may not carry a footprint; the ink is
+  // then the best available shape.
+  if (!solid || !solid.length) return alpha[y * size + x] > INK_ALPHA;
+  return solid[y * size + x] === 1;
+}
+
+/**
+ * The blue line: the exact boundary of the solid footprint, traced with marching
+ * squares in mask pixel space. It follows the helmet's notch and the horns'
+ * spikes (no star-shaped bridging) and it never wanders into empty air, because
+ * every segment separates a solid pixel from an open one. Hit test and line are
+ * two views of the same bytes.
+ */
+export function buildSolidRegion(mask: ArtMask): Path2D | null {
+  if (typeof Path2D === 'undefined') return null;
+  const { size, solid } = mask;
+  const p = new Path2D();
+  for (let y = 0; y < size; y++) {
+    let x = 0;
+    while (x < size) {
+      if (!solid[y * size + x]) { x++; continue; }
+      const start = x;
+      while (x < size && solid[y * size + x]) x++;
+      p.rect(start, y, x - start, 1);
+    }
+  }
+  return p;
+}
+
+export function buildSolidOutline(mask: ArtMask): Path2D | null {
+  if (typeof Path2D === 'undefined') return null;
+  const { size, solid } = mask;
+  const at = (x: number, y: number) =>
+    x < 0 || y < 0 || x >= size || y >= size ? 0 : solid[y * size + x];
+  const p = new Path2D();
+  const seg = (x1: number, y1: number, x2: number, y2: number) => {
+    p.moveTo(x1, y1);
+    p.lineTo(x2, y2);
+  };
+  for (let y = -1; y < size; y++) {
+    for (let x = -1; x < size; x++) {
+      const a = at(x, y);
+      const b = at(x + 1, y);
+      const c = at(x + 1, y + 1);
+      const d = at(x, y + 1);
+      const code = a * 8 + b * 4 + c * 2 + d;
+      if (code === 0 || code === 15) continue;
+      const tx = x + 1, ty = y + 0.5;
+      const rx = x + 1.5, ry = y + 1;
+      const bx = x + 1, by = y + 1.5;
+      const lx = x + 0.5, ly = y + 1;
+      switch (code) {
+        case 1: case 14: seg(lx, ly, bx, by); break;
+        case 2: case 13: seg(bx, by, rx, ry); break;
+        case 3: case 12: seg(lx, ly, rx, ry); break;
+        case 4: case 11: seg(tx, ty, rx, ry); break;
+        case 6: case 9: seg(tx, ty, bx, by); break;
+        case 7: case 8: seg(lx, ly, tx, ty); break;
+        case 5: seg(tx, ty, rx, ry); seg(lx, ly, bx, by); break;
+        case 10: seg(lx, ly, tx, ty); seg(bx, by, rx, ry); break;
+        default: break;
+      }
+    }
+  }
+  return p;
 }
 
 interface TargetPixels { data: Uint8ClampedArray; size: number }
@@ -1231,7 +1424,7 @@ export function drawExtrudedWheelFragment(
 interface Flyer { x: number; y: number; vx: number; vy: number; rot: number; vr: number; kind: ItemType; w?: WeaponId; hue?: number; busterPellet?: boolean; scale?: number }
 interface Beam { x: number; y: number; life: number; max: number; rgb: string }
 interface Portal { x: number; y: number; life: number; max: number; rgb: string }
-interface BossProjectile { x: number; y: number; vx: number; vy: number; rot: number; type: BossType }
+interface BossProjectile { x: number; y: number; vx: number; vy: number; rot: number; type: BossAttackFamily; head: BossHead }
 
 interface RockFragment { x: number; y: number; vx: number; vy: number; rot: number; vr: number; size: number; seed: number; life: number; max: number }
 /** Coordinates and angle are local to a rock cell (or to the open chest). */
@@ -1241,18 +1434,9 @@ interface Star { x: number; y: number; r: number; vx: number; baseY: number; age
 interface BonusCoin { angle: number; radius: number; lx: number; ly: number; phase: number; taken: boolean }
 export type TreasureBuff = 'rapid' | 'double' | 'mini' | 'giant';
 export type BuffKind = 'speed' | 'ammo' | 'power' | TreasureBuff;
-export type SpecialMode = 'bonus' | 'treasure';
-export type LevelMode = 'classic' | 'boulder' | 'double' | SpecialMode;
 
 const STAGE_SECONDS: Record<'boulder' | SpecialMode, number> = { boulder: 65, bonus: 45, treasure: 10 };
-const isSpecial = (mode: LevelMode): mode is 'boulder' | SpecialMode => mode === 'boulder' || mode === 'bonus' || mode === 'treasure';
 
-/** Star power-ups are reserved for bosses and special/bonus stages. */
-export function allowsStarPowerups(level: Pick<LevelCfg, 'boss' | 'mode'>) {
-  return level.boss || isSpecial(level.mode);
-}
-
-type PatternName = 'constant' | 'wave' | 'pendulum' | 'stopgo' | 'jerk' | 'chaos';
 const PATTERNS: Record<PatternName, (t: number, b: number, d: number) => number> = {
   constant: (_t, b, d) => b * d,
   wave: (t, b, d) => b * d * (0.3 + 1.4 * (0.5 + 0.5 * Math.sin(t * 1.5))),
@@ -1271,78 +1455,11 @@ const PATTERNS: Record<PatternName, (t: number, b: number, d: number) => number>
   chaos: (t, b, d) => b * d * (Math.sin(t * 1.1) * 1.4 + Math.sin(t * 2.7 + 1) * 0.75 + 0.35),
 };
 
-export interface LevelCfg {
-  mode: LevelMode; hp: number; maxHp: number;
-  n: number; boss: boolean; ammo: number; base: number; pattern: PatternName; dir: number;
-  radius: number; style: Style; name: string; old: number; spikes: number; coins: number;
-}
-
-const BOSS_NAMES = ['DARK KNIGHT', 'ONI DEMON', 'MECHA CYBORG', 'PIRATE LORD'];
-/** Perfect Shot buries `Math.min(5, 3 + floor(n / 30))` knives in a boss. */
-export const bossKnifeCount = (n: number) => Math.min(5, 3 + Math.floor(n / 30));
-const BOSS_STYLES: Style[] = ['knight', 'oni', 'cyborg', 'pirate'];
-const WORLD_STYLES: Style[] = ['orange', 'wood', 'target'];
 const PRAISE = ['MANTAP!', 'KEREN!', 'SEMPURNA!', 'GACOR!', 'JAGO!', 'LUAR BIASA!'];
-
-export function makeLevel(n: number, forcedMode?: LevelMode): LevelCfg {
-  const boss = n % 5 === 0;
-  const world = Math.floor((n - 1) / 5);
-  const base = Math.min(1.5 + n * 0.11, 4.3);
-  let pattern: PatternName;
-  if (n <= 2) pattern = 'constant';
-  else if (boss) pattern = n === 5 ? 'wave' : n >= 15 ? pick<PatternName>(['chaos', 'jerk']) : pick<PatternName>(['jerk', 'stopgo', 'chaos']);
-  else {
-    const pool: PatternName[] = ['constant', 'wave', 'pendulum'];
-    if (n >= 6) pool.push('stopgo');
-    if (n >= 11) pool.push('jerk');
-    if (n >= 16) pool.push('chaos');
-    pattern = pick(pool);
-  }
-  const regularAmmo = Math.min(5 + Math.floor(n * 0.5), 13);
-  // Double the boss shot quota so the fight can sustain exactly twice the HP without an early ammo clear.
-  const ammo = boss ? (regularAmmo + 2) * 2 : regularAmmo;
-  const bossIdx = Math.floor(n / 5) - 1;
-  // The boss on screen *is* Perfect Shot's head, so its name is read from that
-  // same artwork: stage 5 is the pirate, and calling it "DARK KNIGHT" was the
-  // HUD contradicting the drawing.
-  const style: Style = boss ? bossStyleFor(n) ?? BOSS_STYLES[Math.max(0, bossIdx) % BOSS_STYLES.length] : WORLD_STYLES[world % WORLD_STYLES.length];
-  const bossName = boss ? bossNameFor(n) : '';
-  // Boss DARK KNIGHT tampil bersih: tanpa duri jebakan & penghalang (peluru berkarat).
-  const cleanKnight = boss && style === 'knight';
-  const old = cleanKnight ? 0 : n < 2 ? 0 : Math.min(1 + Math.floor((n - 2) / 3), 5);
-  // Boss selalu memiliki duri mematikan yang DILARANG DITEMBAK!
-  const spikes = cleanKnight
-    ? 0
-    : boss
-    ? Math.min(5, 2 + Math.floor(n / 5)) // 2 sampai 5 duri jebakan mematikan di kepala boss!
-    : n < 4
-    ? 0
-    : Math.min(1 + Math.floor((n - 4) / 4), 4);
-  const coins = (Math.random() < 0.65 ? 1 : 0) + (Math.random() < 0.3 ? 1 : 0);
-  // Each five-stage boss cycle is three ordinary stages, one random special,
-  // then a boss: stages 4, 9, 14... use exactly one of the three special modes.
-  const mode: LevelMode = forcedMode ?? (boss ? 'classic'
-    : n % 5 === 4 ? pick<LevelMode>(['boulder', 'bonus', 'treasure'])
-    : 'classic');
-  return {
-    n, boss, ammo: isSpecial(mode) ? 12 : ammo, base, pattern, dir: Math.random() < 0.5 ? 1 : -1,
-    radius: boss ? 122 : mode === 'boulder' || mode === 'bonus' ? ROCK_RADIUS : 106, style,
-    name: boss
-      ? bossName || BOSS_NAMES[Math.max(0, bossIdx) % BOSS_NAMES.length]
-      // the HUD prints the level name as-is for non-boss stages
-      : '',
-    // Perfect Shot's boss stage has no spikes at all: its rintangan are the 3–5
-    // knives already buried in the head, so Game A uses exactly those.
-    old: isSpecial(mode) ? 0 : boss ? bossKnifeCount(n) : old,
-    spikes: isSpecial(mode) ? 0 : boss ? 0 : spikes,
-    coins: isSpecial(mode) ? 0 : coins,
-    mode, hp: 0, maxHp: 0, // populated from the actual number of breakable chunks
-  };
-}
 
 export interface GameEvents {
   onGameOver: (score: number, level: number, coinsToBank: number, runCoins: number) => void;
-  onBossDefeated?: (bossName: string, level: number, coinsEarned: number, bossType: BossType) => void;
+  onBossDefeated?: (bossName: string, level: number, coinsEarned: number, bossHead: BossHead) => void;
   /** The treasure counter and saved balance both grow as each flying coin reaches the HUD. */
   onTreasureCoin?: (amount: number) => void;
   /** Bank any remaining special-stage reward at its end, exactly once. */
@@ -1427,11 +1544,10 @@ export class Game {
   private wheelScale = 1;
   private wheelArtSource: WheelArtSource | null = null;
   /**
-   * `?hitbox=1` paints the boss' real collision contour over the head, in the
-   * very transform the art and the stuck weapons use. Green = the contour is
-   * read from Perfect Shot's artwork; red = the art never reached the engine and
-   * the stage fell back to a legacy ring — the exact thing to look for when
-   * "the boss still feels like a wheel".
+   * `?hitbox=1` is the *developer* inspection mode: it paints the collision
+   * contour, the old circular ring and every impact marker over the head. It is
+   * never part of a boss fight — a player only ever sees the blue edge of the
+   * drawing itself (`drawBossSilhouette`), which is the one and only hitbox.
    */
   private readonly hitboxFlag = (() => {
     try {
@@ -1440,10 +1556,6 @@ export class Game {
       return false;
     }
   })();
-  /** On for every boss stage: the boss' collision is drawn over its art. */
-  private get showHitbox(): boolean {
-    return this.hitboxFlag || (this.level?.boss ?? false);
-  }
   private wheelArtCache = new Map<string, HTMLImageElement>();
   private wheelArtKey = '';
   private wheelImage: HTMLImageElement | null = null;
@@ -1506,6 +1618,16 @@ export class Game {
   private targetR = 0;
   /** The silhouette as a filled path, for the collision overlay. */
   private maskSurface: Path2D | null = null;
+  /** Filled region a round can hit (the silhouette, windows included). */
+  private maskSolidRegion: Path2D | null = null;
+  /** The blue line itself: the exact boundary of that region. */
+  private maskSolidEdge: Path2D | null = null;
+  /**
+   * Recent boss hits, as art-local angles. Each one lights a short piece of the
+   * blue outline for a quarter of a second, so the player sees that the round
+   * bit *the line* — the same bytes the hit test reads, not an invisible ring.
+   */
+  private bossEdgePing: { a: number; born: number }[] = [];
   /** Radius the face bitmap was baked at (`buildFace`), for pad scaling. */
   private faceBaseR = 0;
   private faceR = 106;
@@ -2439,6 +2561,36 @@ export class Game {
     if (changed) this.buildFace();
   }
 
+  /**
+   * First-use costs that would otherwise land on the frame a run starts.
+   *
+   * Nothing here draws to the visible canvas: the refraction scratch surface is
+   * allocated and the HUD's fonts are shaped once into a throwaway 2x2 canvas so
+   * the browser has already parsed `Russo One` at every size the HUD asks for.
+   * Called while the engine sits idle on the menu, it removes a visible hitch
+   * from the first shot of a stage without changing a single pixel.
+   */
+  prewarm() {
+    this.s7State?.prewarmLens();
+    try {
+      const doc = (globalThis as { document?: Document }).document;
+      if (!doc || typeof doc.createElement !== 'function') return;
+      const scratch = doc.createElement('canvas');
+      scratch.width = 2;
+      scratch.height = 2;
+      const c = scratch.getContext('2d');
+      if (!c) return;
+      const font = (size: number) => `${size}px 'Russo One', sans-serif`;
+      c.textBaseline = 'middle';
+      for (const size of [16, 13, 29, 40]) {
+        c.font = font(size);
+        c.fillText('0123456789 COMBO x BOSS', 0, 0);
+      }
+    } catch {
+      // A blocked offscreen context is not an error worth interrupting the menu.
+    }
+  }
+
   start() { this.startRun(1); }
 
   /** Start an existing SGA level directly from the level map without changing its stage rules. */
@@ -2824,9 +2976,7 @@ export class Game {
     if (!this.level.boss) place('old', this.level.old, 0.4);
     place('coin', this.level.coins, 0.32);
     // Berlian / Diamond tertancap di arena yang butuh 2x tembakan baru jatuh!
-    // (Dark Knight: penghalang berlian juga dihilangkan.)
-    const cleanKnight = this.level.boss && this.level.style === 'knight';
-    if (!cleanKnight && this.level.n >= 2 && Math.random() < 0.6) {
+    if (this.level.n >= 2 && Math.random() < 0.6) {
       place('diamond_chest', 1, 0.42);
     }
   }
@@ -2840,7 +2990,7 @@ export class Game {
     if (mood === 'laugh') {
       // Game B pops HA · HA · HA! 160 ms apart, each over its own 1 s flight.
       this.bossHa = [{ age: 0, i: 0 }, { age: -0.16, i: 1 }, { age: -0.32, i: 2 }];
-      bossVoice.bossLaugh((this.level.style as string) ?? 'pirate');
+      bossVoice.bossLaugh(bossHeadFor(this.level.n) ?? 'pirate');
     } else {
       bossVoice.bossGrowl();
     }
@@ -3009,8 +3159,12 @@ export class Game {
     // placed from the profile would sit just off the drawing.
     this.bossArtProfile = readable && mask ? maskProfile(mask) : null;
     this.artMask = readable ? mask : null;
+    this.maskSolidRegion = null;
+    this.maskSolidEdge = null;
     this.maskOutline = this.artMask ? buildMaskOutline(this.artMask) : null;
     this.maskSurface = this.artMask ? buildMaskSurface(this.artMask) : null;
+    this.maskSolidRegion = this.artMask ? buildSolidRegion(this.artMask) : null;
+    this.maskSolidEdge = this.artMask ? buildSolidOutline(this.artMask) : null;
     this.artMaskMaxR = this.artMask
       ? this.artMask.maxR
       : this.bossArtProfile ? Math.max(...this.bossArtProfile) : 1;
@@ -3051,10 +3205,14 @@ export class Game {
     if (!traced || traced.maxR <= 0.05) return null;
     this.wheelSvg = markup;
     this.artMask = traced;
+    this.maskSolidRegion = null;
+    this.maskSolidEdge = null;
     this.artMaskMaxR = traced.maxR;
     this.bossArtProfile = maskProfile(traced);
     this.maskOutline = buildMaskOutline(traced);
     this.maskSurface = buildMaskSurface(traced);
+    this.maskSolidRegion = buildSolidRegion(traced);
+    this.maskSolidEdge = buildSolidOutline(traced);
     return traced;
   }
 
@@ -3087,13 +3245,13 @@ export class Game {
     c.save();
     c.setLineDash([]);
     // The collision region as an area: the exact silhouette, filled.
-    if (mask && this.maskSurface) {
+    if (mask && (this.maskSolidRegion ?? this.maskSurface)) {
       const k = (2 * mask.span * R) / mask.size;
       c.save();
       c.scale(k, k);
       c.translate(-mask.size / 2, -mask.size / 2);
       c.fillStyle = 'rgba(34,255,136,0.14)';
-      c.fill(this.maskSurface);
+      c.fill((this.maskSolidRegion ?? this.maskSurface)!);
       c.restore();
     } else {
       // No artwork reached the engine: there is nothing to fill, and the red
@@ -3192,28 +3350,98 @@ export class Game {
     c.restore();
   }
 
-  /** The colour key for the collision overlay, in screen space under the boss. */
-  private drawHitboxLegend(c: CanvasRenderingContext2D, R: number) {
-    const label = 'HITBOX = BENTUK GAMBAR';
-    const sub = 'hijau = daerah tabrakan (tepi gambar bos)';
-    const y = this.targetY + R + 26;
-    c.save();
-    c.textAlign = 'center';
-    c.font = 'bold 11px system-ui, sans-serif';
-    const w = Math.max(c.measureText(label).width, c.measureText(sub).width) + 18;
-    c.fillStyle = 'rgba(3,10,22,0.72)';
+  /**
+   * The only hitbox marker a boss fight ever shows: the blue edge of the
+   * drawing, traced from the very mask the rounds are tested against.
+   *
+   * Everything else the old overlay painted — the green collision fill, the
+   * dashed contour, the red legacy ring, the impact dots, the heading lines and
+   * the old hitbox banner — belonged to the inspection overlay and is gone from
+   * play. `?hitbox=1` still paints it for development.
+   */
+  /**
+   * Clip the canvas to the boss' blue outline, in the artwork's own frame.
+   *
+   * Boss mode has no disc: the head is the surface. A hit may light up the head
+   * — it must never paint a filled circle of radius R, because that circle was
+   * the old wheel hitbox and seeing it flash on every hit is exactly what makes
+   * the collision look circular. Everything painted on a boss goes through this
+   * clip.
+   *
+   * Returns false on every non-boss stage (nothing to clip — the wheel really
+   * is a disc), and when no artwork mask exists.
+   */
+  private clipBossSurface(c: CanvasRenderingContext2D): boolean {
+    if (!this.level.boss) return false;
+    const mask = this.ensureArtMask();
+    const region = this.maskSolidRegion ?? this.maskSurface;
+    if (!mask || !region) return false;
+    const R = this.level.radius;
+    const k = (2 * mask.span * R) / mask.size;
+    const half = mask.size / 2;
+    c.scale(k, k);
+    c.translate(-half, -half);
+    c.clip(region);
+    // Undo the two transforms so the caller keeps drawing in art coordinates.
+    c.translate(half, half);
+    c.scale(1 / k, 1 / k);
+    return true;
+  }
+
+  /**
+   * Fill the target's surface: the boss' outline on a boss stage, the wheel's
+   * disc everywhere else. The caller owns the save/restore.
+   */
+  private paintTargetSurface(c: CanvasRenderingContext2D, style: string) {
+    const R = this.level.radius;
+    c.fillStyle = style;
+    if (this.clipBossSurface(c)) {
+      c.fillRect(-R * 1.5, -R * 1.5, R * 3, R * 3);
+      return;
+    }
     c.beginPath();
-    if (typeof c.roundRect === 'function') c.roundRect(CX - w / 2, y - 13, w, 33, 8);
-    else c.rect(CX - w / 2, y - 13, w, 33);
+    c.arc(0, 0, R, 0, TAU);
     c.fill();
-    c.strokeStyle = 'rgba(56,189,248,0.8)';
-    c.lineWidth = 1.2;
-    c.stroke();
-    c.fillStyle = '#7dd3fc';
-    c.fillText(label, CX, y);
-    c.font = '9px system-ui, sans-serif';
-    c.fillStyle = 'rgba(190,215,245,0.92)';
-    c.fillText(sub, CX, y + 13);
+  }
+
+  private drawBossSilhouette(c: CanvasRenderingContext2D) {
+    const mask = this.ensureArtMask();
+    const surface = this.maskSolidEdge ?? this.maskSurface;
+    if (!mask || !surface) return;
+    const R = this.level.radius;
+    const k = (2 * mask.span * R) / mask.size;
+    c.save();
+    c.setLineDash([]);
+    c.scale(k, k);
+    c.translate(-mask.size / 2, -mask.size / 2);
+    // A soft dark pass underneath keeps the line readable over bright heads,
+    // then the blue line itself — the exact edge a round stops on.
+    c.strokeStyle = 'rgba(3,10,22,0.55)';
+    c.lineWidth = 3.6 / k;
+    c.lineJoin = 'round';
+    c.stroke(surface);
+    c.strokeStyle = 'rgba(56,189,248,0.95)';
+    c.lineWidth = 1.7 / k;
+    c.stroke(surface);
+    // The last hits flash the very piece of the line they stopped on. A wedge
+    // clip keeps the glow on the outline instead of smearing it over the face.
+    const half = mask.size / 2;
+    const now = this.time;
+    for (const ping of this.bossEdgePing) {
+      const age = now - ping.born;
+      if (age < 0 || age > 0.45) continue;
+      const fade = 1 - age / 0.45;
+      c.save();
+      c.beginPath();
+      c.moveTo(half, half);
+      c.arc(half, half, mask.size * 0.78, ping.a - 0.16, ping.a + 0.16);
+      c.closePath();
+      c.clip();
+      c.strokeStyle = `rgba(186,240,255,${(0.9 * fade).toFixed(3)})`;
+      c.lineWidth = (1.7 + 3.4 * fade) / k;
+      c.stroke(surface);
+      c.restore();
+    }
     c.restore();
   }
 
@@ -3247,9 +3475,15 @@ export class Game {
     // scaled up by its laugh / angry / rage pose, so a world-space bound would
     // cut the outer 14 % of the drawing away while it is animating.
     if (Math.hypot(lx, ly) > R * mask.maxR + 2) return null;
+    // The decision is the blue outline (`maskSolid` = inside the line). Outside
+    // it the round flies on; inside it the boss is solid, even where the head
+    // has a see-through window in the middle of its drawing.
     if (!maskSolid(mask, u, v)) return null;
-    // The radius is measured in the artwork's own frame, so it always agrees
-    // with the point that is drawn and with the frame the head turns in.
+    // The round stops on the pixel that crossed the line. That pixel is the
+    // first solid one along a ray walked in from outside, so it is always the
+    // boundary itself — the exact point the blue line is stroked through — and
+    // the radius is measured in the artwork's own frame, so it agrees with the
+    // drawing and with the frame the head turns in.
     return { r: Math.hypot(lx, ly), x: lx, y: ly };
   }
 
@@ -3383,7 +3617,7 @@ export class Game {
   private bossClipPaint(c: CanvasRenderingContext2D): boolean {
     if (!this.level.boss) return false;
     const mask = this.ensureArtMask();
-    const surface = this.maskSurface;
+    const surface = this.maskSolidRegion ?? this.maskSurface;
     const art = this.bossArtScreen;
     if (!mask || !surface || !art || typeof c.getTransform !== 'function') return false;
     const base = c.getTransform();
@@ -3397,6 +3631,23 @@ export class Game {
     // Hand the canvas back in screen space, already clipped.
     c.setTransform(base);
     return true;
+  }
+
+  /**
+   * Run a ported layer's own painting. On a boss stage the layer may only touch
+   * the drawing: its FX are spawned on its own wheel rim (radius R), which is
+   * empty sky around a head, and painting them there is what made a rifle's hit
+   * look like it landed on a circle instead of on the outline.
+   */
+  private withBossPaintClip(c: CanvasRenderingContext2D, paint: () => void) {
+    c.save();
+    if (this.level.boss) this.bossClipPaint(c);
+    try {
+      paint();
+    } catch {
+      /* a layer's own art must never blank slide 1 */
+    }
+    c.restore();
   }
 
   /** A damage / combo callout: never splatter, so it is never clipped. */
@@ -4704,7 +4955,7 @@ export class Game {
     if (w.chronoEvery && this.perkCount % w.chronoEvery === 0) {
       sfx2.timestop();
       this.applySlow(1.2, 0, '250,220,120', 'time');
-      this.addText('⏱ STOP WAKTU!', CX, this.targetY, '#fde047', 30);
+      this.addText(T('⏱ STOP WAKTU!'), CX, this.targetY, '#fde047', 30);
       this.flashWhite = Math.max(this.flashWhite, 0.25);
     }
     if (w.spikeOff) {
@@ -4905,7 +5156,7 @@ export class Game {
       } else if (roll === 3) {
         this.spikeOffT = 1.8;
         this.addText('🦄 DURI HILANG!', hx, hy + 70, '#c4b5fd', 22);
-      } else this.transmuteOne(hx, hy, R, '🦄 JADI KOIN!');
+      } else this.transmuteOne(hx, hy, R, T('🦄 JADI KOIN!'));
       const RBC = ['248,113,113', '251,146,60', '250,204,21', '74,222,128', '96,165,250', '192,132,252'];
       for (let i = 0; i < 6; i++) this.sink.push({ x: CX, y: this.targetY, vx: 0, vy: 0, life: 0.5 + i * 0.06, max: 0.5 + i * 0.06, size: R * (1.4 + i * 0.25), color: RBC[i], kind: 'shock', rot: 0, vr: 0, g: 0 });
     }
@@ -5161,6 +5412,13 @@ export class Game {
    * after the wheel, as both slides draw them.
    */
   private drawLayerWheels(c: CanvasRenderingContext2D) {
+    // Every one of these layers paints its marks on the rim of its own wheel:
+    // `translate(radius, 0)` for each embed. A boss is not that wheel, so its
+    // marks would land in the empty sky around the head at exactly radius R —
+    // the circle this stage must never show. On a boss the shared renderer
+    // draws each round at its exact impact pixel instead, and the layer keeps
+    // its screen-space bursts (which are already at the contact point).
+    if (this.level.boss) return;
     if (this.s11State && (this.s11State.busy || this.setElevenLive)) {
       // A bad frame from slide 7's own art must not blank slide 1.
       try {
@@ -5334,6 +5592,11 @@ export class Game {
     const impact = hitX !== undefined && hitY !== undefined
       ? this.artToWorld(hitX, hitY)
       : this.worldPos(local, surfaceR ?? R);
+    if (this.level.boss && hitX !== undefined && hitY !== undefined) {
+      // Light the exact spot on the outline that just stopped this round.
+      this.bossEdgePing.push({ a: Math.atan2(hitY, hitX), born: this.time });
+      if (this.bossEdgePing.length > 12) this.bossEdgePing.shift();
+    }
     const hue = s2Hit ? s2Hit.hue : p?.hue ?? (w.id === 'firework' ? gunState.rocketHue : w.id === 'yoyo' ? gunState.yoyoHue : undefined);
     if (w.id === 'firework' && hue !== undefined) gunState.rocketHue = hue;
     if (w.id === 'yoyo' && hue !== undefined) gunState.yoyoHue = hue;
@@ -5360,8 +5623,11 @@ export class Game {
         : big ? embeddedProjectileScale(big) : undefined,
       busterPellet: busterPellet || undefined,
       // Slide 9 / slide 11 / slide 2 paint their own round into the wheel, so
-      // the slide-1 bullet art must not be drawn on top of it.
-      hideArt: layerHit ? true : undefined,
+      // the slide-1 bullet art must not be drawn on top of it. On a boss those
+      // layers would paint it on their own rim, radius R — a disc the boss does
+      // not have — so there the shared renderer draws the round instead, at the
+      // exact pixel this round bit (`px`, `py`), on the blue outline.
+      hideArt: layerHit && !this.level.boss ? true : undefined,
       // Slide 2's artist draws the stuck round itself (see `setTwoLook.ts`).
       setTwo: s2Hit ? true : undefined,
     });
@@ -5372,7 +5638,12 @@ export class Game {
     // running both sprayed a second, game-3 acid splash (and acid globs stuck
     // on the rim) or a second plasma blast, plus a second hit voice, over
     // every hit.
-    const ownHitFx = !layerFeel;
+    // On a boss the shared renderer always owns the impact burst: the ported
+    // layers spawn theirs on their own wheel rim — radius R, outside the
+    // drawing — so their burst is clipped away while the round's real contact
+    // pixel goes unmarked. This keeps the same burst on the same pixel for
+    // every weapon, pistol or AK-47.
+    const ownHitFx = !layerFeel || !!this.level.boss;
     // Dora airBlast hit FX (game-3)
     if (ownHitFx && w.id === 'dora') {
       const hp = impact;
@@ -5453,7 +5724,7 @@ export class Game {
       if (tint === this.lastPaint) {
         pts += 3;
         sfx4.match();
-        this.addText('🎨 WARNA SAMA! +3', hp0.x, hp0.y + 60, `rgb(${tint})`, 22);
+        this.addText(T('🎨 WARNA SAMA! +3'), hp0.x, hp0.y + 60, `rgb(${tint})`, 22);
       }
       this.lastPaint = tint;
     }
@@ -5639,7 +5910,7 @@ export class Game {
     sfx3.chime();
     sfx2.jackpot();
     this.shake = Math.max(this.shake, 8);
-    this.addText('BERLIAN +10! +5 APEL', x, y - 12, '#67e8f9', 22);
+    this.addText(T('BERLIAN +10! +5 APEL'), x, y - 12, '#67e8f9', 22);
     for (let i = 0; i < 26; i++) {
       const a = rand(0, TAU);
       const v = rand(120, 440);
@@ -5871,7 +6142,7 @@ export class Game {
     if (this.level.boss) {
       this.coins += 5;
       this.score += 5;
-      this.addText('BOS KALAH! +5 💰', CX, this.targetY + 20, '#ffd23f', 28);
+      this.addText(T('BOS KALAH! +5 💰'), CX, this.targetY + 20, '#ffd23f', 28);
     } else {
       this.score += 3;
     }
@@ -5935,7 +6206,7 @@ export class Game {
       return { res: 'hit' };
     }
     const isBoss = this.level.boss;
-    const bType = isBoss ? (this.level.style as BossType) : null;
+    const bType = isBoss ? (this.level.style as BossAttackFamily) : null;
     const px = p.x - CX;
     const py = p.y - this.targetY;
     const worldA = Math.atan2(py, px);
@@ -6179,7 +6450,7 @@ export class Game {
         return { res: 'hit' };
       }
       this.centerDiamondHits++;
-      this.addText(`BERLIAN ${this.centerDiamondHits}/3`, p.x, p.y - 26, '#a5f3fc', 22);
+      this.addText(`${T('BERLIAN')} ${this.centerDiamondHits}/3`, p.x, p.y - 26, '#a5f3fc', 22);
       this.sink.light(p.x, p.y, 90 + this.centerDiamondHits * 20, '103,232,249', 0.35);
       if (!this.elevenSpecialImpact(p, p.x, p.y)) this.specialImpact(p.x, p.y, 'diamond');
       this.burstSpecial(p.x, p.y, 'diamond', this.centerDiamondHits === 3 ? 28 : 10);
@@ -6718,11 +6989,11 @@ export class Game {
     if (mode === 'boulder') {
       this.coins += 3;
       this.score += 75;
-      this.addText('BERLIAN BERSIH! +3 APEL', CX, this.targetY + 185, '#a5f3fc', 28);
+      this.addText(T('BERLIAN BERSIH! +3 APEL'), CX, this.targetY + 185, '#a5f3fc', 28);
     } else if (mode === 'bonus') {
       this.addText(`🪙 BONUS +${this.coins - this.stageStartCoins}!`, CX, this.targetY + 185, '#fde68a', 26);
     } else if (this.treasureCoins.length) {
-      this.addText('🪙 KOIN BERTEBARAN!', CX, this.targetY + 185, '#fde68a', 26);
+      this.addText(T('🪙 KOIN BERTEBARAN!'), CX, this.targetY + 185, '#fde68a', 26);
     }
     this.payStageReward();
     this.sink.light(CX, this.targetY, 250, '255,255,255', 0.8);
@@ -6784,7 +7055,7 @@ export class Game {
           this.stateT = 0;
           this.projs = [];
           this.holding = false;
-          this.addText('WAKTU HABIS!', CX, this.targetY + 185, '#fb7185', 26);
+          this.addText(T('WAKTU HABIS!'), CX, this.targetY + 185, '#fb7185', 26);
           if (!this.setTwoVoice('fail')) sfx.fail(this.weapon?.id);
         } else this.finishSpecialStage();
       }
@@ -6892,6 +7163,9 @@ export class Game {
     for (let i = this.lights.length - 1; i >= 0; i--) {
       this.lights[i].life -= dt;
       if (this.lights[i].life <= 0) this.lights.splice(i, 1);
+    }
+    if (this.bossEdgePing.length && this.bossEdgePing[0].born < this.time - 0.6) {
+      this.bossEdgePing = this.bossEdgePing.filter((p) => this.time - p.born < 0.6);
     }
     this.time += s;
     // Real-time, staggered coin arrivals continue during the treasure-clear
@@ -7068,9 +7342,11 @@ export class Game {
     if (this.level.boss && this.state === 'play') {
       this.bossShootTimer -= s;
       if (this.bossShootTimer <= 0) {
-        const bDef = getBossDef(this.level.style);
-        this.bossShootTimer = bossFireInterval(bDef.fireInterval, rand(-0.18, 0.22));
-        const bType = this.level.style as BossType;
+        // The boss firing is the Game B head on screen, not a Game A archetype:
+        // its own fire rhythm, pace, colour and projectile read from the head.
+        const boss = bossDef(bossHeadFor(this.level.n) ?? 'pirate');
+        this.bossShootTimer = bossFireInterval(boss.fireInterval, rand(-0.18, 0.22));
+        const bType = boss.family;
         // Boss launches projectile downward toward the player with aim spread
         const spawnY = this.targetY + this.level.radius * 0.8;
         const targetX = CX + rand(-60, 60);
@@ -7078,7 +7354,7 @@ export class Game {
         const dy = (GUN_Y + 40) - spawnY;
         const dist = Math.hypot(dx, dy);
         // Boss shots travel 1.9x faster, but retain clear telegraphing and interceptable hitboxes.
-        const spd = (160 + this.level.n * 3) * 1.9;
+        const spd = (160 + this.level.n * 3) * 1.9 * boss.shotPace;
         const shotRot = Math.atan2(dy, dx) - Math.PI / 2;
         this.bossProjs.push({
           x: CX,
@@ -7087,12 +7363,14 @@ export class Game {
           vy: (dy / dist) * spd,
           rot: shotRot,
           type: bType,
+          head: boss.head,
         });
         this.bossMuzzleFlashes.push({
           x: CX,
           y: spawnY,
           rot: shotRot,
           type: bType,
+          head: boss.head,
           age: 0,
           max: 0.28,
         });
@@ -7102,7 +7380,7 @@ export class Game {
         else if (bType === 'pirate') sfx2.pirate();
         else sfx3.keris();
         // Crisp boss-specific firing flecks + directional shockwave ring.
-        const bossRgb = bType === 'knight' ? '56,189,248' : bType === 'oni' ? '239,68,68' : bType === 'cyborg' ? '34,211,238' : '234,179,8';
+        const bossRgb = boss.rgb;
         this.particles.push({
           x: CX, y: spawnY, vx: 0, vy: 0, life: 0.24, max: 0.24,
           size: 46, color: `rgb(${bossRgb})`, kind: 'ring', rot: 0, vr: 0, g: 0,
@@ -7143,13 +7421,15 @@ export class Game {
         const tailX = x - dirx * 44;
         const tailY = y - diry * 44;
         if (Math.random() < 0.5) {
-          // Tail material/color follows each boss rather than sharing orange fire.
-          const trail = bp.type === 'knight'
-            ? { color: '56,189,248', kind: 'spark' as const }
-            : bp.type === 'oni'
-            ? { color: '239,68,68', kind: 'glow' as const }
-            : bp.type === 'cyborg'
-            ? { color: '34,211,238', kind: 'spark' as const }
+          // Tail material/colour follows the head that fired it: eleven bosses,
+          // eleven trails, even when two share a body family.
+          const firedBy = bossDef(bp.head);
+          const trail = firedBy.family === 'knight'
+            ? { color: firedBy.rgb, kind: 'spark' as const }
+            : firedBy.family === 'oni'
+            ? { color: firedBy.rgb, kind: 'glow' as const }
+            : firedBy.family === 'cyborg'
+            ? { color: firedBy.rgb, kind: 'spark' as const }
             : { color: '71,85,105', kind: 'smoke' as const };
           this.particles.push({
             x: tailX + rand(-7, 7),
@@ -7194,7 +7474,7 @@ export class Game {
         sfx.clang();
         this.shake = Math.max(this.shake, 8);
         this.recoil = 1.6;
-        this.addText('SERANGAN BOS!', bp.x, GUN_Y - 20, '#ef4444', 20);
+        this.addText(T('SERANGAN BOS!'), bp.x, GUN_Y - 20, '#ef4444', 20);
         this.sink.push({ x: bp.x, y: bp.y, vx: 0, vy: 0, life: 0.35, max: 0.35, size: 50, color: '#ef4444', kind: 'shock', rot: 0, vr: 0, g: 0 });
         break;
       }
@@ -7554,7 +7834,11 @@ export class Game {
         // A slide-11 hit keeps its own mark alive (slide 11's acid keeps eating,
         // its plasma scar keeps burning): no game-3 scar FX on top of it.
         if (it.hideArt && (this.setElevenLive || this.setNineLive)) continue;
-        const wp = this.worldPos(it.angle, this.level.radius);
+        // On a boss the round bit a pixel of the drawing; its scar, drip and
+        // smoke have to grow from that pixel, not from the rim of a wheel.
+        const wp = this.level.boss && it.px !== undefined && it.py !== undefined
+          ? this.artToWorld(it.px, it.py)
+          : this.worldPos(it.angle, this.level.radius);
         const hx = wp.x, hy = wp.y;
         if (it.w === 'xeno') {
           // Ported from game-3: the blob sags, then a drip stretches until it
@@ -8000,7 +8284,7 @@ export class Game {
         if (this.level.boss && this.events.onBossDefeated) {
           this.state = 'idle';
           this.bankedCoins += 5; // the boss reward was already included in this.coins
-          this.events.onBossDefeated(this.level.name, this.level.n, 5, this.level.style as BossType);
+          this.events.onBossDefeated(this.level.name, this.level.n, 5, bossHeadFor(this.level.n) ?? 'pirate');
         } else {
           this.loadLevel(this.level.n + 1);
         }
@@ -9005,6 +9289,10 @@ export class Game {
         }
         for (const [index, wave] of wheelEntryBurst.waves.entries()) {
           if (wave.opacity <= 0) continue;
+          // A boss is not a disc: the entrance shockwave would draw two rings
+          // around the head at radius R, i.e. exactly the circle this hitbox is
+          // not. Its soft flash above still plays, so the arrival reads the same.
+          if (this.level.boss) continue;
           c.globalAlpha = wheelEntry.opacity * wave.opacity;
           c.strokeStyle = index === 1
             ? 'rgba(255,255,255,1)'
@@ -9025,7 +9313,8 @@ export class Game {
       }
       // Ordinary round targets keep their drop shadow. The special rock and
       // treasure chest must NOT sit on a large black disk as chunks fall away.
-      // Dark Knight juga tampil tanpa lingkaran hitam di belakangnya.
+      // A boss never gets one either: its head is drawn from Game B's art and
+      // only the blue outline may frame it.
       if (!isSpecial(this.level.mode) && !this.level.boss) {
         c.beginPath();
         c.arc(0, 10, R + 6, 0, TAU);
@@ -9073,10 +9362,12 @@ export class Game {
           const totalWeaponLen = it.type === 'old' ? BLEN : (getWeapon(it.w || 'pistol').stick + 12);
           const len = totalWeaponLen;
           // Masuk lebih dalam hingga hanya terlihat setengah (50% tertanam di
-          // dalam papan). Di boss, Perfect Shot menanam 72 % — hanya 28 % yang
-          // menonjol keluar dari gambar (`edgeTop(a, bh * 0.28)`), sehingga
-          // peluru terbaca menancap di kepala, bukan duduk di tepi roda.
-          const embedDepth = totalWeaponLen * (this.level.boss ? 0.72 : 0.5);
+          // dalam papan). Di boss, kepala digambar SETELAH peluru, jadi yang
+          // terlihat hanya bagian yang menonjol keluar garis: ujung peluru
+          // duduk tepat DI garis biru (sisanya tertutup gambar kepala). Angka
+          // ini sama untuk semua senjata — pistol, AK-47, minigun, shotgun —
+          // supaya hit-nya terbaca identik di mana pun peluru berhenti.
+          const embedDepth = totalWeaponLen * (this.level.boss ? 0.18 : 0.5);
           const pencilEmbedBonus = it.w === 'pencil' ? Math.sin(it.angle * 13) * 5 : 0;
           const itemR = it.px !== undefined && it.py !== undefined
             ? Math.hypot(it.px, it.py)
@@ -9325,21 +9616,23 @@ export class Game {
         c.save();
         c.globalCompositeOperation = 'lighter';
         c.globalAlpha = this.wheelFlash * 0.2;
-        c.beginPath();
-        c.arc(0, 0, R, 0, TAU);
-        c.fillStyle = `rgb(${this.wheelFlashRgb})`;
-        c.fill();
+        // The head lights up, not a circle around it.
+        this.paintTargetSurface(c, `rgb(${this.wheelFlashRgb})`);
         c.restore();
       }
       if (this.hitFlash > 0 && !isSpecial(this.level.mode)) {
-        c.beginPath();
-        c.arc(0, 0, R, 0, TAU);
-        // Brief surface flash: the whole circular board/boss lights up on impact.
-        c.fillStyle = `rgba(255,255,255,${this.hitFlash * 0.28})`;
-        c.fill();
+        c.save();
+        // Brief surface flash: the board — or, on a boss, the head itself —
+        // lights up on impact. Never a disc behind the head.
+        this.paintTargetSurface(c, `rgba(255,255,255,${this.hitFlash * 0.28})`);
+        c.restore();
       }
       if (this.slowT > 0) {
         const fa = Math.min(1, this.slowT / 0.3);
+        // On a boss every slow effect clings to the head: the film is clipped to
+        // the blue outline, so no ring ever forms around it.
+        c.save();
+        this.clipBossSurface(c);
         if (this.slowKind === 'water') {
           drawWetSurface(c, R, this.time, fa);
         } else {
@@ -9389,13 +9682,13 @@ export class Game {
             c.restore();
           }
         }
+        c.restore();
       }
       if (this.burnT > 0 && !this.setElevenLive) {
         const fa = Math.min(1, this.burnT / 0.4);
-        c.beginPath();
-        c.arc(0, 0, R, 0, TAU);
-        c.fillStyle = `rgba(255,100,20,${0.15 * fa + 0.05 * Math.sin(this.time * 20)})`;
-        c.fill();
+        c.save();
+        this.paintTargetSurface(c, `rgba(255,100,20,${0.15 * fa + 0.05 * Math.sin(this.time * 20)})`);
+        c.restore();
       }
       for (const it of this.items) {
         if (it.type !== 'coin' && it.type !== 'diamond_chest') continue;
@@ -9414,8 +9707,10 @@ export class Game {
       c.restore();
       }
       c.restore();
-      // Above the art and the stuck rounds: the boss' collision, in colour.
-      if (this.showHitbox && this.level.boss) {
+      // Above the art and the stuck rounds: the boss' one and only hitbox.
+      // In play that is the blue edge of the drawing; `?hitbox=1` swaps in the
+      // full developer overlay (contour, old ring, impact markers).
+      if (this.level.boss) {
         c.save();
         // Same transform chain the head is drawn with: translate, scale, the
         // boss' float/sway/breath/reaction, then the wheel angle. Anything less
@@ -9426,9 +9721,9 @@ export class Game {
         const decor = this.bossDecorMatrix();
         c.transform(decor.a, decor.b, decor.c, decor.d, decor.e, decor.f);
         if (this.level.mode !== 'treasure') c.rotate(this.rot);
-        this.drawHitboxDebug(c);
+        if (this.hitboxFlag) this.drawHitboxDebug(c);
+        else this.drawBossSilhouette(c);
         c.restore();
-        this.drawHitboxLegend(c, R);
       }
       if (s7w) {
         // Slide 3's lens bends what is already on screen (the gravity orb,
@@ -9823,45 +10118,41 @@ export class Game {
     // Slide 2's own layer for the eight exported weapons: its rounds' bursts,
     // bubbles, bite marks, shrapnel and callouts.
     if (this.s2wState && (this.s2wState.busy || this.setTwoLive)) {
-      try {
-        this.s2wState.draw(c, this.time);
-        this.s2wState.drawSky(c);
-      } catch {
-        /* slide 2's own art must never blank slide 1 */
-      }
+      this.withBossPaintClip(c, () => {
+        this.s2wState!.draw(c, this.time);
+        this.s2wState!.drawSky(c);
+      });
     }
     // Slide 6 layer: scorch marks on the wheel face, then its beams and the
     // burst that follows them.
     if (this.s6State && (this.s6State.busy || this.setSixLive)) {
-      try {
-        this.s6State.drawWheel(c, CX, this.targetY + this.bump * 7, this.level.radius, this.rot);
-        this.s6State.drawBeam(c);
-        this.s6State.draw(c);
-      } catch {
-        /* keep drawing slide 1 */
-      }
+      this.withBossPaintClip(c, () => {
+        // Its scorch marks sit at `translate(radius, 0)`: rim art, not boss art.
+        if (!this.level.boss) this.s6State!.drawWheel(c, CX, this.targetY + this.bump * 7, this.level.radius, this.rot);
+        this.s6State!.drawBeam(c);
+        this.s6State!.draw(c);
+      });
     }
     // Slide 7's bursts, sparks and smoke go over its gun, as on slide 7
     // (`render()`: wheel, sights, beam, rounds, gun, then fx and particles).
     if (this.s11State && (this.s11State.busy || this.setElevenLive)) {
-      // A bad frame from slide 7's own art must not blank slide 1.
-      try {
-        this.s11State.draw(c);
-      } catch {
-        /* keep drawing slide 1 */
-      }
+      this.withBossPaintClip(c, () => this.s11State!.draw(c));
     }
     // Slide-3 layer: its particles and FX objects (its wheel was drawn with
     // the wheel itself).
     if (this.s7State && (this.s7State.busy || this.setSevenLive)) {
-      this.s7State.draw(c);
-      this.s7State.drawFront(c);
+      this.withBossPaintClip(c, () => {
+        this.s7State!.draw(c);
+        this.s7State!.drawFront(c);
+      });
     }
     // Slide-7 SET 1 layer: wheel-space sparks first, then its particles/FX.
     if (this.s1State && (this.s1State.busy || this.setOneLive)) {
-      this.s1State.drawWheel(c, CX, this.targetY + this.bump * 7);
-      this.s1State.draw(c);
-      this.s1State.drawFront(c);
+      this.withBossPaintClip(c, () => {
+        if (!this.level.boss) this.s1State!.drawWheel(c, CX, this.targetY + this.bump * 7);
+        this.s1State!.draw(c);
+        this.s1State!.drawFront(c);
+      });
     }
     if (
       this.state !== 'idle' &&
@@ -10009,7 +10300,7 @@ export class Game {
       c.fillStyle = `rgba(255,80,80,${k2})`;
       c.font = "13px 'Russo One', sans-serif";
       c.textAlign = 'center';
-      c.fillText('LEPAS UNTUK MENEMBAK', CX, this.targetY + R + rr2 * 0.55);
+      c.fillText(T('LEPAS UNTUK MENEMBAK'), CX, this.targetY + R + rr2 * 0.55);
       c.restore();
     }
     // glitch screen
@@ -10079,35 +10370,55 @@ export class Game {
       c.restore();
     }
 
-    // coins
+    // Coins: the wallet in the right corner reads at exactly the same size as
+    // the score in the left corner (one HUD row, not two), and the coin itself
+    // is drawn with the run clock so it keeps flipping instead of sitting on
+    // its first frame like a frozen icon.
+    const scoreSize = isSpecial(this.level.mode) ? 29 : 40;
+    const coinSize = scoreSize;
+    const coinY = isSpecial(this.level.mode) ? 34 : 46;
+    const coinR = isSpecial(this.level.mode) ? 13 : 17.5;
+    const coinCx = W - coinR - 8;
+    const coinCountX = coinCx - coinR - 8;
     c.textAlign = 'right';
-    c.font = font(22);
-    const coinY = isSpecial(this.level.mode) ? 34 : 44;
-    c.strokeText(String(this.coins), W - 46, coinY);
+    c.font = font(coinSize);
+    // A long wallet must not run into the centred stage label (special stages)
+    // or the boss bar: shrink the counter only as far as it has to.
+    const coinText = String(this.coins);
+    // Special stages put their timer pill on this row (ends at CX + 118);
+    // boss stages put the health bar there (ends at CX + 103).
+    const coinRowLeft = isSpecial(this.level.mode) ? 336 : this.level.boss ? 316 : 0;
+    const coinRoom = coinRowLeft ? coinCountX - coinRowLeft : coinCountX;
+    if (coinRoom > 24 && typeof c.measureText === 'function') {
+      const wide = c.measureText(coinText).width;
+      if (wide > coinRoom) c.font = font(Math.max(16, Math.floor((coinSize * coinRoom) / wide)));
+    }
+    c.strokeText(coinText, coinCountX, coinY);
     c.save();
     if (this.coinPulse > 0.04) {
       c.fillStyle = `rgba(251,191,36,${Math.min(0.45, this.coinPulse * 0.4)})`;
       c.beginPath();
-      c.arc(W - 60, coinY, 16 * this.coinPulse, 0, TAU);
+      c.arc(coinCx, coinY, (coinR + 6) * this.coinPulse, 0, TAU);
       c.fill();
     }
     c.fillStyle = '#ffd23f';
-    c.fillText(String(this.coins), W - 46, coinY);
+    c.fillText(coinText, coinCountX, coinY);
     c.restore();
     c.save();
-    c.translate(W - 28, coinY);
-    c.scale(1 + this.coinPulse * 0.16, 1 + this.coinPulse * 0.16);
-    this.drawCoin(c, 0, false); // no oversized halo clipped by the HUD edge
+    c.translate(coinCx, coinY);
+    const coinScale = (coinR / CLASSIC_COIN_RADIUS) * (1 + this.coinPulse * 0.16);
+    c.scale(coinScale, coinScale);
+    this.drawCoin(c, this.time, false); // no oversized halo clipped by the HUD edge
     c.restore();
 
     // Stage identity and countdown are above the target, never over the diamond.
     const n = this.level.n;
     c.textAlign = 'center';
     const modeLabel = this.level.mode === 'boulder' ? `💎 DIAMOND BREAKER • LV ${n}`
-      : this.level.mode === 'bonus' ? `🪙 BONUS STAGE • LV ${n}`
-      : this.level.mode === 'treasure' ? `🧰 HARTA KARUN • LV ${n}`
+      : this.level.mode === 'bonus' ? `${T('🪙 BONUS STAGE')} • LV ${n}`
+      : this.level.mode === 'treasure' ? `${T('🧰 HARTA KARUN')} • LV ${n}`
       : this.level.mode === 'double' ? `🔫🔫 DOUBLE GUN • LEVEL ${n}`
-      : this.level.boss ? `BOSS • ${this.level.name}` : `LEVEL ${n}`;
+      : this.level.boss ? `${T('BOSS')} • ${this.level.name}` : `${T('LEVEL')} ${n}`;
     c.font = font(isSpecial(this.level.mode) ? 13 : 16);
     c.fillStyle = this.level.mode === 'treasure' || this.level.mode === 'bonus' ? '#fde68a'
       : this.level.mode === 'boulder' ? '#a5f3fc' : this.level.boss ? '#ff5050' : '#ffffff';
@@ -10128,7 +10439,7 @@ export class Game {
         c.fillText(timeStr, CX - 108, 42);
         c.textAlign = 'right';
         c.fillStyle = '#a5f3fc';
-        c.fillText(`BATU ${Math.round(ratio * 100)}%`, CX + 108, 42);
+        c.fillText(`${T('BATU')} ${Math.round(ratio * 100)}%`, CX + 108, 42);
         const barX = CX - 26, barY = 39, barW = 64;
         c.fillStyle = '#164e63'; c.fillRect(barX, barY, barW, 6);
         c.fillStyle = '#67e8f9'; c.fillRect(barX, barY, barW * ratio, 6);
@@ -10140,8 +10451,8 @@ export class Game {
         c.fillStyle = this.stageTime < 8 ? '#fb7185' : '#fde68a';
         c.fillText(`${timeStr}  •  KOIN ${taken}/${this.bonusCoins.length}`, CX, 42);
       } else {
-        const status = this.treasureBuff === 'double' ? '2 SENJATA'
-          : this.treasureBuff ? `BONUS ${this.treasureBuff.toUpperCase()}` : 'BERONDONG PETI!';
+        const status = this.treasureBuff === 'double' ? T('2 SENJATA')
+          : this.treasureBuff ? `${T('BONUS')} ${this.treasureBuff.toUpperCase()}` : T('BERONDONG PETI!');
         c.fillStyle = this.stageTime < 8 ? '#fb7185' : '#fde68a';
         c.fillText(`${timeStr}  •  ${status}`, CX, 42);
       }
@@ -10276,7 +10587,7 @@ export class Game {
     c.fillStyle = this.weapon.energy ? this.weapon.color : 'rgba(255,255,255,0.6)';
     // A slide-3 gun carries no slide-1 perk: the label names its card instead.
     const s3Card = this.sevenPlainTrigger;
-    c.fillText(`${this.weapon.name}${this.hasTwinGuns ? ' ×2' : ''} • ${s3Card ? 'SLIDE 3' : this.weapon.perk}`, W - 14, H - 16);
+    c.fillText(`${this.weapon.name}${this.hasTwinGuns ? ' ×2' : ''} • ${s3Card ? 'SLIDE 3' : T(this.weapon.perk)}`, W - 14, H - 16);
     const wq = this.weapon;
     let info = '';
     if (s3Card) { /* slide 3: no perk counters, no charge meter, no spin-up */ }
@@ -10287,17 +10598,17 @@ export class Game {
     else if (wq.snowman) info = `⛄ ${3 - (this.perkCount % 3)} lagi`;
     else if (wq.abductEvery) info = `🛸 culik ${wq.abductEvery - (this.perkCount % wq.abductEvery)} lagi`;
     else if (wq.everyBonus) info = `🎰 lucky ${wq.everyBonus.n - (this.perkCount % wq.everyBonus.n)} lagi`;
-    else if (wq.meltEvery && wq.meltEvery > 1) info = `✏️ hapus ${wq.meltEvery - (this.perkCount % wq.meltEvery)} lagi`;
-    else if (wq.paint && this.lastPaint) info = '🎨 warna terakhir ●';
+    else if (wq.meltEvery && wq.meltEvery > 1) info = `✏️ ${T('hapus')} ${wq.meltEvery - (this.perkCount % wq.meltEvery)} ${T('lagi')}`;
+    else if (wq.paint && this.lastPaint) info = T('🎨 warna terakhir ●');
     // A gun that fires on the press (a Slide 5 / Slide 7 card) has no charge to hold for.
     // Slide 7's caster locks on by itself while held (its 2.6 s lock).
     else if (this.elevenCasterTrigger) {
-      info = this.holding && this.state === 'play' ? `🎯 kunci ${Math.round(this.s11.casterLock * 100)}%` : '🎯 tahan = kunci & luncurkan';
+      info = this.holding && this.state === 'play' ? `🎯 ${T('kunci')} ${Math.round(this.s11.casterLock * 100)}%` : T('🎯 tahan = kunci & luncurkan');
     } else if (wq.charge && !this.plainTrigger) {
       const full = this.elevenBuster ? 1.2 : 1;
-      info = this.charging ? `🔋 ${this.chargeT >= full ? 'FULL!' : Math.round(Math.min(1, this.chargeT / full) * 100) + '%'}` : '🔋 tahan untuk charge';
+      info = this.charging ? `🔋 ${this.chargeT >= full ? 'FULL!' : Math.round(Math.min(1, this.chargeT / full) * 100) + '%'}` : T('🔋 tahan untuk charge');
     }
-    else if (wq.phaseSpikes) info = '👻 kebal duri';
+    else if (wq.phaseSpikes) info = T('👻 kebal duri');
     else if (wq.notes) info = `🎶 nada ${Math.min(10, Math.max(1, this.combo))}/10`;
     if (info) {
       c.font = font(13);
@@ -10337,10 +10648,10 @@ export class Game {
         c.fillStyle = '#ffd0d0';
         c.fillText(this.level.name, 0, 20);
       } else if (isSpecial(this.level.mode)) {
-        const title = this.level.mode === 'boulder' ? '💎 DIAMOND BREAKER'
-          : this.level.mode === 'bonus' ? '🪙 BONUS STAGE' : '🧰 HARTA KARUN';
-        const hint = this.level.mode === 'boulder' ? 'Kikis batu hingga diamond bersih!'
-          : this.level.mode === 'bonus' ? 'Bidik koin yang berputar!' : '10 detik! Berondong petinya!';
+        const title = this.level.mode === 'boulder' ? `💎 ${T('DIAMOND BREAKER')}`
+          : this.level.mode === 'bonus' ? T('🪙 BONUS STAGE') : T('🧰 HARTA KARUN');
+        const hint = this.level.mode === 'boulder' ? T('Kikis batu hingga diamond bersih!')
+          : this.level.mode === 'bonus' ? T('Bidik koin yang berputar!') : T('10 detik! Berondong petinya!');
         c.font = font(27); c.lineWidth = 5; c.strokeStyle = 'rgba(0,0,0,0.9)';
         c.strokeText(title, 0, -9);
         c.fillStyle = this.level.mode === 'boulder' ? '#a5f3fc' : '#fde68a';
@@ -10359,7 +10670,7 @@ export class Game {
       if (n <= 2 && !this.sevenPlainTrigger && (this.weapon.auto || scope || charge)) {
         c.font = font(13);
         c.fillStyle = '#ffd23f';
-        const hint = charge ? 'TAP = TEMBAK, TAHAN = CHARGE x4!' : scope ? 'TAHAN = BIDIK SLOW-MO, LEPAS = TEMBAK' : this.weapon.spinup ? 'TAHAN LAYAR UNTUK MEMUTAR LARAS!' : 'TAHAN LAYAR / SPASI = AUTO-FIRE';
+        const hint = charge ? T('TAP = TEMBAK, TAHAN = CHARGE x4!') : scope ? T('TAHAN = BIDIK SLOW-MO, LEPAS = TEMBAK') : this.weapon.spinup ? T('TAHAN LAYAR UNTUK MEMUTAR LARAS!') : T('TAHAN LAYAR / SPASI = AUTO-FIRE');
         c.fillText(hint, 0, 40);
       }
       c.restore();
@@ -10420,7 +10731,7 @@ export class Game {
       c.shadowBlur = 0;
       c.font = `700 18px ${clearFont}`;
       c.fillStyle = '#fff';
-      c.fillText('BONUS +3', 0, 40);
+      c.fillText(T('BONUS +3'), 0, 40);
       c.restore();
     }
   }

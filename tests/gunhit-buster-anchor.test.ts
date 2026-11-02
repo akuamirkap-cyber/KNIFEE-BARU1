@@ -277,8 +277,16 @@ test('wheel and Boss orbs draw after the slide-11 scorch in the captured wheel t
       game.drawBusterWheelPellets = (...args: unknown[]) => { paint.push('buster-orbs'); originalPellets(...args); };
       paint.length = 0; game.render();
       const wheel = paint.indexOf('slide11-wheel'), orb = paint.indexOf('buster-orbs');
-      assert.ok(wheel >= 0 && orb > wheel, `${mode} glow is not hidden by the later scorch`);
-      assert.ok(paint.indexOf('wheel-transform-restored') > wheel, `${mode} uses the captured rotating and breathing target frame`);
+      if (mode === 'boss') {
+        // Slide 11's own wheel is a disc of radius R: its scorch marks would be
+        // painted in the empty sky around the head, i.e. on the circle this
+        // boss stage must never show. Its orbs still draw over the head.
+        assert.equal(wheel, -1, 'a boss has no slide-11 rim to scorch');
+        assert.ok(paint.includes('buster-orbs'), 'the boss orbs still draw');
+      } else {
+        assert.ok(wheel >= 0 && orb > wheel, `${mode} glow is not hidden by the later scorch`);
+        assert.ok(paint.indexOf('wheel-transform-restored') > wheel, `${mode} uses the captured rotating and breathing target frame`);
+      }
     } finally { capturedTransform = undefined; game.destroy(); }
   }
 });

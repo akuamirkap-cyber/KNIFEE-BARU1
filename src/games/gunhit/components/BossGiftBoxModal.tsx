@@ -1,3 +1,5 @@
+import { rarityLabel, tr } from '../../../i18n/strings';
+import { useLanguage } from '../../../i18n/useLanguage';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GiftBoxBody, GiftBoxLid } from '../../knife-hit/components/Art';
 import {
@@ -158,6 +160,7 @@ export function GiftBoxScene({
   declineLabel,
   onClaim,
 }: GiftBoxSceneProps) {
+  const [language] = useLanguage();
   const active = useSlideActive();
   const wrapRef = useRef<HTMLDivElement>(null);
   const punchRef = useRef<HTMLDivElement>(null);
@@ -261,11 +264,11 @@ export function GiftBoxScene({
                 }}
               >
                 <span className="inline-block h-2 w-2 rounded-full" style={{ background: RARITY_COLOR[weapon.rarity] }} />
-                {weapon.rarity}
+                {rarityLabel(weapon.rarity, language)}
               </span>
             </div>
             <h2 className="mt-1 text-[30px] font-black leading-none text-emerald-300 drop-shadow-[0_3px_0_#0d5c33]">
-              <LetterPop text="SENJATA BARU!" />
+              <LetterPop text={tr(language, 'SENJATA BARU!')} />
             </h2>
             <div className="fade-up mt-1 flex justify-center gap-1" style={{ animationDelay: '.4s' }}>
               {Array.from({ length: RARITY_STARS[weapon.rarity] }).map((_, i) => (
@@ -278,7 +281,7 @@ export function GiftBoxScene({
         ) : (
           <>
             <h2 className="text-[30px] font-black leading-none text-amber-300 drop-shadow-[0_3px_0_#9a5b00]">
-              <LetterPop text="KOIN BONUS!" />
+              <LetterPop text={tr(language, 'KOIN BONUS!')} />
             </h2>
             <div className="fade-up mt-2 flex justify-center gap-1.5" style={{ animationDelay: '.3s' }}>
               {[0, 1, 2].map((i) => (
@@ -401,7 +404,7 @@ export function GiftBoxScene({
               ))}
             </div>
             <p key={taps} className="pop-in tap-hint text-2xl font-black text-white drop-shadow-[0_3px_0_rgba(0,0,0,.35)]">
-              {taps === 0 ? 'TAP UNTUK MEMBUKA!' : taps === 1 ? 'TAP LAGI!' : 'SATU LAGI!!'}
+              {taps === 0 ? tr(language, 'TAP UNTUK MEMBUKA!') : taps === 1 ? tr(language, 'TAP LAGI!') : tr(language, 'SATU LAGI!!')}
             </p>
           </>
         )}
@@ -417,13 +420,13 @@ export function GiftBoxScene({
                     className="rounded-full px-2 py-1 text-[10px] font-black text-white"
                     style={{ background: RARITY_COLOR[weapon.rarity] }}
                   >
-                    ⚡ {weapon.perk}
+                    ⚡ {tr(language, weapon.perk)}
                   </span>
                 </div>
-                <p className="max-w-[340px] text-center text-[12px] leading-snug font-medium text-white/80">{weapon.desc}</p>
+                <p className="max-w-[340px] text-center text-[12px] leading-snug font-medium text-white/80">{tr(language, weapon.desc)}</p>
               </>
             )}
-            <p className="text-[16px] font-black text-amber-300 drop-shadow-[0_2px_0_#7a4a00]">+{coins} KOIN 💰</p>
+            <p className="text-[16px] font-black text-amber-300 drop-shadow-[0_2px_0_#7a4a00]">+{coins}{tr(language, ' KOIN 💰')}</p>
             <GreenButton onClick={() => claim(true)} className="w-full max-w-[300px] px-4 py-2 text-[18px]">
               {claimLabel}
             </GreenButton>

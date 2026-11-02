@@ -13,7 +13,8 @@ import { bananaPeelOpen, bananaFleshFill } from '../src/games/gunhit/game/art/gu
 import { dragonFlameSurge } from '../src/games/gunhit/game/art/guns3';
 import { honeyPumpPulse } from '../src/games/gunhit/game/art/guns4';
 import { FX, spawnImpact, spawnMuzzle, type Particle } from '../src/games/gunhit/game/fx';
-import { drawGun, drawProjectile, getWeapon, WEAPONS } from '../src/games/gunhit/game/weapons';
+import { drawGun, drawProjectile } from '../src/games/gunhit/game/weaponDraw';
+import { getWeapon, WEAPONS } from '../src/games/gunhit/game/weapons';
 import { GUN_METRICS } from '../src/games/gunhit/game/art/metrics';
 import { gunState } from '../src/games/gunhit/game/art/kit';
 import { drawPreciseWeaponDecal } from '../src/games/gunhit/game/art/decalSystem';
@@ -1102,7 +1103,7 @@ test('Slide #2 pentatonic sound rhythm, UI/clear/fail/start SFX, wheel 0.15->1 e
   assert.ok(gameSrc.includes('const wheelEntryTotal = this.wheelEntryDelayT + 1.16 * this.pace;'), 'every wheel plays the full Perfect Shot entrance timeline');
   assert.ok(!gameSrc.includes("this.synchronizedEntrance && this.state === 'intro'"), 'the wheel entrance is never gated behind the menu handoff');
   assert.ok(gameSrc.includes("c.fillText('STAGE CLEAR!', 0, 0);"), 'draws STAGE CLEAR! banner on canvas like Slide #2');
-  assert.ok(gameSrc.includes("c.fillText('BONUS +3', 0, 40);"), 'draws BONUS +3 subtitle on canvas like Slide #2');
+  assert.ok(gameSrc.includes("c.fillText(T('BONUS +3'), 0, 40);"), 'draws BONUS +3 subtitle on canvas like Slide #2');
   assert.ok(gameSrc.includes('c.drawImage(this.face,'), 'keeps SGA wheel face image');
 });
 

@@ -89,11 +89,17 @@ adb install -r release\GameArcadeHub-v1.0.0-release.apk
 
 ## 5. Signing key (penting!)
 
-Saat build release pertama, script otomatis membuat **keystore** di:
+Saat build release pertama, `BUILD-APK.bat` otomatis membuat **keystore** di:
 
 ```
 android/game-arcade-hub-release.keystore
 android/keystore.properties      <- berisi password
+```
+
+Di macOS / Linux (atau kalau mau bikin key sendiri), jalankan sekali:
+
+```bash
+bash tools/make-keystore.sh          # bisa juga: KEYSTORE_PASSWORD=xxx bash tools/make-keystore.sh
 ```
 
 `keystore.properties` dibaca oleh `android/app/build.gradle` untuk menandatangani APK.
@@ -122,25 +128,34 @@ keyPassword=password-key
 
 ## 6. Upload ke Google Play
 
-Google Play butuh file **`.aab`** (Android App Bundle), bukan APK. Untuk itu:
+Google Play butuh file **`.aab`** (Android App Bundle), bukan APK. Satu perintah:
 
-```bat
-cd android
-gradlew.bat bundleRelease
+```bash
+npm run build:aab
 ```
 
-Hasilnya: `android/app/build/outputs/bundle/release/app-release.aab`
+Yang terjadi: `vite build` -> `cap sync android` -> `gradlew bundleRelease` -> hasil
+disalin otomatis ke:
+
+```
+release/GameArcadeHub-v1.0.0-release.aab
+```
+
+(Manual, kalau perlu: `cd android && ./gradlew bundleRelease` — Windows:
+`gradlew.bat bundleRelease`. File mentahnya ada di
+`android/app/build/outputs/bundle/release/app-release.aab`.)
 
 Upload di https://play.google.com/console -> `Create app` -> `Release` -> `Production` ->
 upload `.aab`.
 
 Checklist sebelum upload:
 
-- [ ] `android/app/build.gradle` -> `versionCode` naik (1 -> 2, 3, ...) setiap rilis
-- [ ] `versionName` naik (1.0.0 -> 1.0.1, 1.1.0, ...)
+- [ ] `npm run version:bump` (atau edit `android/version.properties`) — `versionCode`
+      **wajib** naik setiap upload, `versionName` mengikuti
 - [ ] Ikon & splash sudah sesuai (`assets/app-icon.png` -> `tools/make-android-assets.sh`)
 - [ ] `android/app/src/main/res/values/strings.xml` -> `app_name` = "Game Arcade Hub"
-- [ ] Package name `com.gamearcade.hub` sudah final (nanti tidak bisa diganti)
+- [ ] Package name `com.gamearcade.hub` **sudah final** — tidak bisa diganti setelah rilis
+      pertama di Play Console
 
 ---
 
@@ -156,11 +171,15 @@ Checklist sebelum upload:
 ├── capacitor.config.ts      <-- konfigurasi Capacitor (appId, nama, webDir)
 ├── assets/app-icon.png      <-- sumber ikon launcher (1024x1024)
 ├── tools/make-android-assets.sh  <-- regenerate ikon & splash dari app-icon.png
+├── tools/make-keystore.sh   <-- buat signing key (macOS/Linux)
+├── tools/android-build.mjs  <-- dipakai npm run build:apk / build:aab
+├── tools/bump-version.mjs   <-- npm run version:bump
 ├── src/                     <-- source code web game (React + Vite)
 ├── public/                  <-- assets statis (gambar bos, dll)
-├── release/                 <-- HASIL APK (dibuat otomatis)
+├── release/                 <-- HASIL APK/AAB (dibuat otomatis)
 └── android/                 <-- project Android Studio (Capacitor)
-    ├── app/build.gradle     <-- signing config + versionCode/versionName
+    ├── version.properties   <-- versionCode & versionName (satu-satunya tempat)
+    ├── app/build.gradle     <-- signing config, membaca version.properties
     ├── keystore.properties  <-- (otomatis dibuat, jangan di-commit)
     └── gradlew.bat          <-- wrapper Gradle
 ```
@@ -170,8 +189,10 @@ Checklist sebelum upload:
 ## 8. Update aplikasi (rilis berikutnya)
 
 1. Ubah kode game di `src/`.
-2. (Opsional) naikkan `versionCode` & `versionName` di `android/app/build.gradle`.
-3. Klik lagi `BUILD-APK.bat`.
+2. Naikkan versi: `npm run version:bump` (patch) / `npm run version:bump -- minor`.
+   Angka `versionCode` & `versionName` ada di **`android/version.properties`** —
+   `build.gradle`, `BUILD-APK.bat` dan `npm run build:aab` semuanya membaca file itu.
+3. Klik lagi `BUILD-APK.bat` (atau `npm run build:apk` / `npm run build:aab`).
 4. APK baru ada di `release/`, signature sama -> bisa install di atas APK lama.
 
 Untuk development di browser tanpa build APK:
@@ -204,13 +225,60 @@ Gradle. Jalankan ulang `BUILD-APK.bat` setelah masalahnya diperbaiki.
 
 ## 10. Regenerate ikon & splash screen
 
-Kalau mau ganti ikon aplikasi:
+Semua ikon berasal dari satu file: `assets/app-icon.png` (1024x1024, PNG).
 
-1. Ganti `assets/app-icon.png` (1024x1024, PNG, background polos).
-2. Jalankan (butuh ImageMagick, atauInstall `magick` di Windows):
+1. Ganti `assets/app-icon.png`.
+2. Jalankan (butuh ImageMagick — Windows: install `magick`):
 
 ```bash
 bash tools/make-android-assets.sh assets/app-icon.png android/app/src/main/res
 ```
 
-3. Klik ulang `BUILD-APK.bat`.
+3. Klik ulang `BUILD-APK.bat` / `npm run build:apk`.
+
+Yang dihasilkan script itu:
+
+| File | Ukuran | Dipakai untuk |
+|------|--------|---------------|
+| `mipmap-<density>/ic_launcher.png` | 48 – 192 px | ikon lama (Android 7, sudut membulat) |
+| `mipmap-<density>/ic_launcher_round.png` | 48 – 192 px | ikon bulat (Android 7) |
+| `mipmap-<density>/ic_launcher_foreground.png` | 108 – 432 px | adaptive icon (Android 8+), emblem di dalam safe zone 66dp |
+| `drawable-nodpi/splash_logo.png` | 512 px | splash screen |
+
+Adaptive icon: background (`values/ic_launcher_background.xml`) + foreground di atasnya.
+Emblem digambar di 74% kanvas 108dp supaya tidak terpotong saat launcher memakai mask
+bulat/squircle.
+
+Splash screen diatur di `android/app/src/main/res/values/styles.xml`
+(`AppTheme.NoActionBarLaunch`, parent `Theme.SplashScreen`):
+
+- Android 12+ memakai `windowSplashScreenBackground` + `windowSplashScreenAnimatedIcon`,
+  lalu pindah ke `postSplashScreenTheme` (`AppTheme.NoActionBar`).
+- Android 7–11 memakai `android:windowBackground` -> `drawable/splash.xml`
+  (warna `#0D1627` + logo, tanpa gambar landscape lagi).
+
+Status bar & navigation bar juga berwarna `#0B0E14` supaya tidak ada kilatan putih
+sebelum WebView menggambar game.
+
+---
+
+## Rilis ke Play Console
+
+Urutannya (semua berkas sudah disiapkan di repo):
+
+1. **Build**: `npm run build:aab` → `release/GameArcadeHub-v<versi>-release.aab`
+   (naikkan versi dulu: `npm run version:bump`).
+2. **Aset toko**: `store/icon-512.png`, `store/feature-graphic-1024x500.png`,
+   `store/screenshots/phone-01..04.png`. Periksa dengan `npm run check:store`
+   (juga jalan di CI). Buat ulang dengan `npm run store:assets`.
+3. **Listing**: salin dari `store/listing-id.md` (id-ID) dan `store/listing-en.md`
+   (default/English).
+4. **Formulir**: Data safety dari `docs/DATA-SAFETY.md`, rating IARC dari
+   `docs/CONTENT-RATING.md`, kebijakan privasi dari `docs/PRIVACY.md`
+   (butuh URL publik — hosting sendiri).
+5. **QA**: jalankan `docs/TEST-PLAN.md` di HP fisik sebelum mengunggah.
+6. **Unggah**: Play Console → Testing → Internal testing dulu, lalu Production.
+
+CI (`.github/workflows/ci.yml`) menjalankan typecheck, seluruh tes, build web,
+dan pemeriksaan aset toko pada setiap push. Build Android tetap di mesin lokal
+karena butuh Android SDK dan keystore.

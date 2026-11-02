@@ -1,3 +1,4 @@
+import { registerSlideAudio } from './slideAudioBridge';
 import { traceBossSegment } from './bossRaycast';
 /**
  * Slide-11 (`games/game-8` / Knife-Hit Arsenal FX) runtime for slide 1.
@@ -1552,3 +1553,8 @@ export function drawSetElevenShotShell(
   if (shown) fx.drawShot(c, shown);
   fx.draw(c);
 }
+
+// Slide 1's master mute/volume drives this bus as soon as the module loads.
+registerSlideAudio((muted, volume) => {
+    setElevenMuted(muted); setElevenVolume(volume);
+});

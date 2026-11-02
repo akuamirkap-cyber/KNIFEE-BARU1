@@ -1,6 +1,11 @@
-import type { BossType } from './bossRoster';
+import type { BossAttackFamily } from './bossCatalog';
 
-export type Style = 'orange' | 'wood' | 'target' | BossType;
+/**
+ * A target's look. Bosses are not a style any more: every boss in Game A is
+ * one of Game B's eleven heads, painted from Perfect Shot's own artwork, and
+ * `BossAttackFamily` only picks the FX/decals an attack is drawn with.
+ */
+export type Style = 'orange' | 'wood' | 'target' | BossAttackFamily;
 
 const TAU = Math.PI * 2;
 
@@ -29,14 +34,11 @@ function shade(c: CanvasRenderingContext2D, R: number, strength = 0.35) {
   c.stroke();
 }
 
-import { renderBossHead } from './bossRenderer';
-
 export function drawFace(c: CanvasRenderingContext2D, R: number, style: Style) {
-  // ----------------- GENERATED 2D CARTOON VILLAIN HEADS (NO BLACK BG, NON-ROUND) -----------------
-  if (style === 'knight' || style === 'oni' || style === 'cyborg' || style === 'pirate') {
-    renderBossHead(c, style, R);
-    return;
-  }
+  // A boss never reaches this function: Game A's boss is always Perfect Shot's
+  // head (`buildFace` paints the raster and leaves the canvas empty until it
+  // lands). The old four hand-drawn villains are gone with `bossRoster.ts`.
+  if (style === 'knight' || style === 'oni' || style === 'cyborg' || style === 'pirate') return;
 
   // ----------------- NORMAL ROUND TARGETS -----------------
   c.save();

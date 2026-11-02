@@ -493,5 +493,3 @@ export function rollGiftWeapon(excludeId?: string): Weapon {
   return source[source.length - 1];
 }
 
-export { drawGun } from './art/guns';
-export { drawProjectile } from './art/projectiles';

@@ -1,16 +1,19 @@
+import { tr } from '../../../i18n/strings';
+import { useLanguage } from '../../../i18n/useLanguage';
 import { useEffect, useRef, useState } from 'react';
 import { sfx } from '../game/audio';
 import { sfx4 } from '../game/sfx4';
 import { HeadArt } from '../../perfect-shot/play/HeadArt';
 import { bossHeadFor } from '../game/bossIdentity';
-import { getBossDef, type BossType } from '../game/bossRoster';
+import { bossDef, type BossHead } from '../game/bossCatalog';
 import { useSlideActive } from '../../shared/SlideActivity';
 import { Burst } from '../../knife-hit/components/Effects';
 import { getSavedSgaSpeed } from '../game/gameSpeed';
 
 interface BossDefeatedModalProps {
   bossName: string;
-  bossType: BossType;
+  /** The Game B head this boss wears — the only boss identity Game A has. */
+  bossHead: BossHead;
   stage: number;
   rewardCoins: number;
   playerLevel: number;
@@ -28,7 +31,7 @@ function BossPortrait({ stage, name }: { stage: number; name: string }) {
 
 export const BossDefeatedModal = ({
   bossName,
-  bossType,
+  bossHead,
   stage,
   rewardCoins,
   playerLevel,
@@ -38,11 +41,12 @@ export const BossDefeatedModal = ({
   leveledUp,
   onContinue,
 }: BossDefeatedModalProps) => {
+  const [language] = useLanguage();
   const active = useSlideActive();
   const [visibleXp, setVisibleXp] = useState(xpBefore);
   const continueRef = useRef(onContinue);
   continueRef.current = onContinue;
-  const boss = getBossDef(bossType);
+  const boss = bossDef(bossHead);
 
   useEffect(() => {
     if (!active) return;
@@ -86,15 +90,15 @@ export const BossDefeatedModal = ({
 
         <div className="text-center font-game">
           <div className="text-4xl font-black tracking-wide text-white drop-shadow-[0_4px_8px_rgba(0,0,0,0.8)]">BOSS DEFEATED!</div>
-          <div className="mt-1 text-xs font-bold tracking-widest" style={{ color: boss.accent }}>{bossName} DITAKLUKKAN!</div>
+          <div className="mt-1 text-xs font-bold tracking-widest" style={{ color: boss.accent }}>{bossName}{tr(language, ' DITAKLUKKAN!')}</div>
         </div>
 
         <div className="mt-6 w-full max-w-xs">
           <div className="mb-1 flex items-center justify-between font-game text-[11px] font-black tracking-wider">
-            <span className="text-emerald-200">LEVEL {playerLevel}{leveledUp ? ' · LEVEL UP!' : ''}</span>
+            <span className="text-emerald-200">{tr(language, 'LEVEL')} {playerLevel}{leveledUp ? tr(language, ' · LEVEL UP!') : ''}</span>
             <span className="text-lime-200">+{xpGained} XP</span>
           </div>
-          <div className="relative flex h-7 items-center overflow-hidden rounded-full border-2 border-white/60 bg-black/45 px-1 shadow-[0_0_12px_rgba(74,222,128,.28)]" role="progressbar" aria-label={`Player level ${playerLevel} XP`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={visibleXp}>
+          <div className="relative flex h-7 items-center overflow-hidden rounded-full border-2 border-white/60 bg-black/45 px-1 shadow-[0_0_12px_rgba(74,222,128,.28)]" role="progressbar" aria-label={`${tr(language, 'Player level ')}${playerLevel} XP`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={visibleXp}>
             <span className="absolute left-2.5 z-10 font-game text-[10px] font-black text-white/90">XP</span>
             <div className="h-4 rounded-full bg-gradient-to-r from-emerald-500 via-green-400 to-lime-300 shadow-[0_0_12px_#4ade80] transition-[width] duration-1000 ease-out" style={{ width: `${visibleXp}%` }} />
             <span className="absolute right-2 z-10 font-mono text-[9px] font-bold text-white drop-shadow">{visibleXp}/100</span>
@@ -102,7 +106,7 @@ export const BossDefeatedModal = ({
         </div>
 
         <div className="mt-7 w-full max-w-[230px] text-center">
-          <div className="mb-1.5 font-game text-[10px] font-black tracking-[.18em] text-white/70">LANJUT OTOMATIS…</div>
+          <div className="mb-1.5 font-game text-[10px] font-black tracking-[.18em] text-white/70">{tr(language, 'LANJUT OTOMATIS…')}</div>
           <div className="h-1.5 overflow-hidden rounded-full bg-white/20">
             <div className="boss-auto-continue h-full rounded-full bg-gradient-to-r from-emerald-300 to-cyan-300" />
           </div>

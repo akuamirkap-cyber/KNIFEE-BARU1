@@ -1,12 +1,11 @@
 /**
- * Game B's obstacle knives, drawn on canvas with the reference geometry.
+ * Obstacle knives, drawn on canvas with the reference geometry.
  *
- * Perfect Shot sticks three kinds of knife into its target (see
- * `perfect-shot/play/KnifeArt.tsx`): a wooden-handled kitchen knife, a knight's
- * dagger with a golden guard, and a black kunai with a ring pommel. They always
- * use the same 28 x 84 box with the tip at the top, ~30 % of it sunk into the
- * target. Game A's boss stage uses those exact shapes now, so both games show
- * the same obstacles.
+ * The art bersama shipped three kinds of knife with the target artwork: a
+ * wooden-handled kitchen knife, a knight's dagger with a golden guard, and a
+ * black kunai with a ring pommel. They always use the same 28 x 84 box with the
+ * tip at the top, ~30 % of it sunk into the target. Game A's boss stage uses
+ * those exact shapes.
  *
  * Each variant is baked once into a small offscreen sprite; the engine then
  * costs one `drawImage` per knife per frame.

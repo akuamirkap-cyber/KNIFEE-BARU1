@@ -1,4 +1,6 @@
 import { useLayoutEffect, useRef } from 'react';
+import { WEAPON_FLIGHT_MS } from './weaponFlightTiming';
+export { WEAPON_FLIGHT_MS };
 
 type Rect = { x: number; y: number; w: number; h: number };
 export type SgaWeaponFlightData = { id: number; image: string; from: Rect; to: Rect };
@@ -6,9 +8,9 @@ export type SgaWeaponFlightData = { id: number; image: string; from: Rect; to: R
 /**
  * How long the captured menu frame travels before it lands on the gun slot.
  * The live canvas gun stays hidden for exactly this long, so the hand-off never
- * shows two weapons at once.
+ * shows two weapons at once. The value itself lives in `weaponFlightTiming` so
+ * the menu can schedule the hand-off without loading this overlay.
  */
-export const WEAPON_FLIGHT_MS = 780;
 
 /** Carries the actual SGA menu-canvas frame into the gameplay weapon slot. */
 export default function SgaWeaponFlight({ flight }: { flight: SgaWeaponFlightData }) {

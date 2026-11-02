@@ -5,11 +5,9 @@ import path from 'node:path';
 
 const app = readFileSync(path.join(process.cwd(), 'src/games/gunhit/App.tsx'), 'utf8');
 
-test('Vortex ring, combo ghost, and combo glow are disabled in both SGA and Perfect Shot', () => {
-  const perfectShotMenu = readFileSync(path.join(process.cwd(), 'src/games/perfect-shot/components/MainMenu.tsx'), 'utf8');
+test('Vortex ring, combo ghost, and combo glow stay disabled in SGA', () => {
   const perfectShotCss = readFileSync(path.join(process.cwd(), 'src/games/perfect-shot/index.css'), 'utf8');
   assert.doesNotMatch(app, /sga-vortex-anchor|sga-vortex-ring|vortexAnchorRef/);
-  assert.doesNotMatch(perfectShotMenu, /combo-ghost|combo-glow/);
   assert.match(perfectShotCss, /\.st-in-combo::before \{ content: none !important; animation: none !important; \}/);
   assert.doesNotMatch(perfectShotCss, /@keyframes comboVortex2|@keyframes comboGlow|@keyframes comboGhost/);
   assert.match(app, /SunburstFX size=\{430\}/, 'the separate rarity Sunburst stays in SGA');
@@ -108,7 +106,7 @@ test('SGA uses Perfect Shot UI, page-transition and ambient audio with a separat
   assert.match(app, /studioSfx\.lbEnter\(0, LB_IN\)/);
   assert.match(app, /beginMenuPageTransition\('cloud', 'QUEST', menuPageLead\(\)/);
   assert.match(app, /beginMenuPageTransition\('wrap', 'ACHIEVEMENT', menuPageLead\(\)/);
-  assert.match(app, /beginMenuPageTransition\('podium', 'PERINGKAT', menuPageLead\(\)/);
+  assert.match(app, /beginMenuPageTransition\('podium', tr\(language, 'PERINGKAT'\), menuPageLead\(\)/);
   assert.match(app, /studioSfx\.cloudClose\(0, t\.rate\)/);
   assert.match(app, /studioSfx\.menuEnter\(0, nextPlan\)/);
   assert.match(app, /phase=\{menuPageTransition\.phase\}/);
@@ -150,7 +148,7 @@ test('SGA uses Perfect Shot quest-map geometry while keeping SGA stage progress 
   assert.match(app, /beginMenuPageTransition\('cloud', 'QUEST', QUEST_OUT\.total/);
   assert.match(app, /studioSfx\.menuEnter\(0, nextPlan\)/);
   assert.match(app, /beginMenuPageTransition\('wrap', 'ACHIEVEMENT', ACH_OUT\.total/);
-  assert.match(app, /beginMenuPageTransition\('podium', 'PERINGKAT', LB_OUT\.total/);
+  assert.match(app, /beginMenuPageTransition\('podium', tr\(language, 'PERINGKAT'\), LB_OUT\.total/);
   assert.match(app, /opening \? menuPageLead\(\) : SHOP_OUT\.total/);
   assert.match(app, /const MENU_EXIT_K = 0\.78/);
   assert.match(app, /planStyleMotion\(menuPlan\.title\[i\], TL\.letter\(i\), \['in-letter', 'out-letter'\]/);

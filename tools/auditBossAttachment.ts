@@ -47,8 +47,10 @@ function make() {
   return game;
 }
 function inkOf(game: any) {
-  const mask = game.artMask; const R = game.level.radius;
+  // Read the mask and the radius *at call time*: the grow / shrink weapons
+  // really do resize the target, and a stale radius would report a false miss.
   return (lx: number, ly: number) => {
+    const mask = game.artMask; const R = game.level.radius;
     const u = Math.floor(((lx / R / mask.span) + 1) * 0.5 * mask.size);
     const v = Math.floor(((ly / R / mask.span) + 1) * 0.5 * mask.size);
     if (u < 1 || v < 1 || u >= mask.size - 1 || v >= mask.size - 1) return false;

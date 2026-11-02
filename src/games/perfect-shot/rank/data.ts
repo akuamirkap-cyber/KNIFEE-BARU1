@@ -24,12 +24,12 @@ export function buildBoard(g: GameState, scope: "global" | "week"): Player[] {
     const base = Math.round((128000 * Math.pow(0.86, i) + 2400) * k);
     return { id: `b${i}`, name, country, score: base, trend: Math.round(base * (0.02 + ((i * 37) % 9) / 100)), seed: i * 7 + (scope === "week" ? 3 : 1), stage: Math.max(3, Math.round(98 * Math.pow(0.87, i))) };
   });
-  const me: Player = { id: "me", name: "Kamu", country: "ID", score: Math.round(myScore(g) * (scope === "global" ? 1 : 0.9)), trend: 0, seed: 999, stage: g.stage, me: true };
+  const me: Player = { id: "me", name: "You", country: "ID", score: Math.round(myScore(g) * (scope === "global" ? 1 : 0.9)), trend: 0, seed: 999, stage: g.stage, me: true };
   me.trend = Math.round(me.score * 0.12);
   return [...bots, me].sort((a, b) => b.score - a.score);
 }
 
-export const fmt = (n: number) => n.toLocaleString("id-ID");
+export const fmt = (n: number) => n.toLocaleString("en-US");
 
 /* ---------------- timeline (ms) ---------------- */
 export const LB_IN = scaleTL({

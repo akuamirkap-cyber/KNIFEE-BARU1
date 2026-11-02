@@ -108,7 +108,8 @@ if "!BUILD_TYPE!"=="debug" (
 )
 if not exist "!APK_SRC!" goto :fail_apk
 
-for /f "tokens=2" %%v in ('findstr /c:"versionName " "%ANDROID_DIR%\app\build.gradle"') do set "APP_VERSION=%%~v"
+rem  Versi rilis sekarang dibaca dari android\version.properties
+for /f "tokens=2 delims==" %%v in ('findstr /b /c:"versionName=" "%ANDROID_DIR%\version.properties" 2^>nul') do set "APP_VERSION=%%~v"
 if not defined APP_VERSION set "APP_VERSION=1.0.0"
 
 if not exist "%RELEASE_DIR%" mkdir "%RELEASE_DIR%" >nul 2>&1

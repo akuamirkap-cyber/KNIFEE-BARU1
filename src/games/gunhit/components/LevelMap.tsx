@@ -1,14 +1,14 @@
+import { tr, trId, trStageCaption } from '../../../i18n/strings';
+import { useLanguage } from '../../../i18n/useLanguage';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { getBossDef } from '../game/bossRoster';
 import { HeadArt } from '../../perfect-shot/play/HeadArt';
 import {
   GUN_HIT_MAP_MAX_LEVEL,
-  getGunHitMapBoss,
   getGunHitMapNodeCaption,
   getGunHitMapNodeTheme,
   getGunHitMapStage,
 } from '../game/stageMap';
-import { bossHeadFor, headInfoFor } from '../game/bossIdentity';
+import { bossHeadFor, bossProfileFor, headInfoFor } from '../game/bossIdentity';
 
 const MAP_X = [50, 31, 19, 32, 50, 69, 81, 68];
 const MAP_GAP = 96;
@@ -38,6 +38,7 @@ export default function LevelMap({
   onBack: () => void;
   onStart: (level: number) => void;
 }) {
+  const [language] = useLanguage();
   const [selectedLevel, setSelectedLevel] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const highestUnlocked = Math.min(GUN_HIT_MAP_MAX_LEVEL, Math.max(1, bestLevel));
@@ -66,7 +67,7 @@ export default function LevelMap({
 
   const selectedType = selectedLevel === null ? null : getGunHitMapStage(selectedLevel);
   const selectedBoss = selectedType === 'boss' && selectedLevel !== null
-    ? getBossDef(getGunHitMapBoss(selectedLevel))
+    ? bossProfileFor(selectedLevel)
     : null;
 
   return (
@@ -76,10 +77,10 @@ export default function LevelMap({
       <div className="pointer-events-none absolute inset-0 shadow-[inset_0_0_48px_rgba(0,0,0,.5)]" />
 
       <header className="relative z-10 flex items-center gap-2 px-3 pt-3">
-        <button onClick={onBack} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-b-4 border-[#07534b] bg-gradient-to-b from-[#34d399] to-[#059669] text-2xl font-black shadow-lg active:translate-y-0.5" aria-label="Kembali ke menu">‹</button>
+        <button onClick={onBack} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-b-4 border-[#07534b] bg-gradient-to-b from-[#34d399] to-[#059669] text-2xl font-black shadow-lg active:translate-y-0.5" aria-label={tr(language, 'Kembali ke menu')}>‹</button>
         <div className="min-w-0 flex-1 text-center">
           <h2 className="bg-gradient-to-b from-white to-cyan-200 bg-clip-text text-[22px] font-black leading-none tracking-[.12em] text-transparent drop-shadow">QUEST</h2>
-          <p className="mt-1 text-[10px] font-bold tracking-wider text-white/60">GUN HIT SGA · 100 STAGE · 20 BOSS</p>
+          <p className="mt-1 text-[10px] font-bold tracking-wider text-white/60">{tr(language, 'GUN HIT SGA · 100 STAGE · 11 BOS')}</p>
         </div>
         <div className="shrink-0 rounded-full border border-cyan-200/40 bg-black/40 px-2.5 py-1.5 text-[11px] font-black tabular-nums text-cyan-100">{highestUnlocked}/100</div>
       </header>
@@ -88,7 +89,7 @@ export default function LevelMap({
         {(['normal', 'special', 'boss'] as const).map((kind) => (
           <div key={kind} className="rounded-xl border bg-black/35 px-1 py-1.5 text-center" style={{ borderColor: `${MAP_STAGE[kind].color}66` }}>
             <div className="text-[17px] leading-none">{MAP_STAGE[kind].symbol}</div>
-            <div className="mt-1 text-[9px] font-black tracking-wider" style={{ color: MAP_STAGE[kind].color }}>{MAP_STAGE[kind].label}</div>
+            <div className="mt-1 text-[9px] font-black tracking-wider" style={{ color: MAP_STAGE[kind].color }}>{tr(language, MAP_STAGE[kind].label)}</div>
           </div>
         ))}
       </div>
@@ -113,11 +114,11 @@ export default function LevelMap({
 
           <div className="absolute left-1/2 -translate-x-1/2 text-center" style={{ top: MAP_HEIGHT - 63 }}>
             <div className="text-2xl">🚩</div>
-            <div className="whitespace-nowrap rounded-full border border-white/20 bg-black/55 px-2.5 py-0.5 text-[10px] font-black tracking-wider text-white/75">MULAI · STAGE 1</div>
+            <div className="whitespace-nowrap rounded-full border border-white/20 bg-black/55 px-2.5 py-0.5 text-[10px] font-black tracking-wider text-white/75">{tr(language, 'MULAI · STAGE 1')}</div>
           </div>
           <div className="absolute left-1/2 -translate-x-1/2 text-center" style={{ top: 7 }}>
             <div className="tap-hint text-[30px] drop-shadow-[0_4px_10px_rgba(0,0,0,.6)]">🏆</div>
-            <div className="whitespace-nowrap rounded-full border border-amber-300/50 bg-black/60 px-2.5 py-0.5 text-[10px] font-black tracking-wider text-amber-200">STAGE 100 · FINAL BOSS</div>
+            <div className="whitespace-nowrap rounded-full border border-amber-300/50 bg-black/60 px-2.5 py-0.5 text-[10px] font-black tracking-wider text-amber-200">{tr(language, 'STAGE 100 · FINAL BOSS')}</div>
           </div>
 
           {Array.from({ length: GUN_HIT_MAP_MAX_LEVEL }, (_, index) => {
@@ -128,28 +129,40 @@ export default function LevelMap({
             const isActive = level === activeLevel;
             const isFinal = level === GUN_HIT_MAP_MAX_LEVEL;
             const size = isFinal ? 62 : kind === 'boss' ? 56 : 44;
-            const bossType = kind === 'boss' ? getGunHitMapBoss(level) : null;
-            const boss = bossType ? getBossDef(bossType) : null;
+            const boss = kind === 'boss' ? bossProfileFor(level) : null;
             const stageColors = {
               normal: ['#34d399', '#047857'],
               special: ['#fcd34d', '#b45309'],
               boss: [boss?.accent ?? '#fb7185', '#881337'],
             }[kind];
             return (
-              <div key={level} className="absolute" style={{ left: `${nodeX(index)}%`, top: nodeY(index), transform: 'translate(-50%,-50%)' }}>
+              <div
+                key={level}
+                className="absolute"
+                style={{
+                  left: `${nodeX(index)}%`,
+                  top: nodeY(index),
+                  transform: 'translate(-50%,-50%)',
+                  // 100 nodes, each with its own gradient, glow and entrance
+                  // animation: let the browser skip layout/paint for the ones
+                  // off the scroll viewport instead of doing all 100 on open.
+                  contentVisibility: 'auto',
+                  containIntrinsicSize: `${size + 26}px ${size + 26}px`,
+                }}
+              >
                 <div className="fade-up relative" style={{ animationDelay: `${Math.min(index * 0.008, 0.4)}s` }}>
                 <button
                   type="button"
                   onClick={() => setSelectedLevel(level)}
-                  aria-label={`Stage ${level}${locked ? ' terkunci' : ''}`}
+                  aria-label={`Stage ${level}${locked ? tr(language, ' terkunci') : ''}`}
                   className="relative block transition active:scale-95"
                   style={{ width: size, height: size }}
                 >
                   {isActive && !locked && <span className="ring-ping absolute -inset-2 rounded-full border-2 border-amber-300/70" />}
-                  {isActive && !locked && <span className="tap-hint absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-amber-300 px-2 py-0.5 text-[9px] font-black text-slate-950 shadow">KAMU DI SINI</span>}
+                  {isActive && !locked && <span className="tap-hint absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-amber-300 px-2 py-0.5 text-[9px] font-black text-slate-950 shadow">{tr(language, 'KAMU DI SINI')}</span>}
                   <span className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-full border border-white/30" style={{ background: `linear-gradient(180deg,${stageColors[0]},${stageColors[1]})`, borderBottom: '5px solid rgba(0,0,0,.42)', boxShadow: `0 8px 16px rgba(0,0,0,.4), 0 0 13px ${kind === 'boss' ? boss?.glow ?? 'rgba(251,113,133,.4)' : kind === 'special' ? 'rgba(252,211,77,.25)' : 'rgba(52,211,153,.18)'}`, filter: locked ? 'grayscale(.8) brightness(.58)' : undefined }}>
                     <span className="pointer-events-none absolute inset-x-2 top-1 h-2 rounded-full bg-white/40 blur-[1px]" />
-                    {kind === 'boss' && bossType ? (
+                    {kind === 'boss' && boss ? (
                       <span className="relative z-10 overflow-hidden rounded-full" style={{ width: size - 12, height: size - 12 }}><BossIcon level={level} size={size - 12} /></span>
                     ) : <span className={`relative z-10 text-[20px] ${kind === 'special' ? 'tap-hint' : ''}`}>{theme.symbol}</span>}
                     {locked && <span className="absolute -bottom-1 -right-1 z-20 flex h-5 w-5 items-center justify-center rounded-full border border-white bg-slate-900 text-[10px]">🔒</span>}
@@ -157,7 +170,7 @@ export default function LevelMap({
                   </span>
                 </button>
                 <span className="absolute left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded-md border border-white/25 bg-[#06151ddd] px-1.5 py-px text-[8px] font-black tracking-wide text-white shadow-md" style={{ top: size + 3 }}>
-                  {kind === 'boss' ? `${headInfoFor(level)?.name.toUpperCase() ?? 'BOSS'} LV${level}` : getGunHitMapNodeCaption(level)}
+                  {kind === 'boss' ? `${headInfoFor(level)?.name.toUpperCase() ?? 'BOSS'} LV${level}` : trStageCaption(language, getGunHitMapNodeCaption(level))}
                 </span>
                 </div>
               </div>
@@ -173,7 +186,7 @@ export default function LevelMap({
               const kind = getGunHitMapStage(selectedLevel);
               const theme = getGunHitMapNodeTheme(selectedLevel);
               const meta = MAP_STAGE[kind];
-              const boss = kind === 'boss' ? getBossDef(getGunHitMapBoss(selectedLevel)) : null;
+              const boss = kind === 'boss' ? bossProfileFor(selectedLevel) : null;
               // The boss the stage actually fires at, named after the head art it
               // wears — the map keeps its own theme name, the fight keeps its art.
               const artBoss = kind === 'boss' ? headInfoFor(selectedLevel)?.name ?? '' : '';
@@ -181,23 +194,23 @@ export default function LevelMap({
               return <>
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-[10px] font-black tracking-[.24em] text-cyan-100/60">STAGE SGA</p>
+                    <p className="text-[10px] font-black tracking-[.24em] text-cyan-100/60">{tr(language, 'STAGE SGA')}</p>
                     <h3 id="gunhit-stage-title" className="mt-1 text-2xl font-black leading-none text-white">LEVEL {selectedLevel}</h3>
-                    <p className="mt-2 text-[12px] font-black tracking-[.16em]" style={{ color: meta.color }}>{theme.symbol} {kind === 'boss' ? artBoss : theme.label}</p>
+                    <p className="mt-2 text-[12px] font-black tracking-[.16em]" style={{ color: meta.color }}>{theme.symbol} {kind === 'boss' ? trId(language, artBoss) : tr(language, theme.label)}</p>
                   </div>
                   {boss ? <div className="rounded-full border border-white/15 bg-black/30 p-1"><BossIcon level={selectedLevel} size={58} /></div> : <div className="grid h-16 w-16 place-items-center rounded-2xl border border-white/10 bg-black/25 text-4xl">{theme.symbol}</div>}
                 </div>
                 <p className="mt-3 text-[12px] leading-relaxed text-white/65">
                   {kind === 'boss'
-                    ? `BOSS ${artBoss || theme.label}. Pertarungan memakai boss Game B.`
+                    ? `${tr(language, 'BOSS ')}${trId(language, artBoss || theme.label)}. ${tr(language, 'Bos besar dengan pola serangan khusus dan tiga fase amukan.')}`
                     : kind === 'special'
-                      ? 'Stage spesial SGA: sistem tetap memilih Batu, Bonus, atau Harta Karun sesuai aturan stage yang sudah ada.'
-                      : `Tema ikon peta: ${theme.label}. Musuh dan aturan stage tetap memakai sistem SGA.`}
+                      ? tr(language, 'Stage spesial SGA: sistem tetap memilih Batu, Bonus, atau Harta Karun sesuai aturan stage yang sudah ada.')
+                      : `${tr(language, 'Tema ikon peta: ')}${tr(language, theme.label)}. ${tr(language, 'Musuh dan aturan stage tetap memakai sistem SGA.')}`}
                 </p>
                 <div className="mt-4 flex gap-2">
-                  <button onClick={() => setSelectedLevel(null)} className="flex-1 rounded-2xl border border-white/15 bg-white/10 py-3 text-sm font-black text-white/80 active:scale-95">KEMBALI</button>
+                  <button onClick={() => setSelectedLevel(null)} className="flex-1 rounded-2xl border border-white/15 bg-white/10 py-3 text-sm font-black text-white/80 active:scale-95">{tr(language, 'KEMBALI')}</button>
                   <button onClick={startSelected} disabled={locked} className={`flex-[1.5] rounded-2xl border-b-4 py-3 text-sm font-black tracking-wider text-white active:translate-y-0.5 ${locked ? 'border-white/10 bg-white/10 text-white/40' : 'border-[#064324] bg-gradient-to-b from-[#75f5a2] to-[#079447]'}`}>
-                    {locked ? '🔒 TERKUNCI' : `MULAI LEVEL ${selectedLevel} ▶`}
+                    {locked ? tr(language, '🔒 TERKUNCI') : `${tr(language, 'MULAI LEVEL ')}${selectedLevel} ▶`}
                   </button>
                 </div>
               </>;

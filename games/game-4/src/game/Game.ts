@@ -38,6 +38,10 @@ import { BazookaShot, CardShot, CricketShot, ElectroShot, FishShot, FreezeBeam, 
 import { ConvergeRings, FieldLines, FrostBloom } from './fx6';
 import { SplashSheet } from './particles';
 import { type StuckItem, WEAPON_MAP, type WeaponAnim, type WeaponId, newAnim } from './weapons';
+import { RECOIL_ROT } from './recoil';
+
+// Re-exported so this game and Game A's port keep one source of truth.
+export { RECOIL_ROT };
 
 export type GameStatus = 'playing' | 'cleared' | 'failed';
 export interface GameInfo {
@@ -86,79 +90,6 @@ const GUN_X = W / 2;
 const GUN_Y = 600;
 const SPIN = 1.9;
 const PURPLES = ['200,140,255', '255,180,255', '150,100,255', '230,200,255'];
-export const RECOIL_ROT: Record<WeaponId, number> = {
-  golden: 0.11,
-  blackhole: 0.02,
-  ketapel: 0,
-  sumpit: 0,
-  shotgun: 0.07,
-  soaker: 0.035,
-  snowball: 0.05,
-  sniper: 0.09,
-  flame: 0.02,
-  bubble: 0.03,
-  bamboo: 0.1,
-  banana: 0.05,
-  harpoon: 0.05,
-  chicken: 0.04,
-  confetti: 0.06,
-  seed: 0.03,
-  pizza: 0.06,
-  minigun: 0.02,
-  crossbow: 0.07,
-  plasma: 0.04,
-  laser: 0.03,
-  dragon: 0.06,
-  gravity: 0.02,
-  honey: 0.03,
-  coconut: 0.08,
-  angklung: 0.03,
-  bee: 0.03,
-  sakura: 0.04,
-  firework: 0.05,
-  keris: 0.03,
-  moonbeam: 0.03,
-  storm: 0.03,
-  pencil: 0.05,
-  sandal: 0.08,
-  paintball: 0.04,
-  wand: 0.03,
-  shark: 0.06,
-  ghost: 0.04,
-  ufo: 0.04,
-  rainbow: 0.04,
-  meteor: 0.1,
-  diamond: 0.04,
-  fish: 0.04,
-  rpg: 0.06,
-  cricket: 0.08,
-  electro: 0.03,
-  bazooka: 0.08,
-  freeze: 0.03,
-  rail: 0.08,
-  magnet: 0.04,
-  shrink: 0.03,
-  grow: 0.03,
-  pirate: 0.09,
-  card: 0.03,
-  holy: 0.05,
-  unicorn: 0.04,
-  obliterator: 0.07,
-  coin: 0.04,
-  saber: 0.02,
-  gauntlet: 0.08,
-  ruby: 0.09,
-  emerald: 0.03,
-  sapphire: 0.09,
-  crystal: 0.06,
-  beerifle: 0.07,
-  charge: 0.06,
-  pulse: 0.04,
-  cryo: 0.04,
-  hyperdrive: 0.06,
-  quantum: 0.05,
-  wars: 0.06,
-};
 const GREENS = ['120,255,170', '190,255,215', '60,255,140', '230,255,240'];
 const MOON_COLS = ['225,215,255', '200,185,255', '255,255,255'];
 const FX5_RGB: Partial<Record<WeaponId, string>> = {

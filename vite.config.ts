@@ -2,6 +2,7 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig} from 'vite';
+import { readFileSync } from 'node:fs';
 
 /**
  * Storage that a cross-origin frame may be refused.
@@ -239,6 +240,23 @@ const STORAGE_SHIM = `<script>
 })();
 </script>`;
 
+/**
+ * Versi rilis, dibaca dari `android/version.properties` — satu-satunya tempat
+ * angka versionCode/versionName diubah. Nilainya disuntik ke bundle sebagai
+ * `__APP_VERSION__` supaya event telemetri selalu melaporkan versi build yang
+ * benar-benar berjalan.
+ */
+function releaseVersion(): string {
+  try {
+    const raw = readFileSync(path.resolve(process.cwd(), 'android/version.properties'), 'utf8');
+    const name = /^versionName\s*=\s*(.+)$/m.exec(raw)?.[1]?.trim() ?? '0.0.0';
+    const code = /^versionCode\s*=\s*(\d+)$/m.exec(raw)?.[1]?.trim() ?? '0';
+    return `${name}+${code}`;
+  } catch {
+    return 'dev';
+  }
+}
+
 function standbyControlPlugin() {
   return {
     name: 'standby-control',
@@ -314,10 +332,53 @@ export default defineConfig(() => {
       hmr: process.env.DISABLE_HMR !== 'true',
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
     },
+    define: {
+      __APP_VERSION__: JSON.stringify(releaseVersion()),
+    },
     build: {
       rollupOptions: {
         input: {
           main: path.resolve(process.cwd(), 'index.html'),
+        },
+        output: {
+          /**
+           * Game A's artwork and its ported slides are reachable from both the
+           * menu (the live gun showcase) and the engine, so the bundler used to
+           * hoist them into the first chunk and the title screen waited for the
+           * whole game to parse. Naming them keeps the entry chunk to the shell,
+           * the menus and the weapon table; the art and the engine arrive as
+           * their own files right after first paint.
+           */
+          advancedChunks: {
+            groups: [
+              // Small modules both the menu and the engine use. They get their
+              // own chunk so the entry can import them without pulling the
+              // engine (which owns the rest of Game.ts' graph) into first load.
+              {
+                name: 'shared-runtime',
+                test: /[\\/](perfect-shot[\\/](anim[\\/]presets|audio[\\/]sfx)|gunhit[\\/]utils[\\/](mobilePerf|adaptiveCanvasDpr|frameCadence|useSgaBgTheme|useSgaGameSpeed))\.(ts|tsx)$/,
+              },
+              // Sound recipes the menu itself plays.
+              {
+                name: 'gunhit-audio',
+                test: /[\\/]games[\\/]gunhit[\\/]game[\\/](audio|sfx2|sfx3|sfx4|sfx5|sfx6|slide2Audio|slide23Sfx|fireworkSlide2Sfx|setOneAudio|slideAudioBridge)\.ts$/,
+              },
+              // The data the menus read (weapon table, level rules, quests, save
+              // keys) — no artwork, so it can stay next to the menu chunk.
+              {
+                name: 'gunhit-menu-data',
+                test: /[\\/]games[\\/]gunhit[\\/]game[\\/](weapons|levels|layout|quests|stageMap|stageUnlock|gameSpeed|backgroundThemes|sunburstPalette|playerProgress|safeStorage|retiredWeapons|bossCatalog|bossIdentity)\.ts$/,
+              },
+              { name: 'ported-4', test: /[\\/]games[\\/]game-4[\\/]/ },
+              { name: 'ported-6', test: /[\\/]games[\\/]game-6[\\/]/ },
+              { name: 'ported-8', test: /[\\/]games[\\/]game-8[\\/]/ },
+              { name: 'gunhit-art-guns', test: /[\\/]games[\\/]gunhit[\\/]game[\\/]art[\\/]guns[0-9]*\.ts$/ },
+              { name: 'gunhit-art-variants', test: /[\\/]games[\\/]gunhit[\\/]game[\\/]art[\\/](legacyVariants|gunVariants|commonGunMotion|metrics|drawCentered|kit)\.ts$/ },
+              { name: 'gunhit-art', test: /[\\/]games[\\/]gunhit[\\/]game[\\/]art[\\/]/ },
+              { name: 'gunhit-engine', test: /[\\/]games[\\/]gunhit[\\/]game[\\/]/ },
+              { name: 'gunhit-components', test: /[\\/]games[\\/]gunhit[\\/]components[\\/]/ },
+            ],
+          },
         },
       },
     },

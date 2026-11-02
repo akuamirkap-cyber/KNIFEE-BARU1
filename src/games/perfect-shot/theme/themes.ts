@@ -35,7 +35,7 @@ export type Theme = {
 
 export const THEMES: Theme[] = [
   {
-    id: "hutan", name: "HUTAN", icon: "🌲", desc: "Hutan rimba klasik dengan siluet pepohonan & kunang-kunang emas",
+    id: "hutan", name: "FOREST", icon: "🌲", desc: "Classic jungle forest with tree silhouettes & golden fireflies",
     sky: ["#0b1a1f", "#2a4d55", "#10242a"], glow: "#4f8088",
     far: { kind: "trees", color: "#1a333a" }, near: { kind: "trees", color: "#0d1c21" }, trunks: true,
     features: ["fog"], particle: "firefly", pc: "#ffe48a",
@@ -44,7 +44,7 @@ export const THEMES: Theme[] = [
     props: ["pine", "mushroom", "rock", "tree", "flower"], grass: "#05090b",
   },
   {
-    id: "pagi", name: "PAGI", icon: "🌅", desc: "Danau pagi yang cerah dengan matahari terbit & bukit hijau",
+    id: "pagi", name: "MORNING", icon: "🌅", desc: "Bright morning lake with a rising sun & green hills",
     sky: ["#ff9e6b", "#ffd6a0", "#a8e2f0"], glow: "#fff4c9",
     far: { kind: "hills", color: "#8fc79a" }, near: { kind: "trees", color: "#4f8f5a" },
     features: ["sun", "clouds"], particle: "pollen", pc: "#fffbe0",
@@ -53,7 +53,7 @@ export const THEMES: Theme[] = [
     props: ["palm", "boat", "flower", "tree", "rock"], grass: "#2f5a35",
   },
   {
-    id: "town", name: "TOWN", icon: "🏘️", desc: "Kota kecil saat senja dengan lampu jendela yang hangat",
+    id: "town", name: "TOWN", icon: "🏘️", desc: "Small town at dusk with warm window lights",
     sky: ["#2b1b4a", "#b0506e", "#ffa06b"], glow: "#ffcf8a",
     far: { kind: "houses", color: "#4a2d55" }, near: { kind: "houses", color: "#24152f" },
     features: ["clouds"], particle: "spark", pc: "#ffd27a",
@@ -62,7 +62,7 @@ export const THEMES: Theme[] = [
     props: ["house", "lantern", "tree", "house", "flower"], grass: "#1a0f22",
   },
   {
-    id: "salju", name: "SALJU", icon: "❄️", desc: "Pegunungan bersalju dengan pinus putih & hujan salju lembut",
+    id: "salju", name: "SNOW", icon: "❄️", desc: "Snowy mountains with white pines & a soft snowfall",
     sky: ["#bfe2ff", "#8fc0ec", "#dff1ff"], glow: "#ffffff",
     far: { kind: "mountains", color: "#9fbfe0" }, near: { kind: "pines", color: "#3f6a8f" },
     features: ["clouds"], particle: "snow", pc: "#ffffff",
@@ -71,7 +71,7 @@ export const THEMES: Theme[] = [
     props: ["pine", "crystal", "rock", "pine", "house"], grass: "#e6f3ff",
   },
   {
-    id: "malam", name: "MALAM", icon: "🌙", desc: "Malam berbintang dengan bulan purnama di atas danau tenang",
+    id: "malam", name: "NIGHT", icon: "🌙", desc: "Starry night with a full moon over a calm lake",
     sky: ["#04061a", "#1d1656", "#3c2d80"], glow: "#7464d8",
     far: { kind: "hills", color: "#1d1a4d" }, near: { kind: "pines", color: "#0a0822" },
     features: ["moon"], particle: "star", pc: "#ffffff",
@@ -80,7 +80,7 @@ export const THEMES: Theme[] = [
     props: ["pine", "lantern", "rock", "tree", "flower"], grass: "#03041a",
   },
   {
-    id: "perang", name: "PERANG", icon: "🔥", desc: "Medan perang membara dengan reruntuhan & bara api beterbangan",
+    id: "perang", name: "WAR", icon: "🔥", desc: "Burning battlefield with ruins & flying embers",
     sky: ["#1a0705", "#6b1d0e", "#ff7a2f"], glow: "#ff9a4d",
     far: { kind: "ruins", color: "#4a160c" }, near: { kind: "ruins", color: "#1c0907" },
     features: ["fire", "fog"], particle: "ember", pc: "#ffb347",
@@ -89,7 +89,7 @@ export const THEMES: Theme[] = [
     props: ["rock", "tomb", "house", "dynamite", "rock"], grass: "#120403",
   },
   {
-    id: "mistis", name: "MISTIS", icon: "🔮", desc: "Rawa misterius berkabut dengan roh cahaya & rune kuno",
+    id: "mistis", name: "MYSTIC", icon: "🔮", desc: "Foggy mysterious swamp with light spirits & ancient runes",
     sky: ["#08160f", "#1f3d30", "#3d2b5e"], glow: "#7ef0c0",
     far: { kind: "trees", color: "#1d3a35" }, near: { kind: "trees", color: "#0a1712" }, trunks: true,
     features: ["fog", "runes"], particle: "firefly", pc: "#9dffd8",
@@ -98,7 +98,7 @@ export const THEMES: Theme[] = [
     props: ["mushroom", "crystal", "tomb", "tree", "lantern"], grass: "#040b08",
   },
   {
-    id: "kristal", name: "KRISTAL", icon: "💎", desc: "Gua kristal berkilau dengan aurora & lantai es biru",
+    id: "kristal", name: "CRYSTAL", icon: "💎", desc: "Glittering crystal cave with an aurora & blue ice floor",
     sky: ["#051433", "#0e3d70", "#22b8dd"], glow: "#8afcff",
     far: { kind: "crystals", color: "#1a5a8f" }, near: { kind: "crystals", color: "#0a2a52" },
     features: ["aurora"], particle: "spark", pc: "#c8fbff",
@@ -107,7 +107,7 @@ export const THEMES: Theme[] = [
     props: ["crystal", "rock", "gem", "crystal", "rock"], grass: "#03132b",
   },
   {
-    id: "neon", name: "NEON", icon: "🌆", desc: "Synthwave retro dengan matahari neon & lantai grid bercahaya",
+    id: "neon", name: "NEON", icon: "🌆", desc: "Retro synthwave with a neon sun & glowing grid floor",
     sky: ["#12002b", "#4d0a70", "#ff3ea5"], glow: "#ff8ae0",
     far: { kind: "neonMtn", color: "#2a0050" }, near: { kind: "none", color: "#000" },
     features: ["neonSun"], particle: "spark", pc: "#ff8ae0",
@@ -116,7 +116,7 @@ export const THEMES: Theme[] = [
     props: ["palm", "joystick", "crystal", "palm", "lantern"], grass: "#0d0020",
   },
   {
-    id: "kubah", name: "KUBAH", icon: "🕌", desc: "Kota kubah emas di bawah langit ungu & bulan sabit",
+    id: "kubah", name: "DOME", icon: "🕌", desc: "Golden dome city under a purple sky & crescent moon",
     sky: ["#140a2e", "#3d2070", "#9a5fd0"], glow: "#ffd27a",
     far: { kind: "domes", color: "#2d1a55" }, near: { kind: "domes", color: "#170d33" },
     features: ["moon"], particle: "star", pc: "#ffe7a8",
@@ -125,7 +125,7 @@ export const THEMES: Theme[] = [
     props: ["dome", "lantern", "dome", "palm", "house"], grass: "#0a0520",
   },
   {
-    id: "cyber", name: "CYBER", icon: "🌐", desc: "Metropolis siber dengan gedung pencakar & hujan data",
+    id: "cyber", name: "CYBER", icon: "🌐", desc: "Cyber metropolis with skyscrapers & data rain",
     sky: ["#020a1a", "#06264d", "#0b7090"], glow: "#22d3ee",
     far: { kind: "city", color: "#0a2a4f" }, near: { kind: "city", color: "#031428" },
     features: [], particle: "rain", pc: "#38e0ff",
@@ -134,7 +134,7 @@ export const THEMES: Theme[] = [
     props: ["house", "robot", "crystal", "lantern", "rock"], grass: "#010610",
   },
   {
-    id: "nebula", name: "NEBULA", icon: "🪐", desc: "Luar angkasa dengan awan nebula, planet bercincin & bintang",
+    id: "nebula", name: "NEBULA", icon: "🪐", desc: "Deep space with nebula clouds, a ringed planet & stars",
     sky: ["#05010f", "#2c0b4e", "#6e2080"], glow: "#ff8ad8",
     far: { kind: "rocks", color: "#1d0a33" }, near: { kind: "none", color: "#000" },
     features: ["planets"], particle: "star", pc: "#ffffff",

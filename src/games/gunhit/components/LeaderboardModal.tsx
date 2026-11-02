@@ -1,3 +1,6 @@
+import { tr } from '../../../i18n/strings';
+import { useLanguage } from '../../../i18n/useLanguage';
+
 interface LeaderboardModalProps {
   bestScore: number;
   bestLevel: number;
@@ -11,11 +14,12 @@ export default function LeaderboardModal({
   totalCoins,
   onClose,
 }: LeaderboardModalProps) {
+  const [language] = useLanguage();
   const records = [
-    { rank: '🥇 1st', title: 'Rekor Skor Tertinggi', val: bestScore, unit: 'PTS', color: '#fde047' },
-    { rank: '🥈 2nd', title: 'Stage Tertinggi Dicapai', val: bestLevel, unit: 'STAGE', color: '#94a3b8' },
-    { rank: '🥉 3rd', title: 'Koleksi Koin Emas', val: totalCoins, unit: 'COINS', color: '#fb923c' },
-    { rank: '⭐ 4th', title: 'Boss Tertinggi Ditaklukkan', val: Math.floor(bestLevel / 5), unit: 'BOSS', color: '#38bdf8' },
+    { rank: '🥇 1st', title: tr(language, 'Rekor Skor Tertinggi'), val: bestScore, unit: 'PTS', color: '#fde047' },
+    { rank: '🥈 2nd', title: tr(language, 'Stage Tertinggi Dicapai'), val: bestLevel, unit: 'STAGE', color: '#94a3b8' },
+    { rank: '🥉 3rd', title: tr(language, 'Koleksi Koin Emas'), val: totalCoins, unit: 'COINS', color: '#fb923c' },
+    { rank: '⭐ 4th', title: tr(language, 'Boss Tertinggi Ditaklukkan'), val: Math.floor(bestLevel / 5), unit: 'BOSS', color: '#38bdf8' },
   ];
 
   return (
@@ -28,7 +32,7 @@ export default function LeaderboardModal({
         <button
           onClick={onClose}
           className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-lg text-white transition hover:bg-white/20 active:scale-90"
-          aria-label="Tutup"
+          aria-label={tr(language, 'Tutup')}
         >
           ✕
         </button>

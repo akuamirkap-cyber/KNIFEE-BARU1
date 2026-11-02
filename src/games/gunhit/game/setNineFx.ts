@@ -1,3 +1,4 @@
+import { registerSlideAudio } from './slideAudioBridge';
 import { traceBossSegment } from './bossRaycast';
 /**
  * Slide-9 (`games/game-6` / `Weapon Lab`) runtime for slide 1.
@@ -677,3 +678,8 @@ export function drawSetNineShotShell(
     c.restore();
   }
 }
+
+// Slide 1's master mute/volume drives this bus as soon as the module loads.
+registerSlideAudio((muted, volume) => {
+    setNineMuted(muted); setNineVolume(volume);
+});

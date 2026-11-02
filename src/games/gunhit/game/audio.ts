@@ -2,8 +2,7 @@ import { slide23Sfx } from './slide23Sfx';
 import { fireworkSfx } from './fireworkSlide2Sfx';
 import { slide2Sfx } from './slide2Audio';
 import { setOneSfx } from './setOneAudio';
-import { setNineMuted, setNineVolume } from './setNineFx';
-import { setElevenMuted, setElevenVolume } from './setElevenFx';
+import { broadcastSlideAudio } from './slideAudioBridge';
 
 let actx: AudioContext | null = null;
 let master: GainNode | null = null;
@@ -64,8 +63,8 @@ export function setMasterVolume(v: number) {
   fireworkSfx.setVolume(userVolume);
   slide2Sfx.setVolume(userVolume);
   setOneSfx.setVolume(userVolume);
-  setNineVolume(userVolume);
-  setElevenVolume(userVolume);
+  // Slides 9 and 11 own their buses; they pick the new volume up when they load.
+  broadcastSlideAudio(muted, userVolume);
   if (master) master.gain.value = muted ? 0 : MASTER_LEVEL * userVolume;
 }
 
@@ -75,10 +74,8 @@ export function setMuted(m: boolean) {
   fireworkSfx.setMuted(m);
   slide2Sfx.setMuted(m);
   setOneSfx.setMuted(m);
-  // Slide 9's ported guns play through slide 9's own synthesizer.
-  setNineMuted(m);
-  // …and slide 11's through slide 11's.
-  setElevenMuted(m);
+  // Slide 9's and slide 11's ported guns play through their own synthesizers.
+  broadcastSlideAudio(m, userVolume);
   if (master) master.gain.value = m ? 0 : MASTER_LEVEL * userVolume;
 }
 

@@ -11,10 +11,14 @@ test('the menu frame is the only weapon in the air: the live gun waits for it to
   const game = read('src/games/gunhit/game/Game.ts');
   const flight = read('src/games/gunhit/components/SgaWeaponFlight.tsx');
 
-  // One duration, shared by the DOM flight and the canvas gun.
-  assert.match(flight, /export const WEAPON_FLIGHT_MS = 780;/);
+  // One duration, shared by the DOM flight and the canvas gun. The number lives
+  // in its own module now, so the menu can time the hand-off without loading
+  // the flight overlay's chunk; the overlay re-exports it for compatibility.
+  const timing = read('src/games/gunhit/components/weaponFlightTiming.ts');
+  assert.match(timing, /export const WEAPON_FLIGHT_MS = 780;/);
+  assert.match(flight, /export \{ WEAPON_FLIGHT_MS \};/);
   assert.match(flight, /duration: WEAPON_FLIGHT_MS/);
-  assert.match(app, /import SgaWeaponFlight, \{ WEAPON_FLIGHT_MS/);
+  assert.match(app, /import \{ WEAPON_FLIGHT_MS \} from '\.\/components\/weaponFlightTiming';/);
   assert.match(app, /const gunHiddenFor = wantsWeaponFlight \? WEAPON_FLIGHT_MS \/ 1000 : 0;/);
   // The bitmap is removed the moment it lands, so nothing rests on the gun.
   assert.match(app, /deferPageClose\(mountAt \+ WEAPON_FLIGHT_MS \+ 24, \(\) => setWeaponFlight\(null\)\)/);
@@ -53,8 +57,11 @@ test('the boss hit surface is sampled from the artwork on screen, never a circle
     (game.match(/this\.bossRadiusAt\(/g) ?? []).length >= 10,
     'all boss collision sites read the artwork contour',
   );
-  const processor = read('src/games/gunhit/game/bossAssetProcessor.ts');
-  assert.match(processor, /Math\.max\(targetRadius \* 0\.3, asset\.radii\[deg\] \* scale\)/);
+  // There is no Game A boss asset/contour processor left to fall back to: the
+  // silhouette comes from the head art on screen, and nowhere else.
+  assert.ok(!game.includes('getExactBossRadius'), 'no legacy radial boss table');
+  assert.ok(!game.includes('bossAssetProcessor'), 'no legacy boss asset pipeline');
+  assert.match(game, /private ensureArtMask\(\): ArtMask \| null \{/, 'the mask is rebuilt from the live artwork');
 });
 
 test('the alpha contour of a cut-out head follows its shape instead of filling a circle', () => {
@@ -108,15 +115,16 @@ test('every coin and diamond in Game A is the Diamond Breaker art', () => {
   assert.match(sprite, /import \{ drawBreakerCoin \} from '\.\/coinArt';/);
   assert.match(diamondSprite, /import \{ drawBreakerDiamond \} from '\.\/diamondArt';/);
 
-  // The armory wallet is the same coin now, not a second icon.
-  assert.match(arsenal, /<CoinSprite size=\{24\}/);
-  assert.match(arsenal, /<DiamondSprite size=\{17\} \/>/);
+  // The armory wallet is the same coin now, not a second icon — and it keeps
+  // the menu HUD's scale (25 px coin / 24 px diamond), not a smaller copy.
+  assert.match(arsenal, /<CoinSprite size=\{25\}/);
+  assert.match(arsenal, /<DiamondSprite size=\{24\} \/>/);
   assert.doesNotMatch(arsenal, /\bCoins\b/);
 
   // No emoji stand-ins left wherever a coin or diamond is used as an icon.
   const settings = read('src/games/gunhit/components/SgaSettingsPanel.tsx');
   const picker = read('src/games/gunhit/components/WeaponPicker.tsx');
-  assert.match(settings, /<CoinSprite size=\{22\} \/><span className="mt-1 block font-title text-\[9px\] text-amber-100">BONUS · 4<\/span>/);
+  assert.match(settings, /<CoinSprite size=\{22\} \/><span className="mt-1 block font-title text-\[9px\] text-amber-100">\{tr\(language, 'BONUS · 4'\)\}<\/span>/);
   assert.doesNotMatch(settings, /🪙/);
   assert.match(picker, /if \(id === 'coingun'\) return <CoinSprite size=\{size\}/);
   assert.match(picker, /if \(id === 'diamond'\) return <DiamondSprite size=\{size\}/);

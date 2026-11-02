@@ -86,7 +86,10 @@ test('BossGiftBoxModal memakai kotak hadiah & efek Knife, tapi senjata dari data
 
 test('alur boss Gun Hit memakai BossGiftBoxModal sebagai bonus stage', () => {
   const app = readFileSync(path.join(ROOT, 'src/games/gunhit/App.tsx'), 'utf8');
-  assert.match(app, /import \{ BossGiftBoxModal, GiftBoxScene \}/);
+  // Both the boss gift box and the milestone gift are the same lazily loaded
+  // overlay now, so they are no longer one eager import statement.
+  assert.match(app, /import\('\.\/components\/BossGiftBoxModal'\)\.then\(\(m\) => \(\{ default: m\.BossGiftBoxModal \}\)\)/);
+  assert.match(app, /import\('\.\/components\/BossGiftBoxModal'\)\.then\(\(m\) => \(\{ default: m\.GiftBoxScene \}\)\)/);
   assert.match(app, /<BossGiftBoxModal/);
   assert.match(app, /onClaim=\{handleGiftBoxClaim\}/);
   assert.match(app, /setBonusStageOpen\(true\)/);

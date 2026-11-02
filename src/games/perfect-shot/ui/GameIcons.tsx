@@ -394,8 +394,8 @@ export function ToolChip({ set, name, tone = "dark" }: { set: IconSet; name: Ico
 }
 
 export const ICON_SETS: { id: IconSet; name: string; desc: string }[] = [
-  { id: "flat", name: "FLAT", desc: "Simbol satu warna, bersih & minimalis" },
-  { id: "classic", name: "BAJA 3D", desc: "Ikon berwarna di plat baja heksagon" },
-  { id: "gold", name: "EMAS ROYAL", desc: "Ikon emas di lencana perisai" },
-  { id: "neon", name: "NEON TAKTIS", desc: "Ikon garis menyala di panel oktagon" },
+  { id: "flat", name: "FLAT", desc: "Single-colour symbols, clean & minimal" },
+  { id: "classic", name: "STEEL 3D", desc: "Colour icons on hexagonal steel plates" },
+  { id: "gold", name: "ROYAL GOLD", desc: "Gold icons on a shield badge" },
+  { id: "neon", name: "TACTICAL NEON", desc: "Glowing line icons on octagon panels" },
 ];

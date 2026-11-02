@@ -208,6 +208,18 @@ export class SetSevenFx implements SevenHost, SevenWheelHost {
   /** This frame's `lens()` requests, applied by `applyLens()`. */
   lensReq: LensReq[] = [];
   private lensCanvas: HTMLCanvasElement | null = null;
+  /**
+   * One plain snapshot of the frame, shared by every refraction ring of a frame.
+   *
+   * Reading straight from the live canvas (`drawImage(source, …)`) is a surface
+   * resolve: Skia and Android WebViews both hand back the GPU buffer, which the
+   * offline audit measures at ~33 ms *per lens*. Sampling a normal 2D canvas
+   * instead is a plain blit, so the frame pays for one copy no matter how many
+   * gravity rounds are stuck in the wheel.
+   */
+  private lensSource: HTMLCanvasElement | null = null;
+  private lensSourceCtx: CanvasRenderingContext2D | null = null;
+  private lensSourceValid = false;
   private lastAngle: number | null = null;
 
   private hooks: SevenHooks;
@@ -421,9 +433,31 @@ export class SetSevenFx implements SevenHost, SevenWheelHost {
    * its idle ambience (`animate`), then the particles, the FX, the rounds slide
    * 1 already let go, the decals' drips, and the screen flash fades.
    */
+  /**
+   * Allocate the refraction surface before a gravity round needs it.
+   *
+   * `applyLens` grows its scratch canvas the first time a blackhole round comes
+   * home, and a fresh 1024² surface costs a full allocation (measured at 478 ms
+   * on the audit's canvas). Growing it while the engine is idle in the menu
+   * moves that cost off the frame that fires the first shot; the artwork, the
+   * rings and every pixel they draw are unchanged.
+   */
+  prewarmLens() {
+    if (this.lensCanvas) return;
+    const doc = (globalThis as { document?: Document }).document;
+    if (!doc || typeof doc.createElement !== 'function') return;
+    const canvas = doc.createElement('canvas');
+    // Largest lens a round can ask for is ~92 px radius; keep room for the
+    // widest backing-store density (2x) plus the growth step `applyLens` uses.
+    canvas.width = 2 ** Math.ceil(Math.log2(92 * 2 * 2));
+    canvas.height = canvas.width;
+    this.lensCanvas = canvas;
+  }
+
   update(dt: number, animate = false) {
     this.time += dt;
     this.lensReq.length = 0;
+    this.lensSourceValid = false;
     if (this.timers.length) {
       const run: { t: number; fn: () => void }[] = [];
       this.timers = this.timers.filter((t) => {
@@ -563,6 +597,30 @@ export class SetSevenFx implements SevenHost, SevenWheelHost {
     const m = typeof ctx.getTransform === 'function' ? ctx.getTransform() : null;
     if (!m || !source) return;
     const k = Math.hypot(m.a, m.b) || 1;
+    // Build the shared snapshot once per frame, with the main canvas' transform
+    // and clip still on: it is a straight blit of what the player sees.
+    if (!this.lensSourceValid) {
+      let snapshot = this.lensSource;
+      if (!snapshot) {
+        snapshot = document.createElement('canvas');
+        this.lensSource = snapshot;
+        this.lensSourceCtx = null;
+      }
+      if (snapshot.width !== source.width || snapshot.height !== source.height) {
+        snapshot.width = source.width;
+        snapshot.height = source.height;
+        this.lensSourceCtx = null;
+      }
+      const sc = this.lensSourceCtx ?? (this.lensSourceCtx = snapshot.getContext('2d'));
+      if (sc) {
+        sc.setTransform(1, 0, 0, 1, 0, 0);
+        sc.globalCompositeOperation = 'copy';
+        sc.drawImage(source, 0, 0);
+        sc.globalCompositeOperation = 'source-over';
+        this.lensSourceValid = true;
+      }
+    }
+    const lensSource = this.lensSourceValid ? this.lensSource : null;
     for (const l of this.lensReq) {
       const size = Math.ceil(l.r * 2 * k);
       if (size < 4) continue;
@@ -590,7 +648,7 @@ export class SetSevenFx implements SevenHost, SevenWheelHost {
       const lc = lensCanvas.getContext('2d');
       if (!lc) continue;
       lc.clearRect(0, 0, size, size);
-      lc.drawImage(source, sx, sy, sw, sh, dx, dy, sw, sh);
+      lc.drawImage(lensSource ?? source, sx, sy, sw, sh, dx, dy, sw, sh);
       const rings = 10;
       for (let i = 1; i < rings; i++) {
         const f = i / rings;

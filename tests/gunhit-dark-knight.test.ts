@@ -52,7 +52,7 @@ test('bos punya pola putaran khas yang terkontrol dan tembakan 1.9x lebih cepat'
   // they no longer drive a boss stage.
   assert.ok(!src.includes('bossRotationSpeed(this.level.style as BossType, this.levelTime)'));
   assert.ok(typeof bossRotationSpeed('knight', 1.1) === 'number');
-  assert.ok(src.includes('const spd = (160 + this.level.n * 3) * 1.9;'), 'peluru boss bergerak 1.9x lebih cepat');
+  assert.match(src, /const spd = \(160 \+ this\.level\.n \* 3\) \* 1\.9 \* boss\.shotPace;/, 'peluru boss bergerak 1.9x lebih cepat, dengan pace milik head Game B-nya');
   assert.ok(
     src.includes("if (this.level.mode !== 'treasure') c.rotate(this.rot);"),
     'render harus memutar lapisan target memakai this.rot (bos ikut berputar)'
@@ -241,10 +241,15 @@ test('api & jejak peluru bos mengekor di ekor (partikel spawn di belakang)', () 
   );
 });
 
-test('semua boss tampil bersih tanpa disk bayangan atau glow outline neon', () => {
+test('semua boss tampil bersih: tanpa disk bayangan, tanpa overlay hitbox Game A', () => {
   const gameSrc = read('src/games/gunhit/game/Game.ts');
   assert.ok(gameSrc.includes('if (!isSpecial(this.level.mode) && !this.level.boss)'), 'disk bayangan dihilangkan untuk semua boss');
-  const rendererSrc = read('src/games/gunhit/game/bossRenderer.ts');
-  assert.ok(rendererSrc.includes('no neon/glow outline for any boss'), 'renderer menghilangkan outline glow untuk semua boss');
-  assert.ok(!rendererSrc.includes('shadowBlur'), 'renderer boss tidak membuat aura bercahaya');
+  // Game A no longer has its own boss renderer or boss PNGs: a boss is only
+  // ever Perfect Shot's head, and the only marker drawn over it is the blue
+  // edge of that drawing. The green fill / red ring / impact dots / legend the
+  // old overlay painted mid-fight are gone (they survive in `?hitbox=1`).
+  assert.ok(!gameSrc.includes('HITBOX = BENTUK GAMBAR'), 'banner hitbox tidak pernah tampil di pertarungan');
+  assert.ok(!gameSrc.includes('drawHitboxLegend'), 'tidak ada legend hitbox di layar');
+  assert.match(gameSrc, /if \(this\.hitboxFlag\) this\.drawHitboxDebug\(c\);\n\s*else this\.drawBossSilhouette\(c\);/, 'di play hanya garis biru bentuk bos yang digambar');
+  assert.ok(gameSrc.includes('private drawBossSilhouette('), 'satu-satunya penanda hitbox adalah tepi gambar bos');
 });

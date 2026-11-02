@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { cssColor } from '../src/games/gunhit/game/fx';
 import { drawGlow } from '../src/games/gunhit/game/art/glowSprite';
 import { AcidFluid } from '../src/games/gunhit/game/acidFluid';
-import { drawGun } from '../src/games/gunhit/game/weapons';
+import { drawGun } from '../src/games/gunhit/game/weaponDraw';
 import { drawPreciseWeaponDecal } from '../src/games/gunhit/game/art/decalSystem';
 import { getWeapon } from '../src/games/gunhit/game/weapons';
 import { installCanvasShim } from './supportCanvas';
