@@ -165,10 +165,10 @@ export const tripodWeapon2: Weapon = {
 /* ================================================================================= */
 function drawIron2(ctx: C, _g: Game, s: WeaponState) {
   const t = s.t, ch = s.chan;
-  // DEADBLAST — gauntlet cannon, NOT a helmet and NOT a body. Red-gold armour
-  // in one symmetric weapon silhouette: a wide emitter slit at the crown (the
-  // muzzle), a gold core channel down the spine, two side emitter pods and a
-  // gold base cap. No jaw, no mouth, no brow, no eyes.
+  // DEADBLAST — gauntlet cannon. One symmetric weapon silhouette taken from
+  // the reference: a pointed crown carrying a wide glowing emitter (the
+  // muzzle), flaring red armour flanks, a gold spine with an energy core
+  // channel, two side emitter pods, and a gold base cap tapering to a point.
   const RED = ['#ff7a72', '#e01c28', '#9a0c18', '#4a0610'];
   const PLATE = ['#ff8a82', '#e8202c', '#a30e1a', '#560712'];
   const RING = ['#fff3b8', '#e2ac3c', '#8a5a14', '#4a2c06'];
@@ -179,25 +179,24 @@ function drawIron2(ctx: C, _g: Game, s: WeaponState) {
   ctx.save();
   ctx.translate(rand(-1, 1) * ch * 1.1, rand(-1, 1) * ch * 1.1);
 
-  /* ── silhouette: one symmetric weapon body, widest across the upper third ─ */
+  /* ── silhouette: pointed crown → flaring flanks → pointed base ─────────── */
   const plate = () => {
     ctx.beginPath();
-    ctx.moveTo(-16, 0);
-    ctx.bezierCurveTo(2, -30, 56, -54, 116, -56);
-    ctx.bezierCurveTo(164, -55, 206, -43, 232, -25);
-    ctx.quadraticCurveTo(252, -21, 268, -18);
-    ctx.quadraticCurveTo(281, 0, 268, 18);
-    ctx.quadraticCurveTo(252, 21, 232, 25);
-    ctx.bezierCurveTo(206, 43, 164, 55, 116, 56);
-    ctx.bezierCurveTo(56, 54, 2, 30, -16, 0);
+    ctx.moveTo(272, 0);
+    ctx.bezierCurveTo(246, -15, 218, -36, 188, -47);
+    ctx.bezierCurveTo(144, -56, 92, -52, 50, -39);
+    ctx.bezierCurveTo(18, -30, -7, -17, -28, 0);
+    ctx.bezierCurveTo(-7, 17, 18, 30, 50, 39);
+    ctx.bezierCurveTo(92, 52, 144, 56, 188, 47);
+    ctx.bezierCurveTo(218, 36, 246, 15, 272, 0);
     ctx.closePath();
   };
 
-  /* base cap behind the tail */
+  /* collar behind the base cap */
   ctx.fillStyle = vgrad(ctx, -20, 20, RING);
-  rr(ctx, -34, -19, 22, 38, 8); ctx.fill();
+  rr(ctx, -42, -20, 21, 40, 9); ctx.fill();
   ctx.strokeStyle = 'rgba(80,40,0,.85)'; ctx.lineWidth = 1.6; ctx.stroke();
-  ctx.fillStyle = '#2a0a10'; rr(ctx, -34, -12, 8, 24, 3); ctx.fill();
+  ctx.fillStyle = '#2a0a10'; rr(ctx, -42, -12, 8, 24, 3); ctx.fill();
 
   /* base plate: red, shaded across the width so it reads round */
   plate();
@@ -205,143 +204,167 @@ function drawIron2(ctx: C, _g: Game, s: WeaponState) {
   ctx.save();
   plate(); ctx.clip();
 
-  /* gold core channel down the spine */
+  /* darker red toward both flanks */
+  const sg0 = ctx.createLinearGradient(0, -56, 0, 56);
+  sg0.addColorStop(0, 'rgba(40,0,6,.45)');
+  sg0.addColorStop(.45, 'rgba(40,0,6,0)');
+  sg0.addColorStop(.55, 'rgba(40,0,6,0)');
+  sg0.addColorStop(1, 'rgba(40,0,6,.45)');
+  ctx.fillStyle = sg0; ctx.fillRect(-36, -60, 320, 120);
+
+  /* gold base cap at the tail, tapering to a point */
   ctx.beginPath();
-  ctx.moveTo(230, -9);
-  ctx.bezierCurveTo(188, -14, 118, -16, 58, -13);
-  ctx.bezierCurveTo(22, -11, -2, -8, -16, -4);
-  ctx.lineTo(-16, 4);
-  ctx.bezierCurveTo(-2, 8, 22, 11, 58, 13);
-  ctx.bezierCurveTo(118, 16, 188, 14, 230, 9);
+  ctx.moveTo(-28, 0);
+  ctx.bezierCurveTo(-15, -16, 4, -22, 22, -18);
+  ctx.lineTo(22, 18);
+  ctx.bezierCurveTo(4, 22, -15, 16, -28, 0);
   ctx.closePath();
-  ctx.fillStyle = vgrad(ctx, -16, 16, RING); ctx.fill();
+  ctx.fillStyle = vgrad(ctx, -22, 22, RING); ctx.fill();
+  ctx.strokeStyle = 'rgba(80,40,0,.65)'; ctx.lineWidth = 1.3; ctx.stroke();
+  /* vent slot */
+  ctx.fillStyle = 'rgba(40,0,6,.75)'; rr(ctx, -18, -4, 17, 8, 3.5); ctx.fill();
+
+  /* gold spine: lower oval + centre column */
+  ctx.fillStyle = vgrad(ctx, -25, 25, RING);
+  ctx.beginPath(); ctx.ellipse(52, 0, 27, 25, 0, 0, TAU); ctx.fill();
+  ctx.strokeStyle = 'rgba(80,40,0,.6)'; ctx.lineWidth = 1.3; ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(74, -12);
+  ctx.bezierCurveTo(120, -14, 168, -12, 208, -8);
+  ctx.lineTo(208, 8);
+  ctx.bezierCurveTo(168, 12, 120, 14, 74, 12);
+  ctx.closePath();
+  ctx.fillStyle = vgrad(ctx, -14, 14, RING); ctx.fill();
   ctx.strokeStyle = 'rgba(80,40,0,.55)'; ctx.lineWidth = 1; ctx.stroke();
+  /* gold spine highlight */
   ctx.strokeStyle = 'rgba(255,240,190,.35)'; ctx.lineWidth = 1.3;
-  ctx.beginPath(); ctx.moveTo(2, 0); ctx.lineTo(228, 0); ctx.stroke();
-  /* energy line inside the channel */
-  ctx.fillStyle = '#05121c'; rr(ctx, 24, -3.4, 198, 6.8, 3.4); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(78, 0); ctx.lineTo(206, 0); ctx.stroke();
+
+  /* energy core channel inside the spine */
+  ctx.fillStyle = '#05121c'; rr(ctx, 78, -3.6, 124, 7.2, 3.6); ctx.fill();
   add(ctx);
-  const cg = ctx.createLinearGradient(26, 0, 220, 0);
+  const cg = ctx.createLinearGradient(80, 0, 200, 0);
   cg.addColorStop(0, rgba('#2a7bff', 0.45)); cg.addColorStop(1, rgba(CY, 0.75 + 0.25 * ch));
-  ctx.fillStyle = cg; rr(ctx, 26, -2.2, 194, 4.4, 2.2); ctx.fill();
-  for (let i = 0; i < 3; i++) drawGlow(ctx, 26 + (((t * 0.9 + i / 3) % 1) * 194), 0, 10, '#ffffff', 0.65);
-  drawGlow(ctx, 120, 0, 56, CY, 0.1 + 0.18 * ch);
+  ctx.fillStyle = cg; rr(ctx, 80, -2.3, 120, 4.6, 2.3); ctx.fill();
+  for (let i = 0; i < 3; i++) drawGlow(ctx, 80 + (((t * 0.9 + i / 3) % 1) * 120), 0, 9, '#ffffff', 0.6);
+  drawGlow(ctx, 140, 0, 38, CY, 0.1 + 0.18 * ch);
   norm(ctx);
 
-  /* swept gold trim on both side plates */
+  /* gold V-chevron under the crown */
+  ctx.beginPath();
+  ctx.moveTo(206, -27);
+  ctx.lineTo(236, -12);
+  ctx.lineTo(236, 12);
+  ctx.lineTo(206, 27);
+  ctx.closePath();
+  ctx.fillStyle = vgrad(ctx, -27, 27, RING); ctx.fill();
+  ctx.strokeStyle = 'rgba(80,40,0,.7)'; ctx.lineWidth = 1.3; ctx.stroke();
+
+  /* swept gold trim along both red flanks */
   for (const sg of [-1, 1]) {
-    ctx.strokeStyle = GLINE; ctx.lineWidth = 1.8;
+    ctx.strokeStyle = GLINE; ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(44, sg * 20);
-    ctx.bezierCurveTo(68, sg * 44, 114, sg * 52, 158, sg * 42);
-    ctx.bezierCurveTo(184, sg * 36, 204, sg * 26, 216, sg * 15);
+    ctx.moveTo(58, sg * 22);
+    ctx.bezierCurveTo(102, sg * 50, 154, sg * 55, 196, sg * 43);
     ctx.stroke();
-    ctx.strokeStyle = 'rgba(40,0,6,.5)'; ctx.lineWidth = 1.2;
+    ctx.strokeStyle = 'rgba(80,40,0,.5)'; ctx.lineWidth = 1.2;
     ctx.beginPath();
-    ctx.moveTo(40, sg * 14);
-    ctx.bezierCurveTo(64, sg * 38, 110, sg * 46, 154, sg * 36);
+    ctx.moveTo(50, sg * 14);
+    ctx.bezierCurveTo(94, sg * 42, 146, sg * 47, 192, sg * 35);
     ctx.stroke();
   }
-  /* darker red plate inset for depth */
+  /* darker red inset on each flank for depth */
   for (const sg of [-1, 1]) {
-    ctx.fillStyle = vgrad(ctx, sg * 14, sg * 52, PLATE);
+    ctx.fillStyle = vgrad(ctx, sg * 16, sg * 52, PLATE);
     ctx.beginPath();
-    ctx.moveTo(36, sg * 14);
-    ctx.bezierCurveTo(66, sg * 42, 116, sg * 48, 160, sg * 38);
-    ctx.bezierCurveTo(114, sg * 30, 66, sg * 22, 36, sg * 14);
+    ctx.moveTo(46, sg * 16);
+    ctx.bezierCurveTo(90, sg * 45, 148, sg * 51, 194, sg * 39);
+    ctx.bezierCurveTo(146, sg * 31, 90, sg * 24, 46, sg * 16);
     ctx.closePath();
     ctx.fill();
-  }
-  /* cooling ribs along the temples */
-  for (const sg of [-1, 1]) {
-    ctx.strokeStyle = 'rgba(40,0,6,.35)'; ctx.lineWidth = 1.1;
-    for (const x0 of [174, 196, 214]) {
-      ctx.beginPath();
-      ctx.moveTo(x0, sg * 34);
-      ctx.quadraticCurveTo(x0 + 10, sg * 20, x0 + 18, sg * 9);
-      ctx.stroke();
-    }
   }
 
   /* ── side emitter pods ─────────────────────────────────────────────────── */
   for (const sg of [-1, 1]) {
     ctx.save();
-    ctx.translate(140, sg * 40);
-    ctx.rotate(sg * 0.36);
+    ctx.translate(126, sg * 43);
+    ctx.rotate(sg * 0.3);
     ctx.fillStyle = '#04121a';
-    rr(ctx, -10, -13, 20, 26, 7); ctx.fill();
-    const pg = ctx.createLinearGradient(0, -13, 0, 13);
+    rr(ctx, -11, -15, 22, 30, 8); ctx.fill();
+    const pg = ctx.createLinearGradient(0, -15, 0, 15);
     pg.addColorStop(0, rgba('#2a7bff', 0.5 + 0.3 * ch));
     pg.addColorStop(1, rgba(CY, 0.8 + 0.2 * ch));
     ctx.fillStyle = pg;
-    rr(ctx, -10, -13, 20, 26, 7); ctx.fill();
+    rr(ctx, -11, -15, 22, 30, 8); ctx.fill();
     ctx.restore();
   }
-  ctx.restore(); // end plate clip
 
-  /* side pod glow, outside the clip so it blooms over the edge */
-  add(ctx);
-  for (const sg of [-1, 1]) drawGlow(ctx, 140, sg * 40, 16 + 24 * ch, CY, 0.3 + 0.4 * ch);
-  norm(ctx);
+  /* ── pointed gold crown carrying the emitter ───────────────────────────── */
+  ctx.beginPath();
+  ctx.moveTo(272, 0);
+  ctx.bezierCurveTo(256, -13, 240, -21, 228, -21);
+  ctx.lineTo(228, 21);
+  ctx.bezierCurveTo(240, 21, 256, 13, 272, 0);
+  ctx.closePath();
+  ctx.fillStyle = vgrad(ctx, -21, 21, RING); ctx.fill();
+  ctx.strokeStyle = 'rgba(80,40,0,.9)'; ctx.lineWidth = 1.7; ctx.stroke();
 
-  /* ── crown emitter: the muzzle, a wide slit across the top ─────────────── */
-  ctx.fillStyle = vgrad(ctx, -16, 16, RING);
+  /* emitter lens inside the crown — the muzzle face */
   ctx.beginPath();
-  ctx.moveTo(240, -15);
-  ctx.quadraticCurveTo(256, -17, 270, -13);
-  ctx.quadraticCurveTo(278, 0, 270, 13);
-  ctx.quadraticCurveTo(256, 17, 240, 15);
-  ctx.quadraticCurveTo(248, 0, 240, -15);
+  ctx.moveTo(270, 0);
+  ctx.bezierCurveTo(256, -11, 244, -16, 234, -16);
+  ctx.lineTo(234, 16);
+  ctx.bezierCurveTo(244, 16, 256, 11, 270, 0);
   ctx.closePath();
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(80,40,0,.95)'; ctx.lineWidth = 1.6; ctx.stroke();
-  ctx.fillStyle = '#04121a';
-  ctx.beginPath();
-  ctx.moveTo(244, -9);
-  ctx.quadraticCurveTo(258, -10, 268, -7);
-  ctx.quadraticCurveTo(274, 0, 268, 7);
-  ctx.quadraticCurveTo(258, 10, 244, 9);
-  ctx.quadraticCurveTo(252, 0, 244, -9);
-  ctx.closePath();
-  ctx.fill();
+  ctx.fillStyle = '#04121a'; ctx.fill();
   add(ctx);
-  const eg = ctx.createLinearGradient(244, 0, 272, 0);
+  const eg = ctx.createLinearGradient(234, 0, 270, 0);
   eg.addColorStop(0, rgba('#2a7bff', 0.5 + 0.3 * ch));
   eg.addColorStop(1, rgba(CY, 0.85 + 0.15 * ch));
   ctx.fillStyle = eg;
   ctx.beginPath();
-  ctx.moveTo(244, -9);
-  ctx.quadraticCurveTo(258, -10, 268, -7);
-  ctx.quadraticCurveTo(274, 0, 268, 7);
-  ctx.quadraticCurveTo(258, 10, 244, 9);
-  ctx.quadraticCurveTo(252, 0, 244, -9);
+  ctx.moveTo(270, 0);
+  ctx.bezierCurveTo(256, -11, 244, -16, 234, -16);
+  ctx.lineTo(234, 16);
+  ctx.bezierCurveTo(244, 16, 256, 11, 270, 0);
   ctx.closePath();
   ctx.fill();
+  norm(ctx);
+  ctx.restore(); // end plate clip
+
+  /* side pod glow, outside the clip so it blooms over the edge */
+  add(ctx);
+  for (const sg of [-1, 1]) drawGlow(ctx, 126, sg * 43, 16 + 24 * ch, CY, 0.3 + 0.4 * ch);
+  norm(ctx);
+
+  /* ── muzzle bloom at the crown ─────────────────────────────────────────── */
+  add(ctx);
   const base = 0.5 + 0.15 * Math.sin(t * 4) + 0.5 * ch;
-  const rg = ctx.createRadialGradient(262, 0, 0, 262, 0, 24);
+  const rg = ctx.createRadialGradient(258, 0, 0, 258, 0, 24);
   rg.addColorStop(0, 'rgba(255,255,255,1)');
   rg.addColorStop(0.4, `rgba(143,232,255,${Math.min(1, base)})`);
   rg.addColorStop(1, 'rgba(60,160,255,0)');
-  ctx.save(); ctx.translate(262, 0); ctx.scale(0.55, 1); ctx.translate(-262, 0);
-  ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(262, 0, 24, 0, TAU); ctx.fill(); ctx.restore();
+  ctx.save(); ctx.translate(258, 0); ctx.scale(0.55, 1); ctx.translate(-258, 0);
+  ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(258, 0, 24, 0, TAU); ctx.fill(); ctx.restore();
   for (let i = 0; i < 3; i++) {
-    ctx.save(); ctx.translate(262, 0); ctx.scale(0.5, 1); ctx.rotate(t * (2 + i) + i * 2);
+    ctx.save(); ctx.translate(258, 0); ctx.scale(0.5, 1); ctx.rotate(t * (2 + i) + i * 2);
     ctx.strokeStyle = rgba('#d8f6ff', 0.55 + 0.35 * ch); ctx.lineWidth = 1.3;
     ctx.beginPath(); ctx.arc(0, 0, 8 + i * 6, 0, 2.2); ctx.stroke();
     ctx.restore();
   }
-  drawGlow(ctx, 264, 0, 30 + 56 * ch, CY, 0.45 + 0.5 * ch);
-  drawGlow(ctx, 264, 0, 9 + 8 * ch, '#ffffff', 0.6 + 0.4 * ch);
+  drawGlow(ctx, 260, 0, 30 + 56 * ch, CY, 0.45 + 0.5 * ch);
+  drawGlow(ctx, 260, 0, 9 + 8 * ch, '#ffffff', 0.6 + 0.4 * ch);
   norm(ctx);
 
   ctx.restore();
 }
 
+
 export const ironWeapon2: Weapon = {
   ...ironWeapon,
   name: 'Deadblast Repulsor', sub: 'Gauntlet Repulsor Laser', isNew: true,
-  desc: 'Gauntlet cannon merah-emas ramping modern: satu siluet senjata simetris dengan emitter lebar di puncak, core channel emas di tulang punggung, dua pod emitter samping, dan base cap emas — tanpa rahang, tanpa mata, tanpa mulut.',
-  muzzle: 276, muzzleY: 0,
+  desc: 'Gauntlet cannon merah-emas ramping modern: mahkota runcong dengan emitter lebar menyala sebagai muara, sayap merah melebar, tulang emas berinti energi, dua pod emitter samping, dan base cap emas meruncing.',
+  muzzle: 278, muzzleY: 0,
   draw: drawIron2,
 };
 
