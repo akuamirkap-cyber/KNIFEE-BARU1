@@ -226,25 +226,35 @@ function drawIron2(ctx: C, _g: Game, s: WeaponState) {
   ctx.strokeStyle = 'rgba(80,40,0,.7)'; ctx.lineWidth = 1;
   for (const x of [156, 164]) { ctx.beginPath(); ctx.moveTo(x, -44); ctx.lineTo(x, 44); ctx.stroke(); }
 
-  /* four knuckle barrels around the palm */
+  /* fist housing: one wide knuckle block everything grows from */
+  ctx.fillStyle = vgrad(ctx, -52, 52, RED);
+  rr(ctx, 162, -52, 66, 104, 14); ctx.fill();
+  ctx.strokeStyle = OUT; ctx.lineWidth = 2; ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,214,120,.5)'; ctx.lineWidth = 1.2;
+  for (const x of [176, 192, 208]) { ctx.beginPath(); ctx.moveTo(x, -46); ctx.lineTo(x, 46); ctx.stroke(); }
+
+  /* gold knuckle plate across the barrel roots */
+  ctx.fillStyle = vgrad(ctx, -50, 50, RING);
+  rr(ctx, 220, -50, 16, 100, 6); ctx.fill();
+  ctx.strokeStyle = 'rgba(80,40,0,.85)'; ctx.lineWidth = 1.4; ctx.stroke();
+  ctx.strokeStyle = 'rgba(80,40,0,.6)'; ctx.lineWidth = 1;
+  for (const y of [-35, 35]) { ctx.beginPath(); ctx.moveTo(222, y); ctx.lineTo(234, y); ctx.stroke(); }
+
+  /* four knuckle barrels rooted in the plate */
   for (const by of [-44, -26, 26, 44]) {
     ctx.fillStyle = vgrad(ctx, by - 8, by + 8, RED);
-    rr(ctx, 214, by - 8, 54, 16, 7); ctx.fill();
+    rr(ctx, 230, by - 8, 36, 16, 7); ctx.fill();
     ctx.strokeStyle = OUT; ctx.lineWidth = 1.5; ctx.stroke();
-    ctx.fillStyle = vgrad(ctx, by - 8, by + 8, GOLD); rr(ctx, 262, by - 8, 10, 16, 4); ctx.fill();
+    ctx.fillStyle = vgrad(ctx, by - 8, by + 8, GOLD); rr(ctx, 260, by - 8, 12, 16, 4); ctx.fill();
     ctx.strokeStyle = 'rgba(80,40,0,.8)'; ctx.lineWidth = 1; ctx.stroke();
-    ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.fillRect(220, by - 6, 34, 2.4);
+    ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.fillRect(234, by - 6, 22, 2.4);
     if (ch > 0.05) { add(ctx); drawGlow(ctx, 270, by, 6 + 10 * ch, CY, 0.5 * ch); norm(ctx); }
   }
 
-  /* fist block */
-  ctx.fillStyle = vgrad(ctx, -34, 34, RED);
-  rr(ctx, 168, -34, 52, 68, 12); ctx.fill();
-  ctx.strokeStyle = OUT; ctx.lineWidth = 2; ctx.stroke();
-  ctx.strokeStyle = 'rgba(255,214,120,.55)'; ctx.lineWidth = 1.2;
-  for (const x of [182, 196, 210]) { ctx.beginPath(); ctx.moveTo(x, -30); ctx.lineTo(x, 30); ctx.stroke(); }
-
-  /* palm repulsor core */
+  /* centre palm housing wedge + repulsor core */
+  ctx.fillStyle = vgrad(ctx, -16, 16, RING);
+  ctx.beginPath(); ctx.moveTo(230, -16); ctx.lineTo(252, -12); ctx.lineTo(252, 12); ctx.lineTo(230, 16); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = 'rgba(80,40,0,.85)'; ctx.lineWidth = 1.3; ctx.stroke();
   ctx.fillStyle = vgrad(ctx, -26, 26, GOLD);
   ctx.beginPath(); ctx.ellipse(262, 0, 15, 21, 0, 0, TAU); ctx.fill();
   ctx.strokeStyle = 'rgba(80,40,0,.95)'; ctx.lineWidth = 1.8; ctx.stroke();
