@@ -41,7 +41,9 @@ import {
 import GunVariantPicker from './GunVariantPicker';
 import DefaultExportModal from './DefaultExportModal';
 import { SHOP_IN, SHOP_OUT } from '../../perfect-shot/shop/timeline';
-import '../../perfect-shot/index.css';
+// The shared motion/art stylesheet is imported once by src/main.tsx so it is
+// part of the startup CSS; importing it here too would push it into the lazy
+// chunk and reorder it against src/index.css.
 
 type Tab = 'ALL' | 'DESAIN' | 'EPIC' | 'LANGKA' | 'LEGENDARIS' | 'UMUM' | 'BOSS';
 

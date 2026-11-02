@@ -67,6 +67,32 @@ test('font dikemas di dalam app, bukan diambil dari Google Fonts', () => {
   }
 });
 
+test('CSS animasi bersama dimuat saat startup, bukan menunggu chunk lazy', () => {
+  const main = read('src/main.tsx');
+  const shared = main.indexOf("import './games/perfect-shot/index.css'");
+  assert.ok(shared >= 0, 'stylesheet animasi bersama diimpor oleh entry');
+  assert.ok(main.indexOf("import './index.css'") < shared, 'urutan sama seperti sebelumnya: index.css dulu, lalu stylesheet bersama');
+
+  // The keyframes the menu needs (bullet, letters, shine) live in that file.
+  const css = read('src/games/perfect-shot/index.css');
+  for (const name of ['.in-letter', '.in-bullet', '.mm-shine', '.a {']) {
+    assert.ok(css.includes(name), `${name} ada di stylesheet bersama`);
+  }
+
+  // No lazy chunk may own it: if another module imports it, the bundler hoists
+  // the file into a shared chunk and reorders it against src/index.css.
+  const importers: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of fs.readdirSync(path.join(process.cwd(), dir), { withFileTypes: true })) {
+      const rel = `${dir}/${entry.name}`;
+      if (entry.isDirectory()) walk(rel);
+      else if (/\.tsx?$/.test(entry.name) && !rel.endsWith('src/main.tsx') && read(rel).includes('perfect-shot/index.css')) importers.push(rel);
+    }
+  };
+  walk('src');
+  assert.deepEqual(importers, [], 'hanya entry yang mengimpor stylesheet bersama');
+});
+
 test('Android: layar dikunci portrait dan plugin back benar-benar terpasang', () => {
   const manifest = read('android/app/src/main/AndroidManifest.xml');
   assert.match(manifest, /android:screenOrientation="portrait"/, 'main activity dikunci portrait');
