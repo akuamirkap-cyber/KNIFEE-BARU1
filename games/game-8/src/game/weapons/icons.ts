@@ -165,9 +165,11 @@ export const tripodWeapon2: Weapon = {
 /* ================================================================================= */
 function drawIron2(ctx: C, _g: Game, s: WeaponState) {
   const t = s.t, ch = s.chan;
-  // DEADBLAST Mark II: same red-gold armour, a brand-new silhouette — a fist
-  // cannon: layered chevron plates, claw fins at the wrist, four knuckle
-  // barrels around one centre palm repulsor.
+  // DEADBLAST Mark III — open gauntlet hand, angled upward like the reference
+  // (side 3/4 view, fingers slightly splayed, palm repulsor visible). Red-gold
+  // armour, same forearm chevrons, but the fist cannon is replaced by an
+  // articulated hand tilted up ~22°. Forearm stays horizontal, hand assembly is
+  // rotated so the palm faces forward-up and the fingers reach toward the muzzle.
   const RED = ['#ff7a72', '#e01c28', '#9a0c18', '#4a0610'];
   const PLATE = ['#ff8a82', '#e8202c', '#a30e1a', '#560712'];
   const RING = ['#fff3b8', '#e2ac3c', '#8a5a14', '#4a2c06'];
@@ -188,7 +190,6 @@ function drawIron2(ctx: C, _g: Game, s: WeaponState) {
   ctx.beginPath(); ctx.moveTo(12, -30); ctx.lineTo(120, -26); ctx.lineTo(152, -36); ctx.lineTo(152, 36); ctx.lineTo(120, 26); ctx.lineTo(12, 30); ctx.closePath();
   ctx.fillStyle = vgrad(ctx, -36, 36, RED); ctx.fill();
   ctx.strokeStyle = OUT; ctx.lineWidth = 2.2; ctx.stroke();
-  /* layered chevron plates along both flanks */
   for (const sg of [-1, 1]) {
     for (let i = 0; i < 3; i++) {
       const x0 = 18 + i * 40;
@@ -210,78 +211,123 @@ function drawIron2(ctx: C, _g: Game, s: WeaponState) {
   drawGlow(ctx, 84, 0, 70, CY, 0.12 + 0.2 * ch);
   norm(ctx);
 
-  /* wrist claw fins sweeping forward */
-  for (const sg of [-1, 1]) {
-    ctx.fillStyle = vgrad(ctx, sg * 34, sg * 66, RED);
-    ctx.beginPath(); ctx.moveTo(150, sg * 34); ctx.lineTo(196, sg * 40); ctx.lineTo(232, sg * 66); ctx.lineTo(204, sg * 60); ctx.lineTo(170, sg * 46); ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = OUT; ctx.lineWidth = 1.8; ctx.stroke();
-    ctx.strokeStyle = GLINE; ctx.lineWidth = 1.6;
-    ctx.beginPath(); ctx.moveTo(196, sg * 40); ctx.lineTo(232, sg * 66); ctx.stroke();
-    add(ctx); ctx.fillStyle = rgba(CY, 0.3 + 0.35 * ch);
-    ctx.beginPath(); ctx.moveTo(176, sg * 44); ctx.lineTo(206, sg * 56); ctx.lineTo(196, sg * 58); ctx.closePath(); ctx.fill(); norm(ctx);
-  }
-
-  /* gold wrist band */
+  /* gold wrist band — hinge for the tilted hand */
   metalBox(ctx, 150, -46, 20, 92, 8, RING, 0.55);
   ctx.strokeStyle = 'rgba(80,40,0,.7)'; ctx.lineWidth = 1;
   for (const x of [156, 164]) { ctx.beginPath(); ctx.moveTo(x, -44); ctx.lineTo(x, 44); ctx.stroke(); }
 
-  /* fist housing: one wide knuckle block everything grows from */
-  ctx.fillStyle = vgrad(ctx, -52, 52, RED);
-  rr(ctx, 162, -52, 66, 104, 14); ctx.fill();
+  // ── hand assembly: open hand angled upward ──────────────────
+  // Pivot at the wrist; the whole hand is tilted so the fingers reach
+  // diagonally up-forward (toward the muzzle) with the palm repulsor
+  // facing up, matching the reference pose.
+  const HX = 166, HY = 0, HAND_ANG = 0.58; // ~33° up-forward
+  ctx.save();
+  ctx.translate(HX, HY);
+  ctx.rotate(HAND_ANG);
+
+  /* palm body: one wide rounded block the fingers root from */
+  ctx.fillStyle = vgrad(ctx, -32, 32, RED);
+  rr(ctx, -2, -33, 48, 66, 16); ctx.fill();
   ctx.strokeStyle = OUT; ctx.lineWidth = 2; ctx.stroke();
-  ctx.strokeStyle = 'rgba(255,214,120,.5)'; ctx.lineWidth = 1.2;
-  for (const x of [176, 192, 208]) { ctx.beginPath(); ctx.moveTo(x, -46); ctx.lineTo(x, 46); ctx.stroke(); }
+  ctx.strokeStyle = 'rgba(255,214,120,.45)'; ctx.lineWidth = 1.1;
+  for (let i = 0; i < 3; i++) { const y = -15 + i * 15; ctx.beginPath(); ctx.moveTo(8, y); ctx.lineTo(40, y); ctx.stroke(); }
 
-  /* gold knuckle plate across the barrel roots */
-  ctx.fillStyle = vgrad(ctx, -50, 50, RING);
-  rr(ctx, 220, -50, 16, 100, 6); ctx.fill();
-  ctx.strokeStyle = 'rgba(80,40,0,.85)'; ctx.lineWidth = 1.4; ctx.stroke();
-  ctx.strokeStyle = 'rgba(80,40,0,.6)'; ctx.lineWidth = 1;
-  for (const y of [-35, 35]) { ctx.beginPath(); ctx.moveTo(222, y); ctx.lineTo(234, y); ctx.stroke(); }
+  /* gold knuckle plate where the fingers root */
+  ctx.fillStyle = vgrad(ctx, -38, 38, RING);
+  rr(ctx, 38, -38, 14, 76, 7); ctx.fill();
+  ctx.strokeStyle = 'rgba(80,40,0,.88)'; ctx.lineWidth = 1.5; ctx.stroke();
 
-  /* four knuckle barrels rooted in the plate */
-  for (const by of [-44, -26, 26, 44]) {
-    ctx.fillStyle = vgrad(ctx, by - 8, by + 8, RED);
-    rr(ctx, 230, by - 8, 36, 16, 7); ctx.fill();
-    ctx.strokeStyle = OUT; ctx.lineWidth = 1.5; ctx.stroke();
-    ctx.fillStyle = vgrad(ctx, by - 8, by + 8, GOLD); rr(ctx, 260, by - 8, 12, 16, 4); ctx.fill();
+  /* one finger: two red phalanges, gold knuckle ring, gold fingertip cap.
+     Returns the fingertip position in hand-local space. */
+  const drawFinger = (by: number, len: number, thick: number, curl: number, goldTip: number): [number, number] => {
+    const bx = 48;
+    ctx.save();
+    ctx.translate(bx, by);
+    ctx.rotate(curl * 0.16);
+    ctx.fillStyle = vgrad(ctx, -thick, thick, RED);
+    rr(ctx, 0, -thick, len * 0.58, thick * 2, thick * 0.55); ctx.fill();
+    ctx.strokeStyle = OUT; ctx.lineWidth = 1.4; ctx.stroke();
+    ctx.fillStyle = vgrad(ctx, -thick, thick, GOLD);
+    rr(ctx, -2, -thick - 1, 9, thick * 2 + 2, 3); ctx.fill();
     ctx.strokeStyle = 'rgba(80,40,0,.8)'; ctx.lineWidth = 1; ctx.stroke();
-    ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.fillRect(234, by - 6, 22, 2.4);
-    if (ch > 0.05) { add(ctx); drawGlow(ctx, 270, by, 6 + 10 * ch, CY, 0.5 * ch); norm(ctx); }
-  }
+    ctx.translate(len * 0.58, 0);
+    ctx.rotate(curl);
+    ctx.fillStyle = vgrad(ctx, -thick * 0.84, thick * 0.84, RED);
+    rr(ctx, 0, -thick * 0.84, len * 0.44, thick * 1.68, thick * 0.45); ctx.fill();
+    ctx.strokeStyle = OUT; ctx.lineWidth = 1.3; ctx.stroke();
+    ctx.fillStyle = vgrad(ctx, -thick * 0.9, thick * 0.9, GOLD);
+    rr(ctx, len * 0.44 - 2, -thick * 0.84, goldTip, thick * 1.68, 3.4); ctx.fill();
+    ctx.strokeStyle = 'rgba(80,40,0,.85)'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,.32)'; ctx.fillRect(3, -thick * 0.5, len * 0.34, 1.8);
+    const tip: [number, number] = [len * 0.44 + goldTip - 2, 0];
+    ctx.restore();
+    return tip;
+  };
+  const tips: [number, number][] = [
+    drawFinger(-31, 57, 7.6, -0.12, 10),   // index
+    drawFinger(-11, 65, 8.4, -0.04, 11),   // middle
+    drawFinger(11, 61, 8.0, 0.07, 10.5),   // ring
+    drawFinger(31, 49, 7.0, 0.16, 9),      // pinky
+  ];
 
-  /* centre palm housing wedge + repulsor core */
-  ctx.fillStyle = vgrad(ctx, -16, 16, RING);
-  ctx.beginPath(); ctx.moveTo(230, -16); ctx.lineTo(252, -12); ctx.lineTo(252, 12); ctx.lineTo(230, 16); ctx.closePath(); ctx.fill();
+  /* thumb: opposable, roots low on the palm, reaches out to the -y side */
+  ctx.save();
+  ctx.translate(4, -28);
+  ctx.rotate(-0.78);
+  ctx.fillStyle = vgrad(ctx, -8, 8, RED);
+  rr(ctx, 0, -8, 28, 16, 7); ctx.fill();
+  ctx.strokeStyle = OUT; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.fillStyle = vgrad(ctx, -8, 8, GOLD); rr(ctx, -2, -9, 9, 18, 4); ctx.fill();
+  ctx.strokeStyle = 'rgba(80,40,0,.85)'; ctx.lineWidth = 1; ctx.stroke();
+  ctx.translate(26, 0); ctx.rotate(0.44);
+  ctx.fillStyle = vgrad(ctx, -7, 7, RED); rr(ctx, 0, -7, 21, 14, 6); ctx.fill();
+  ctx.strokeStyle = OUT; ctx.lineWidth = 1.3; ctx.stroke();
+  ctx.fillStyle = vgrad(ctx, -7, 7, GOLD); rr(ctx, 17, -7, 9, 14, 3.6); ctx.fill();
+  ctx.strokeStyle = 'rgba(80,40,0,.85)'; ctx.lineWidth = 1; ctx.stroke();
+  ctx.restore();
+
+  /* palm repulsor: big gold bezel on the palm face, dark core, blue core */
+  const RX = 74, RY = 0;
+  ctx.fillStyle = vgrad(ctx, -22, 22, RING);
+  ctx.beginPath(); ctx.moveTo(16, -24); ctx.lineTo(48, -19); ctx.lineTo(48, 19); ctx.lineTo(16, 24); ctx.closePath(); ctx.fill();
   ctx.strokeStyle = 'rgba(80,40,0,.85)'; ctx.lineWidth = 1.3; ctx.stroke();
-  ctx.fillStyle = vgrad(ctx, -26, 26, GOLD);
-  ctx.beginPath(); ctx.ellipse(262, 0, 15, 21, 0, 0, TAU); ctx.fill();
-  ctx.strokeStyle = 'rgba(80,40,0,.95)'; ctx.lineWidth = 1.8; ctx.stroke();
-  ctx.fillStyle = '#04121a'; ctx.beginPath(); ctx.ellipse(263, 0, 10, 15, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = vgrad(ctx, -18, 18, GOLD);
+  ctx.beginPath(); ctx.ellipse(RX, RY, 17, 21, 0, 0, TAU); ctx.fill();
+  ctx.strokeStyle = 'rgba(80,40,0,.95)'; ctx.lineWidth = 1.7; ctx.stroke();
+  ctx.fillStyle = 'rgba(255,214,120,.5)'; ctx.beginPath(); ctx.ellipse(RX - 4, RY - 6, 5.5, 3.4, -0.6, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#04121a'; ctx.beginPath(); ctx.ellipse(RX, RY, 11, 14.5, 0, 0, TAU); ctx.fill();
   add(ctx);
   const base = 0.5 + 0.15 * Math.sin(t * 4) + 0.5 * ch;
-  const rg = ctx.createRadialGradient(264, 0, 0, 264, 0, 26);
-  rg.addColorStop(0, 'rgba(255,255,255,1)'); rg.addColorStop(0.4, `rgba(143,232,255,${Math.min(1, base)})`); rg.addColorStop(1, 'rgba(60,160,255,0)');
-  ctx.save(); ctx.translate(264, 0); ctx.scale(0.55, 1); ctx.translate(-264, 0);
-  ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(264, 0, 26, 0, TAU); ctx.fill(); ctx.restore();
+  const rg = ctx.createRadialGradient(RX, RY, 0, RX, RY, 26);
+  rg.addColorStop(0, 'rgba(255,255,255,1)'); rg.addColorStop(0.38, `rgba(143,232,255,${Math.min(1, base)})`); rg.addColorStop(1, 'rgba(60,160,255,0)');
+  ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(RX, RY, 26, 0, TAU); ctx.fill();
   for (let i = 0; i < 3; i++) {
-    ctx.save(); ctx.translate(264, 0); ctx.scale(0.5, 1); ctx.rotate(t * (2 + i) + i * 2);
-    ctx.strokeStyle = rgba('#d8f6ff', 0.55 + 0.35 * ch); ctx.lineWidth = 1.3;
-    ctx.beginPath(); ctx.arc(0, 0, 8 + i * 6, 0, 2.2); ctx.stroke();
+    ctx.save(); ctx.translate(RX, RY); ctx.scale(0.62, 0.95); ctx.rotate(t * (2 + i) + i * 2);
+    ctx.strokeStyle = rgba('#d8f6ff', 0.55 + 0.35 * ch); ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.arc(0, 0, 7 + i * 5, 0, 2.2); ctx.stroke();
     ctx.restore();
   }
-  drawGlow(ctx, 266, 0, 30 + 56 * ch, CY, 0.45 + 0.5 * ch);
-  drawGlow(ctx, 266, 0, 9 + 8 * ch, '#ffffff', 0.6 + 0.4 * ch);
+  drawGlow(ctx, RX + 1, RY, 28 + 52 * ch, CY, 0.42 + 0.48 * ch);
+  drawGlow(ctx, RX + 1, RY, 9 + 8 * ch, '#ffffff', 0.58 + 0.38 * ch);
   norm(ctx);
+
+  /* fingertip charge glints, in hand-local space */
+  if (ch > 0.05) {
+    add(ctx);
+    for (const [lx, ly] of tips) drawGlow(ctx, lx + 4, ly, 6 + 10 * ch, CY, 0.45 * ch);
+    norm(ctx);
+  }
+
+  ctx.restore(); // end hand assembly
+
   ctx.restore();
 }
 
 export const ironWeapon2: Weapon = {
   ...ironWeapon,
   name: 'Deadblast Repulsor', sub: 'Gauntlet Repulsor Laser', isNew: true,
-  desc: 'Sarung tinju kanon merah-emas: pelat chevron berlapis, sirip cakar di pergelangan, empat laras knuckle mengelilingi satu repulsor telapak, dan saluran daya biru menyala.',
-  muzzle: 276, muzzleY: 0,
+  desc: 'Sarung tangan tempur merah-emas pose terbuka miring ke atas: jari-jari terartikulasi, jempol berlawanan, dan repulsor telapak 3/4 — seperti referensi.',
+  muzzle: 272, muzzleY: -11,
   draw: drawIron2,
 };
 
