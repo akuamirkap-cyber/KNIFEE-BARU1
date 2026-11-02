@@ -10409,7 +10409,7 @@ export class Game {
         c.fillText(timeStr, CX - 108, 42);
         c.textAlign = 'right';
         c.fillStyle = '#a5f3fc';
-        c.fillText(`BATU ${Math.round(ratio * 100)}%`, CX + 108, 42);
+        c.fillText(`${T('BATU')} ${Math.round(ratio * 100)}%`, CX + 108, 42);
         const barX = CX - 26, barY = 39, barW = 64;
         c.fillStyle = '#164e63'; c.fillRect(barX, barY, barW, 6);
         c.fillStyle = '#67e8f9'; c.fillRect(barX, barY, barW * ratio, 6);
@@ -10557,7 +10557,7 @@ export class Game {
     c.fillStyle = this.weapon.energy ? this.weapon.color : 'rgba(255,255,255,0.6)';
     // A slide-3 gun carries no slide-1 perk: the label names its card instead.
     const s3Card = this.sevenPlainTrigger;
-    c.fillText(`${this.weapon.name}${this.hasTwinGuns ? ' ×2' : ''} • ${s3Card ? 'SLIDE 3' : this.weapon.perk}`, W - 14, H - 16);
+    c.fillText(`${this.weapon.name}${this.hasTwinGuns ? ' ×2' : ''} • ${s3Card ? 'SLIDE 3' : T(this.weapon.perk)}`, W - 14, H - 16);
     const wq = this.weapon;
     let info = '';
     if (s3Card) { /* slide 3: no perk counters, no charge meter, no spin-up */ }

@@ -30,9 +30,10 @@ Dan tiap pane membawa `data-game-id` (`A`/`B`) + `data-game-name` sehingga otoma
 
 ## Sumber referensi Game B
 
-Versi acuan Game B ada di repo ini (`src/games/perfect-shot/**`) dan di tiga zip
-referensi (`main-menu-transition-animations.zip`, `2d-game-intro-animation.zip`,
-`2d-game-intro-animation (1).zip`). Semua penyelarasan visual Game A mengacu ke sini.
+Versi acuan Game B ada di repo ini (`src/games/perfect-shot/**`) dan di zip
+referensi di `references/` (`main-menu-transition-animations.zip`,
+`2d-game-intro-animation.zip`, `2d-game-intro-animation (1).zip`). Semua
+penyelarasan visual Game A mengacu ke sini.
 
 ## Onboarding & pengaturan Game A
 

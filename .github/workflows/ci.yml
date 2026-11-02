@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: typecheck · tests · build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # `npm ci` is the whole install: no Android SDK and no keystore are needed
+      # to typecheck, test or build the web bundle.
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Tests
+        run: npm test
+
+      - name: Build web bundle
+        run: npm run build
+
+      - name: Upload web build
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist
+          retention-days: 7
+
+  store-assets:
+    name: store assets
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install
+        run: npm ci
+      # The icons and screenshots are committed; this only proves they still
+      # match what Play Console accepts (size, format, no transparency).
+      - name: Check icon, feature graphic and screenshots
+        run: npx tsx tools/check-store-assets.ts
+
+  # The Android build needs the Android SDK and the upload keystore, so it runs
+  # locally with `npm run build:apk` / `npm run build:aab` (see BUILD-APK.md).
+  # If you ever want it in CI, add a job that:
+  #   1. installs the SDK (android-actions/setup-android),
+  #   2. restores the keystore from secrets into android/game-arcade-hub-release.keystore,
+  #   3. writes android/keystore.properties from those same secrets,
+  #   4. runs `npm run build:apk` and uploads release/*.apk.
+  # Never commit the keystore or its passwords.

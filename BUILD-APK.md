@@ -259,3 +259,26 @@ Splash screen diatur di `android/app/src/main/res/values/styles.xml`
 
 Status bar & navigation bar juga berwarna `#0B0E14` supaya tidak ada kilatan putih
 sebelum WebView menggambar game.
+
+---
+
+## Rilis ke Play Console
+
+Urutannya (semua berkas sudah disiapkan di repo):
+
+1. **Build**: `npm run build:aab` → `release/GameArcadeHub-v<versi>-release.aab`
+   (naikkan versi dulu: `npm run version:bump`).
+2. **Aset toko**: `store/icon-512.png`, `store/feature-graphic-1024x500.png`,
+   `store/screenshots/phone-01..04.png`. Periksa dengan `npm run check:store`
+   (juga jalan di CI). Buat ulang dengan `npm run store:assets`.
+3. **Listing**: salin dari `store/listing-id.md` (id-ID) dan `store/listing-en.md`
+   (default/English).
+4. **Formulir**: Data safety dari `docs/DATA-SAFETY.md`, rating IARC dari
+   `docs/CONTENT-RATING.md`, kebijakan privasi dari `docs/PRIVACY.md`
+   (butuh URL publik — hosting sendiri).
+5. **QA**: jalankan `docs/TEST-PLAN.md` di HP fisik sebelum mengunggah.
+6. **Unggah**: Play Console → Testing → Internal testing dulu, lalu Production.
+
+CI (`.github/workflows/ci.yml`) menjalankan typecheck, seluruh tes, build web,
+dan pemeriksaan aset toko pada setiap push. Build Android tetap di mesin lokal
+karena butuh Android SDK dan keystore.
