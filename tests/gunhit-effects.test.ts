@@ -13,7 +13,8 @@ import { bananaPeelOpen, bananaFleshFill } from '../src/games/gunhit/game/art/gu
 import { dragonFlameSurge } from '../src/games/gunhit/game/art/guns3';
 import { honeyPumpPulse } from '../src/games/gunhit/game/art/guns4';
 import { FX, spawnImpact, spawnMuzzle, type Particle } from '../src/games/gunhit/game/fx';
-import { drawGun, drawProjectile, getWeapon, WEAPONS } from '../src/games/gunhit/game/weapons';
+import { drawGun, drawProjectile } from '../src/games/gunhit/game/weaponDraw';
+import { getWeapon, WEAPONS } from '../src/games/gunhit/game/weapons';
 import { GUN_METRICS } from '../src/games/gunhit/game/art/metrics';
 import { gunState } from '../src/games/gunhit/game/art/kit';
 import { drawPreciseWeaponDecal } from '../src/games/gunhit/game/art/decalSystem';

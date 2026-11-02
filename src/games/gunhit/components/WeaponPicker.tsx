@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
-import { drawGun, drawProjectile, getWeapon, RARITY_COLOR, WEAPONS, type WeaponId } from '../game/weapons';
+import { drawGun, drawProjectile } from '../game/weaponDraw';
+import { getWeapon, RARITY_COLOR, WEAPONS, type WeaponId } from '../game/weapons';
 import { hasSlide6Update, hasSlide7Update, hasSlide9Update, hasSlide11Update } from '../game/art/gunVariants';
 import { gunState } from '../game/art/kit';
 import { fitInkBoxQuarterTurn, getGunInkBox } from '../game/art/metrics';

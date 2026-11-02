@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
-import { Game, GUN_Y, GAMEPLAY_GUN_SCALE, H, makeLevel, initialGameplayWheelCenterY } from './game/Game';
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import type { Game } from './game/Game';
+import { GAMEPLAY_GUN_SCALE, GUN_Y, H, initialGameplayWheelCenterY } from './game/layout';
+import { makeLevel } from './game/levels';
 import { savedValues, storage } from './game/safeStorage';
 import { setMasterVolume, setMuted, sfx } from './game/audio';
 import type { BossHead } from './game/bossCatalog';
@@ -11,24 +13,42 @@ import { useSlideActive } from '../shared/SlideActivity';
 import { useAndroidBack } from '../../utils/androidBack';
 import { Burst, Dust, Flare, Shockwave, SparkleField, SunburstFX } from '../knife-hit/components/Effects';
 import { gunSunburstColor } from './game/sunburstPalette';
-import { drawGunCentered } from './game/art/drawCentered';
-import { getGunMetrics } from './game/art/metrics';
-import { gunState } from './game/art/kit';
+/**
+ * Weapon artwork for the menu showcase: a dynamic import, so the title screen
+ * does not wait for every gun's art to be parsed before it can paint.
+ */
+type MenuGunArt = typeof import('./game/menuGunArt');
+let menuGunArtPromise: Promise<MenuGunArt> | null = null;
+const loadMenuGunArt = () => (menuGunArtPromise ??= import('./game/menuGunArt'));
 import { juicyAudio } from '../../utils/juicyAudio';
 import DiamondSprite from '../shared/DiamondSprite';
 import CoinSprite from '../shared/CoinSprite';
 import { MILESTONES, QUESTS, type Quest, type QuestState } from './game/quests';
 import { GUN_HIT_MAP_MAX_LEVEL, getGunHitMapNodeTheme, getGunHitMapStage } from './game/stageMap';
-import Arsenal from './components/Arsenal';
-import QuestModal from './components/QuestModal';
 import { useAllStagesOpen, toggleAllStagesOpen, isUnlockShortcut } from './game/stageUnlock';
-import SgaSettingsPanel from './components/SgaSettingsPanel';
-import SgaWeaponFlight, { WEAPON_FLIGHT_MS, type SgaWeaponFlightData } from './components/SgaWeaponFlight';
-import { Leaderboard as PerfectShotLeaderboard } from '../perfect-shot/components/Leaderboard';
-import { BossDefeatedModal } from './components/BossDefeatedModal';
-import { BossGiftBoxModal, GiftBoxScene } from './components/BossGiftBoxModal';
-import StarBuffModal from './components/StarBuffModal';
-import { QuestMap as PerfectShotQuestMap } from '../perfect-shot/components/QuestMap';
+import { WEAPON_FLIGHT_MS } from './components/weaponFlightTiming';
+import type { SgaWeaponFlightData } from './components/SgaWeaponFlight';
+
+/**
+ * Everything behind a tap is loaded on demand: the armory, the quest page, the
+ * settings sheet, the results overlays. None of it is needed for the title
+ * screen to paint, and each one drags its own artwork with it.
+ */
+const Arsenal = lazy(() => import('./components/Arsenal'));
+const QuestModal = lazy(() => import('./components/QuestModal'));
+const SgaSettingsPanel = lazy(() => import('./components/SgaSettingsPanel'));
+const SgaWeaponFlight = lazy(() => import('./components/SgaWeaponFlight'));
+const PerfectShotLeaderboard = lazy(() =>
+  import('../perfect-shot/components/Leaderboard').then((m) => ({ default: m.Leaderboard })));
+const BossDefeatedModal = lazy(() =>
+  import('./components/BossDefeatedModal').then((m) => ({ default: m.BossDefeatedModal })));
+const BossGiftBoxModal = lazy(() =>
+  import('./components/BossGiftBoxModal').then((m) => ({ default: m.BossGiftBoxModal })));
+const GiftBoxScene = lazy(() =>
+  import('./components/BossGiftBoxModal').then((m) => ({ default: m.GiftBoxScene })));
+const StarBuffModal = lazy(() => import('./components/StarBuffModal'));
+const PerfectShotQuestMap = lazy(() =>
+  import('../perfect-shot/components/QuestMap').then((m) => ({ default: m.QuestMap })));
 import type { StageBase } from '../perfect-shot/quest/data';
 import { levelConfig, type TargetKind } from '../perfect-shot/play/levels';
 import type { FlatName } from '../perfect-shot/ui/FlatIcons';
@@ -54,6 +74,18 @@ import { animClass, animStore, getSharedMenuPlan, gunTiming, publishMenuPlan, re
 import { OVERLAY_RATE } from '../perfect-shot/anim/speed';
 
 type Screen = 'menu' | 'playing' | 'over';
+
+/**
+ * The engine — art for every weapon, every ported slide, the boss catalogue and
+ * all the FX — is by far the largest module in this app. Pulling it in as its
+ * own chunk lets the menu paint (and accept taps) without waiting for it; the
+ * chunk is requested on mount, so it is normally warm long before a run starts.
+ * Anything that must start a run before it lands is queued in `engineQueue`.
+ */
+const loadEngine = () => import('./game/Game');
+
+/** An overlay whose chunk is still in flight simply is not on screen yet. */
+const Overlay = ({ children }: { children: ReactNode }) => <Suspense fallback={null}>{children}</Suspense>;
 type MenuPageTransition = { phase: OverlayPhase; variant: OverlayVariant; label: string; rate: number } | null;
 type MenuDeparture = 'gun' | 'quest' | 'ready' | 'ranks' | 'play' | null;
 type MenuTransitionTiming = { lead: number; cover: number; hold: number; reveal: number; swapAt: number; finishAt: number; rate: number };
@@ -278,6 +310,29 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   const weaponPivotRef = useRef<HTMLDivElement>(null);
   const gameShellRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Game | null>(null);
+  // Runs asked for while the engine chunk is still in flight.
+  const engineQueue = useRef<((engine: Game) => void)[]>([]);
+  // Latest "is the engine allowed to simulate" flag, so a late engine starts
+  // in the right state instead of waiting for the next dependency change.
+  const activeRef = useRef(false);
+  // Gun art for the menu showcase, once its chunk has landed.
+  const [gunArt, setGunArt] = useState<MenuGunArt | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void loadMenuGunArt().then((mod) => {
+      if (alive) setGunArt(mod);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  /** Start a run now, or the moment the engine chunk lands. */
+  const whenEngine = (start: (engine: Game) => void) => {
+    const engine = gameRef.current;
+    if (engine) start(engine);
+    else engineQueue.current.push(start);
+  };
   // Game B's wheel artwork, rasterised on demand and handed to the engine so
   // every stage shows exactly the wheel the reference game shows.
   const wheelArtCache = useRef(new Map<string, HTMLImageElement>());
@@ -682,7 +737,12 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
 
   // Create one engine per mounted slide. Quest/coin updates must not destroy a live run.
   useEffect(() => {
-    const g = new Game(canvasRef.current!, {
+    let cancelled = false;
+    let g: Game | null = null;
+    const boot = async () => {
+      const { Game: Engine } = await loadEngine();
+      if (cancelled || !canvasRef.current) return;
+      g = new Engine(canvasRef.current, {
       onGameOver: (score, level, coins, runCoins) => {
         const prevBest = num(LS.best);
         const newBest = score > prevBest;
@@ -791,12 +851,32 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
         const current = questStateRef.current;
         saveQuests({
           ...current,
-          highestScore: Math.max(current.highestScore, g.score),
+          highestScore: Math.max(current.highestScore, gameRef.current?.score ?? 0),
           highestLevel: Math.max(current.highestLevel, level),
           totalCoinsCollected: current.totalCoinsCollected + unbankedCoins,
         });
       },
     });
+      g.setWeapon(getWeapon(storage.getItem(LS.weapon) || 'pistol').id);
+      g.setGameSpeed(getSavedSgaSpeed());
+      g.setBackgroundTheme(getSavedSgaBgTheme());
+      gameRef.current = g;
+      // The mount effects that ran while the chunk was in flight could not touch
+      // the engine; replay their state once it exists.
+      g.setActive(activeRef.current);
+      g.setWheelArtSource({
+        keyFor: wheelArtKeyFor,
+        get: (key) => wheelArtCache.current.get(key) ?? null,
+        request: requestWheelArt,
+        // The markup behind the same raster: the engine rasterises it itself when
+        // the runtime refuses to hand back the pixels of an SVG-drawn canvas, so a
+        // boss keeps its real silhouette instead of a ring.
+        markup: (key) => wheelSvgCache.current.get(key) ?? null,
+      });
+      // A run asked for before the chunk landed starts now.
+      for (const start of engineQueue.current.splice(0)) start(g);
+    };
+
     const flushShotsToStorage = () => {
       if (questWriteTimerRef.current !== undefined) {
         window.clearTimeout(questWriteTimerRef.current);
@@ -811,23 +891,14 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     };
     document.addEventListener('visibilitychange', onVisChange);
     window.addEventListener('pagehide', flushShotsToStorage);
-    g.setWeapon(getWeapon(storage.getItem(LS.weapon) || 'pistol').id);
-    g.setGameSpeed(getSavedSgaSpeed());
-    g.setBackgroundTheme(getSavedSgaBgTheme());
-    gameRef.current = g;
-    g.setWheelArtSource({
-      keyFor: wheelArtKeyFor,
-      get: (key) => wheelArtCache.current.get(key) ?? null,
-      request: requestWheelArt,
-      // The markup behind the same raster: the engine rasterises it itself when
-      // the runtime refuses to hand back the pixels of an SVG-drawn canvas, so a
-      // boss keeps its real silhouette instead of a ring.
-      markup: (key) => wheelSvgCache.current.get(key) ?? null,
-    });
+    void boot();
+
     return () => {
+      cancelled = true;
       document.removeEventListener('visibilitychange', onVisChange);
       window.removeEventListener('pagehide', flushShotsToStorage);
-      g.destroy();
+      engineQueue.current.length = 0;
+      g?.destroy();
       gameRef.current = null;
       flushShotsToStorage();
     };
@@ -958,14 +1029,17 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   // The menu, results and modal screens use their own lightweight effects;
   // the heavy level canvas has nothing to simulate behind those overlays.
   const gameplayModalOpen = inGameSettingsOpen || arsenalOpen || questOpen || leaderboardOpen || starBuffOpen || bonusStageOpen || Boolean(bossDefeatedData);
+  const simulate = active && screen === 'playing' && !gameplayModalOpen;
+  activeRef.current = simulate;
   useEffect(() => {
     if (screen !== 'playing' && inGameSettingsOpen) setInGameSettingsOpen(false);
     if (screen === 'menu') gameRef.current?.toIdle();
-    gameRef.current?.setActive(active && screen === 'playing' && !gameplayModalOpen);
-  }, [active, screen, gameplayModalOpen, inGameSettingsOpen]);
+    gameRef.current?.setActive(simulate);
+  }, [simulate, screen, inGameSettingsOpen]);
 
   // Upright weapon preview on the main menu (-10% from 374x328 -> 337x295, native VSync FPS)
   useEffect(() => {
+    if (!gunArt) return;
     if (screen !== 'menu' || arsenalOpen || questOpen || leaderboardOpen || mapOpen || settingsOpen) return;
     const cv = previewCanvasRef.current;
     if (!cv) return;
@@ -978,6 +1052,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     if (!ctx) return;
 
     const curW = getWeapon(weapon);
+    const { drawGunCentered, getGunMetrics, gunState } = gunArt;
 
     const drawStill = () => {
       // Keep SGA's exact weapon art still in the showcase. The menu's shared
@@ -1056,7 +1131,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     } catch {
       // Some low-end canvas contexts disable readback; fall back to the shared frame center.
     }
-  }, [screen, weapon, arsenalOpen, questOpen, leaderboardOpen, mapOpen, settingsOpen]);
+  }, [gunArt, screen, weapon, arsenalOpen, questOpen, leaderboardOpen, mapOpen, settingsOpen]);
 
   // Roll up score only while the slide is active; pause at the current number.
   useEffect(() => {
@@ -1085,7 +1160,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
         setTransitionStep(2);
       } else {
         setTransitioning(false);
-        gameRef.current?.startAtLevel(startingLevelRef.current);
+        whenEngine((engine) => engine.startAtLevel(startingLevelRef.current));
         setScreen('playing');
         setTransitionStep(0);
       }
@@ -1096,7 +1171,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   const captureMenuWeaponFlight = (): boolean => {
     const source = previewCanvasRef.current;
     const shell = gameShellRef.current;
-    if (!source || !shell || !shell.clientWidth || !shell.clientHeight) return false;
+    if (!gunArt || !source || !shell || !shell.clientWidth || !shell.clientHeight) return false;
     try {
       const shellRect = shell.getBoundingClientRect();
       const sourceRect = source.getBoundingClientRect();
@@ -1151,7 +1226,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       const dpr = source.width / 337;
       const sourceScaleX = source.width / sourceRect.width;
       const sourceScaleY = source.height / sourceRect.height;
-      const metric = getGunMetrics(weapon);
+      const metric = gunArt.getGunMetrics(weapon);
       const previewScale = (295 * 0.78) / Math.max(metric.span, 130);
       const gameScaleX = shell.clientWidth / 420;
       const gameScaleY = shell.clientHeight / 760;
@@ -1247,8 +1322,10 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       // The flying menu frame is the only weapon until it lands: the live gun
       // stays hidden for the flight's own duration, then appears in place.
       const gunHiddenFor = wantsWeaponFlight ? WEAPON_FLIGHT_MS / 1000 : 0;
-      if (specialMode) gameRef.current?.startSpecialStage(specialMode, gunEntryDelay, true, wheelEntryDelay, gunHiddenFor, wantsWeaponFlight);
-      else gameRef.current?.startAtLevel(level, wantsWeaponFlight, gunEntryDelay, true, wheelEntryDelay, gunHiddenFor);
+      whenEngine((engine) => {
+        if (specialMode) engine.startSpecialStage(specialMode, gunEntryDelay, true, wheelEntryDelay, gunHiddenFor, wantsWeaponFlight);
+        else engine.startAtLevel(level, wantsWeaponFlight, gunEntryDelay, true, wheelEntryDelay, gunHiddenFor);
+      });
       setScreen('playing');
       afterPaint(playEnterAudio);
     });
@@ -2004,7 +2081,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
         )}
 
         {screen === 'menu' && settingsOpen && (
-          <SgaSettingsPanel
+          <Overlay><SgaSettingsPanel
             closing={settingsClosing}
             muted={muted}
             volume={soundVolume}
@@ -2039,17 +2116,17 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
             }}
             onSpecial={startSpecial}
             formatSpeed={formatSgaSpeed}
-          />
+          /></Overlay>
         )}
 
         {screen === 'menu' && mapOpen && (
-          <PerfectShotQuestMap
+          <Overlay><PerfectShotQuestMap
             leaving={mapLeaving}
             progress={{ stage: Math.max(1, Math.min(GUN_HIT_MAP_MAX_LEVEL, bestLevel)), stages: SGA_QUEST_STAGES }}
             unlockAll={allStagesOpen}
             onBack={closeLevelMap}
             onPlay={(_event, level) => beginStage(level)}
-          />
+          /></Overlay>
         )}
 
         {screen === 'menu' && (mapOpen || questOpen) && (
@@ -2213,7 +2290,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
           </div>
         )}
         {screen === 'menu' && arsenalOpen && (
-          <Arsenal
+          <Overlay><Arsenal
             current={weapon}
             highestLevel={bestLevel}
             totalCoins={totalCoins}
@@ -2223,11 +2300,11 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
             onUnlockAll={unlockAllAffordableWeapons}
             onPick={chooseWeapon}
             onClose={() => startArsenalTransition(false)}
-          />
+          /></Overlay>
         )}
 
         {screen === 'menu' && questOpen && (
-          <QuestModal
+          <Overlay><QuestModal
             state={questState}
             ownedCount={ownedWeaponIds().length}
             coins={totalCoins}
@@ -2236,7 +2313,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
             onClaimMilestone={handleClaimMilestone}
             onClose={closeQuestPage}
             leaving={questLeaving}
-          />
+          /></Overlay>
         )}
 
         {/* Kado peti milestone di halaman reward: adegan buka kado yang sama
@@ -2244,7 +2321,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
         {milestoneGift && (() => {
           const rewardWeapon = milestoneGift.weaponId ? getWeapon(milestoneGift.weaponId) : null;
           return (
-            <GiftBoxScene
+            <Overlay><GiftBoxScene
               badge="★ REWARD MILESTONE ★"
               headline={`MILESTONE ${milestoneGift.count}!`}
               hint="🎁 Peti hadiah milestone siap dibuka!"
@@ -2253,21 +2330,21 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
               claimLabel={rewardWeapon ? 'PAKAI & LANJUT ➜' : 'AMBIL HADIAH ➜'}
               declineLabel={rewardWeapon ? 'Lanjut tanpa ganti senjata' : undefined}
               onClaim={(equip) => takeMilestoneGift(equip)}
-            />
+            /></Overlay>
           );
         })()}
 
         {screen === 'menu' && leaderboardOpen && (
-          <PerfectShotLeaderboard
+          <Overlay><PerfectShotLeaderboard
             leaving={leaderboardLeaving}
             stats={{ stage: bestLevel, score: best, coins: totalCoins }}
             onBack={closeLeaderboardPage}
-          />
+          /></Overlay>
         )}
 
         {/* BOSS DEFEATED Modal Celebration (Exact Screenshot 2!) */}
         {bossDefeatedData && (
-          <BossDefeatedModal
+          <Overlay><BossDefeatedModal
             bossName={bossDefeatedData.name}
             bossHead={bossDefeatedData.bossHead}
             stage={bossDefeatedData.level}
@@ -2278,28 +2355,28 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
             xpGained={bossDefeatedData.xpGained}
             leveledUp={bossDefeatedData.leveledUp}
             onContinue={handleContinueAfterBoss}
-          />
+          /></Overlay>
         )}
 
         {/* PILIHAN POWER UP DARI BINTANG */}
         {starBuffOpen && (
-          <StarBuffModal
+          <Overlay><StarBuffModal
             treasure={starBuffTreasure}
             onPick={(kind) => {
               gameRef.current?.applyBuff(kind);
               setStarBuffOpen(false);
             }}
-          />
+          /></Overlay>
         )}
 
         {/* BONUS STAGE: KOTAK HADIAH ala Knife Boss 100 Lv — efek kotak + senjata baru Gun Hit */}
         {bonusStageOpen && (
-          <BossGiftBoxModal
+          <Overlay><BossGiftBoxModal
             bossName={bonusAfterBoss.bossName}
             stage={bonusAfterBoss.stage}
             currentWeaponId={weapon}
             onClaim={handleGiftBoxClaim}
-          />
+          /></Overlay>
         )}
 
         {/* Game Over Screen (DIBESARKAN TEKSNYA 2X + ANIMASI MEWAH!) */}
@@ -2371,7 +2448,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
         {playTransition && (
           <TransitionOverlay phase={playTransition.phase} origin={playTransition.origin} label={playTransition.label} variant="scope" lens={playTransition.lens} />
         )}
-        {weaponFlight && <SgaWeaponFlight key={weaponFlight.id} flight={weaponFlight} />}
+        {weaponFlight && <Overlay><SgaWeaponFlight key={weaponFlight.id} flight={weaponFlight} /></Overlay>}
       </div>
     </div>
   );

@@ -11,10 +11,14 @@ test('the menu frame is the only weapon in the air: the live gun waits for it to
   const game = read('src/games/gunhit/game/Game.ts');
   const flight = read('src/games/gunhit/components/SgaWeaponFlight.tsx');
 
-  // One duration, shared by the DOM flight and the canvas gun.
-  assert.match(flight, /export const WEAPON_FLIGHT_MS = 780;/);
+  // One duration, shared by the DOM flight and the canvas gun. The number lives
+  // in its own module now, so the menu can time the hand-off without loading
+  // the flight overlay's chunk; the overlay re-exports it for compatibility.
+  const timing = read('src/games/gunhit/components/weaponFlightTiming.ts');
+  assert.match(timing, /export const WEAPON_FLIGHT_MS = 780;/);
+  assert.match(flight, /export \{ WEAPON_FLIGHT_MS \};/);
   assert.match(flight, /duration: WEAPON_FLIGHT_MS/);
-  assert.match(app, /import SgaWeaponFlight, \{ WEAPON_FLIGHT_MS/);
+  assert.match(app, /import \{ WEAPON_FLIGHT_MS \} from '\.\/components\/weaponFlightTiming';/);
   assert.match(app, /const gunHiddenFor = wantsWeaponFlight \? WEAPON_FLIGHT_MS \/ 1000 : 0;/);
   // The bitmap is removed the moment it lands, so nothing rests on the gun.
   assert.match(app, /deferPageClose\(mountAt \+ WEAPON_FLIGHT_MS \+ 24, \(\) => setWeaponFlight\(null\)\)/);

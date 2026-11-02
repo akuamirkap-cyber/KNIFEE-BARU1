@@ -120,5 +120,8 @@ test('starting a map node launches that real SGA level without replacing stage g
   const app = read('src/games/gunhit/App.tsx');
   assert.ok(game.includes('startAtLevel(\n    level: number,\n    weaponHandoff = false,'));
   assert.ok(map.includes('Stage spesial SGA: sistem tetap memilih Batu, Bonus, atau Harta Karun'));
-  assert.ok(app.includes('gameRef.current?.startAtLevel(level, wantsWeaponFlight, gunEntryDelay, true, wheelEntryDelay, gunHiddenFor)'));
+  // The engine is its own chunk now, so the run is queued through `whenEngine`
+  // and starts the same SGA level the moment that chunk is in.
+  assert.ok(app.includes('whenEngine((engine) => {'));
+  assert.ok(app.includes('else engine.startAtLevel(level, wantsWeaponFlight, gunEntryDelay, true, wheelEntryDelay, gunHiddenFor);'));
 });

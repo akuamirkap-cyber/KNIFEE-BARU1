@@ -48,7 +48,7 @@ import { setTwoGunFx, setTwoIdFor, type TwoWeapon } from './setTwoArt';
 import type { Bullet as NineBullet } from '../../../../games/game-6/src/game/types';
 import { newAnim, type StuckItem } from '../../../../games/game-4/src/game/weapons';
 import { drawStuckItem } from '../../../../games/game-4/src/game/art';
-import { RECOIL_ROT } from '../../../../games/game-4/src/game/Game';
+import { RECOIL_ROT } from '../../../../games/game-4/src/game/recoil';
 import { drawSprite, glowSprite } from '../../../../games/game-4/src/game/core';
 import { sfx as sevenSfx } from '../../../../games/game-4/src/game/audio';
 import type { Projectile as SevenShot } from '../../../../games/game-4/src/game/projectiles';
@@ -78,7 +78,8 @@ import { drawClassicBeam, drawLaserBeam, drawVoidTether } from './art/beamEffect
 import { getGunEffect, getGunVariant } from './art/gunVariants';
 import { drawWetSurface } from './art/waterSurface';
 import { drawFace, STYLE_COLORS, type Style } from './faces';
-import { drawGun, drawProjectile, WEAPONS, getWeapon, type Weapon, type WeaponId, type ProjKind } from './weapons';
+import { drawGun, drawProjectile } from './weaponDraw';
+import { WEAPONS, getWeapon, type Weapon, type WeaponId, type ProjKind } from './weapons';
 import { drawStar, drawRockFragment } from './art/boulder';
 import { DiamondRock, drawRockDiamond, type BrokenRockCell } from './art/diamondRock';
 import { drawBonusCoin, TreasureChest } from './art/bonusArt';
@@ -166,18 +167,31 @@ import {
   type SgaBackgroundTheme,
 } from './backgroundThemes';
 
-export const W = 420;
-export const H = 760;
-const CX = W / 2;
-export const BASE_WHEEL_CY = 255;
-export const CY = Math.round(BASE_WHEEL_CY * (1 - 0.28)); // 28% higher wheel position (184)
-export const SPECIAL_CY = CY; // Bonus / Special stage wheel sits at the same vertical position as the normal wheel.
-export function initialGameplayWheelCenterY(boss = false, special = false) {
-  if (special) return SPECIAL_CY;
-  return boss ? CY + 36 : CY;
-}
-const ROCK_RADIUS = 166; // ~80% of the 420px screen, as on Diamond Breaker's 480px screen.
-export const GAMEPLAY_GUN_SCALE = 1.08; // -10% from 1.2x (1.2 * 0.9 = 1.08)
+import {
+  BASE_WHEEL_CY,
+  CX,
+  CY,
+  GAMEPLAY_GUN_SCALE,
+  GUN_Y,
+  H,
+  SPECIAL_CY,
+  W,
+  initialGameplayWheelCenterY,
+} from './layout';
+export { BASE_WHEEL_CY, CY, GAMEPLAY_GUN_SCALE, GUN_Y, H, SPECIAL_CY, W, initialGameplayWheelCenterY };
+import {
+  ROCK_RADIUS,
+  allowsStarPowerups,
+  bossKnifeCount,
+  isSpecial,
+  makeLevel,
+  type LevelCfg,
+  type LevelMode,
+  type PatternName,
+  type SpecialMode,
+} from './levels';
+export { ROCK_RADIUS, allowsStarPowerups, bossKnifeCount, isSpecial, makeLevel };
+export type { LevelCfg, LevelMode, PatternName, SpecialMode } from './levels';
 const TWIN_SPACING = 30; // dual lebih rapat: 60px antar laras (dulu 92px)
 const SINGLE_BARREL = [0] as const;
 const TWIN_BARRELS = [-TWIN_SPACING, TWIN_SPACING] as const;
@@ -188,7 +202,6 @@ const EMBED = 21; // tertancap setengah (50% masuk ke dalam)
 const L = TOTAL_LEN - EMBED; // hanya terlihat setengah (50% di luar)
 const BLEN = TOTAL_LEN;
 // projectile speed depends on weapon
-export const GUN_Y = H - Math.round(185 * GAMEPLAY_GUN_SCALE); // muzzle tip raised so +20% gun never clips bottom
 const TAU = Math.PI * 2;
 
 // A new run brings the weapon in from beneath the screen. This is only a
@@ -1415,18 +1428,9 @@ interface Star { x: number; y: number; r: number; vx: number; baseY: number; age
 interface BonusCoin { angle: number; radius: number; lx: number; ly: number; phase: number; taken: boolean }
 export type TreasureBuff = 'rapid' | 'double' | 'mini' | 'giant';
 export type BuffKind = 'speed' | 'ammo' | 'power' | TreasureBuff;
-export type SpecialMode = 'bonus' | 'treasure';
-export type LevelMode = 'classic' | 'boulder' | 'double' | SpecialMode;
 
 const STAGE_SECONDS: Record<'boulder' | SpecialMode, number> = { boulder: 65, bonus: 45, treasure: 10 };
-const isSpecial = (mode: LevelMode): mode is 'boulder' | SpecialMode => mode === 'boulder' || mode === 'bonus' || mode === 'treasure';
 
-/** Star power-ups are reserved for bosses and special/bonus stages. */
-export function allowsStarPowerups(level: Pick<LevelCfg, 'boss' | 'mode'>) {
-  return level.boss || isSpecial(level.mode);
-}
-
-type PatternName = 'constant' | 'wave' | 'pendulum' | 'stopgo' | 'jerk' | 'chaos';
 const PATTERNS: Record<PatternName, (t: number, b: number, d: number) => number> = {
   constant: (_t, b, d) => b * d,
   wave: (t, b, d) => b * d * (0.3 + 1.4 * (0.5 + 0.5 * Math.sin(t * 1.5))),
@@ -1445,68 +1449,7 @@ const PATTERNS: Record<PatternName, (t: number, b: number, d: number) => number>
   chaos: (t, b, d) => b * d * (Math.sin(t * 1.1) * 1.4 + Math.sin(t * 2.7 + 1) * 0.75 + 0.35),
 };
 
-export interface LevelCfg {
-  mode: LevelMode; hp: number; maxHp: number;
-  n: number; boss: boolean; ammo: number; base: number; pattern: PatternName; dir: number;
-  radius: number; style: Style; name: string; old: number; spikes: number; coins: number;
-}
-
-/** Perfect Shot buries `Math.min(5, 3 + floor(n / 30))` knives in a boss. */
-export const bossKnifeCount = (n: number) => Math.min(5, 3 + Math.floor(n / 30));
-const WORLD_STYLES: Style[] = ['orange', 'wood', 'target'];
 const PRAISE = ['MANTAP!', 'KEREN!', 'SEMPURNA!', 'GACOR!', 'JAGO!', 'LUAR BIASA!'];
-
-export function makeLevel(n: number, forcedMode?: LevelMode): LevelCfg {
-  const boss = n % 5 === 0;
-  const world = Math.floor((n - 1) / 5);
-  const base = Math.min(1.5 + n * 0.11, 4.3);
-  let pattern: PatternName;
-  if (n <= 2) pattern = 'constant';
-  else if (boss) pattern = n === 5 ? 'wave' : n >= 15 ? pick<PatternName>(['chaos', 'jerk']) : pick<PatternName>(['jerk', 'stopgo', 'chaos']);
-  else {
-    const pool: PatternName[] = ['constant', 'wave', 'pendulum'];
-    if (n >= 6) pool.push('stopgo');
-    if (n >= 11) pool.push('jerk');
-    if (n >= 16) pool.push('chaos');
-    pattern = pick(pool);
-  }
-  const regularAmmo = Math.min(5 + Math.floor(n * 0.5), 13);
-  // Double the boss shot quota so the fight can sustain exactly twice the HP without an early ammo clear.
-  const ammo = boss ? (regularAmmo + 2) * 2 : regularAmmo;
-  // The boss on screen *is* Perfect Shot's head. Game A has no boss roster of
-  // its own any more: stage 5 is the pirate, 10 the jester, … 55 the sun, and
-  // the name, the colours and the attack all come from that same head.
-  const style: Style = boss
-    ? bossStyleFor(n) ?? bossDef('pirate').family
-    : WORLD_STYLES[world % WORLD_STYLES.length];
-  const bossName = boss ? bossNameFor(n) : '';
-  const old = n < 2 ? 0 : Math.min(1 + Math.floor((n - 2) / 3), 5);
-  const spikes = boss
-    ? Math.min(5, 2 + Math.floor(n / 5)) // 2 sampai 5 duri jebakan mematikan di kepala boss!
-    : n < 4
-    ? 0
-    : Math.min(1 + Math.floor((n - 4) / 4), 4);
-  const coins = (Math.random() < 0.65 ? 1 : 0) + (Math.random() < 0.3 ? 1 : 0);
-  // Each five-stage boss cycle is three ordinary stages, one random special,
-  // then a boss: stages 4, 9, 14... use exactly one of the three special modes.
-  const mode: LevelMode = forcedMode ?? (boss ? 'classic'
-    : n % 5 === 4 ? pick<LevelMode>(['boulder', 'bonus', 'treasure'])
-    : 'classic');
-  return {
-    n, boss, ammo: isSpecial(mode) ? 12 : ammo, base, pattern, dir: Math.random() < 0.5 ? 1 : -1,
-    radius: boss ? 122 : mode === 'boulder' || mode === 'bonus' ? ROCK_RADIUS : 106, style,
-    name: boss
-      ? bossName
-      // the HUD prints the level name as-is for non-boss stages
-      : '',
-    // Perfect Shot's boss stage has no spikes at all: its rintangan are the 3–5
-    // knives already buried in the head, so Game A uses exactly those.
-    old: isSpecial(mode) ? 0 : boss ? bossKnifeCount(n) : old,
-    spikes: isSpecial(mode) ? 0 : boss ? 0 : spikes,
-    coins: isSpecial(mode) ? 0 : coins,
-    mode, hp: 0, maxHp: 0, // populated from the actual number of breakable chunks
-  };
-}
 
 export interface GameEvents {
   onGameOver: (score: number, level: number, coinsToBank: number, runCoins: number) => void;
