@@ -29,6 +29,8 @@ type Props = {
   onSpeed: (value: SgaGameSpeed) => void;
   onTheme: (value: SgaBackgroundTheme) => void;
   onReplayIntro: () => void;
+  /** Opens the in-app privacy policy (Play Console requires it to be reachable). */
+  onPrivacy: () => void;
   onSpecial: (stage: 'boulder' | 'bonus' | 'treasure') => void;
   formatSpeed: (value: SgaGameSpeed) => string;
 };
@@ -44,7 +46,7 @@ function Toggle({ on }: { on: boolean }) {
 export default function SgaSettingsPanel({
   closing, muted, volume, sfxEnabled, musicEnabled, speed, speedOptions, themes, theme,
   animSpeed, animGunStyle, animSpeeds, animStyles, onAnimSpeed, onAnimGunStyle,
-  onClose, onMute, onSfx, onMusic, onVolume, onSpeed, onTheme, onReplayIntro, onSpecial, formatSpeed,
+  onClose, onMute, onSfx, onMusic, onVolume, onSpeed, onTheme, onReplayIntro, onSpecial, formatSpeed, onPrivacy,
 }: Props) {
   const [advanced, setAdvanced] = useState(false);
   const stripRef = useRef<HTMLDivElement>(null);
@@ -189,7 +191,9 @@ export default function SgaSettingsPanel({
           </div>
         )}
 
-        <button type="button" onClick={onClose} className="press shine font-title mt-3 h-11 w-full rounded-xl border-2 border-[#0e5a26] bg-gradient-to-b from-[#7cf06f] via-[#3fcf4a] to-[#1f9b37] text-[16px] text-white shadow-[0_4px_0_#0e5a26]" style={{ textShadow: '0 2px 0 #0e5a26' }}>SIMPAN & KEMBALI</button>
+        <button type="button" onClick={onPrivacy} className="press mt-3 flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border-2 border-white/20 bg-white/5 font-title text-[12px] text-white/80">🔒 KEBIJAKAN PRIVASI</button>
+
+        <button type="button" onClick={onClose} className="press shine font-title mt-2 h-11 w-full rounded-xl border-2 border-[#0e5a26] bg-gradient-to-b from-[#7cf06f] via-[#3fcf4a] to-[#1f9b37] text-[16px] text-white shadow-[0_4px_0_#0e5a26]" style={{ textShadow: '0 2px 0 #0e5a26' }}>SIMPAN & KEMBALI</button>
       </section>
     </div>
   );

@@ -27,6 +27,7 @@ import { MILESTONES, QUESTS, type Quest, type QuestState } from './game/quests';
 import { GUN_HIT_MAP_MAX_LEVEL, getGunHitMapNodeTheme, getGunHitMapStage } from './game/stageMap';
 import { useAllStagesOpen, toggleAllStagesOpen, isUnlockShortcut } from './game/stageUnlock';
 import { WEAPON_FLIGHT_MS } from './components/weaponFlightTiming';
+import PrivacyPage from '../../components/PrivacyPage';
 import type { SgaWeaponFlightData } from './components/SgaWeaponFlight';
 
 /**
@@ -431,6 +432,8 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   const [gameSpeed, setGameSpeed] = useSgaGameSpeed();
   const [menuTheme, setMenuTheme] = useSgaBgTheme();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Kebijakan privasi: halaman in-app yang teksnya sama dengan docs/PRIVACY.md.
+  const [privacyOpen, setPrivacyOpen] = useState(false);
   const [settingsClosing, setSettingsClosing] = useState(false);
   const [inGameSettingsOpen, setInGameSettingsOpen] = useState(false);
   const [arsenalOpen, setArsenalOpen] = useState(false);
@@ -1703,6 +1706,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
    * hub (which leaves the app) instead of killing a run by accident.
    */
   useAndroidBack(() => {
+    if (privacyOpen) { setPrivacyOpen(false); return true; }
     if (inGameSettingsOpen) { setInGameSettingsOpen(false); return true; }
     if (arsenalOpen) { startArsenalTransition(false); return true; }
     if (questOpen) { closeQuestPage(); return true; }
@@ -2080,6 +2084,10 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
           </div>
         )}
 
+        {privacyOpen && (
+          <Overlay><PrivacyPage onClose={() => setPrivacyOpen(false)} /></Overlay>
+        )}
+
         {screen === 'menu' && settingsOpen && (
           <Overlay><SgaSettingsPanel
             closing={settingsClosing}
@@ -2115,6 +2123,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
               window.dispatchEvent(new CustomEvent('sans-replay-intro'));
             }}
             onSpecial={startSpecial}
+            onPrivacy={() => setPrivacyOpen(true)}
             formatSpeed={formatSgaSpeed}
           /></Overlay>
         )}

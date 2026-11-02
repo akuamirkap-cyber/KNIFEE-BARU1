@@ -16,7 +16,8 @@
     "frames": "tsx tools/render-frame.ts",
     "build:apk": "npm run build && cap sync android && node tools/android-build.mjs apk",
     "build:aab": "npm run build && cap sync android && node tools/android-build.mjs aab",
-    "version:bump": "node tools/bump-version.mjs"
+    "version:bump": "node tools/bump-version.mjs",
+    "docs:privacy": "tsx tools/write-privacy-doc.ts"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.3",
