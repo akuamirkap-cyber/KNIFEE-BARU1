@@ -111,9 +111,10 @@ test('every coin and diamond in Game A is the Diamond Breaker art', () => {
   assert.match(sprite, /import \{ drawBreakerCoin \} from '\.\/coinArt';/);
   assert.match(diamondSprite, /import \{ drawBreakerDiamond \} from '\.\/diamondArt';/);
 
-  // The armory wallet is the same coin now, not a second icon.
-  assert.match(arsenal, /<CoinSprite size=\{24\}/);
-  assert.match(arsenal, /<DiamondSprite size=\{17\} \/>/);
+  // The armory wallet is the same coin now, not a second icon — and it keeps
+  // the menu HUD's scale (25 px coin / 24 px diamond), not a smaller copy.
+  assert.match(arsenal, /<CoinSprite size=\{25\}/);
+  assert.match(arsenal, /<DiamondSprite size=\{24\} \/>/);
   assert.doesNotMatch(arsenal, /\bCoins\b/);
 
   // No emoji stand-ins left wherever a coin or diamond is used as an icon.

@@ -116,12 +116,15 @@ export default function QuestModal({ state, ownedCount, coins, diamonds, onClaim
       {/* Currency and completion HUD: grouped at the upper right, like the reference. */}
       <div className="a in-down relative z-20 flex shrink-0 items-center gap-2" style={animStyle('inDown', ACH_IN.top(1), 'outUp', ACH_OUT.top(1))}>
         <div className="flex-1" />
-        <div className="font-title flex h-10 items-center gap-1.5 rounded-full border-2 border-[#0b1f5c] bg-[#0b1f5c]/75 pl-2 pr-1 text-white shadow-inner">
-          <CoinSprite size={22} />
-          <span className="min-w-[30px] text-base tabular-nums">{coins}</span>
-          <DiamondSprite size={20} className="-mx-0.5" />
-          <span className="min-w-[18px] text-base tabular-nums">{diamonds}</span>
-          <span className="grid h-7 w-7 place-items-center rounded-full bg-gradient-to-b from-[#4ade80] to-[#16a34a] text-lg leading-none shadow-[0_2px_0_#14532d]">+</span>
+        {/* Same wallet as the main menu: 25/24 px coin and diamond art with
+            text-xl / text-lg counters, so the achievement page does not show a
+            smaller currency than the menu it was opened from. */}
+        <div className="font-title flex h-11 items-center gap-1.5 rounded-full border-2 border-[#0b1f5c] bg-[#0b1f5c]/75 pl-2 pr-1 text-white shadow-inner">
+          <CoinSprite size={25} />
+          <span className="min-w-[34px] text-xl tabular-nums leading-none">{coins}</span>
+          <DiamondSprite size={24} className="-mx-0.5" />
+          <span className="min-w-[24px] text-lg tabular-nums leading-none">{diamonds}</span>
+          <span className="grid h-8 w-8 place-items-center rounded-full bg-gradient-to-b from-[#4ade80] to-[#16a34a] text-xl leading-none shadow-[0_2px_0_#14532d]">+</span>
         </div>
         <div className="font-title flex h-11 flex-col items-center justify-center rounded-xl border-2 border-[#0b1f5c] bg-gradient-to-b from-[#1e3a8a] to-[#0f1f4f] px-2.5 shadow-[0_3px_0_#060f2e]">
           <span className="text-lg leading-none text-[#ffd23f]">{claimed}<span className="text-xs text-white/65">/{QUESTS.length}</span></span>

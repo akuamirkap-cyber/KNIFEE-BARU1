@@ -518,13 +518,16 @@ export default function Arsenal({
             <button type="button" aria-label="Alat Arsenal" title="Alat Arsenal" onClick={() => setShowTools((open) => !open)} className="press grid h-5 w-5 shrink-0 place-items-center rounded-full bg-white/10 text-white/75"><MoreHorizontal className="h-4 w-4" /></button>
           </div>
         </div>
-        <div className="flex h-9 shrink-0 items-center gap-1.5 rounded-full border-2 border-white/10 bg-black/45 pl-2 pr-1 text-white shadow-inner">
-          <CoinSprite size={24} className="drop-shadow-[0_0_5px_rgba(255,210,80,.7)]" />
-          <span className="min-w-[24px] text-[13px] font-black">{totalCoins}</span>
-          <span className="h-5 w-px bg-white/20" />
-          <DiamondSprite size={17} />
-          <span className="min-w-[16px] text-[13px] font-black">{diamonds}</span>
-          <button onClick={() => sfx.coin()} aria-label="Tambah mata uang" className="press grid h-8 w-8 place-items-center rounded-full bg-gradient-to-b from-[#7c6cff] to-[#4b3bd6] text-lg leading-none shadow-[0_2px_0_#2a1f8a]">+</button>
+        {/* Wallet: same coin/diamond sizes and type scale as the main menu HUD
+            (25/24 px art, text-xl / text-lg), so the currency never shrinks
+            when the Armory opens. */}
+        <div className="flex h-11 shrink-0 items-center gap-1.5 rounded-full border-2 border-white/10 bg-black/45 pl-2 pr-1 text-white shadow-inner">
+          <CoinSprite size={25} className="drop-shadow-[0_0_5px_rgba(255,210,80,.7)]" />
+          <span className="min-w-[34px] text-xl font-black tabular-nums leading-none">{totalCoins}</span>
+          <span className="h-6 w-px bg-white/20" />
+          <DiamondSprite size={24} />
+          <span className="min-w-[26px] text-lg font-black tabular-nums leading-none">{diamonds}</span>
+          <button onClick={() => sfx.coin()} aria-label="Tambah mata uang" className="press grid h-9 w-9 place-items-center rounded-full bg-gradient-to-b from-[#7c6cff] to-[#4b3bd6] text-xl leading-none shadow-[0_2px_0_#2a1f8a]">+</button>
         </div>
         {showTools && <div className="a in-pop absolute right-0 top-[calc(100%+6px)] z-[90] w-48 rounded-xl border border-[#c084fc]/45 bg-[#1e1338]/95 p-2 shadow-[0_12px_28px_rgba(0,0,0,.65)] backdrop-blur">
           <div className="font-arsenal-title mb-1 px-1 text-[9px] text-white/55">ARSENAL · TOOLS</div>

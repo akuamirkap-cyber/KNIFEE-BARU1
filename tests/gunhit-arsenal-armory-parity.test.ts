@@ -53,8 +53,9 @@ test('the selected card and the active tab animate like the reference', () => {
 test('the wallet stays Game A’s own art, never Game B’s', () => {
   // Game A's coin badge + DiamondSprite must survive the port.
   assert.match(arsenal, /from 'lucide-react'/, 'lucide icons still used');
-  assert.match(arsenal, /<CoinSprite size=\{24\}/, 'the wallet shows Diamond Breaker\'s own coin');
-  assert.match(arsenal, /<DiamondSprite size=\{17\} \/>/, 'the SGA diamond sprite is untouched');
+  // Same wallet scale as the menu HUD: 25 px coin, 24 px diamond.
+  assert.match(arsenal, /<CoinSprite size=\{25\}/, 'the wallet shows Diamond Breaker\'s own coin');
+  assert.match(arsenal, /<DiamondSprite size=\{24\} \/>/, 'the SGA diamond sprite is untouched');
   assert.doesNotMatch(arsenal, /from '\.\.\/\.\.\/perfect-shot\/components\/Bits'/, 'no Perfect Shot coin');
   assert.doesNotMatch(arsenal, /from '\.\.\/\.\.\/perfect-shot\/gift\/GiftArt'/, 'no Perfect Shot gem');
 });

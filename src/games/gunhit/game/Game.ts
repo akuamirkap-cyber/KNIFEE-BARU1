@@ -10391,25 +10391,45 @@ export class Game {
       c.restore();
     }
 
-    // coins
+    // Coins: the wallet in the right corner reads at exactly the same size as
+    // the score in the left corner (one HUD row, not two), and the coin itself
+    // is drawn with the run clock so it keeps flipping instead of sitting on
+    // its first frame like a frozen icon.
+    const scoreSize = isSpecial(this.level.mode) ? 29 : 40;
+    const coinSize = scoreSize;
+    const coinY = isSpecial(this.level.mode) ? 34 : 46;
+    const coinR = isSpecial(this.level.mode) ? 13 : 17.5;
+    const coinCx = W - coinR - 8;
+    const coinCountX = coinCx - coinR - 8;
     c.textAlign = 'right';
-    c.font = font(22);
-    const coinY = isSpecial(this.level.mode) ? 34 : 44;
-    c.strokeText(String(this.coins), W - 46, coinY);
+    c.font = font(coinSize);
+    // A long wallet must not run into the centred stage label (special stages)
+    // or the boss bar: shrink the counter only as far as it has to.
+    const coinText = String(this.coins);
+    // Special stages put their timer pill on this row (ends at CX + 118);
+    // boss stages put the health bar there (ends at CX + 103).
+    const coinRowLeft = isSpecial(this.level.mode) ? 336 : this.level.boss ? 316 : 0;
+    const coinRoom = coinRowLeft ? coinCountX - coinRowLeft : coinCountX;
+    if (coinRoom > 24 && typeof c.measureText === 'function') {
+      const wide = c.measureText(coinText).width;
+      if (wide > coinRoom) c.font = font(Math.max(16, Math.floor((coinSize * coinRoom) / wide)));
+    }
+    c.strokeText(coinText, coinCountX, coinY);
     c.save();
     if (this.coinPulse > 0.04) {
       c.fillStyle = `rgba(251,191,36,${Math.min(0.45, this.coinPulse * 0.4)})`;
       c.beginPath();
-      c.arc(W - 60, coinY, 16 * this.coinPulse, 0, TAU);
+      c.arc(coinCx, coinY, (coinR + 6) * this.coinPulse, 0, TAU);
       c.fill();
     }
     c.fillStyle = '#ffd23f';
-    c.fillText(String(this.coins), W - 46, coinY);
+    c.fillText(coinText, coinCountX, coinY);
     c.restore();
     c.save();
-    c.translate(W - 28, coinY);
-    c.scale(1 + this.coinPulse * 0.16, 1 + this.coinPulse * 0.16);
-    this.drawCoin(c, 0, false); // no oversized halo clipped by the HUD edge
+    c.translate(coinCx, coinY);
+    const coinScale = (coinR / CLASSIC_COIN_RADIUS) * (1 + this.coinPulse * 0.16);
+    c.scale(coinScale, coinScale);
+    this.drawCoin(c, this.time, false); // no oversized halo clipped by the HUD edge
     c.restore();
 
     // Stage identity and countdown are above the target, never over the diamond.
