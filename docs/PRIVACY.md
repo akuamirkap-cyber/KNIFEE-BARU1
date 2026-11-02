@@ -2,7 +2,7 @@
 
 **Privacy Policy — Game Arcade Hub**
 
-Terakhir diperbarui / Last updated: **2 November 2026** · Versi 1.0.0
+Terakhir diperbarui / Last updated: **2 November 2026** · Versi 1.1.0
 
 Nama paket / Package name: `com.gamearcade.hub` · Kontak / Contact: <akuamirkap2@gmail.com>
 
@@ -28,7 +28,9 @@ Aplikasi menyimpan data permainan berikut di penyimpanan lokal (localStorage / I
 
 • progres misi, milestone, dan achievement;
 
-• pengaturan: volume, musik/efek suara, kecepatan permainan, tema latar, dan durasi animasi.
+• pengaturan: volume, musik/efek suara, kecepatan permainan, tema latar, dan durasi animasi;
+
+• hitungan sesi lokal: jumlah kali aplikasi dibuka dan tanggal hari bermain (maksimal 90 hari). Angka ini dipakai game untuk menghitung statistik retensi **di perangkat saja** dan tidak dikirim ke mana pun — aplikasi tidak memuat SDK analitik.
 
 Data ini tidak pernah dikirim keluar dari perangkat. Tidak ada backup ke cloud dan tidak ada sinkronisasi antar perangkat.
 
@@ -70,7 +72,7 @@ Kalau kamu punya pertanyaan tentang privasi, kirim email ke alamat di bagian Kon
 
 ## Perubahan kebijakan
 
-Versi kebijakan ini: 1.0.0 (diperbarui 2 November 2026). Kalau di masa depan aplikasi menambahkan fitur yang mengirim data (misalnya leaderboard online atau analitik), kebijakan ini akan diperbarui lebih dulu dan tanggal di atas ikut berubah, sebelum versi barunya dirilis.
+Versi kebijakan ini: 1.1.0 (diperbarui 2 November 2026). Kalau di masa depan aplikasi menambahkan fitur yang mengirim data (misalnya leaderboard online atau analitik), kebijakan ini akan diperbarui lebih dulu dan tanggal di atas ikut berubah, sebelum versi barunya dirilis.
 
 ## Kontak
 
@@ -98,7 +100,9 @@ The app keeps the following game data in local storage (localStorage / IndexedDB
 
 • quest, milestone and achievement progress;
 
-• settings: volume, music/sound effects, game speed, background theme, and animation speed.
+• settings: volume, music/sound effects, game speed, background theme, and animation speed;
+
+• local session counters: how many times the app was opened and which days it was played (up to 90 days). The game uses these to compute retention statistics **on the device only**; there is no analytics SDK and nothing is transmitted.
 
 This data never leaves the device. There is no cloud backup and no sync between devices.
 
@@ -140,7 +144,7 @@ For any privacy question, email the address in the Contact section.
 
 ## Changes to this policy
 
-Policy version 1.0.0 (updated 2 November 2026). If a future version of the app adds something that transmits data (for example an online leaderboard or analytics), this policy will be updated — and the date above changed — before that version ships.
+Policy version 1.1.0 (updated 2 November 2026). If a future version of the app adds something that transmits data (for example an online leaderboard or analytics), this policy will be updated — and the date above changed — before that version ships.
 
 ## Contact
 

@@ -2,6 +2,7 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig} from 'vite';
+import { readFileSync } from 'node:fs';
 
 /**
  * Storage that a cross-origin frame may be refused.
@@ -239,6 +240,23 @@ const STORAGE_SHIM = `<script>
 })();
 </script>`;
 
+/**
+ * Versi rilis, dibaca dari `android/version.properties` — satu-satunya tempat
+ * angka versionCode/versionName diubah. Nilainya disuntik ke bundle sebagai
+ * `__APP_VERSION__` supaya event telemetri selalu melaporkan versi build yang
+ * benar-benar berjalan.
+ */
+function releaseVersion(): string {
+  try {
+    const raw = readFileSync(path.resolve(process.cwd(), 'android/version.properties'), 'utf8');
+    const name = /^versionName\s*=\s*(.+)$/m.exec(raw)?.[1]?.trim() ?? '0.0.0';
+    const code = /^versionCode\s*=\s*(\d+)$/m.exec(raw)?.[1]?.trim() ?? '0';
+    return `${name}+${code}`;
+  } catch {
+    return 'dev';
+  }
+}
+
 function standbyControlPlugin() {
   return {
     name: 'standby-control',
@@ -313,6 +331,9 @@ export default defineConfig(() => {
       port: 3000,
       hmr: process.env.DISABLE_HMR !== 'true',
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
+    },
+    define: {
+      __APP_VERSION__: JSON.stringify(releaseVersion()),
     },
     build: {
       rollupOptions: {

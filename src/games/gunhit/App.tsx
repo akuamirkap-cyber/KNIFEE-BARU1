@@ -28,6 +28,7 @@ import { GUN_HIT_MAP_MAX_LEVEL, getGunHitMapNodeTheme, getGunHitMapStage } from 
 import { useAllStagesOpen, toggleAllStagesOpen, isUnlockShortcut } from './game/stageUnlock';
 import { WEAPON_FLIGHT_MS } from './components/weaponFlightTiming';
 import PrivacyPage from '../../components/PrivacyPage';
+import { currentRun, trackRunEnd, trackStageClear, trackStageStart } from '../../telemetry/gameAnalytics';
 import type { SgaWeaponFlightData } from './components/SgaWeaponFlight';
 
 /**
@@ -747,6 +748,8 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       if (cancelled || !canvasRef.current) return;
       g = new Engine(canvasRef.current, {
       onGameOver: (score, level, coins, runCoins) => {
+        // Funnel: the run is over, record how far it got and how long it lasted.
+        trackRunEnd({ outcome: 'game_over', stage: level, score, coins: runCoins });
         const prevBest = num(LS.best);
         const newBest = score > prevBest;
         if (newBest) storage.setItem(LS.best, String(score));
@@ -771,7 +774,8 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
         setStarBuffTreasure(treasure);
         setStarBuffOpen(true);
       },
-      onStageCleared: (level) => {
+      onStageCleared: (level, boss) => {
+        trackStageClear({ stage: level, boss });
         const unlocked = Math.max(1, num(LS.bestLevel), level + 1);
         if (unlocked > num(LS.bestLevel)) {
           storage.setItem(LS.bestLevel, String(unlocked));
@@ -1270,6 +1274,8 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       setMenuDeparture('play');
     }
     const stageConfig = makeLevel(level, specialMode);
+    // Funnel: a stage is about to start (this also opens a new run if none is live).
+    trackStageStart({ stage: level, mode: stageConfig.mode, weapon, boss: stageConfig.boss });
     const lead = fromMenu || fromSettings ? PLAY_SCOPE.menuLead : fromMap ? PLAY_SCOPE.questLead : PLAY_SCOPE.otherLead;
     const mountAt = lead + PLAY_SCOPE.cover;
     // The rival wheel plays Perfect Shot's own drop -> squash -> pop entrance, but
@@ -1611,6 +1617,11 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   };
 
   const goToMainMenuFromPlay = () => {
+    // Leaving mid-run (pause → menu) ends the funnel with "abandoned" instead of
+    // "game_over", so a quit is never counted as a death.
+    if (currentRun()) {
+      trackRunEnd({ outcome: 'abandoned', stage: currentRun()!.stage, score: gameRef.current?.score ?? 0, coins: 0 });
+    }
     const nextPlan = freshMenuPlan();
     const timing = beginMenuPageTransition('fade', 'MENU', PLAY_OUT.total, () => {
       setInGameSettingsOpen(false);

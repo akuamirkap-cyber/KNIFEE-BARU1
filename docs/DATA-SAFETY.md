@@ -9,6 +9,12 @@ aplikasi saat ini (lihat `docs/PRIVACY.md` dan `src/legal/privacyPolicy.ts`).
 > menyimpan progres di localStorage/IndexedDB di dalam sandbox aplikasi dan tidak
 > mengirim apa pun ke server. Karena itu seluruh jawaban "data types" di bawah
 > adalah **No**.
+>
+> Game juga menyimpan hitungan sesi lokal (jumlah launch + tanggal bermain) untuk
+> statistik retensi **di perangkat**. Lapisan telemetri (`src/telemetry/`) tidak
+> punya sink aktif secara default, jadi angka itu tidak pernah keluar dari HP.
+> Lihat `docs/ANALYTICS.md` — kalau sink dipasang, seluruh jawaban di dokumen ini
+> harus diperbarui pada rilis yang sama.
 
 ---
 

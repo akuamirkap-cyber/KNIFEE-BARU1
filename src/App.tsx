@@ -4,6 +4,9 @@ import { SlideActivityProvider } from './games/shared/SlideActivity';
 import { juicyAudio } from './utils/juicyAudio';
 import { useAndroidBack, installAndroidBack, exitAndroidApp } from './utils/androidBack';
 import { sfx as studioSfx } from './games/perfect-shot/audio/sfx';
+import { installErrorHooks, reportError } from './telemetry/errorHooks';
+import { trackSessionStart } from './telemetry/gameAnalytics';
+import { installDebugSinkFromUrl } from './telemetry/debugSink';
 
 // Keep the entry bundle small; preload SGA behind the intro so parsing does not
 // stall the first menu entrance as the logo disappears.
@@ -25,6 +28,11 @@ function GameBootFallback({ message = 'MEMUAT GAME' }: { message?: string }) {
 class GameLoadBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
   static getDerivedStateFromError() { return { failed: true }; }
+
+  componentDidCatch(error: unknown, info: { componentStack?: string | null }) {
+    // A crash here used to leave only a blank screen and no trace anywhere.
+    reportError('react-boundary', error, { where: 'game-boundary', component: (info.componentStack ?? '').trim().split('\n')[0] ?? '' });
+  }
 
   render() {
     if (this.state.failed) {
@@ -62,6 +70,16 @@ export default function App() {
     const stage = gameStageRef.current;
     if (!stage || stage.scrollWidth <= stage.clientWidth + 2) return;
     setActiveGame(stage.scrollLeft >= stage.clientWidth * 0.45 ? 'perfect-shot' : 'sga');
+  }, []);
+
+  useEffect(() => {
+    // Telemetry boot: counts this launch (local only) and starts listening for
+    // uncaught errors. With no analytics sink configured — the shipped default —
+    // both are inert and nothing leaves the device.
+    const env = (import.meta as unknown as { env?: { DEV?: boolean } }).env;
+    installDebugSinkFromUrl(window.location.search, Boolean(env?.DEV));
+    trackSessionStart();
+    installErrorHooks();
   }, []);
 
   useEffect(() => {

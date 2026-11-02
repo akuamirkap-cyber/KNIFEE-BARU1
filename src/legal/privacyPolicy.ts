@@ -14,7 +14,7 @@ export const PRIVACY_APP_NAME = 'Game Arcade Hub';
 export const PRIVACY_PACKAGE_NAME = 'com.gamearcade.hub';
 export const PRIVACY_CONTACT_EMAIL = 'akuamirkap2@gmail.com';
 export const PRIVACY_LAST_UPDATED = '2 November 2026';
-export const PRIVACY_POLICY_VERSION = '1.0.0';
+export const PRIVACY_POLICY_VERSION = '1.1.0';
 
 export type PolicySection = {
   /** Stable id, also used as an anchor in docs/PRIVACY.md. */
@@ -40,7 +40,8 @@ export const PRIVACY_SECTIONS_ID: PolicySection[] = [
       '• skor tertinggi dan stage tertinggi;',
       '• jumlah koin dan diamond, senjata yang sudah dimiliki, serta senjata yang sedang dipakai;',
       '• progres misi, milestone, dan achievement;',
-      '• pengaturan: volume, musik/efek suara, kecepatan permainan, tema latar, dan durasi animasi.',
+      '• pengaturan: volume, musik/efek suara, kecepatan permainan, tema latar, dan durasi animasi;',
+      '• hitungan sesi lokal: jumlah kali aplikasi dibuka dan tanggal hari bermain (maksimal 90 hari). Angka ini dipakai game untuk menghitung statistik retensi **di perangkat saja** dan tidak dikirim ke mana pun — aplikasi tidak memuat SDK analitik.',
       'Data ini tidak pernah dikirim keluar dari perangkat. Tidak ada backup ke cloud dan tidak ada sinkronisasi antar perangkat.',
     ],
   },
@@ -126,7 +127,8 @@ export const PRIVACY_SECTIONS_EN: PolicySection[] = [
       '• best score and highest stage;',
       '• coin and diamond balances, owned weapons, and the equipped weapon;',
       '• quest, milestone and achievement progress;',
-      '• settings: volume, music/sound effects, game speed, background theme, and animation speed.',
+      '• settings: volume, music/sound effects, game speed, background theme, and animation speed;',
+      '• local session counters: how many times the app was opened and which days it was played (up to 90 days). The game uses these to compute retention statistics **on the device only**; there is no analytics SDK and nothing is transmitted.',
       'This data never leaves the device. There is no cloud backup and no sync between devices.',
     ],
   },
