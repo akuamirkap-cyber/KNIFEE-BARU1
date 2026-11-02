@@ -40,6 +40,8 @@ globals.window = Object.assign(globals.window ?? {}, {
 });
 
 const { Game } = await import('../src/games/gunhit/game/Game.ts');
+const { setGunEffect } = await import('../src/games/gunhit/game/art/gunVariants.ts');
+const { solidOffset } = await import('./supportBossOutline.ts');
 
 const W = 420;
 const H = 750;
@@ -230,6 +232,74 @@ test('a boss hit pings the exact piece of the outline it stopped on', async () =
   assert.ok(changed > 100, `the ping really painted (${changed} px)`);
   assert.equal(off, 0, `every ping pixel sits on the blue line (${off} elsewhere)`);
   game.bossEdgePing = [];
+  game.destroy();
+});
+
+
+/** Fire `shots` rounds of `id` at the boss, holding the trigger for autos. */
+async function land(game: Record<string, any>, id: string, effect: string, shots = 4) {
+  setGunEffect(id as never, effect as never);
+  game.setWeapon(id);
+  for (let i = 0; i < shots; i++) {
+    game.rot = -Math.PI / 2 - (i * Math.PI) / 3;
+    game.ammoLeft = 99;
+    game.cooldown = 0;
+    game.reloadT = 0;
+    game.press();
+    for (let f = 0; f < 30; f++) game.update(1 / 60);
+    game.onRelease();
+    for (let f = 0; f < 30; f++) game.update(1 / 60);
+  }
+}
+
+test('rifles, beams and shotguns stick exactly like the pistol does', async () => {
+  const cases: [string, string][] = [
+    ['pistol', 'original'],
+    ['ak47', 'set11'],
+    ['minigun', 'original'],
+    ['shotgun', 'original'],
+    ['laser', 'set9'],
+    ['freeze', 'set7'],
+    ['railgun', 'set11'],
+    ['nano_swarm', 'set11'],
+    ['sniper', 'original'],
+    ['mp5', 'set11'],
+  ];
+  for (const [id, effect] of cases) {
+    const { game } = await bossStage('pirate', 5);
+    await land(game, id, effect);
+    const stuck = (game.items as any[]).filter((it) => it.type === 'bullet' && it.px !== undefined);
+    assert.ok(stuck.length > 0, `${id}/${effect}: the round stuck on the boss at all`);
+    // Every round is drawn by the shared renderer, at its exact pixel — no layer
+    // is allowed to take the art and paint it on its own rim.
+    assert.equal(stuck.filter((it) => it.hideArt).length, 0,
+      `${id}/${effect}: the shared renderer draws the stuck round`);
+    for (const it of stuck) {
+      const off = solidOffset(game, it.px, it.py);
+      assert.ok(Math.abs(off) <= 2.5,
+        `${id}/${effect}: the round sits on the blue outline (${off.toFixed(2)} mask px)`);
+    }
+    game.destroy();
+  }
+});
+
+test('no ported layer paints its own wheel rim on a boss', async () => {
+  const { game } = await bossStage('pirate', 5);
+  await land(game, 'ak47', 'set11');
+  const calls: string[] = [];
+  for (const key of ['s11State', 's9State', 's6State', 's1State'] as const) {
+    const layer = game[key];
+    if (!layer || typeof layer.drawWheel !== 'function') continue;
+    const original = layer.drawWheel.bind(layer);
+    layer.drawWheel = (...args: unknown[]) => { calls.push(key); original(...args); };
+  }
+  game.render();
+  assert.deepEqual(calls, [], 'a boss has no wheel rim for a layer to mark');
+  // And the shared impact burst is the one that fires, at the contact pixel.
+  const src = read('src/games/gunhit/game/Game.ts');
+  assert.match(src, /const ownHitFx = !layerFeel \|\| !!this\.level\.boss;/);
+  assert.match(src, /hideArt: layerHit && !this\.level\.boss \? true : undefined,/);
+  assert.match(src, /private withBossPaintClip\(c: CanvasRenderingContext2D, paint: \(\) => void\)/);
   game.destroy();
 });
 

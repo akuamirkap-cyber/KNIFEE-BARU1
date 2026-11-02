@@ -3654,6 +3654,23 @@ export class Game {
     return true;
   }
 
+  /**
+   * Run a ported layer's own painting. On a boss stage the layer may only touch
+   * the drawing: its FX are spawned on its own wheel rim (radius R), which is
+   * empty sky around a head, and painting them there is what made a rifle's hit
+   * look like it landed on a circle instead of on the outline.
+   */
+  private withBossPaintClip(c: CanvasRenderingContext2D, paint: () => void) {
+    c.save();
+    if (this.level.boss) this.bossClipPaint(c);
+    try {
+      paint();
+    } catch {
+      /* a layer's own art must never blank slide 1 */
+    }
+    c.restore();
+  }
+
   /** A damage / combo callout: never splatter, so it is never clipped. */
   private drawImpactText(c: CanvasRenderingContext2D, p: Particle) {
     const k = Math.max(0, p.life / p.max);
@@ -5416,6 +5433,13 @@ export class Game {
    * after the wheel, as both slides draw them.
    */
   private drawLayerWheels(c: CanvasRenderingContext2D) {
+    // Every one of these layers paints its marks on the rim of its own wheel:
+    // `translate(radius, 0)` for each embed. A boss is not that wheel, so its
+    // marks would land in the empty sky around the head at exactly radius R —
+    // the circle this stage must never show. On a boss the shared renderer
+    // draws each round at its exact impact pixel instead, and the layer keeps
+    // its screen-space bursts (which are already at the contact point).
+    if (this.level.boss) return;
     if (this.s11State && (this.s11State.busy || this.setElevenLive)) {
       // A bad frame from slide 7's own art must not blank slide 1.
       try {
@@ -5620,8 +5644,11 @@ export class Game {
         : big ? embeddedProjectileScale(big) : undefined,
       busterPellet: busterPellet || undefined,
       // Slide 9 / slide 11 / slide 2 paint their own round into the wheel, so
-      // the slide-1 bullet art must not be drawn on top of it.
-      hideArt: layerHit ? true : undefined,
+      // the slide-1 bullet art must not be drawn on top of it. On a boss those
+      // layers would paint it on their own rim, radius R — a disc the boss does
+      // not have — so there the shared renderer draws the round instead, at the
+      // exact pixel this round bit (`px`, `py`), on the blue outline.
+      hideArt: layerHit && !this.level.boss ? true : undefined,
       // Slide 2's artist draws the stuck round itself (see `setTwoLook.ts`).
       setTwo: s2Hit ? true : undefined,
     });
@@ -5632,7 +5659,12 @@ export class Game {
     // running both sprayed a second, game-3 acid splash (and acid globs stuck
     // on the rim) or a second plasma blast, plus a second hit voice, over
     // every hit.
-    const ownHitFx = !layerFeel;
+    // On a boss the shared renderer always owns the impact burst: the ported
+    // layers spawn theirs on their own wheel rim — radius R, outside the
+    // drawing — so their burst is clipped away while the round's real contact
+    // pixel goes unmarked. This keeps the same burst on the same pixel for
+    // every weapon, pistol or AK-47.
+    const ownHitFx = !layerFeel || !!this.level.boss;
     // Dora airBlast hit FX (game-3)
     if (ownHitFx && w.id === 'dora') {
       const hp = impact;
@@ -7823,7 +7855,11 @@ export class Game {
         // A slide-11 hit keeps its own mark alive (slide 11's acid keeps eating,
         // its plasma scar keeps burning): no game-3 scar FX on top of it.
         if (it.hideArt && (this.setElevenLive || this.setNineLive)) continue;
-        const wp = this.worldPos(it.angle, this.level.radius);
+        // On a boss the round bit a pixel of the drawing; its scar, drip and
+        // smoke have to grow from that pixel, not from the rim of a wheel.
+        const wp = this.level.boss && it.px !== undefined && it.py !== undefined
+          ? this.artToWorld(it.px, it.py)
+          : this.worldPos(it.angle, this.level.radius);
         const hx = wp.x, hy = wp.y;
         if (it.w === 'xeno') {
           // Ported from game-3: the blob sags, then a drip stretches until it
@@ -9347,10 +9383,12 @@ export class Game {
           const totalWeaponLen = it.type === 'old' ? BLEN : (getWeapon(it.w || 'pistol').stick + 12);
           const len = totalWeaponLen;
           // Masuk lebih dalam hingga hanya terlihat setengah (50% tertanam di
-          // dalam papan). Di boss, Perfect Shot menanam 72 % — hanya 28 % yang
-          // menonjol keluar dari gambar (`edgeTop(a, bh * 0.28)`), sehingga
-          // peluru terbaca menancap di kepala, bukan duduk di tepi roda.
-          const embedDepth = totalWeaponLen * (this.level.boss ? 0.72 : 0.5);
+          // dalam papan). Di boss, kepala digambar SETELAH peluru, jadi yang
+          // terlihat hanya bagian yang menonjol keluar garis: ujung peluru
+          // duduk tepat DI garis biru (sisanya tertutup gambar kepala). Angka
+          // ini sama untuk semua senjata — pistol, AK-47, minigun, shotgun —
+          // supaya hit-nya terbaca identik di mana pun peluru berhenti.
+          const embedDepth = totalWeaponLen * (this.level.boss ? 0.18 : 0.5);
           const pencilEmbedBonus = it.w === 'pencil' ? Math.sin(it.angle * 13) * 5 : 0;
           const itemR = it.px !== undefined && it.py !== undefined
             ? Math.hypot(it.px, it.py)
@@ -10101,45 +10139,41 @@ export class Game {
     // Slide 2's own layer for the eight exported weapons: its rounds' bursts,
     // bubbles, bite marks, shrapnel and callouts.
     if (this.s2wState && (this.s2wState.busy || this.setTwoLive)) {
-      try {
-        this.s2wState.draw(c, this.time);
-        this.s2wState.drawSky(c);
-      } catch {
-        /* slide 2's own art must never blank slide 1 */
-      }
+      this.withBossPaintClip(c, () => {
+        this.s2wState!.draw(c, this.time);
+        this.s2wState!.drawSky(c);
+      });
     }
     // Slide 6 layer: scorch marks on the wheel face, then its beams and the
     // burst that follows them.
     if (this.s6State && (this.s6State.busy || this.setSixLive)) {
-      try {
-        this.s6State.drawWheel(c, CX, this.targetY + this.bump * 7, this.level.radius, this.rot);
-        this.s6State.drawBeam(c);
-        this.s6State.draw(c);
-      } catch {
-        /* keep drawing slide 1 */
-      }
+      this.withBossPaintClip(c, () => {
+        // Its scorch marks sit at `translate(radius, 0)`: rim art, not boss art.
+        if (!this.level.boss) this.s6State!.drawWheel(c, CX, this.targetY + this.bump * 7, this.level.radius, this.rot);
+        this.s6State!.drawBeam(c);
+        this.s6State!.draw(c);
+      });
     }
     // Slide 7's bursts, sparks and smoke go over its gun, as on slide 7
     // (`render()`: wheel, sights, beam, rounds, gun, then fx and particles).
     if (this.s11State && (this.s11State.busy || this.setElevenLive)) {
-      // A bad frame from slide 7's own art must not blank slide 1.
-      try {
-        this.s11State.draw(c);
-      } catch {
-        /* keep drawing slide 1 */
-      }
+      this.withBossPaintClip(c, () => this.s11State!.draw(c));
     }
     // Slide-3 layer: its particles and FX objects (its wheel was drawn with
     // the wheel itself).
     if (this.s7State && (this.s7State.busy || this.setSevenLive)) {
-      this.s7State.draw(c);
-      this.s7State.drawFront(c);
+      this.withBossPaintClip(c, () => {
+        this.s7State!.draw(c);
+        this.s7State!.drawFront(c);
+      });
     }
     // Slide-7 SET 1 layer: wheel-space sparks first, then its particles/FX.
     if (this.s1State && (this.s1State.busy || this.setOneLive)) {
-      this.s1State.drawWheel(c, CX, this.targetY + this.bump * 7);
-      this.s1State.draw(c);
-      this.s1State.drawFront(c);
+      this.withBossPaintClip(c, () => {
+        if (!this.level.boss) this.s1State!.drawWheel(c, CX, this.targetY + this.bump * 7);
+        this.s1State!.draw(c);
+        this.s1State!.drawFront(c);
+      });
     }
     if (
       this.state !== 'idle' &&
