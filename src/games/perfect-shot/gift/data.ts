@@ -7,10 +7,10 @@ export type Reward =
 
 /** light / rarity tiers that the box glows with while charging */
 export const TIERS = [
-  { c: "#f1f5f9", name: "BIASA", chip: "bg-[#e2e8f0] text-[#1e293b]" },
-  { c: "#38bdf8", name: "LANGKA", chip: "bg-[#0ea5e9] text-white" },
-  { c: "#c084fc", name: "EPIK", chip: "bg-[#a855f7] text-white" },
-  { c: "#fbbf24", name: "LEGENDARIS", chip: "bg-gradient-to-b from-[#ffe27a] to-[#f59e0b] text-[#5a2a00]" },
+  { c: "#f1f5f9", name: "COMMON", chip: "bg-[#e2e8f0] text-[#1e293b]" },
+  { c: "#38bdf8", name: "RARE", chip: "bg-[#0ea5e9] text-white" },
+  { c: "#c084fc", name: "EPIC", chip: "bg-[#a855f7] text-white" },
+  { c: "#fbbf24", name: "LEGENDARY", chip: "bg-gradient-to-b from-[#ffe27a] to-[#f59e0b] text-[#5a2a00]" },
 ];
 
 export const RATES = { coin: 0.55, gem: 0.3, weapon: 0.15 };

@@ -11,7 +11,7 @@
  *   stage_start    { stage, mode, weapon, boss, cleared_this_run }
  *   stage_clear    { stage, boss, cleared_this_run, run_ms }
  *   run_end        { outcome: game_over | abandoned, stage, score, coins, cleared, run_ms, weapon, mode }
- *   error          { source, message, … }
+ *   save_state     { status, from_version, to_version, repaired }
  */
 import { track } from './analytics';
 import { sessionProps, sessionTracker } from './session';
@@ -80,6 +80,22 @@ export function trackRunEnd(
     mode: state?.mode ?? 'classic',
   });
   run = null;
+}
+
+/**
+ * How the save file looked at boot: `fresh` (first launch), `migrated` (older
+ * schema upgraded), `repaired` (checksum or values did not add up), or
+ * `reset-for-downgrade`. A run of `repaired` events is the only early warning
+ * that players lose progress on a specific device.
+ */
+export function trackSaveState(report: { status: string; fromVersion: number; toVersion: number; repaired: string[] }): void {
+  track('save_state', {
+    status: report.status,
+    from_version: report.fromVersion,
+    to_version: report.toVersion,
+    repaired: report.repaired.length,
+    ...(report.repaired.length ? { repaired_keys: report.repaired.join(',') } : {}),
+  });
 }
 
 /** The run in progress, for debugging; `null` between runs. */

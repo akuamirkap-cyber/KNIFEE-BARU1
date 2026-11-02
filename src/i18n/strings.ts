@@ -19,6 +19,8 @@ const CORE_EN: Record<string, string> = {
   // ---------------------------------------------------------------- umum
   MATI: 'OFF',
   AKTIF: 'ON',
+  'TOP RUNS · OFFLINE': 'TOP RUNS · OFFLINE',
+  'RUN #': 'RUN #',
   '5 Achievement': '5 Achievements',
   '10 Achievement': '10 Achievements',
   '20 Achievement': '20 Achievements',

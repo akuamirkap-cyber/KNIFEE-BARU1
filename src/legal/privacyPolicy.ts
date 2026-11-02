@@ -42,7 +42,8 @@ export const PRIVACY_SECTIONS_ID: PolicySection[] = [
       '• progres misi, milestone, dan achievement;',
       '• pengaturan: volume, musik/efek suara, kecepatan permainan, tema latar, durasi animasi, bahasa aplikasi (Indonesia/Inggris), dan penanda bahwa layar CARA MAIN sudah pernah dilihat;',
       '• hitungan sesi lokal: jumlah kali aplikasi dibuka dan tanggal hari bermain (maksimal 90 hari). Angka ini dipakai game untuk menghitung statistik retensi **di perangkat saja** dan tidak dikirim ke mana pun — aplikasi tidak memuat SDK analitik.',
-      'Data ini tidak pernah dikirim keluar dari perangkat. Tidak ada backup ke cloud dan tidak ada sinkronisasi antar perangkat.',
+      '• papan skor lokal: sepuluh hasil permainan terbaikmu (skor, stage, koin, waktu) untuk layar PERINGKAT.',
+      'Data ini tidak pernah dikirim keluar dari perangkat. Tidak ada backup ke cloud dan tidak ada sinkronisasi antar perangkat. Papan skor bersifat lokal: tidak ada leaderboard online, tidak ada nama pemain lain, dan tidak ada skor yang diunggah.',
     ],
   },
   {
@@ -129,7 +130,8 @@ export const PRIVACY_SECTIONS_EN: PolicySection[] = [
       '• quest, milestone and achievement progress;',
       '• settings: volume, music/sound effects, game speed, background theme, animation speed, app language (Indonesian/English), and a flag that the HOW TO PLAY screen has been seen;',
       '• local session counters: how many times the app was opened and which days it was played (up to 90 days). The game uses these to compute retention statistics **on the device only**; there is no analytics SDK and nothing is transmitted.',
-      'This data never leaves the device. There is no cloud backup and no sync between devices.',
+      '• local leaderboard: your ten best runs (score, stage, coins, time) for the RANKING screen.',
+      'This data never leaves the device. There is no cloud backup and no sync between devices. The leaderboard is local: there is no online board, no other players\' names, and no score is ever uploaded.',
     ],
   },
   {

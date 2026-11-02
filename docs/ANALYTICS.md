@@ -26,6 +26,7 @@ event  →  src/telemetry/analytics.ts  →  sink (default: tidak ada = no-op)
 | `stage_start` | sebuah stage mulai (menu, peta, atau ulang) | `stage`, `mode`, `weapon`, `boss`, `cleared_this_run` |
 | `stage_clear` | stage selesai | `stage`, `boss`, `cleared_this_run`, `run_ms` |
 | `run_end` | run selesai | `outcome` (`game_over` \| `abandoned`), `stage`, `score`, `coins`, `cleared`, `run_ms`, `weapon`, `mode` |
+| `save_state` | app dibuka, setelah migrasi simpanan | `status` (`fresh` \| `current` \| `migrated` \| `repaired` \| `reset-for-downgrade`), `from_version`, `to_version`, `repaired` (jumlah kunci), `repaired_keys` |
 | `error` | error global / promise / React boundary | `source` (`window` \| `promise` \| `react-boundary`), `message`, `file`, `line`, `column`, `where`, `component` |
 
 Semua event otomatis diberi `t` (timestamp) dan `session` (id per launch).

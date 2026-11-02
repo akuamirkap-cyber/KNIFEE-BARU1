@@ -108,6 +108,8 @@ test('reset progres menghapus kemajuan, tapi pengaturan tetap', () => {
     gunhit_player_xp: '300',
     gunhit_player_level: '3',
     gunhit_all_stages_open: '1',
+    gunhit_runs_v1: '{"v":1,"c":"x","d":[]}',
+    gunhit_save_meta: '{"v":2,"c":"x","d":{}}',
     gunhit_volume: '0.4',
     gunhit_game_speed: '1.2',
     gunhit_menu_theme: 'night',

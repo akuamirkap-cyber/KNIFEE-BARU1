@@ -394,8 +394,8 @@ export function GunShop({ leaving, coins, gems, onBack }: Props) {
             <button
               onPointerEnter={hoverSfx}
               onClick={cycleDesign}
-              aria-label="Ganti desain"
-              title={`Desain ${designIdx + 1}/8`}
+              aria-label="Change design"
+              title={`Design ${designIdx + 1}/8`}
               className="press relative grid h-12 w-12 place-items-center rounded-2xl border-2 border-[#c084fc]/60 bg-gradient-to-b from-[#7c3aed] to-[#4c1d95] shadow-[0_4px_0_#2e1065]"
             >
               <Ico name="palette" className="h-6 w-6" color="#ffffff" />

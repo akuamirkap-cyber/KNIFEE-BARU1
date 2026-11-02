@@ -20,6 +20,8 @@ export const PROGRESS_KEYS = [
   'gunhit_player_xp',
   'gunhit_player_level',
   'gunhit_all_stages_open',
+  'gunhit_runs_v1',
+  'gunhit_save_meta',
 ] as const;
 
 /** Pengaturan yang sengaja DIPERTAHANKAN saat reset progres. */

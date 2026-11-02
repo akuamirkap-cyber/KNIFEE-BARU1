@@ -107,7 +107,7 @@ export function AnimStudio({ closing, plan, onClose, onPreviewIn, onPreviewCycle
             <h2 className="font-title text-xl tracking-wide text-white">
               🎬 ANIMATION <span className="text-[#ffd23f]">STUDIO</span>
             </h2>
-            <p className="font-ui text-xs text-white/50">Atur animasi masuk & keluar tiap elemen</p>
+            <p className="font-ui text-xs text-white/50">Tune the entrance & exit animation of each element</p>
           </div>
           <button
             onClick={onClose}
@@ -195,7 +195,7 @@ export function AnimStudio({ closing, plan, onClose, onPreviewIn, onPreviewCycle
 
           {/* mode */}
           <div className="mt-4">
-            <div className="font-title mb-1.5 text-xs tracking-widest text-white/60">🔁 MODE GANTI ANIMASI</div>
+            <div className="font-title mb-1.5 text-xs tracking-widest text-white/60">🔁 ANIMATION SWITCH MODE</div>
             <div className="grid grid-cols-3 gap-1.5 rounded-xl bg-black/30 p-1">
               {MODES.map((m) => {
                 const disabled = m.id === "mix" && tab === "gun";

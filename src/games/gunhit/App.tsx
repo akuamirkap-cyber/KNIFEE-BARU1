@@ -34,6 +34,10 @@ import { tr } from '../../i18n/strings';
 import { useLanguage } from '../../i18n/useLanguage';
 import { markHowToPlaySeen, shouldShowHowToPlay } from '../../storage/firstRun';
 import { resetProgress } from '../../storage/resetProgress';
+import { bootSave } from '../../storage/saveState';
+import type { Player } from '../perfect-shot/rank/data';
+import { getLanguage } from '../../i18n/language';
+import { readRuns, recordRun, type RunRecord } from '../../storage/leaderboard';
 import { currentRun, trackRunEnd, trackStageClear, trackStageStart } from '../../telemetry/gameAnalytics';
 import type { SgaWeaponFlightData } from './components/SgaWeaponFlight';
 
@@ -187,6 +191,32 @@ function MenuBullet() {
     </div>
   );
 }
+
+/**
+ * Baris papan skor dari run yang benar-benar disimpan di perangkat ini.
+ *
+ * PERINGKAT dulu menampilkan pesaing karangan (skor bot tetap, nama asing).
+ * Sekarang isinya run pemain sendiri: skor, stage dan waktunya nyata, dan
+ * semua tetap di HP — tidak ada leaderboard online (lihat docs/SAVE-DATA.md).
+ */
+function runsToRivals(runs: RunRecord[]): Player[] {
+  return runs.map((run, index) => ({
+    id: `run-${run.at}-${index}`,
+    name: `${tr(getLanguage(), 'RUN #')}${index + 1}`,
+    country: 'ID' as const,
+    score: run.score,
+    stage: run.stage,
+    trend: 0,
+    seed: 400 + index,
+  }));
+}
+
+/**
+ * Migrasi + verifikasi checksum simpanan sebelum layar pertama membaca progres.
+ * Modul ini dievaluasi sebelum komponen mana pun merender, jadi `useState`
+ * pertama sudah melihat nilai yang sudah dirapikan.
+ */
+const saveReport = bootSave(storage);
 
 const LS = {
   best: 'gunhit_best',
@@ -455,6 +485,8 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   const [menuReturnKey, setMenuReturnKey] = useState(0);
   const [questOpen, setQuestOpen] = useState(false);
   const [leaderboardOpen, setLeaderboardOpen] = useState(false);
+  // Papan skor lokal: diisi ulang setiap kali halaman PERINGKAT dibuka.
+  const [leaderboardRivals, setLeaderboardRivals] = useState<Player[]>([]);
 
   const beginMenuPageTransition = (
     variant: OverlayVariant,
@@ -764,6 +796,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       onGameOver: (score, level, coins, runCoins) => {
         // Funnel: the run is over, record how far it got and how long it lasted.
         trackRunEnd({ outcome: 'game_over', stage: level, score, coins: runCoins });
+        recordRun({ score, stage: level, coins: runCoins });
         const prevBest = num(LS.best);
         const newBest = score > prevBest;
         if (newBest) storage.setItem(LS.best, String(score));
@@ -1453,6 +1486,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   };
 
   const openLeaderboardPage = () => {
+    setLeaderboardRivals(runsToRivals(readRuns(storage)));
     const timing = beginMenuPageTransition('podium', tr(language, 'PERINGKAT'), menuPageLead(), () => setLeaderboardOpen(true), 'ranks', {
       cover: (t) => studioSfx.podiumClose(0, t.rate),
       swap: (t) => { studioSfx.podiumOpen(0, t.rate); studioSfx.lbEnter(0, LB_IN); },
@@ -2433,6 +2467,8 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
           <Overlay><PerfectShotLeaderboard
             leaving={leaderboardLeaving}
             stats={{ stage: bestLevel, score: best, coins: totalCoins }}
+            rivals={leaderboardRivals}
+            subtitle={tr(language, 'TOP RUNS · OFFLINE')}
             onBack={closeLeaderboardPage}
           /></Overlay>
         )}

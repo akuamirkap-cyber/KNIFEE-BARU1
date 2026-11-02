@@ -12,6 +12,17 @@ type Props = {
   leaving: boolean;
   onBack: (e: MouseEvent<HTMLElement>) => void;
   stats?: { stage: number; score: number; coins?: number };
+  /**
+   * Rival rows to show instead of the simulated ones.
+   *
+   * Game A's board is local: it owns real saved runs (`src/storage/leaderboard`),
+   * so it passes them here and the page shows the player their own best runs
+   * rather than a list of invented names. Game B keeps the simulated rivals so
+   * the page never looks empty on a fresh install.
+   */
+  rivals?: Player[];
+  /** Small line under the title, e.g. "TOP RUNS · OFFLINE". */
+  subtitle?: string;
 };
 const v = (o: Record<string, string | number>) => o as CSSProperties;
 const STROKE = (c: string, w = 2) => ({ textShadow: `0 ${w + 1}px 0 ${c}, -${w}px 0 0 ${c}, ${w}px 0 0 ${c}, 0 -${w}px 0 ${c}, 0 6px 14px rgba(0,0,0,.4)` });
@@ -59,7 +70,7 @@ function StripeBtn({ label, icon, onClick, c, edge }: { label: string; icon: "tr
   );
 }
 
-export function Leaderboard({ leaving, onBack, stats }: Props) {
+export function Leaderboard({ leaving, onBack, stats, rivals, subtitle }: Props) {
   const g = useGame();
   const [view, setView] = useState<"congrats" | "board">("congrats");
   const [scope, setScope] = useState<"global" | "week">("global");
@@ -68,9 +79,15 @@ export function Leaderboard({ leaving, onBack, stats }: Props) {
   const [entered, setEntered] = useState(false);
   const board = useMemo(() => {
     const rows = buildBoard(stats ? { ...g, stage: stats.stage, coins: stats.coins ?? g.coins } : g, scope);
-    if (!stats) return rows;
-    return rows.map((p) => p.me ? { ...p, score: stats.score, stage: stats.stage } : p).sort((a, b) => b.score - a.score);
-  }, [g, scope, stats]);
+    const me = rows.find((p) => p.me);
+    const withStats = stats && me
+      ? rows.map((p) => p.me ? { ...p, score: stats.score, stage: stats.stage } : p).sort((a, b) => b.score - a.score)
+      : rows;
+    if (!rivals?.length || !me) return withStats;
+    // Real saved runs replace the simulated rivals; the player's own row stays.
+    const mine = { ...me, score: stats?.score ?? me.score, stage: stats?.stage ?? me.stage };
+    return [...rivals, mine].sort((a, b) => b.score - a.score);
+  }, [g, scope, stats, rivals]);
   const myRank = board.findIndex((p) => p.me) + 1;
   const me = board[myRank - 1];
   const ahead = myRank > 1 ? board[myRank - 2] : null;
@@ -107,10 +124,10 @@ export function Leaderboard({ leaving, onBack, stats }: Props) {
       if (navigator.share) await navigator.share({ title: "Perfect Shot", text });
       else {
         await navigator.clipboard.writeText(text);
-        setToast({ t: "Teks pencapaian disalin!", n: Date.now() });
+        setToast({ t: "Achievement text copied!", n: Date.now() });
       }
     } catch {
-      setToast({ t: "Teks pencapaian disalin!", n: Date.now() });
+      setToast({ t: "Achievement text copied!", n: Date.now() });
     }
   };
 
@@ -141,12 +158,15 @@ export function Leaderboard({ leaving, onBack, stats }: Props) {
             <div className="font-title text-[26px] leading-none text-white" style={STROKE("#140d3a", 2)}>
               {view === "congrats" ? "RANKING" : "LEADERBOARD"}
             </div>
+            {subtitle && (
+              <div className="font-title mt-1 text-[11px] leading-none tracking-[0.18em] text-white/55">{subtitle}</div>
+            )}
           </div>
           <div {...A("in-down", LB_IN.top(2), "out-up")}>
             <button
               onPointerEnter={hoverSfx}
               onClick={view === "congrats" ? goBoard : goCongrats}
-              aria-label="Ganti tampilan"
+              aria-label="Switch view"
               className="press grid h-12 w-12 place-items-center rounded-2xl border-2 border-white/20 bg-white/10 shadow-[0_4px_0_rgba(0,0,0,.35)]"
             >
               <Ico name={view === "congrats" ? "trophy" : "star"} className="h-7 w-7" color="#fde68a" />
@@ -162,12 +182,12 @@ export function Leaderboard({ leaving, onBack, stats }: Props) {
 
             <div {...A("gf-title-pop", LB_IN.title, "out-fade", "relative")}>
               <div className="font-title text-[40px] leading-none text-[#ffd23f]" style={STROKE("#7c2d12", 3)}>
-                SELAMAT!
+                CONGRATULATIONS!
               </div>
             </div>
             <div {...A("in-pop", LB_IN.title, "out-fade", "relative mt-2 flex items-center gap-2 rounded-full border-2 border-[#22c55e] bg-[#0f3b1f]/90 px-4 py-1.5")}>
               <Ico name="map" className="h-5 w-5" color="#86efac" />
-              <span className="font-title text-[18px] leading-none text-[#bbf7d0]">SAMPAI STAGE {g.stage}</span>
+              <span className="font-title text-[18px] leading-none text-[#bbf7d0]">REACHED STAGE {g.stage}</span>
             </div>
 
             <div className="relative mt-10 grid place-items-center">

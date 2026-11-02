@@ -422,7 +422,7 @@ export default function App() {
           <Achievement key={`ach-${enterKey}`} leaving={leaving !== null} onBack={(e) => go("menu", e)} onGo={(e) => go("quest", e)} />
         )}
 
-        {screen === "ranks" && <Leaderboard key={`lb-${enterKey}`} leaving={leaving !== null} onBack={(e) => go("menu", e)} />}
+        {screen === "ranks" && <Leaderboard key={`lb-${enterKey}`} leaving={leaving !== null} subtitle="SIMULATED RIVALS · OFFLINE" onBack={(e) => go("menu", e)} />}
 
         {screen === "quest" && (
           <QuestMap key={`quest-${enterKey}`} leaving={leaving !== null} onBack={(e) => go("menu", e)} onPlay={(e, n) => go("play", e, n)} />
@@ -460,7 +460,7 @@ export default function App() {
             >
               <ToolChip set={uiSet.icons} name="studio" tone="gold" />
             </button>
-            <button onClick={openCodex} onPointerEnter={hoverSfx} title="Kamus Game" aria-label="Kamus Game" className="press">
+            <button onClick={openCodex} onPointerEnter={hoverSfx} title="Game Codex" aria-label="Game Codex" className="press">
               <ToolChip set={uiSet.icons} name="book" tone="gold" />
             </button>
             <button

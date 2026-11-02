@@ -97,8 +97,8 @@ export function Settings({ closing, onClose, onIntro }: Props) {
           </div>
           <div className="mt-2 grid grid-cols-2 gap-2">
             {[
-              { l: "🎯 Efek", on: snd.sfx, f: () => (snd.sfx ? (sfx.toggle(false), setTimeout(() => sfx.setSfx(false), 240)) : (sfx.setSfx(true), sfx.toggle(true))) },
-              { l: "🎵 Musik", on: snd.music, f: () => (sfx.toggle(!snd.music), sfx.setMusic(!snd.music)) },
+              { l: "🎯 SFX", on: snd.sfx, f: () => (snd.sfx ? (sfx.toggle(false), setTimeout(() => sfx.setSfx(false), 240)) : (sfx.setSfx(true), sfx.toggle(true))) },
+              { l: "🎵 Music", on: snd.music, f: () => (sfx.toggle(!snd.music), sfx.setMusic(!snd.music)) },
             ].map((x) => (
               <button key={x.l} onPointerEnter={hoverSfx} onClick={x.f} className="press font-ui flex h-9 items-center justify-between gap-2 rounded-xl bg-white/[.06] px-3 text-[13px] text-white">
                 {x.l}
@@ -113,7 +113,7 @@ export function Settings({ closing, onClose, onIntro }: Props) {
           <div className="flex items-baseline justify-between">
             <span className={label}>🎨 BACKGROUND THEME</span>
             <span key={st.theme} className="a in-fade font-title text-[12px] text-white" style={v({ "--d": "0ms", "--dur": "250ms" })}>
-              {st.theme === "auto" ? "🎯 OTOMATIS" : `${t.icon} ${t.name}`}
+              {st.theme === "auto" ? "🎯 AUTOMATIC" : `${t.icon} ${t.name}`}
             </span>
           </div>
           <div
