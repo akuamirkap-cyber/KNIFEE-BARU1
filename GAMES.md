@@ -33,3 +33,27 @@ Dan tiap pane membawa `data-game-id` (`A`/`B`) + `data-game-name` sehingga otoma
 Versi acuan Game B ada di repo ini (`src/games/perfect-shot/**`) dan di tiga zip
 referensi (`main-menu-transition-animations.zip`, `2d-game-intro-animation.zip`,
 `2d-game-intro-animation (1).zip`). Semua penyelarasan visual Game A mengacu ke sini.
+
+## Onboarding & pengaturan Game A
+
+Halaman **PENGATURAN** di Game A sekarang punya tiga hal tambahan di atas tombol
+kebijakan privasi:
+
+- **BAHASA** — pilihan `ID` / `EN`. Pilihan disimpan di `sga.language.v1` dan
+  langsung dipakai teks-teks baru (CARA MAIN, dialog reset, seksi pengaturan).
+  Ekstraksi seluruh teks gameplay ke katalog berjalan di Part 8
+  (`src/i18n/catalog.ts` sudah jadi rumahnya).
+- **❓ CARA MAIN** — layar 7 langkah (sentuh untuk menembak; senjata scope/charge
+  ditahan lalu dilepas;
+  pantulan, musuh garis, mode bos, koin/berlian, naik level). Tampil **otomatis
+  sekali** saat pertama kali menu siap (`sga.onboarding.v1`), lalu bisa dibuka
+  kapan pun dari Pengaturan. Esc / tombol back menutupnya.
+- **🗑 RESET PROGRES** — konfirmasi dua langkah (dialog `alertdialog`, tombol
+  "BATAL" / "YA, HAPUS"), menghapus 11 kunci progres `gunhit_*` (best score,
+  level, koin, berlian, senjata, quest, XP, level pemain, stage terbuka) lalu
+  memuat ulang aplikasi. Pengaturan (volume, kecepatan, tema, bahasa, penanda
+  CARA MAIN) sengaja dipertahankan.
+
+Tombol back Android menutup dengan prioritas: **CARA MAIN → konfirmasi reset →
+kebijakan privasi → pengaturan** — jadi tidak mungkin keluar aplikasi saat masih
+ada overlay terbuka.

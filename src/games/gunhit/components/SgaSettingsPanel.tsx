@@ -3,6 +3,8 @@ import type { SgaBackgroundTheme, SgaBgThemeOption } from '../game/backgroundThe
 import type { SgaGameSpeed } from '../game/gameSpeed';
 import type { StyleId } from '../../perfect-shot/anim/presets';
 import CoinSprite from '../../shared/CoinSprite';
+import { LANGUAGES, type Language } from '../../../i18n/language';
+import { t } from '../../../i18n/catalog';
 import DiamondSprite from '../../shared/DiamondSprite';
 
 type Props = {
@@ -31,6 +33,12 @@ type Props = {
   onReplayIntro: () => void;
   /** Opens the in-app privacy policy (Play Console requires it to be reachable). */
   onPrivacy: () => void;
+  language: Language;
+  onLanguage: (language: Language) => void;
+  /** Reopens the CARA MAIN screen from Settings. */
+  onHelp: () => void;
+  /** Opens the "delete all progress" confirmation. */
+  onReset: () => void;
   onSpecial: (stage: 'boulder' | 'bonus' | 'treasure') => void;
   formatSpeed: (value: SgaGameSpeed) => string;
 };
@@ -47,6 +55,7 @@ export default function SgaSettingsPanel({
   closing, muted, volume, sfxEnabled, musicEnabled, speed, speedOptions, themes, theme,
   animSpeed, animGunStyle, animSpeeds, animStyles, onAnimSpeed, onAnimGunStyle,
   onClose, onMute, onSfx, onMusic, onVolume, onSpeed, onTheme, onReplayIntro, onSpecial, formatSpeed, onPrivacy,
+  language, onLanguage, onHelp, onReset,
 }: Props) {
   const [advanced, setAdvanced] = useState(false);
   const stripRef = useRef<HTMLDivElement>(null);
@@ -86,7 +95,7 @@ export default function SgaSettingsPanel({
               <div className="absolute inset-x-0 top-1/2 h-2 -translate-y-1/2 rounded-full bg-black/50 shadow-inner" />
               <div className="absolute left-0 top-1/2 h-2 -translate-y-1/2 rounded-full bg-gradient-to-r from-[#22c55e] to-[#86efac] shadow-[0_0_8px_rgba(34,197,94,.55)]" style={{ width: `${percent}%` }} />
               <div className="pointer-events-none absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-[#16a34a] bg-white shadow" style={{ left: `${percent}%` }} />
-              <input type="range" min={0} max={100} step={1} value={percent} onChange={(event) => onVolume(Number(event.target.value) / 100)} aria-label="Volume" className="absolute inset-0 h-full w-full cursor-pointer opacity-0" />
+              <input type="range" min={0} max={100} step={1} value={percent} onChange={(event) => onVolume(Number(event.target.value) / 100)} aria-label="Volume" aria-valuetext={`${percent}%`} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" />
             </div>
             <span className="font-title w-11 text-right text-[14px] text-[#86efac]">{percent}%</span>
           </div>
@@ -191,7 +200,31 @@ export default function SgaSettingsPanel({
           </div>
         )}
 
-        <button type="button" onClick={onPrivacy} className="press mt-3 flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border-2 border-white/20 bg-white/5 font-title text-[12px] text-white/80">🔒 KEBIJAKAN PRIVASI</button>
+        <section className="mt-3 rounded-2xl border border-white/10 bg-black/35 p-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-title text-[11px] tracking-[.14em] text-white/60">{t(language, 'settings.language')}</span>
+            <div className="flex gap-1 rounded-lg border border-white/15 bg-white/5 p-0.5">
+              {LANGUAGES.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => onLanguage(option.id)}
+                  aria-pressed={language === option.id}
+                  aria-label={option.label}
+                  className={`rounded-md px-3 py-1 font-title text-[11px] tracking-wider transition ${language === option.id ? 'bg-amber-400 text-[#1a1206]' : 'text-white/60'}`}
+                >
+                  {option.short}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="mt-2 grid grid-cols-1 gap-2">
+            <button type="button" onClick={onHelp} className="press font-title flex h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-sky-300/30 bg-sky-400/10 text-[12px] text-sky-100">{t(language, 'settings.help')}</button>
+            <button type="button" onClick={onReset} className="press font-title flex h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-red-400/30 bg-red-500/10 text-[12px] text-red-200">{t(language, 'settings.reset')}</button>
+          </div>
+        </section>
+
+        <button type="button" onClick={onPrivacy} className="press mt-2 flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border-2 border-white/20 bg-white/5 font-title text-[12px] text-white/80">🔒 KEBIJAKAN PRIVASI</button>
 
         <button type="button" onClick={onClose} className="press shine font-title mt-2 h-11 w-full rounded-xl border-2 border-[#0e5a26] bg-gradient-to-b from-[#7cf06f] via-[#3fcf4a] to-[#1f9b37] text-[16px] text-white shadow-[0_4px_0_#0e5a26]" style={{ textShadow: '0 2px 0 #0e5a26' }}>SIMPAN & KEMBALI</button>
       </section>

@@ -90,8 +90,12 @@ test('halaman privasi ada di dalam game dan bisa dibuka dari Pengaturan', () => 
   assert.ok(app.includes("import PrivacyPage from '../../components/PrivacyPage';"));
   assert.ok(app.includes('onPrivacy={() => setPrivacyOpen(true)}'));
   assert.ok(app.includes('<PrivacyPage onClose={() => setPrivacyOpen(false)} />'));
-  // Back closes the policy before anything else.
-  assert.match(app, /useAndroidBack\(\(\) => \{\n\s+if \(privacyOpen\) \{ setPrivacyOpen\(false\); return true; \}/);
+  // Back closes the policy before any menu screen; the Part 7 overlays that can
+  // sit on top of it (CARA MAIN, konfirmasi reset) take priority over it.
+  assert.match(app, /if \(privacyOpen\) \{ setPrivacyOpen\(false\); return true; \}/);
+  const back = app.slice(app.indexOf('useAndroidBack(() => {'));
+  assert.ok(back.indexOf('if (helpOpen)') < back.indexOf('if (privacyOpen)'));
+  assert.ok(back.indexOf('if (resetOpen)') < back.indexOf('if (privacyOpen)'));
 });
 
 test('dokumen Data Safety & content rating siap dipakai', () => {

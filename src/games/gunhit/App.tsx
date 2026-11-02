@@ -28,6 +28,11 @@ import { GUN_HIT_MAP_MAX_LEVEL, getGunHitMapNodeTheme, getGunHitMapStage } from 
 import { useAllStagesOpen, toggleAllStagesOpen, isUnlockShortcut } from './game/stageUnlock';
 import { WEAPON_FLIGHT_MS } from './components/weaponFlightTiming';
 import PrivacyPage from '../../components/PrivacyPage';
+import HowToPlayPage from './components/HowToPlayPage';
+import ResetProgressDialog from './components/ResetProgressDialog';
+import { useLanguage } from '../../i18n/useLanguage';
+import { markHowToPlaySeen, shouldShowHowToPlay } from '../../storage/firstRun';
+import { resetProgress } from '../../storage/resetProgress';
 import { currentRun, trackRunEnd, trackStageClear, trackStageStart } from '../../telemetry/gameAnalytics';
 import type { SgaWeaponFlightData } from './components/SgaWeaponFlight';
 
@@ -435,6 +440,13 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Kebijakan privasi: halaman in-app yang teksnya sama dengan docs/PRIVACY.md.
   const [privacyOpen, setPrivacyOpen] = useState(false);
+  // CARA MAIN: tampil sendiri sekali, lalu bisa dibuka lagi dari Pengaturan.
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [helpIsFirstRun, setHelpIsFirstRun] = useState(false);
+  const [resetDone, setResetDone] = useState(false);
+  const resetReloadRef = useRef<number | null>(null);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [language, changeLanguage] = useLanguage();
   const [settingsClosing, setSettingsClosing] = useState(false);
   const [inGameSettingsOpen, setInGameSettingsOpen] = useState(false);
   const [arsenalOpen, setArsenalOpen] = useState(false);
@@ -1716,7 +1728,49 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
    * screen returns to the menu. Anything this pane does not use is left to the
    * hub (which leaves the app) instead of killing a run by accident.
    */
+  // Sekali saja: begitu menu siap, tampilkan CARA MAIN untuk pemain baru.
+  useEffect(() => {
+    if (!active || !menuReady) return;
+    if (!shouldShowHowToPlay(storage)) return;
+    setHelpIsFirstRun(true);
+    setHelpOpen(true);
+  }, [active, menuReady]);
+
+  /** Tutup CARA MAIN dan tandai sudah pernah dilihat. */
+  const closeHelp = () => {
+    setHelpOpen(false);
+    setHelpIsFirstRun(false);
+    markHowToPlaySeen(storage);
+  };
+
+  /**
+   * RESET PROGRES: hapus save, lalu muat ulang aplikasi. Reload adalah satu-satunya
+   * cara yang dijamin membuat semua layar (menu, peta, arsenal, quest) membaca
+   * save yang sudah kosong, tanpa menyentuh belasan state satu per satu.
+   */
+  const confirmResetProgress = () => {
+    resetProgress(storage);
+    // Tampilkan konfirmasi singkat, baru reload: kalau jendela langsung hilang,
+    // pemain tidak tahu apakah tombolnya bekerja atau aplikasinya crash.
+    setResetDone(true);
+    if (resetReloadRef.current !== null) window.clearTimeout(resetReloadRef.current);
+    resetReloadRef.current = window.setTimeout(() => window.location.reload(), 800);
+  };
+
+  useEffect(
+    () => () => {
+      if (resetReloadRef.current !== null) window.clearTimeout(resetReloadRef.current);
+    },
+    [],
+  );
+
   useAndroidBack(() => {
+    if (helpOpen) { closeHelp(); return true; }
+    if (resetOpen) {
+      // Setelah progres dihapus dialognya menunggu reload — jangan ditutup.
+      if (!resetDone) setResetOpen(false);
+      return true;
+    }
     if (privacyOpen) { setPrivacyOpen(false); return true; }
     if (inGameSettingsOpen) { setInGameSettingsOpen(false); return true; }
     if (arsenalOpen) { startArsenalTransition(false); return true; }
@@ -2095,6 +2149,18 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
           </div>
         )}
 
+        {helpOpen && (
+          <Overlay><HowToPlayPage firstRun={helpIsFirstRun} onClose={closeHelp} /></Overlay>
+        )}
+
+        {resetOpen && (
+          <Overlay><ResetProgressDialog
+            done={resetDone}
+            onCancel={() => setResetOpen(false)}
+            onConfirm={confirmResetProgress}
+          /></Overlay>
+        )}
+
         {privacyOpen && (
           <Overlay><PrivacyPage onClose={() => setPrivacyOpen(false)} /></Overlay>
         )}
@@ -2135,6 +2201,13 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
             }}
             onSpecial={startSpecial}
             onPrivacy={() => setPrivacyOpen(true)}
+            language={language}
+            onLanguage={changeLanguage}
+            onHelp={() => setHelpOpen(true)}
+            onReset={() => {
+              setResetDone(false);
+              setResetOpen(true);
+            }}
             formatSpeed={formatSgaSpeed}
           /></Overlay>
         )}

@@ -15,6 +15,12 @@ aplikasi saat ini (lihat `docs/PRIVACY.md` dan `src/legal/privacyPolicy.ts`).
 > punya sink aktif secara default, jadi angka itu tidak pernah keluar dari HP.
 > Lihat `docs/ANALYTICS.md` — kalau sink dipasang, seluruh jawaban di dokumen ini
 > harus diperbarui pada rilis yang sama.
+>
+> Pilihan pengguna juga tersimpan lokal dan tidak dikirim: volume/kecepatan/tema,
+> bahasa aplikasi (`sga.language.v1`, Indonesia atau Inggris), dan penanda bahwa
+> layar **CARA MAIN** sudah pernah dilihat (`sga.onboarding.v1`). Tombol
+> **RESET PROGRES** di Pengaturan menghapus progres bermain tetapi mempertahankan
+> pengaturan tersebut.
 
 ---
 
