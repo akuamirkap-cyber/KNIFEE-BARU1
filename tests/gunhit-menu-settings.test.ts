@@ -231,7 +231,7 @@ test('menu & game theme choices default to forest and expose all SGA background 
   // The menu scenery is the reference game's backdrop: all twelve designs map
   // onto its theme ids, so every one of them is available in Game A.
   const backdrop = readFileSync(path.join(process.cwd(), 'src/games/gunhit/components/MenuBackdrop.tsx'), 'utf8');
-  assert.match(themes, /import MenuBackdrop from '\.\/MenuBackdrop'/);
+  assert.match(themes, /import MenuBackdrop(?:, \{[^}]+\})? from '\.\/MenuBackdrop'/);
   assert.match(backdrop, /data-menu-environment=\{theme\}/);
   assert.match(backdrop, /import \{ ThemeLayer \} from '\.\.\/\.\.\/perfect-shot\/theme\/Backdrop'/);
   for (const [sga, id] of [

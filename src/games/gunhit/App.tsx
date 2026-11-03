@@ -70,6 +70,7 @@ import MenuEnvironment, { type MenuEnvironmentTheme } from './components/MenuEnv
 import { SGA_SPEED_OPTIONS, formatSgaSpeed, getSavedSgaSpeed } from './game/gameSpeed';
 import { useSgaGameSpeed } from './utils/useSgaGameSpeed';
 import { SGA_BG_THEMES, getSavedSgaBgTheme } from './game/backgroundThemes';
+import MenuSunburst from './components/MenuSunburst';
 import { useSgaBgTheme } from './utils/useSgaBgTheme';
 import { SGA_ORIENTATION_OPTIONS, getSavedSgaOrientation, isLandscape } from './game/orientation';
 import { useSgaOrientation } from './utils/useSgaOrientation';
@@ -2083,15 +2084,23 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                   ? { className: 'absolute inset-0', style: {} as CSSProperties }
                   : planMotion('in-bg', 0, 1100, 'absolute inset-0', undefined, 'out-bg', 120, 700))}
               >
-                <MenuEnvironment theme={menuTheme} />
+                <MenuEnvironment theme={menuTheme} vivid={menuLandscape} />
               </div>
-              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_46%,rgba(125,211,252,.08),transparent_68%)]" />
-              <div className="absolute inset-0 opacity-60">
-                <Dust count={14} />
-                <SparkleField count={10} spread={1.45} />
+              <div className={`absolute inset-0 ${menuLandscape ? 'bg-[radial-gradient(ellipse_at_50%_46%,rgba(125,211,252,.16),transparent_66%)]' : 'bg-[radial-gradient(ellipse_at_50%_46%,rgba(125,211,252,.08),transparent_68%)]'}`} />
+              <div className={`absolute inset-0 ${menuLandscape ? 'opacity-95' : 'opacity-60'}`}>
+                <Dust count={menuLandscape ? 20 : 14} />
+                <SparkleField count={menuLandscape ? 16 : 10} spread={1.45} />
               </div>
-              {/* Keep SGA's selectable world art, with the right game's darker top/bottom framing. */}
-              <div className="pointer-events-none absolute inset-0" style={{ background: 'linear-gradient(180deg, rgba(3,7,10,.42) 0%, rgba(3,7,10,.12) 13%, transparent 28%, transparent 76%, rgba(1,5,8,.54) 100%), radial-gradient(ellipse at 50% 46%, transparent 52%, rgba(0,0,0,.24) 100%)' }} />
+              {/* Keep SGA's selectable world art, with a lighter top/bottom framing
+                  in landscape so the sky keeps the vivid blue of the reference. */}
+              <div
+                className="pointer-events-none absolute inset-0"
+                style={{
+                  background: menuLandscape
+                    ? 'linear-gradient(180deg, rgba(3,7,10,.16) 0%, rgba(3,7,10,.04) 13%, transparent 30%, transparent 80%, rgba(1,5,8,.30) 100%), radial-gradient(ellipse at 50% 46%, transparent 58%, rgba(0,0,0,.16) 100%)'
+                    : 'linear-gradient(180deg, rgba(3,7,10,.42) 0%, rgba(3,7,10,.12) 13%, transparent 28%, transparent 76%, rgba(1,5,8,.54) 100%), radial-gradient(ellipse at 50% 46%, transparent 52%, rgba(0,0,0,.24) 100%)',
+                }}
+              />
             </div>
 
             <div {...planMotion('in-shake', 800 + 560 * 0.78, 380, 'absolute inset-0', undefined, '', 0, 0)}>
@@ -2157,7 +2166,15 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                   {!menuDeparture && [18, 42, 64, 82].map((x, i) => <span key={x} className="mm-mote pointer-events-none absolute bottom-[14%] h-1.5 w-1.5 rounded-full bg-[#e0fbff]" style={{ left: `${x}%`, animationDelay: `${(3400 + i * 700) * menuPlan.k}ms` }} />)}
                   <div className="float relative h-full w-full" data-menu-gun>
                     <div ref={weaponPivotRef} className="pointer-events-none absolute inset-0" aria-hidden="true">
-                      <SunburstFX size={430} color={gunSunburstColor(getWeapon(weapon).rarity)} intensity={0.44} speed={32} core={false} stars={false} style={{ left: 'calc(50% + var(--weapon-pivot-x, 0px))', top: 'calc(50% + var(--weapon-pivot-y, 0px))' }} />
+                      {menuLandscape ? (
+                        <MenuSunburst
+                          size={640}
+                          spin={26}
+                          style={{ left: 'calc(50% + var(--weapon-pivot-x, 0px))', top: 'calc(50% + var(--weapon-pivot-y, 0px))' }}
+                        />
+                      ) : (
+                        <SunburstFX size={430} color={gunSunburstColor(getWeapon(weapon).rarity)} intensity={0.44} speed={32} core={false} stars={false} style={{ left: 'calc(50% + var(--weapon-pivot-x, 0px))', top: 'calc(50% + var(--weapon-pivot-y, 0px))' }} />
+                      )}
                       {!menuDeparture && menuPlan.gun === 'combo' && (
                         <div
                           aria-hidden="true"
