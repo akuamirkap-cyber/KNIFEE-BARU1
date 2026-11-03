@@ -2532,6 +2532,8 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
             stats={{ stage: bestLevel, score: best, coins: totalCoins }}
             rivals={leaderboardRivals}
             subtitle={tr(language, 'TOP RUNS · OFFLINE')}
+            // Landscape: podium/tabs kiri, daftar peringkat kanan (tidak terpotong).
+            landscape={menuLandscape}
             onBack={closeLeaderboardPage}
           /></Overlay>
         )}
