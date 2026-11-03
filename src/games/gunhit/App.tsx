@@ -12,6 +12,7 @@ import { getWeapon, isWeaponUnlocked, RARITY_COLOR, WEAPONS, type WeaponId } fro
 import { useSlideActive } from '../shared/SlideActivity';
 import { useAndroidBack } from '../../utils/androidBack';
 import { Burst, Dust, Flare, Shockwave, SparkleField, SunburstFX } from '../knife-hit/components/Effects';
+import MenuStageBackdrop from './components/MenuStageBackdrop';
 import { gunSunburstColor } from './game/sunburstPalette';
 /**
  * Weapon artwork for the menu showcase: a dynamic import, so the title screen
@@ -2176,9 +2177,16 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                   ? { className: 'absolute inset-0', style: {} as CSSProperties }
                   : planMotion('in-bg', 0, 1100, 'absolute inset-0', undefined, 'out-bg', 120, 700))}
               >
-                <MenuEnvironment theme={menuTheme} vivid={menuLandscape} />
+                {menuTheme === 'auto' || menuTheme === 'forest' ? (
+                  /* Menu dan gameplay satu ruangan: latar yang sama persis. */
+                  <MenuStageBackdrop orientation={orientation} />
+                ) : (
+                  <MenuEnvironment theme={menuTheme} vivid={menuLandscape} />
+                )}
               </div>
-              <div className={`absolute inset-0 ${menuLandscape ? 'bg-[radial-gradient(ellipse_at_50%_46%,rgba(125,211,252,.16),transparent_66%)]' : 'bg-[radial-gradient(ellipse_at_50%_46%,rgba(125,211,252,.08),transparent_68%)]'}`} />
+              {(menuTheme !== 'auto' && menuTheme !== 'forest') && (
+                <div className={`absolute inset-0 ${menuLandscape ? 'bg-[radial-gradient(ellipse_at_50%_46%,rgba(125,211,252,.16),transparent_66%)]' : 'bg-[radial-gradient(ellipse_at_50%_46%,rgba(125,211,252,.08),transparent_68%)]'}`} />
+              )}
               <div className={`absolute inset-0 ${menuLandscape ? 'opacity-95' : 'opacity-60'}`}>
                 <Dust count={menuLandscape ? 20 : 14} />
                 <SparkleField count={menuLandscape ? 16 : 10} spread={1.45} />
@@ -2259,7 +2267,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                   <div className="float relative h-full w-full" data-menu-gun>
                     <div ref={gunAimRef} className="relative h-full w-full" style={{ willChange: 'transform' }} data-menu-aim>
                     <div ref={weaponPivotRef} className="pointer-events-none absolute inset-0" aria-hidden="true">
-                      <SunburstFX size={430} color={gunSunburstColor(getWeapon(weapon).rarity)} intensity={0.44} speed={32} core={false} stars={false} style={{ left: 'calc(50% + var(--weapon-pivot-x, 0px))', top: 'calc(50% + var(--weapon-pivot-y, 0px))' }} />
+                      <SunburstFX size={430} color="255,255,255" intensity={0.44} speed={32} core={false} stars={false} style={{ left: 'calc(50% + var(--weapon-pivot-x, 0px))', top: 'calc(50% + var(--weapon-pivot-y, 0px))' }} />
                       {!menuDeparture && menuPlan.gun === 'combo' && (
                         <div
                           aria-hidden="true"

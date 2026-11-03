@@ -81,6 +81,7 @@ import { drawClassicBeam, drawLaserBeam, drawVoidTether } from './art/beamEffect
 import { getGunEffect, getGunVariant } from './art/gunVariants';
 import { drawWetSurface } from './art/waterSurface';
 import { drawFace, STYLE_COLORS, type Style } from './faces';
+import { paintStageForest, paintStageGrass, paintStageVignette } from './stageBackdrop';
 import { drawGun, drawProjectile } from './weaponDraw';
 import { WEAPONS, getWeapon, type Weapon, type WeaponId, type ProjKind } from './weapons';
 import { drawStar, drawRockFragment } from './art/boulder';
@@ -9033,7 +9034,6 @@ export class Game {
   private forestBackdropCtx: CanvasRenderingContext2D | null = null;
   private forestGlowPaint: CanvasGradient | null = null;
   private forestGlowKey = '';
-  private forestVignettePaint: CanvasGradient | null = null;
   private specialOverlayCanvas: HTMLCanvasElement | null = null;
   private specialOverlayKey = '';
 
@@ -9214,7 +9214,7 @@ export class Game {
         bg.setTransform(1, 0, 0, 1, 0, 0);
         bg.clearRect(0, 0, backdrop.width, backdrop.height);
         bg.setTransform(density, 0, 0, density, 0, 0);
-        this.paintForestBackdrop(bg, pal);
+        this.paintForestBackdrop(bg);
         this.forestBackdrop = backdrop;
         this.forestBackdropCtx = bg;
         this.forestBackdropKey = key;
@@ -9224,7 +9224,7 @@ export class Game {
     if (this.forestBackdrop) {
       c.drawImage(this.forestBackdrop, 0, 0, W, H);
     } else {
-      this.paintForestBackdrop(c, pal);
+      this.paintForestBackdrop(c);
     }
     this.paintForestGlow(c, pal, R, this.steadyTargetY);
     this.paintForestVignette(c);
@@ -9233,22 +9233,8 @@ export class Game {
     // are batched instead of asking the canvas for 90 separate fills a frame.
     drawForestFireflies(c, this.dust, this.time);
 
-    // 6. Rerumputan Liar 2D di Bagian Bawah Layar (Bottom Grass Blades Sesuai Foto 1!)
-    c.fillStyle = '#020507';
-    c.beginPath();
-    c.moveTo(0, H);
-    const blades = 28;
-    for (let i = 0; i <= blades; i++) {
-      const bx = (i / blades) * W;
-      const wind = Math.sin(this.time * 2 + i * 0.5) * 4;
-      const hBlade = 22 + (i % 3) * 12 + Math.sin(i * 1.5) * 8;
-      c.lineTo(bx - 4, H);
-      c.quadraticCurveTo(bx + wind * 0.5, H - hBlade * 0.6, bx + wind, H - hBlade);
-      c.quadraticCurveTo(bx + 4 + wind * 0.5, H - hBlade * 0.6, bx + 6, H);
-    }
-    c.lineTo(W, H);
-    c.closePath();
-    c.fill();
+    // 6. Bottom grass: the menu paints this same band (stageBackdrop.ts).
+    paintStageGrass(c, this.time);
   }
 
   /**
@@ -9256,70 +9242,9 @@ export class Game {
    * and near tree silhouettes. Cached once per style + raster density, so the
    * radius easing of the Grow/Shrink Ray can never invalidate it.
    */
-  private paintForestBackdrop(
-    c: CanvasRenderingContext2D,
-    pal: (typeof STYLE_COLORS)[Style],
-  ) {
-    // 1. Gradasi Langit Hutan 2D (+20% lebih cerah khas Knife Hit)
-    const bg = c.createLinearGradient(0, 0, 0, H);
-    bg.addColorStop(0, pal.bgTop);
-    bg.addColorStop(0.7, pal.bgBot);
-    bg.addColorStop(1, '#0d252c');
-    c.fillStyle = bg;
-    c.fillRect(0, 0, W, H);
-
-    // 2. Siluet Batang Pohon Lapisan Belakang (Far Background Trees - lebih terlihat jelas)
-    c.fillStyle = 'rgba(24, 52, 60, 0.65)';
-    // Batang pohon jauh 1
-    c.beginPath();
-    c.moveTo(50, 0); c.lineTo(84, 0); c.lineTo(74, H); c.lineTo(40, H); c.closePath();
-    c.fill();
-    // Cabang kecil
-    c.beginPath();
-    c.moveTo(65, 200); c.lineTo(118, 138); c.lineTo(112, 132); c.lineTo(63, 190); c.closePath();
-    c.fill();
-
-    // Batang pohon jauh 2
-    c.beginPath();
-    c.moveTo(330, 0); c.lineTo(370, 0); c.lineTo(354, H); c.lineTo(315, H); c.closePath();
-    c.fill();
-    c.beginPath();
-    c.moveTo(345, 260); c.lineTo(286, 206); c.lineTo(292, 200); c.lineTo(348, 252); c.closePath();
-    c.fill();
-
-    // 3. Siluet Batang Pohon Lapisan Depan (Near Foreground Trees - Kiri & Kanan Sesuai Foto 1)
-    const nearTree = (x0: number, x1: number, x2: number, x3: number) => {
-      const tg = c.createLinearGradient(x0, 0, x1, 0);
-      tg.addColorStop(0, 'rgba(14, 34, 40, 0.95)');
-      tg.addColorStop(0.5, 'rgba(22, 50, 58, 0.92)');
-      tg.addColorStop(1, 'rgba(12, 30, 36, 0.98)');
-      c.fillStyle = tg;
-      c.beginPath();
-      c.moveTo(x0, 0); c.lineTo(x1, 0); c.lineTo(x2, H); c.lineTo(x3, H); c.closePath();
-      c.fill();
-    };
-
-    // Pohon Kiri Utama
-    nearTree(-15, 45, 35, -25);
-    // Cabang pohon kiri menjorok ke target
-    c.fillStyle = 'rgba(6, 15, 18, 0.95)';
-    c.beginPath();
-    c.moveTo(30, 120); c.quadraticCurveTo(80, 100, 130, 40); c.lineTo(120, 35); c.quadraticCurveTo(75, 90, 28, 105); c.closePath();
-    c.fill();
-    c.beginPath();
-    c.moveTo(25, 420); c.quadraticCurveTo(70, 390, 115, 350); c.lineTo(110, 345); c.quadraticCurveTo(65, 382, 23, 405); c.closePath();
-    c.fill();
-
-    // Pohon Kanan Utama
-    nearTree(375, 435, 445, 385);
-    // Cabang pohon kanan menjorok ke target
-    c.beginPath();
-    c.moveTo(390, 150); c.quadraticCurveTo(340, 120, 290, 50); c.lineTo(298, 45); c.quadraticCurveTo(345, 112, 395, 135); c.closePath();
-    c.fill();
-    c.beginPath();
-    c.moveTo(395, 440); c.quadraticCurveTo(350, 410, 300, 370); c.lineTo(306, 364); c.quadraticCurveTo(355, 402, 398, 425); c.closePath();
-    c.fill();
-
+  private paintForestBackdrop(c: CanvasRenderingContext2D) {
+    // Same painter the menu uses, so both rooms are the same room.
+    paintStageForest(c, this.level.style);
   }
 
   /**
@@ -9355,15 +9280,7 @@ export class Game {
 
   /** A restrained bottom vignette: depth without hiding the lower forest. */
   private paintForestVignette(c: CanvasRenderingContext2D) {
-    if (!this.forestVignettePaint) {
-      const lowerShade = c.createLinearGradient(0, H * 0.48, 0, H);
-      lowerShade.addColorStop(0, 'rgba(2, 10, 18, 0)');
-      lowerShade.addColorStop(0.58, 'rgba(2, 10, 18, 0.045)');
-      lowerShade.addColorStop(1, 'rgba(2, 10, 18, 0.12)');
-      this.forestVignettePaint = lowerShade;
-    }
-    c.fillStyle = this.forestVignettePaint;
-    c.fillRect(0, 0, W, H);
+    paintStageVignette(c);
   }
 
   private drawBonusRing(c: CanvasRenderingContext2D, radius: number) {

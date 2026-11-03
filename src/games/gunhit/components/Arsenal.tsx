@@ -14,7 +14,6 @@ import { sfx } from '../game/audio';
 import { sfx4 } from '../game/sfx4';
 import { useSlideActive } from '../../shared/SlideActivity';
 import { SunburstFX } from '../../knife-hit/components/Effects';
-import { gunSunburstColor } from '../game/sunburstPalette';
 import { getSavedSgaSpeed } from '../game/gameSpeed';
 import { isLandscape } from '../game/orientation';
 import { useSgaOrientation } from '../utils/useSgaOrientation';
@@ -621,7 +620,7 @@ export default function Arsenal({
         <div {...A('in-rays', SHOP_IN.rays, 'out-rays', { d: 80, dur: 500 }, 'pointer-events-none absolute h-[150%] aspect-square')} aria-hidden="true">
           <SunburstFX
             size={430}
-            color={gunSunburstColor(selectedGun.rarity)}
+            color="255,255,255"
             intensity={0.44}
             speed={32}
             core={false}

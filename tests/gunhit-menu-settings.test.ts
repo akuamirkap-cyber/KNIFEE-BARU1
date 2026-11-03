@@ -63,12 +63,12 @@ test('Gun Hit menu uses PERFECT SHOT branding and keeps special-stage picks in S
   assert.match(app, /id: 'ready', label: 'READY!'/);
   assert.match(app, /id: 'setting', label: 'SETTING'/);
 
-  const game = readFileSync(path.join(process.cwd(), 'src/games/gunhit/game/Game.ts'), 'utf8');
+  const stage = readFileSync(path.join(process.cwd(), 'src/games/gunhit/game/stageBackdrop.ts'), 'utf8');
   const faces = readFileSync(path.join(process.cwd(), 'src/games/gunhit/game/faces.ts'), 'utf8');
   assert.match(faces, /bgTop: '#1b4d59', bgBot: '#153743'/);
-  assert.match(game, /lowerShade\.addColorStop\(0\.58, 'rgba\(2, 10, 18, 0\.045\)'\)/);
-  assert.match(game, /lowerShade\.addColorStop\(1, 'rgba\(2, 10, 18, 0\.12\)'\)/);
-  assert.match(app, /SunburstFX size=\{430\} color=\{gunSunburstColor\(getWeapon\(weapon\)\.rarity\)\} intensity=\{0\.44\}[^>]*core=\{false\}/);
+  assert.match(stage, /lowerShade\.addColorStop\(0\.58, 'rgba\(2, 10, 18, 0\.045\)'\)/);
+  assert.match(stage, /lowerShade\.addColorStop\(1, 'rgba\(2, 10, 18, 0\.12\)'\)/);
+  assert.match(app, /SunburstFX size=\{430\} color="255,255,255" intensity=\{0\.44\}[^>]*core=\{false\}/);
   const coinSprite = readFileSync(path.join(process.cwd(), 'src/games/shared/CoinSprite.tsx'), 'utf8');
   assert.match(coinSprite, /0\.68 \+ Math\.abs\(Math\.cos/);
   assert.match(coinSprite, /false, false/);
