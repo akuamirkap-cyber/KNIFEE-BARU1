@@ -71,7 +71,7 @@ import { SGA_SPEED_OPTIONS, formatSgaSpeed, getSavedSgaSpeed } from './game/game
 import { useSgaGameSpeed } from './utils/useSgaGameSpeed';
 import { SGA_BG_THEMES, getSavedSgaBgTheme } from './game/backgroundThemes';
 import { useSgaBgTheme } from './utils/useSgaBgTheme';
-import { SGA_ORIENTATION_OPTIONS, getSavedSgaOrientation } from './game/orientation';
+import { SGA_ORIENTATION_OPTIONS, getSavedSgaOrientation, isLandscape } from './game/orientation';
 import { useSgaOrientation } from './utils/useSgaOrientation';
 import { displaySize } from './game/layout';
 import { getFast2DContext, getOptimalCanvasDpr } from './utils/mobilePerf';
@@ -1782,6 +1782,34 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   };
 
   /**
+   * Main menu in landscape.
+   *
+   * The frame is 760x420 there, so the portrait stack (title above a full-size
+   * weapon showcase) no longer fits: the showcase column collapsed to zero
+   * height and the weapon painted right on top of the PERFECT SHOT title.
+   * Landscape therefore gives the weapon its own column on the LEFT — the same
+   * side the gun holds during a landscape run — and stacks the HUD, title,
+   * buttons and nav in the right column. Only placement and type sizes change;
+   * the markup order, the entrance choreography and every animation class stay
+   * exactly as they are, so the intro plan is untouched.
+   */
+  const menuLandscape = isLandscape(orientation);
+  const menuArea = (name: 'gun' | 'hud' | 'title' | 'btns' | 'line' | 'nav'): CSSProperties =>
+    menuLandscape ? { gridArea: name } : {};
+  const menuBodyStyle: CSSProperties = menuLandscape
+    ? {
+        display: 'grid',
+        gridTemplateColumns: '46% 54%',
+        gridTemplateRows: 'auto auto auto auto auto',
+        gridTemplateAreas: '"gun hud" "gun title" "gun btns" "gun line" "gun nav"',
+      }
+    : {};
+  /** The menu weapon box: 337x295 (native art) in portrait, a touch smaller in landscape. */
+  const gunBoxClass = menuLandscape
+    ? 'h-[289px] w-[330px] max-w-full'
+    : 'h-[min(295px,54vh)] w-[min(337px,90vw)] max-w-full';
+
+  /**
    * Android back, top of the pile first: the newest overlay closes, then a live
    * run pauses into the same settings panel as the gear button, and the result
    * screen returns to the menu. Anything this pane does not use is left to the
@@ -2067,9 +2095,9 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
             </div>
 
             <div {...planMotion('in-shake', 800 + 560 * 0.78, 380, 'absolute inset-0', undefined, '', 0, 0)}>
-              <div className="relative flex h-full flex-col">
+              <div className={`relative flex h-full ${menuLandscape ? '' : 'flex-col'}`} style={menuBodyStyle}>
               {/* SGA coin and diamond artwork stays intact, positioned like Perfect Shot's HUD. */}
-              <div className="relative z-10 flex shrink-0 items-center justify-end gap-3 px-5 pt-4">
+              <div className={`relative z-10 flex shrink-0 items-center justify-end gap-3 ${menuLandscape ? 'px-4 pt-2' : 'px-5 pt-4'}`} style={menuArea('hud')}>
                 <div {...planMotion('in-down', 150, 700, 'font-title flex items-center gap-1.5 text-xl text-amber-300 drop-shadow', undefined, 'out-up', 0, 480)}>
                   <span className="font-title tabular-nums font-black tracking-tight">{totalCoins}</span>
                   <CoinSprite size={25} className="drop-shadow-[0_0_5px_rgba(255,210,80,.7)]" />
@@ -2082,10 +2110,10 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
               </div>
 
               {/* Perfect Shot's two-line title, type, bullet slash and staggered impact. */}
-              <div className="relative z-10 mt-1 flex shrink-0 flex-col items-center text-center">
+              <div className={`relative z-10 mt-1 flex shrink-0 flex-col items-center text-center ${menuLandscape ? 'justify-center' : ''}`} style={menuArea('title')}>
                 <div className="relative flex flex-col items-center">
                   {!menuDeparture && <div className="mm-halo pointer-events-none absolute left-1/2 top-[46%] h-[180px] w-[360px] -translate-x-1/2 -translate-y-1/2 rounded-full" style={{ animationDelay: `${2600 * menuPlan.k}ms` }} />}
-                  <h1 className="font-title relative flex text-[min(15vw,72px)] leading-none tracking-wide text-[#3fdc72]">
+                  <h1 className="font-title relative flex text-[min(15vw,72px)] leading-none tracking-wide text-[#3fdc72]" style={menuLandscape ? { fontSize: '44px' } : undefined}>
                     {!menuDeparture && <span aria-hidden className="mm-shine pointer-events-none absolute inset-0 z-10 flex" style={{ animationDelay: `${2800 * menuPlan.k}ms` }}>PERFECT</span>}
                     {'PERFECT'.split('').map((letter, i) => (
                       <span key={`${letter}-${i}`} className={planStyleMotion(menuPlan.title[i], TL.letter(i), ['in-letter', 'out-letter'], 'inline-block', i < 3 ? -1 : 1).className} style={{ ...planStyleMotion(menuPlan.title[i], TL.letter(i), ['in-letter', 'out-letter'], 'inline-block', i < 3 ? -1 : 1).style, textShadow: '0 2px 0 #23a34e, 0 4px 0 #1d8a42, 0 6px 0 #166f35, 0 8px 0 #0f5427, 0 14px 18px rgba(0,0,0,.55)' } as CSSProperties}>{letter}</span>
@@ -2102,7 +2130,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                     </div>
                   </div>
 
-                  <h2 className="font-title relative -mt-1 flex text-[min(18vw,86px)] leading-none tracking-wider text-[#ffd23f]">
+                  <h2 className="font-title relative -mt-1 flex text-[min(18vw,86px)] leading-none tracking-wider text-[#ffd23f]" style={menuLandscape ? { fontSize: '54px' } : undefined}>
                     {!menuDeparture && <span aria-hidden className="mm-shine pointer-events-none absolute inset-0 z-10 flex" style={{ animationDelay: `${3000 * menuPlan.k}ms` }}>SHOT</span>}
                     {'SHOT'.split('').map((letter, i) => (
                       <span key={`${letter}-${i}`} className={planStyleMotion(menuPlan.title[7 + i], TL.shot(i), ['in-slam', 'out-blast'], 'inline-block', i < 2 ? -1 : 1).className} style={{ ...planStyleMotion(menuPlan.title[7 + i], TL.shot(i), ['in-slam', 'out-blast'], 'inline-block', i < 2 ? -1 : 1).style, textShadow: '0 2px 0 #f0a81c, 0 4px 0 #e0901a, 0 6px 0 #c47414, 0 8px 0 #9c5a10, 0 14px 18px rgba(0,0,0,.55)' } as CSSProperties}>{letter}</span>
@@ -2120,10 +2148,10 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
               {/* Weapon showcase. The light behind the weapon is Gun Hit's own
                   sunburst (`SunburstFX`, the amber-ray burst this menu has
                   always used), never the reference menu's conic ray disc. */}
-              <div className="relative flex min-h-0 flex-1 items-center justify-center">
+              <div className={`relative flex items-center justify-center ${menuLandscape ? '' : 'min-h-0 flex-1'}`} style={menuArea('gun')}>
                 <div {...(menuDeparture === 'play'
-                  ? { className: 'relative z-10 h-[min(295px,54vh)] w-[min(337px,90vw)] max-w-full opacity-0', style: {} as CSSProperties }
-                  : planStyleMotion(menuPlan.gun, gunTiming(menuPlan.gun), ['in-gun', 'out-spin'], 'relative z-10 h-[min(295px,54vh)] w-[min(337px,90vw)] max-w-full', 1))}>
+                  ? { className: `relative z-10 ${gunBoxClass} opacity-0`, style: {} as CSSProperties }
+                  : planStyleMotion(menuPlan.gun, gunTiming(menuPlan.gun), ['in-gun', 'out-spin'], `relative z-10 ${gunBoxClass}`, 1))}>
                   {/* No ring or shadow on the floor: the weapon stands on the
                       light of the sunburst alone. */}
                   {!menuDeparture && [18, 42, 64, 82].map((x, i) => <span key={x} className="mm-mote pointer-events-none absolute bottom-[14%] h-1.5 w-1.5 rounded-full bg-[#e0fbff]" style={{ left: `${x}%`, animationDelay: `${(3400 + i * 700) * menuPlan.k}ms` }} />)}
@@ -2147,7 +2175,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                         </div>
                       )}
                     </div>
-                    <canvas ref={previewCanvasRef} style={{ width: 'min(337px, 90vw)', height: 'min(295px, 54vh)' }} className="block cursor-pointer drop-shadow-[0_10px_20px_rgba(0,0,0,.5)] transition-transform hover:scale-105" role="button" tabIndex={0} aria-label={tr(language, 'Buka koleksi senjata')} onClick={() => startArsenalTransition(true)} onKeyDown={(event) => {
+                    <canvas ref={previewCanvasRef} style={menuLandscape ? { width: '330px', height: '289px' } : { width: 'min(337px, 90vw)', height: 'min(295px, 54vh)' }} className="block cursor-pointer drop-shadow-[0_10px_20px_rgba(0,0,0,.5)] transition-transform hover:scale-105" role="button" tabIndex={0} aria-label={tr(language, 'Buka koleksi senjata')} onClick={() => startArsenalTransition(true)} onKeyDown={(event) => {
                       if (event.key === 'Enter' || event.key === ' ') {
                         event.preventDefault();
                         unlockStudioAudio(true);
@@ -2159,7 +2187,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
               </div>
 
               {/* Perfect Shot's glossy paired controls, wired to SGA actions. */}
-              <div className="relative z-10 flex shrink-0 justify-center gap-3 px-6">
+              <div className={`relative z-10 flex shrink-0 justify-center gap-3 ${menuLandscape ? 'items-center px-4' : 'px-6'}`} style={menuArea('btns')}>
                 <div {...planStyleMotion(menuPlan.buttons[0], TL.buttons(0), ['in-left', 'out-left'], 'w-[42%] max-w-[158px]', -1)}>
                   <button type="button" data-gloss="off" onClick={openLevelMap} className="press shine font-ui relative flex h-[54px] w-full items-center justify-center gap-1.5 rounded-2xl bg-gradient-to-b from-[#ff6a3d] to-[#e0331e] text-[20px] text-white shadow-[0_5px_0_#9c1f12,0_10px_18px_rgba(0,0,0,.4)]" style={{ '--shd': '2.4s' } as CSSProperties}>
                     <span className="absolute inset-x-3 top-1.5 h-5 rounded-xl bg-white/25" />
@@ -2176,10 +2204,13 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                 </div>
               </div>
 
-              <div {...planMotion('in-line', 1500, 600, 'relative z-10 mx-auto my-4 h-px w-[70%] bg-gradient-to-r from-transparent via-white/20 to-transparent', undefined, 'out-line', 40, 380)} />
+              {(() => {
+                const line = planMotion('in-line', 1500, 600, `relative z-10 mx-auto ${menuLandscape ? 'my-2' : 'my-4'} h-px w-[70%] bg-gradient-to-r from-transparent via-white/20 to-transparent`, undefined, 'out-line', 40, 380);
+                return <div {...line} style={{ ...line.style, ...menuArea('line') }} />;
+              })()}
 
               {/* Right game's four framed vector icons, retaining SGA menu destinations. */}
-              <div className={`relative z-30 grid shrink-0 grid-cols-4 px-6 pb-5 ${perfectShotIconSet === 'flat' ? 'gap-5' : 'gap-3'}`}>
+              <div className={`relative z-30 grid shrink-0 grid-cols-4 ${menuLandscape ? 'px-4 pb-2' : 'px-6 pb-5'} ${perfectShotIconSet === 'flat' ? 'gap-5' : 'gap-3'}`} style={menuArea('nav')}>
                 {SGA_MENU_NAV.map((item, i) => (
                   <div key={item.id} {...planStyleMotion(menuPlan.nav[i], TL.nav(i), ['in-pop', 'out-down'], 'flex justify-center', i < 2 ? -1 : 1)}>
                     <button type="button" data-gloss="off" onClick={() => {
