@@ -65,7 +65,20 @@ test('level rules and canvas geometry live outside the engine', () => {
 test('vite splits the engine, the artwork and the ported slides', () => {
   const config = read('vite.config.ts');
   assert.ok(config.includes('advancedChunks'));
-  for (const group of ['gunhit-engine', 'gunhit-art', 'gunhit-art-guns', 'gunhit-menu-data', 'gunhit-audio', 'shared-runtime', 'ported-4', 'ported-8']) {
+  for (const group of ['gunhit-art', 'gunhit-art-guns', 'gunhit-menu-data', 'gunhit-audio', 'shared-runtime', 'ported-4', 'ported-8']) {
     assert.ok(config.includes(`name: '${group}'`), `${group} group exists`);
+  }
+  // The engine must never be a *static* dependency of the entry chunk. A broad
+  // `games/gunhit/game/` catch-all used to swallow safeStorage.ts — which the
+  // hub shell does import statically — so the whole 440 kB engine (and, through
+  // it, ported-4/6/8 and every gun texture) was downloaded and parsed before
+  // first paint. Rolldown still splits the engine out on its own once the game
+  // is opened, so those catch-all groups are deliberately gone.
+  for (const catchAll of ['gunhit-engine', 'gunhit-components']) {
+    assert.ok(!config.includes(`name: '${catchAll}'`), `${catchAll} catch-all is gone`);
+    assert.ok(
+      !new RegExp(`name:\\s*'${catchAll}'\\s*,\\s*test:\\s*/\\[\\\\\\\\/\\]games`).test(config),
+      `${catchAll} directory catch-all regex is gone`,
+    );
   }
 });
