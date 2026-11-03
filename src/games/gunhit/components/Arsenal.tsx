@@ -16,6 +16,8 @@ import { useSlideActive } from '../../shared/SlideActivity';
 import { SunburstFX } from '../../knife-hit/components/Effects';
 import { gunSunburstColor } from '../game/sunburstPalette';
 import { getSavedSgaSpeed } from '../game/gameSpeed';
+import { isLandscape } from '../game/orientation';
+import { useSgaOrientation } from '../utils/useSgaOrientation';
 import { getFast2DContext, getOptimalCanvasDpr } from '../utils/mobilePerf';
 import {
   UNIQUE_EDITABLE_WEAPONS,
@@ -329,13 +331,50 @@ export default function Arsenal({
   const heroSectionRef = useRef<HTMLElement>(null);
   const [heroBox, setHeroBox] = useState({ w: 380, h: 180 });
 
+  /**
+   * Armory in landscape.
+   *
+   * The page is a vertical stack (header → showcase → name plate → tabs →
+   * catalog). In the 760x420 landscape frame that stack leaves the catalog with
+   * almost no height, so landscape instead lays the same blocks out in two
+   * columns, exactly like the reference armory screen: the showcase, name plate
+   * and palette button own the LEFT column, while the seven rarity tabs and the
+   * scrollable catalog own the RIGHT column. DOM order, keys and every entrance
+   * class stay unchanged — only the grid placement and a few paddings differ.
+   */
+  const [orientation] = useSgaOrientation();
+  const landscape = isLandscape(orientation);
+  const area = (name: 'head' | 'hero' | 'tabs' | 'panel' | 'plate' | 'buy'): CSSProperties =>
+    landscape ? { gridArea: name } : {};
+  const withArea = (motion: { className: string; style: CSSProperties }, name: Parameters<typeof area>[0]) => ({
+    ...motion,
+    style: { ...motion.style, ...area(name) },
+  });
+  const armoryGridStyle: CSSProperties = landscape
+    ? {
+        display: 'grid',
+        gridTemplateColumns: 'minmax(0,43fr) minmax(0,57fr)',
+        gridTemplateRows: 'auto auto minmax(0,1fr) auto auto',
+        gridTemplateAreas: '"head head" "hero tabs" "hero panel" "plate panel" "buy panel"',
+        columnGap: '8px',
+      }
+    : {};
+
   useEffect(() => {
     const el = heroSectionRef.current;
     if (!el) return;
     const measure = () => {
-      const r = el.getBoundingClientRect();
-      if (r.width > 2 && r.height > 2) {
-        setHeroBox((prev) => (Math.abs(prev.w - r.width) < 1 && Math.abs(prev.h - r.height) < 1 ? prev : { w: Math.round(r.width), h: Math.round(r.height) }));
+      // clientWidth/clientHeight, not getBoundingClientRect: the whole game is
+      // drawn inside ScaledFrame, whose CSS transform scales every rect by the
+      // fit factor. Measuring the transformed rect and then applying it as the
+      // canvas' own CSS size made the showcase as many times too big as the
+      // frame was scaled — on a wide window the gun spilled over the ARMORY
+      // header (and on a small phone it shrank). Layout pixels are what the
+      // canvas needs.
+      const w = el.clientWidth;
+      const h = el.clientHeight;
+      if (w > 2 && h > 2) {
+        setHeroBox((prev) => (Math.abs(prev.w - w) < 1 && Math.abs(prev.h - h) < 1 ? prev : { w: Math.round(w), h: Math.round(h) }));
       }
     };
     measure();
@@ -525,7 +564,7 @@ export default function Arsenal({
     : 'BOSS';
 
   return (
-    <div aria-hidden={leaving} className={`absolute inset-0 z-50 flex min-h-0 flex-col overflow-hidden px-3 pb-2.5 pt-3 font-game text-white select-none ${leaving ? 'arsenal-armory-closing pointer-events-none' : 'arsenal-armory-open'}`}>
+    <div aria-hidden={leaving} style={armoryGridStyle} className={`absolute inset-0 z-50 flex min-h-0 flex-col overflow-hidden px-3 pb-2.5 pt-3 font-game text-white select-none ${leaving ? 'arsenal-armory-closing pointer-events-none' : 'arsenal-armory-open'}`}>
       {/* Armory's purple night-sky palette and soft fireflies. */}
       <div {...A('sh-bg-in', SHOP_IN.bg, 'out-bg', SHOP_OUT.bg, 'pointer-events-none absolute inset-0 overflow-hidden')} aria-hidden="true">
         <div className="absolute inset-0 bg-[linear-gradient(180deg,#2b1f4d_0%,#1d1238_45%,#140b29_100%)]" />
@@ -540,7 +579,7 @@ export default function Arsenal({
       </div>
 
       {/* Header: same yellow back button, title/progress and coin + gem wallet. */}
-      <header {...A('in-down', SHOP_IN.top(0), 'out-up', SHOP_OUT.top(0), 'relative z-20 flex shrink-0 items-center gap-2.5')}>
+      <header {...withArea(A('in-down', SHOP_IN.top(0), 'out-up', SHOP_OUT.top(0), 'relative z-20 flex shrink-0 items-center gap-2.5'), 'head')}>
         <button onClick={requestClose} disabled={leaving} aria-label="Kembali" className="press grid h-11 w-11 shrink-0 place-items-center rounded-2xl border-2 border-[#7a4b00] bg-gradient-to-b from-[#ffe27a] to-[#f59e0b] shadow-[0_4px_0_#7a4b00,inset_0_2px_0_rgba(255,255,255,.5)]">
           <svg viewBox="0 0 24 24" className="h-7 w-7"><path d="M11 4 L3 12 L11 20 V15 H21 V9 H11 Z" fill="#fff" stroke="#7a4b00" strokeWidth="1.8" strokeLinejoin="round" /></svg>
         </button>
@@ -575,7 +614,7 @@ export default function Arsenal({
 
       {/* The reference showcase: spinning ray burst, rarity aura, a landing
           flash + dust ring, and the gun floating above its podium. */}
-      <section ref={heroSectionRef} className="relative z-10 flex mt-1 h-[clamp(120px,20vh,185px)] shrink-0 items-center justify-center">
+      <section ref={heroSectionRef} style={area('hero')} className={`relative z-10 flex items-center justify-center ${landscape ? 'mt-0 h-full min-h-0 w-full' : 'mt-1 h-[clamp(120px,20vh,185px)] shrink-0'}`}>
         {/* The showcase light is the menu's own sunburst — one burst of rays,
             same size/speed/strength as the cover screen, so the armory and the
             menu read as the same room instead of two stacked ray wheels. */}
@@ -609,7 +648,7 @@ export default function Arsenal({
         </div>
       </section>
 
-      <div className="relative z-20 mt-1.5 flex min-h-[42px] shrink-0 items-center justify-center gap-2">
+      <div style={area('plate')} className={`relative z-20 flex items-center justify-center gap-2 ${landscape ? 'mb-1 mt-0 min-h-0' : 'mt-1.5 min-h-[42px] shrink-0'}`}>
         <div key={`plate-${selectedGunId}-${heroKey}`} {...A('in-slam', heroKey === 0 ? SHOP_IN.plate : { d: 260, dur: 460 }, 'out-up', SHOP_OUT.plate, 'flex max-w-[82%] items-center gap-2 rounded-2xl border-2 border-[#ffd23f]/30 bg-gradient-to-b from-[#2a1d48] to-[#140b26] px-4 py-2 shadow-[0_6px_16px_rgba(0,0,0,.5),inset_0_1px_0_rgba(255,255,255,.12)]')}>
           <span className="font-arsenal-title truncate text-[24px] leading-none text-[#ffd23f] [text-shadow:0_2px_0_#9c5a10,0_0_12px_rgba(255,210,63,.35)]">{selectedGun.name.toUpperCase()}</span>
           <span className={`font-arsenal-title flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[12px] leading-none ${RARITY_CHIP[selectedGun.rarity]}`}><RarityIcon className="h-3 w-3" />{rarityName(selectedGun.rarity)}</span>
@@ -620,7 +659,7 @@ export default function Arsenal({
       </div>
 
       {selectedLocked && (
-        <div {...A('in-pop', SHOP_IN.pill, 'out-up', { d: 30, dur: 360 }, 'relative z-20 mt-1 flex shrink-0 justify-center')}>
+        <div {...withArea(A('in-pop', SHOP_IN.pill, 'out-up', { d: 30, dur: 360 }, 'relative z-20 flex justify-center'), 'buy')}>
           <button type="button" onClick={() => {
             if (diamonds < 500) { sfx.coin(); return; }
             if (onBuyRare(selectedGun.id)) setOwnedRare((ids) => ids.includes(selectedGun.id) ? ids : [...ids, selectedGun.id]);
@@ -629,7 +668,7 @@ export default function Arsenal({
       )}
 
       {/* The seven icon tabs mirror Perfect Shot; SGA's filtering and catalog stay intact. */}
-      <nav className="relative z-20 mt-3 grid shrink-0 grid-cols-7 gap-1" aria-label={tr(language, 'Kategori senjata')}>
+      <nav style={area('tabs')} className={`relative z-20 grid grid-cols-7 gap-1 ${landscape ? 'mb-1 mt-0' : 'mt-3 shrink-0'}`} aria-label={tr(language, 'Kategori senjata')}>
         {tabItems.map(({ id, label, Icon, color }, i) => {
           const active = tab === id;
           return <div key={id} {...A('in-pop', SHOP_IN.tab(i), 'out-down', SHOP_OUT.tab(i))}><button type="button" aria-pressed={active} onClick={() => changeTab(id)} className={`press flex w-full flex-col items-center gap-0.5 rounded-t-xl border-x-2 border-t-2 px-0.5 pt-1.5 pb-1 transition-all duration-300 ${active ? '-translate-y-1 border-[#f0abfc]/70 bg-gradient-to-b from-[#c026d3] to-[#7e22ce] shadow-[0_-4px_14px_rgba(192,38,211,.45)]' : 'border-white/10 bg-gradient-to-b from-[#3a2d5c] to-[#271c42]'}`}>
@@ -642,7 +681,7 @@ export default function Arsenal({
       </nav>
 
       {/* Scrollable catalog panel, replacing the old six-weapons-per-page carousel. */}
-      <section {...A('sh-panel-in', SHOP_IN.panel, 'sh-panel-out', SHOP_OUT.panel, 'relative z-10 flex min-h-0 flex-1 flex-col overflow-hidden rounded-b-2xl rounded-tr-2xl border-2 border-[#7e22ce]/80 bg-gradient-to-b from-[#1e1338] to-[#140c27] shadow-[0_10px_30px_rgba(0,0,0,.5)]')}>
+      <section {...withArea(A('sh-panel-in', SHOP_IN.panel, 'sh-panel-out', SHOP_OUT.panel, 'relative z-10 flex min-h-0 flex-1 flex-col overflow-hidden rounded-b-2xl rounded-tr-2xl border-2 border-[#7e22ce]/80 bg-gradient-to-b from-[#1e1338] to-[#140c27] shadow-[0_10px_30px_rgba(0,0,0,.5)]'), 'panel')}>
         <div className="flex shrink-0 items-center justify-between bg-gradient-to-r from-[#5b21b6] to-[#3b1a6e] px-3 py-2">
           <span key={tab} {...A('in-left', { d: 0, dur: 450 }, 'out-fade', { d: 0, dur: 200 }, 'font-arsenal-title text-[15px] text-white')}>{panelTitle}</span>
           {tab !== 'BOSS' && <span className="font-arsenal-title rounded-lg bg-black/40 px-2 py-1 text-[11px] text-white/85">{filteredWeapons.length} ITEM</span>}
@@ -663,8 +702,8 @@ export default function Arsenal({
                     {isGunDefaultMarked(w.id) && <span title={tr(language, 'Default tersimpan')} className="absolute left-1.5 top-7 z-10 grid h-5 w-5 place-items-center rounded-md bg-[#ffd23f] text-[#7a4300] shadow-[0_2px_0_#9a5b00]"><Star className="h-3.5 w-3.5 fill-current" /></span>}
                     {(hasSlide11Update(w.id) || hasSlide9Update(w.id) || hasSlide6Update(w.id) || hasSlide7Update(w.id)) && <span className="font-arsenal-title absolute right-1.5 top-7 z-10 rounded-full border border-[#3fdc72] bg-[#0f3b1f] px-1.5 py-1 text-[7px] leading-none text-[#4ade80]">NEW</span>}
                     {isSelected && <span className="absolute right-1.5 top-1.5 z-20 grid h-5 w-5 place-items-center rounded-full bg-[#22c55e] text-white shadow ring-2 ring-[#0f3b1f]"><Check className="h-3.5 w-3.5" /></span>}
-                    <div className={`absolute inset-x-1 top-7 bottom-8 grid place-items-center transition-[filter] ${locked ? 'brightness-[.18] grayscale' : 'drop-shadow-[0_6px_6px_rgba(0,0,0,.52)]'}`}>
-                      <GunItemCanvas weapon={w} isSelected={isSelected} variant={getGunVariant(w.id)} size={112} eager={index < 12} />
+                    <div className={`absolute inset-x-1 grid place-items-center transition-[filter] ${landscape ? 'top-6 bottom-7' : 'top-7 bottom-8'} ${locked ? 'brightness-[.18] grayscale' : 'drop-shadow-[0_6px_6px_rgba(0,0,0,.52)]'}`}>
+                      <GunItemCanvas weapon={w} isSelected={isSelected} variant={getGunVariant(w.id)} size={landscape ? 88 : 112} eager={index < 12} />
                     </div>
                     {locked && <span className="absolute inset-0 z-20 grid place-items-center"><LockKeyhole className="h-10 w-10 rounded-2xl border-2 border-[#22d3ee] bg-[#08202a]/85 p-2 text-cyan-50 shadow-[0_0_16px_rgba(34,211,238,.6)]" /></span>}
                     <span className={`font-arsenal-title absolute inset-x-1.5 bottom-1.5 z-10 break-words rounded-lg border px-1 py-1.5 text-center text-[11px] leading-[1.05] ${isSelected ? 'border-[#ffe066]/70 bg-black/85 text-[#ffe066]' : 'border-white/10 bg-black/70 text-white'}`}>{w.name.toUpperCase()}</span>
