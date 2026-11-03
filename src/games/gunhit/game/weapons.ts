@@ -181,10 +181,13 @@ const ALL_WEAPON_DEFINITIONS: Weapon[] = [
   { ...base, id: 'shotgun', name: 'SHOTGUN', emoji: '💥', rarity: 'UMUM', perk: 'TIGA SEKALIGUS', desc: '3 peluru menyebar sekaligus. Cepat selesai, tapi berisiko kena peluru lain!',
     speed: 2700, cooldown: 0.55, recoil: 2, shake: 8, half: 4.5, burst: 3, stick: 17, color: '#ff4d2e', trail: '255,200,120', sparks: FIRE, casing: '#d62828', ejectY: 96,
     previewLen: 250, previewScale: 0.82, previewY: 46, stats: { rate: 2, speed: 3, power: 5 } },
-  { ...base, id: 'soaker', name: 'SUPER SOAKER', emoji: '💦', rarity: 'UMUM', perk: 'BASAH', desc: 'Pistol air neon. Target yang basah berputar lebih lambat. Tahan untuk semprot!',
-    speed: 2300, cooldown: 0.11, auto: true, recoil: 0.4, shake: 1.2, half: 4.5, stick: 17, noSmoke: true, color: '#3b82f6', trail: '120,190,255', trailFx: 'bubble',
+  { ...base, id: 'soaker', name: 'SUPER SOAKER', emoji: '💦', rarity: 'UMUM', perk: 'BASAH', desc: 'Pistol air neon. Target yang basah berputar lebih lambat. Tahan untuk semprot, tapi tiap semburan ada jeda.',
+    // 0,11 s menyemprot 9 butir per detik: air menumpuk di target dan pemain
+    // kalah sebelum sempat berhenti. Jeda 0,3 s memberi napas di antara
+    // semburan tanpa menghilangkan rasa "semprot".
+    speed: 2300, cooldown: 0.3, auto: true, recoil: 0.4, shake: 1.2, half: 4.5, stick: 17, noSmoke: true, color: '#3b82f6', trail: '120,190,255', trailFx: 'bubble',
     sparks: ['#ffffff', '#bfdbfe', '#60a5fa'], slow: true, slowFactor: 0.6, slowTime: 1.5, slowRgb: '80,160,255', slowText: '💦 BASAH!',
-    burstFx: { colors: ['#93c5fd', '#dbeafe', '#ffffff'], n: 8, g: 700, spd: 180 }, previewLen: 190, previewY: 40, stats: { rate: 5, speed: 3, power: 2 } },
+    burstFx: { colors: ['#93c5fd', '#dbeafe', '#ffffff'], n: 8, g: 700, spd: 180 }, previewLen: 190, previewY: 40, stats: { rate: 3, speed: 3, power: 2 } },
   { ...base, id: 'snowball', name: 'SNOWBALL CANNON', emoji: '⛄', rarity: 'UMUM', perk: 'MANUSIA SALJU', desc: 'Bola salju bertumpuk. Tiap 3 bola salju menempel, muncul manusia salju dan bonus +3 poin!',
     speed: 2000, cooldown: 0.2, recoil: 0.9, shake: 2.5, half: 13, stick: 16, noSmoke: true, color: '#e0f2fe', trail: '230,245,255', trailFx: 'frost',
     sparks: ['#ffffff', '#e0f2fe', '#bae6fd'], snowman: true, burstFx: { colors: ['#ffffff', '#e0f2fe'], n: 12, g: 500, spd: 160 }, previewLen: 200, previewY: 48, stats: { rate: 3, speed: 2, power: 3 } },
