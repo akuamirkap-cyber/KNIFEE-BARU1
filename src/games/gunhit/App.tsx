@@ -71,6 +71,9 @@ import { SGA_SPEED_OPTIONS, formatSgaSpeed, getSavedSgaSpeed } from './game/game
 import { useSgaGameSpeed } from './utils/useSgaGameSpeed';
 import { SGA_BG_THEMES, getSavedSgaBgTheme } from './game/backgroundThemes';
 import { useSgaBgTheme } from './utils/useSgaBgTheme';
+import { SGA_ORIENTATION_OPTIONS, getSavedSgaOrientation } from './game/orientation';
+import { useSgaOrientation } from './utils/useSgaOrientation';
+import { displaySize } from './game/layout';
 import { getFast2DContext, getOptimalCanvasDpr } from './utils/mobilePerf';
 import { TransitionOverlay, type OverlayPhase, type OverlayVariant } from '../perfect-shot/components/TransitionOverlay';
 import { sfx as studioSfx } from '../perfect-shot/audio/sfx';
@@ -469,6 +472,11 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   const [soundVolume, setSoundVolumeState] = useState<number>(initialSoundVolume);
   const [gameSpeed, setGameSpeed] = useSgaGameSpeed();
   const [menuTheme, setMenuTheme] = useSgaBgTheme();
+  const [orientation, setOrientation] = useSgaOrientation();
+  // The shell and the canvas are the *display* rectangle: 420x760 portrait, or
+  // 760x420 when the world is laid on its side. The engine sizes its own backing
+  // store from the same numbers.
+  const frame = displaySize(orientation);
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Kebijakan privasi: halaman in-app yang teksnya sama dengan docs/PRIVACY.md.
   const [privacyOpen, setPrivacyOpen] = useState(false);
@@ -914,6 +922,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       g.setWeapon(getWeapon(storage.getItem(LS.weapon) || 'pistol').id);
       g.setGameSpeed(getSavedSgaSpeed());
       g.setBackgroundTheme(getSavedSgaBgTheme());
+      g.setOrientation(getSavedSgaOrientation());
       gameRef.current = g;
       // The mount effects that ran while the chunk was in flight could not touch
       // the engine; replay their state once it exists.
@@ -985,6 +994,10 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   useEffect(() => {
     gameRef.current?.setBackgroundTheme(menuTheme);
   }, [menuTheme]);
+
+  useEffect(() => {
+    gameRef.current?.setOrientation(orientation);
+  }, [orientation]);
 
   useEffect(() => {
     const onSansIntroComplete = (event: Event) => {
@@ -1877,9 +1890,13 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
           <span>{tr(language, 'Pilih Game Lain')}</span>
         </button>
       )}
-      <div ref={gameShellRef} className="relative overflow-hidden shadow-[0_0_80px_rgba(0,0,0,0.9)] w-[420px] h-[760px] flex-shrink-0">
+      <div
+        ref={gameShellRef}
+        className="relative flex-shrink-0 overflow-hidden shadow-[0_0_80px_rgba(0,0,0,0.9)]"
+        style={{ width: frame.w, height: frame.h }}
+      >
         {/* Canvas Engine (zero permanent translucent DOM overlays during gameplay so desynchronized:true scans out directly) */}
-        <canvas ref={canvasRef} className="block touch-none w-[420px] h-[760px]" />
+        <canvas ref={canvasRef} className="block touch-none" style={{ width: frame.w, height: frame.h }} />
         {diamondToast && (
           <div key={diamondToast.id} className="pointer-events-none absolute inset-x-0 top-[34%] z-40 flex flex-col items-center diamond-reward-pop" aria-live="polite">
             <div className="relative flex h-36 w-64 items-center justify-center">
@@ -2222,6 +2239,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
             speedOptions={SGA_SPEED_OPTIONS}
             themes={SGA_BG_THEMES}
             theme={menuTheme}
+            orientation={orientation}
             onClose={closeSettingsPage}
             onMute={toggleMute}
             onSfx={toggleEffects}
@@ -2229,6 +2247,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
             onVolume={changeSoundVolume}
             onSpeed={setGameSpeed}
             onTheme={chooseMenuTheme}
+            onOrientation={setOrientation}
             animSpeed={psAnimationConfig.speed}
             animGunStyle={psAnimationConfig.groups.gun.style}
             animSpeeds={SPEEDS}

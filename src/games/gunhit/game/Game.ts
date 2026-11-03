@@ -181,6 +181,12 @@ import {
   initialGameplayWheelCenterY,
 } from './layout';
 export { BASE_WHEEL_CY, CY, GAMEPLAY_GUN_SCALE, GUN_Y, H, SPECIAL_CY, W, initialGameplayWheelCenterY };
+import { displaySize, displayToWorld, worldTransform } from './layout';
+import {
+  getSavedSgaOrientation,
+  normalizeSgaOrientation,
+  type SgaOrientation,
+} from './orientation';
 import {
   ROCK_RADIUS,
   allowsStarPowerups,
@@ -1531,6 +1537,12 @@ export class Game {
   private timeScale = 1;
   private pace: SgaGameSpeed = 1;
   private bgTheme: SgaBackgroundTheme = 'auto';
+  /**
+   * Screen orientation. The world is always simulated in portrait coordinates;
+   * this only changes how it is presented (see `layout.ts`'s landscape notes)
+   * and where the HUD is drawn.
+   */
+  private orientation: SgaOrientation = getSavedSgaOrientation();
   private bump = 0;
   private hitFlash = 0;
   /** game-3 wheelFlash: tints only the target, never the whole screen. */
@@ -2323,6 +2335,23 @@ export class Game {
     return this.bgTheme;
   }
 
+  setOrientation(next: SgaOrientation) {
+    const normalized = normalizeSgaOrientation(next, this.orientation);
+    if (normalized === this.orientation) return;
+    this.orientation = normalized;
+    // The backing store changes shape, so anything pre-baked at the old pixel
+    // size has to go or it will be stretched over the new canvas.
+    this.vignetteBackdrop = null;
+    this.vignetteBackdropDpr = 0;
+    this.specialOverlayCanvas = null;
+    this.specialOverlayKey = '';
+    this.resize();
+  }
+
+  getOrientation(): SgaOrientation {
+    return this.orientation;
+  }
+
   setActive(active: boolean) {
     if (this.active === active) return;
     this.active = active;
@@ -2444,7 +2473,8 @@ export class Game {
   /** Change only raster density; world coordinates, input and effects stay intact. */
   private applyCanvasDpr(dpr: number) {
     this.dpr = dpr;
-    const width = Math.round(W * dpr), height = Math.round(H * dpr);
+    const { w, h } = displaySize(this.orientation);
+    const width = Math.round(w * dpr), height = Math.round(h * dpr);
     if (this.canvas.width !== width) this.canvas.width = width;
     if (this.canvas.height !== height) this.canvas.height = height;
   }
@@ -2458,9 +2488,13 @@ export class Game {
     // Re-measure the cadence against the new backing store.
     this.cadence.reset();
     this.lastWork = 0;
-    this.canvas.style.width = `${W}px`;
-    this.canvas.style.height = `${H}px`;
+    // CSS size follows the *display* rectangle (landscape swaps W and H); the
+    // engine keeps drawing in world units underneath.
+    const { w, h } = displaySize(this.orientation);
+    this.canvas.style.width = `${w}px`;
+    this.canvas.style.height = `${h}px`;
     this.applyCanvasDpr(baseDpr);
+    // The fluid field is a world-space effect, so it keeps the world's size.
     this.acidFluid.resize(W, H);
     // Resizing clears the backing store. Restore a single still frame even
     // if the game is paused rather than leaving an empty thumbnail.
@@ -2483,8 +2517,12 @@ export class Game {
     // Cek tap pada bintang power-up lebih dulu
     if (this.star) {
       const rect = this.canvas.getBoundingClientRect();
-      const x = (e.clientX - rect.left) / rect.width * W;
-      const y = (e.clientY - rect.top) / rect.height * H;
+      // The canvas element is the *display* rectangle, which is rotated in
+      // landscape, so the tap has to be mapped back through the same transform
+      // the world was drawn with.
+      const nx = (e.clientX - rect.left) / rect.width;
+      const ny = (e.clientY - rect.top) / rect.height;
+      const { x, y } = displayToWorld(this.orientation, nx, ny);
       if (this.tryTapStar(x, y)) return;
     }
     this.press();
@@ -9145,7 +9183,11 @@ export class Game {
   private render() {
     const c = this.ctx;
     const k = this.scale * this.dpr;
-    c.setTransform(k, 0, 0, k, 0, 0);
+    // Everything below draws in *world* coordinates. In landscape the base
+    // transform is the 90° rotation from `layout.ts`, so the gun ends up on the
+    // left firing right and the wheel on the right — without the engine ever
+    // learning which way the screen is facing.
+    c.setTransform(...worldTransform(this.orientation, k));
     const pal = STYLE_COLORS[this.level.style];
     const R = this.level.radius;
     let busterWheelTransform: DOMMatrix | null = null;
@@ -10331,25 +10373,36 @@ export class Game {
     // inherit the boss' splinter clip.
     setSplinterClip(c, null);
 
+    // From here on the drawing is *screen* furniture, not world: drop back to
+    // plain display coordinates so the HUD's text stays upright and its corners
+    // sit on the real screen edges in both orientations.
+    const { w: dw, h: dh } = displaySize(this.orientation);
+    c.setTransform(k, 0, 0, k, 0, 0);
     if (this.state !== 'idle') this.drawHUD(c);
 
     if (this.flashWhite > 0) {
       c.fillStyle = `rgba(255,255,255,${this.flashWhite * 0.6})`;
-      c.fillRect(0, 0, W, H);
+      c.fillRect(0, 0, dw, dh);
     }
     if (this.flashRed > 0) {
       c.fillStyle = `rgba(255,0,0,${this.flashRed * 0.3})`;
-      c.fillRect(0, 0, W, H);
-      const rg = c.createRadialGradient(CX, H / 2, H * 0.2, CX, H / 2, H * 0.7);
+      c.fillRect(0, 0, dw, dh);
+      const rg = c.createRadialGradient(dw / 2, dh / 2, dh * 0.2, dw / 2, dh / 2, dh * 0.7);
       rg.addColorStop(0, 'rgba(255,0,0,0)');
       rg.addColorStop(1, `rgba(255,0,0,${this.flashRed * 0.5})`);
       c.fillStyle = rg;
-      c.fillRect(0, 0, W, H);
+      c.fillRect(0, 0, dw, dh);
     }
   }
 
   private drawHUD(c: CanvasRenderingContext2D) {
     const font = (s: number) => `${s}px 'Russo One', sans-serif`;
+    // The HUD is screen furniture, so it is laid out against the *display*
+    // rectangle. In landscape that is 760x420 instead of the portrait world's
+    // 420x760, which moves the score/coin corners and re-centres the stage,
+    // timer and boss rows without the engine knowing the screen rotated.
+    const { w: DW, h: DH } = displaySize(this.orientation);
+    const DCX = DW / 2;
     c.textBaseline = 'middle';
     // score
     c.textAlign = 'left';
@@ -10394,15 +10447,15 @@ export class Game {
     const coinSize = scoreSize;
     const coinY = isSpecial(this.level.mode) ? 34 : 46;
     const coinR = isSpecial(this.level.mode) ? 13 : 17.5;
-    const coinCx = W - coinR - 8;
+    const coinCx = DW - coinR - 8;
     const coinCountX = coinCx - coinR - 8;
     c.textAlign = 'right';
     c.font = font(coinSize);
     // A long wallet must not run into the centred stage label (special stages)
     // or the boss bar: shrink the counter only as far as it has to.
     const coinText = String(this.coins);
-    // Special stages put their timer pill on this row (ends at CX + 118);
-    // boss stages put the health bar there (ends at CX + 103).
+    // Special stages put their timer pill on this row (ends at DCX + 118);
+    // boss stages put the health bar there (ends at DCX + 103).
     const coinRowLeft = isSpecial(this.level.mode) ? 336 : this.level.boss ? 316 : 0;
     const coinRoom = coinRowLeft ? coinCountX - coinRowLeft : coinCountX;
     if (coinRoom > 24 && typeof c.measureText === 'function') {
@@ -10438,25 +10491,25 @@ export class Game {
     c.font = font(isSpecial(this.level.mode) ? 13 : 16);
     c.fillStyle = this.level.mode === 'treasure' || this.level.mode === 'bonus' ? '#fde68a'
       : this.level.mode === 'boulder' ? '#a5f3fc' : this.level.boss ? '#ff5050' : '#ffffff';
-    c.fillText(modeLabel, CX, isSpecial(this.level.mode) ? 20 : 24);
+    c.fillText(modeLabel, DCX, isSpecial(this.level.mode) ? 20 : 24);
 
     if (isSpecial(this.level.mode)) {
       c.save();
       c.fillStyle = 'rgba(5,12,24,0.72)';
       c.strokeStyle = this.level.mode === 'boulder' ? 'rgba(103,232,249,0.7)' : 'rgba(252,211,77,0.7)';
       c.lineWidth = 1.4;
-      c.beginPath(); c.roundRect(CX - 118, 30, 236, 24, 11); c.fill(); c.stroke();
+      c.beginPath(); c.roundRect(DCX - 118, 30, 236, 24, 11); c.fill(); c.stroke();
       c.font = font(12);
       const timeStr = `⏱ ${this.stageTime.toFixed(1)}s`;
       if (this.level.mode === 'boulder') {
         const ratio = 1 - this.level.hp / Math.max(1, this.level.maxHp);
         c.fillStyle = this.stageTime < 8 ? '#fb7185' : '#ffffff';
         c.textAlign = 'left';
-        c.fillText(timeStr, CX - 108, 42);
+        c.fillText(timeStr, DCX - 108, 42);
         c.textAlign = 'right';
         c.fillStyle = '#a5f3fc';
-        c.fillText(`${T('BATU')} ${Math.round(ratio * 100)}%`, CX + 108, 42);
-        const barX = CX - 26, barY = 39, barW = 64;
+        c.fillText(`${T('BATU')} ${Math.round(ratio * 100)}%`, DCX + 108, 42);
+        const barX = DCX - 26, barY = 39, barW = 64;
         c.fillStyle = '#164e63'; c.fillRect(barX, barY, barW, 6);
         c.fillStyle = '#67e8f9'; c.fillRect(barX, barY, barW * ratio, 6);
       } else if (this.level.mode === 'bonus') {
@@ -10465,12 +10518,12 @@ export class Game {
           if (this.bonusCoins[ci].taken) taken++;
         }
         c.fillStyle = this.stageTime < 8 ? '#fb7185' : '#fde68a';
-        c.fillText(`${timeStr}  •  KOIN ${taken}/${this.bonusCoins.length}`, CX, 42);
+        c.fillText(`${timeStr}  •  KOIN ${taken}/${this.bonusCoins.length}`, DCX, 42);
       } else {
         const status = this.treasureBuff === 'double' ? T('2 SENJATA')
           : this.treasureBuff ? `${T('BONUS')} ${this.treasureBuff.toUpperCase()}` : T('BERONDONG PETI!');
         c.fillStyle = this.stageTime < 8 ? '#fb7185' : '#fde68a';
-        c.fillText(`${timeStr}  •  ${status}`, CX, 42);
+        c.fillText(`${timeStr}  •  ${status}`, DCX, 42);
       }
       c.restore();
     }
@@ -10479,7 +10532,7 @@ export class Game {
     if (this.level.boss) {
       const barW = 200;
       const barH = 12;
-      const barX = CX - barW / 2;
+      const barX = DCX - barW / 2;
       const barY = 46;
 
       const hpFrac = Math.max(0, Math.min(1, this.bossHp / this.bossMaxHp));
@@ -10519,12 +10572,12 @@ export class Game {
       c.font = 'bold 9px sans-serif';
       c.fillStyle = '#ffffff';
       c.textAlign = 'center';
-      c.fillText(`${Math.round(this.bossHp)} / ${this.bossMaxHp} HP`, CX, barY + barH * 0.7);
+      c.fillText(`${Math.round(this.bossHp)} / ${this.bossMaxHp} HP`, DCX, barY + barH * 0.7);
       c.restore();
     } else if (!isSpecial(this.level.mode)) {
       const idx = (n - 1) % 5;
       for (let i = 0; i < 5; i++) {
-        const x = CX - 52 + i * 26;
+        const x = DCX - 52 + i * 26;
         const y = 47;
         const isBoss = i === 4;
         if (i === idx) {
@@ -10549,10 +10602,10 @@ export class Game {
 
     // Timed stages refill automatically; the regular ammo buff adds one finite magazine.
     const total = this.level.ammo * this.maxAmmoMult;
-    const spacing = Math.min(26, (H * 0.48) / total);
+    const spacing = Math.min(26, (DH * 0.48) / total);
     for (let i = 0; i < total; i++) {
       const x = 30;
-      const y = H - 40 - i * spacing;
+      const y = DH - 40 - i * spacing;
       c.save();
       if (this.weapon.id === 'yoyo') {
         const used = i >= this.ammoLeft;
@@ -10595,7 +10648,7 @@ export class Game {
     c.textAlign = 'left';
     c.font = font(14);
     c.fillStyle = 'rgba(255,255,255,0.75)';
-    c.fillText(this.reloadT > 0 ? 'ISI ULANG…' : `x${this.ammoLeft}`, 46, H - 30);
+    c.fillText(this.reloadT > 0 ? 'ISI ULANG…' : `x${this.ammoLeft}`, 46, DH - 30);
 
     // weapon label
     c.textAlign = 'right';
@@ -10603,7 +10656,7 @@ export class Game {
     c.fillStyle = this.weapon.energy ? this.weapon.color : 'rgba(255,255,255,0.6)';
     // A slide-3 gun carries no slide-1 perk: the label names its card instead.
     const s3Card = this.sevenPlainTrigger;
-    c.fillText(`${this.weapon.name}${this.hasTwinGuns ? ' ×2' : ''} • ${s3Card ? 'SLIDE 3' : T(this.weapon.perk)}`, W - 14, H - 16);
+    c.fillText(`${this.weapon.name}${this.hasTwinGuns ? ' ×2' : ''} • ${s3Card ? 'SLIDE 3' : T(this.weapon.perk)}`, DW - 14, DH - 16);
     const wq = this.weapon;
     let info = '';
     if (s3Card) { /* slide 3: no perk counters, no charge meter, no spin-up */ }
@@ -10629,16 +10682,16 @@ export class Game {
     if (info) {
       c.font = font(13);
       c.fillStyle = wq.color;
-      c.fillText(info, W - 14, H - 36);
+      c.fillText(info, DW - 14, DH - 36);
     }
     if (wq.spinup && !s3Card) {
       c.fillStyle = 'rgba(255,255,255,0.15)';
-      c.fillRect(W - 114, H - 46, 100, 7);
+      c.fillRect(DW - 114, DH - 46, 100, 7);
       c.fillStyle = this.spin > 0.25 ? '#22c55e' : '#f59e0b';
-      c.fillRect(W - 114, H - 46, 100 * this.spin, 7);
+      c.fillRect(DW - 114, DH - 46, 100 * this.spin, 7);
       c.font = font(10);
       c.fillStyle = 'rgba(255,255,255,0.7)';
-      c.fillText('SPIN', W - 118, H - 40);
+      c.fillText('SPIN', DW - 118, DH - 40);
     }
 
     // banner
@@ -10647,13 +10700,13 @@ export class Game {
       const a = Math.min(1, t * 2.5) * Math.min(1, (1.8 - t) * 5);
       c.save();
       c.globalAlpha = a;
-      c.translate(CX, isSpecial(this.level.mode) ? this.targetY + this.level.radius + 46 : CY + this.level.radius + 115);
+      c.translate(DCX, isSpecial(this.level.mode) ? this.targetY + this.level.radius + 46 : CY + this.level.radius + 115);
       const s = 1 + Math.max(0, (t - 1.5)) * 1.5;
       c.scale(s, s);
       c.textAlign = 'center';
       if (this.level.boss) {
         c.fillStyle = 'rgba(120,0,0,0.65)';
-        c.fillRect(-W / 2, -38, W, 76);
+        c.fillRect(-DW / 2, -38, DW, 76);
         c.font = font(34);
         c.lineWidth = 6;
         c.strokeStyle = 'rgba(0,0,0,0.7)';
@@ -10704,7 +10757,7 @@ export class Game {
       const w = this.weapon.id;
       c.save();
       c.globalAlpha = a;
-      c.translate(CX, 330);
+      c.translate(DCX, 330);
       c.scale(sc, sc);
       c.textAlign = 'center';
       c.textBaseline = 'middle';
