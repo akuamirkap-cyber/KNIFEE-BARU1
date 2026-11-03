@@ -2682,61 +2682,110 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
           /></Overlay>
         )}
 
-        {/* Game Over Screen (DIBESARKAN TEKSNYA 2X + ANIMASI MEWAH!) */}
+        {/* Game Over Screen — portrait memakai kartu besar, landscape versi
+            ringkas dua kolom supaya semuanya muat di layar 760x420. */}
         {screen === 'over' && (
-          <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/80 px-6 text-white backdrop-blur-lg">
-            <div className="pop-in flex w-full max-w-sm flex-col items-center">
-              {/* Header 2X LEBIH BESAR */}
-              <div className="text-6xl sm:text-7xl font-black italic tracking-wider text-red-500 drop-shadow-[0_6px_0_#991b1b] font-game leading-none">
-                GAME OVER
+          <div className="absolute inset-0 z-30 flex items-center justify-center overflow-hidden bg-black/80 px-6 text-white backdrop-blur-lg">
+            {menuLandscape ? (
+              <div className="pop-in flex w-full max-w-[640px] items-center gap-4">
+                {/* kiri: judul, stage, tombol */}
+                <div className="flex w-[45%] shrink-0 flex-col items-center text-center">
+                  <div className="font-game text-[38px] font-black italic leading-none tracking-wider text-red-500 drop-shadow-[0_4px_0_#991b1b]">
+                    GAME OVER
+                  </div>
+                  <div className="mt-1 font-game text-[13px] font-bold text-white/80">
+                    Bertahan hingga <span className="font-black text-amber-300">STAGE {result.level}</span>
+                  </div>
+                  <button
+                    onClick={play}
+                    className="pulse-btn mt-3 w-full rounded-xl border-b-4 border-emerald-800 bg-gradient-to-b from-[#22c55e] via-[#16a34a] to-[#15803d] py-2.5 font-game text-xl font-black text-white shadow-[0_10px_22px_rgba(34,197,94,0.45)] transition active:translate-y-1 active:border-b-0 hover:brightness-110"
+                  >
+                    ↻ MAIN LAGI
+                  </button>
+                  <button
+                    onClick={goToMainMenuFromPlay}
+                    className="mt-2 w-full rounded-xl border-2 border-white/20 bg-white/15 py-2 font-game text-sm font-black text-white shadow-lg transition hover:bg-white/25 active:scale-95"
+                  >
+                    🏠 MENU UTAMA
+                  </button>
+                </div>
+                {/* kanan: kartu skor kaca */}
+                <div className="flex min-w-0 flex-1 flex-col items-center rounded-2xl border-2 border-white/20 bg-white/10 px-4 py-3 text-center shadow-[0_16px_40px_rgba(0,0,0,0.75)] backdrop-blur-xl">
+                  <div className="font-game text-[11px] font-black tracking-[0.25em] text-white/60">{tr(language, 'SKOR AKHIR')}</div>
+                  <div className="my-1 font-game text-[54px] font-black leading-none text-white drop-shadow-[0_6px_14px_rgba(255,255,255,0.3)]">
+                    {displayScore}
+                  </div>
+                  {result.newBest && (
+                    <div className="float-y rounded-full bg-gradient-to-r from-yellow-300 via-amber-400 to-yellow-300 px-4 py-0.5 font-game text-[11px] font-black text-black shadow-[0_0_12px_#fde047]">
+                      ⭐ REKOR TERBARU! ⭐
+                    </div>
+                  )}
+                  <div className="mt-2 grid w-full grid-cols-2 gap-2 border-t-2 border-white/15 pt-2">
+                    <div className="rounded-xl border-2 border-white/15 bg-black/60 px-2 py-1.5 shadow-inner">
+                      <div className="font-game text-[10px] font-black tracking-wider text-white/50">{tr(language, 'REKOR TERBAIK')}</div>
+                      <div className="mt-0.5 font-mono text-xl font-black text-amber-300 drop-shadow">{best}</div>
+                    </div>
+                    <div className="rounded-xl border-2 border-white/15 bg-black/60 px-2 py-1.5 shadow-inner">
+                      <div className="font-game text-[10px] font-black tracking-wider text-white/50">{tr(language, 'DAPAT KOIN')}</div>
+                      <div className="mt-0.5 flex items-center justify-center gap-1 font-mono text-xl font-black text-amber-300 drop-shadow"><span>+{result.coins}</span><CoinSprite size={20} /></div>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div className="mt-2 text-base sm:text-lg font-bold text-white/80 font-game">
-                Bertahan hingga <span className="font-black text-amber-300">STAGE {result.level}</span>
-              </div>
-
-              {/* Glassmorphism Card DIBESARKAN & TEKS 2X */}
-              <div className="mt-6 w-full rounded-3xl border-2 border-white/20 bg-white/10 p-6 text-center shadow-[0_20px_50px_rgba(0,0,0,0.8)] backdrop-blur-xl">
-                <div className="text-sm font-black tracking-[0.25em] text-white/60 font-game">{tr(language, 'SKOR AKHIR')}</div>
-
-                {/* Score Counter Roll-up (Besar & Bergetar) */}
-                <div className="text-8xl sm:text-9xl font-black leading-none my-2 font-game text-white filter drop-shadow-[0_8px_16px_rgba(255,255,255,0.3)] animate-pulse">
-                  {displayScore}
+            ) : (
+              <div className="pop-in flex max-h-full w-full max-w-sm flex-col items-center overflow-y-auto">
+                {/* Header — besar tapi tetap muat satu layar */}
+                <div className="text-5xl sm:text-6xl font-black italic tracking-wider text-red-500 drop-shadow-[0_6px_0_#991b1b] font-game leading-none">
+                  GAME OVER
+                </div>
+                <div className="mt-1.5 text-sm sm:text-base font-bold text-white/80 font-game">
+                  Bertahan hingga <span className="font-black text-amber-300">STAGE {result.level}</span>
                 </div>
 
-                {result.newBest && (
-                  <div className="float-y mx-auto mt-2 mb-1 inline-block rounded-full bg-gradient-to-r from-yellow-300 via-amber-400 to-yellow-300 px-5 py-1.5 text-sm font-black text-black shadow-[0_0_15px_#fde047] font-game">
-                    ⭐ REKOR TERBARU! ⭐
-                  </div>
-                )}
+                {/* Glassmorphism Card DIBESARKAN & TEKS 2X */}
+                <div className="mt-4 w-full rounded-3xl border-2 border-white/20 bg-white/10 p-5 text-center shadow-[0_20px_50px_rgba(0,0,0,0.8)] backdrop-blur-xl">
+                  <div className="text-xs font-black tracking-[0.25em] text-white/60 font-game">{tr(language, 'SKOR AKHIR')}</div>
 
-                {/* Stat Grid (Teks Diperbesar 2x) */}
-                <div className="mt-5 grid grid-cols-2 gap-3 border-t-2 border-white/15 pt-4">
-                  <div className="rounded-2xl border-2 border-white/15 bg-black/60 px-3 py-3 shadow-inner">
-                    <div className="text-xs font-black tracking-wider text-white/50 font-game">{tr(language, 'REKOR TERBAIK')}</div>
-                    <div className="text-3xl font-black text-amber-300 font-mono mt-1 drop-shadow">{best}</div>
+                  {/* Score Counter Roll-up (Besar & Bergetar) */}
+                  <div className="text-7xl sm:text-8xl font-black leading-none my-1.5 font-game text-white filter drop-shadow-[0_8px_16px_rgba(255,255,255,0.3)] animate-pulse">
+                    {displayScore}
                   </div>
-                  <div className="rounded-2xl border-2 border-white/15 bg-black/60 px-3 py-3 shadow-inner">
-                    <div className="text-xs font-black tracking-wider text-white/50 font-game">{tr(language, 'DAPAT KOIN')}</div>
-                    <div className="mt-1 flex items-center justify-center gap-1 text-3xl font-black text-amber-300 font-mono drop-shadow"><span>+{result.coins}</span><CoinSprite size={30} /></div>
+
+                  {result.newBest && (
+                    <div className="float-y mx-auto mt-1.5 mb-0.5 inline-block rounded-full bg-gradient-to-r from-yellow-300 via-amber-400 to-yellow-300 px-4 py-1 text-xs font-black text-black shadow-[0_0_15px_#fde047] font-game">
+                      ⭐ REKOR TERBARU! ⭐
+                    </div>
+                  )}
+
+                  {/* Stat Grid (Teks Diperbesar 2x) */}
+                  <div className="mt-4 grid grid-cols-2 gap-2.5 border-t-2 border-white/15 pt-3">
+                    <div className="rounded-2xl border-2 border-white/15 bg-black/60 px-2 py-2.5 shadow-inner">
+                      <div className="text-[10px] font-black tracking-wider text-white/50 font-game">{tr(language, 'REKOR TERBAIK')}</div>
+                      <div className="text-2xl font-black text-amber-300 font-mono mt-0.5 drop-shadow">{best}</div>
+                    </div>
+                    <div className="rounded-2xl border-2 border-white/15 bg-black/60 px-2 py-2.5 shadow-inner">
+                      <div className="text-[10px] font-black tracking-wider text-white/50 font-game">{tr(language, 'DAPAT KOIN')}</div>
+                      <div className="mt-0.5 flex items-center justify-center gap-1 text-2xl font-black text-amber-300 font-mono drop-shadow"><span>+{result.coins}</span><CoinSprite size={24} /></div>
+                    </div>
                   </div>
                 </div>
+
+                {/* Action Buttons: DIBESARKAN & TEBAL */}
+                <button
+                  onClick={play}
+                  className="pulse-btn mt-4 w-full rounded-2xl border-b-4 border-emerald-800 bg-gradient-to-b from-[#22c55e] via-[#16a34a] to-[#15803d] py-3.5 text-2xl font-black text-white shadow-[0_12px_28px_rgba(34,197,94,0.5)] transition active:translate-y-1 active:border-b-0 font-game hover:brightness-110"
+                >
+                  ↻ MAIN LAGI
+                </button>
+
+                <button
+                  onClick={goToMainMenuFromPlay}
+                  className="mt-2.5 w-full rounded-2xl border-2 border-white/20 bg-white/15 py-2.5 text-sm sm:text-base font-black text-white transition hover:bg-white/25 active:scale-95 font-game shadow-lg"
+                >
+                  🏠 MENU UTAMA
+                </button>
               </div>
-
-              {/* Action Buttons: DIBESARKAN & TEBAL */}
-              <button
-                onClick={play}
-                className="pulse-btn mt-6 w-full rounded-2xl border-b-4 border-emerald-800 bg-gradient-to-b from-[#22c55e] via-[#16a34a] to-[#15803d] py-4 text-3xl font-black text-white shadow-[0_12px_28px_rgba(34,197,94,0.5)] transition active:translate-y-1 active:border-b-0 font-game hover:brightness-110"
-              >
-                ↻ MAIN LAGI
-              </button>
-
-              <button
-                onClick={goToMainMenuFromPlay}
-                className="mt-3 w-full rounded-2xl border-2 border-white/20 bg-white/15 py-3.5 text-base sm:text-lg font-black text-white transition hover:bg-white/25 active:scale-95 font-game shadow-lg"
-              >
-                🏠 MENU UTAMA
-              </button>
-            </div>
+            )}
           </div>
         )}
         {menuPageTransition && (

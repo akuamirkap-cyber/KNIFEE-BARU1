@@ -224,9 +224,9 @@ const TAU = Math.PI * 2;
  * screen-up is world -x. The caps keep the muzzle inside the wheel's width, so
  * a full slide or tilt never sends every round past the target.
  */
-export const GUN_SLIDE_MAX = 66; // world px, i.e. display px up/down
+export const GUN_SLIDE_MAX = 150; // world px, i.e. display px up/down
 export const GUN_SLIDE_SPEED = 230; // world px per second while held
-export const GUN_TILT_MAX = 0.45; // radians (~26°) either way
+export const GUN_TILT_MAX = 0.62; // radians (~36°) — the aim-assist clamp is tighter
 
 // A new run brings the weapon in from beneath the screen. This is only a
 // drawing offset: collision, muzzle origins, recoil and weapon scale stay put.
@@ -1705,6 +1705,12 @@ export class Game {
   private gunSlideDown = false;
   /** Last pointer position in *display* pixels (landscape aim). */
   private aimPointer: { x: number; y: number } | null = null;
+  /**
+   * Rounds already turned to the barrel. A shot is aimed once, when it leaves
+   * the muzzle, so `W`/`S` and a moving pointer can never bend a round in
+   * flight or re-aim the same bullet every frame.
+   */
+  private aimedProjs = new WeakSet<object>();
 
   /** Guarded slide: harnesses build the game with `Object.create(prototype)`. */
   private get gunLift(): number {
@@ -7207,18 +7213,56 @@ export class Game {
     if (dir !== 0) {
       this.gunSlide = Math.max(-GUN_SLIDE_MAX, Math.min(GUN_SLIDE_MAX, this.gunLift + dir * GUN_SLIDE_SPEED * dt));
     }
-    let want = 0;
+    this.gunTilt = this.gunTiltNow + (this.gunAimAngleAt() - this.gunTiltNow) * Math.min(1, dt * 12);
+  }
+
+  /**
+   * Where the barrel has to point so the round lands on the pointer.
+   *
+   * Display (x, y) is world (y, H - x) in landscape, so the pointer becomes a
+   * world point the muzzle can be aimed at. The angle is then clamped to the
+   * width of the target face: the gun may follow the pointer anywhere on the
+   * screen, but the round still lands on the wheel instead of flying past it.
+   */
+  private gunAimAngleAt(): number {
     const pointer = this.aimPointer;
-    if (pointer) {
-      // World (x, y) -> display (H - y, x): the gun sits at display
-      // (H - GUN_Y, gunX) and its barrel points along +x at zero tilt.
-      const dx = pointer.x - (H - GUN_Y);
-      const dy = pointer.y - this.gunX;
-      if (Math.abs(dx) + Math.abs(dy) > 24) {
-        want = Math.max(-GUN_TILT_MAX, Math.min(GUN_TILT_MAX, Math.atan2(dy, dx)));
-      }
-    }
-    this.gunTilt = this.gunTiltNow + (want - this.gunTiltNow) * Math.min(1, dt * 10);
+    if (this.orientation !== 'landscape' || !pointer) return 0;
+    const pointerWorld = { x: pointer.y, y: H - pointer.x };
+    const muzzleY = GUN_Y - 6;
+    const dx = pointerWorld.x - this.gunX;
+    const dy = pointerWorld.y - muzzleY;
+    if (Math.abs(dx) + Math.abs(dy) < 12) return 0;
+    // Turn from "straight up the world" (world -y) towards the pointer.
+    const want = Math.atan2(dx, -dy);
+    const R = this.level?.radius ?? 100;
+    const travel = Math.max(40, muzzleY - (this.targetY + R));
+    // Aim assist: where that line meets the target's face has to stay on the
+    // artwork. A gun slid to the edge of the screen would otherwise fire every
+    // round past the wheel, so its barrel leans in to keep the shot on target.
+    const face = R * 0.9;
+    const hitX = Math.max(CX - face, Math.min(CX + face, this.gunX + Math.tan(want) * travel));
+    const angle = Math.atan2(hitX - this.gunX, travel);
+    return Math.max(-GUN_TILT_MAX, Math.min(GUN_TILT_MAX, angle));
+  }
+
+  /**
+   * Turn a fresh round onto the barrel's line.
+   *
+   * Landscape lets the player aim, so a round leaves the muzzle along the
+   * barrel instead of straight up the screen. Only the direction of travel
+   * changes: speed, spread and every weapon's own recipe stay as they were.
+   */
+  private aimRoundAt(p: Proj) {
+    if (this.orientation !== 'landscape') return;
+    const tilt = this.gunTiltNow;
+    if (!tilt) return;
+    const vx = p.vx;
+    const vy = p.vy;
+    if (!vx && !vy) return;
+    const cos = Math.cos(tilt);
+    const sin = Math.sin(tilt);
+    p.vx = vx * cos - vy * sin;
+    p.vy = vx * sin + vy * cos;
   }
 
   private update(rawDt: number) {
@@ -8295,6 +8339,10 @@ export class Game {
     // projectiles
     for (let i = this.projs.length - 1; i >= 0; i--) {
       const p = this.projs[i];
+      if (!this.aimedProjs.has(p)) {
+        this.aimedProjs.add(p);
+        this.aimRoundAt(p);
+      }
       if (p.spawnDelay && p.spawnDelay > 0) {
         p.spawnDelay -= s;
         if (p.spawnDelay > 0) continue;
@@ -8667,6 +8715,15 @@ export class Game {
 
     // Two upright barrels get two straight sights; a star never steers either.
     if (this.state === 'play' || this.state === 'intro') {
+      // Landscape: the gun follows the pointer, so its sights turn with the
+      // barrel and slide with the gun instead of pointing straight up.
+      const posed = this.orientation === 'landscape' && (this.gunTiltNow !== 0 || this.gunLift !== 0);
+      if (posed) {
+        c.save();
+        c.translate(this.gunX, y0);
+        c.rotate(this.gunTiltNow);
+        c.translate(-CX, -y0);
+      }
       if (this.setSevenLive) {
         // Slide 3 shows no aim line — only its sniper's own laser sight.
         this.drawSevenSight(c, y0);
@@ -8709,6 +8766,7 @@ export class Game {
           c.fillRect(CX + ox - 0.75, this.targetY + R, 1.5, y0 - this.targetY - R);
         }
       }
+      if (posed) c.restore();
     }
 
     // laser beams
