@@ -332,6 +332,22 @@ export default defineConfig(() => {
       hmr: process.env.DISABLE_HMR !== 'true',
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
     },
+    /**
+     * The preview server serves the production build, which is what the user
+     * actually plays. It needs the same host/port as `dev` so the sandbox
+     * preview keeps pointing at port 3000, and the same `allowedHosts` because
+     * the hub is embedded by a host page (a cross-origin frame is a third-party
+     * context, so the browser sends a different Host header than localhost).
+     *
+     * `vite preview` is the fast path: `dev` hands the browser ~215 unbundled,
+     * unminified modules and re-transforms every file it touches, which is why
+     * the game and the weapon showcase used to take seconds to appear.
+     */
+    preview: {
+      host: '0.0.0.0',
+      allowedHosts: true,
+      port: 3000,
+    },
     define: {
       __APP_VERSION__: JSON.stringify(releaseVersion()),
     },
@@ -375,8 +391,6 @@ export default defineConfig(() => {
               { name: 'gunhit-art-guns', test: /[\\/]games[\\/]gunhit[\\/]game[\\/]art[\\/]guns[0-9]*\.ts$/ },
               { name: 'gunhit-art-variants', test: /[\\/]games[\\/]gunhit[\\/]game[\\/]art[\\/](legacyVariants|gunVariants|commonGunMotion|metrics|drawCentered|kit)\.ts$/ },
               { name: 'gunhit-art', test: /[\\/]games[\\/]gunhit[\\/]game[\\/]art[\\/]/ },
-              { name: 'gunhit-engine', test: /[\\/]games[\\/]gunhit[\\/]game[\\/]/ },
-              { name: 'gunhit-components', test: /[\\/]games[\\/]gunhit[\\/]components[\\/]/ },
             ],
           },
         },

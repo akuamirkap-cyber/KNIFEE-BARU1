@@ -356,7 +356,7 @@ const ALL_WEAPON_DEFINITIONS: Weapon[] = [
   { ...base, id: 'gauntlet_cannon', name: 'GAUNTLET CANNON', emoji: '🦾', rarity: 'LEGENDARIS', perk: 'TELAPAK BESI', desc: 'Meriam telapak tangan robotik raksasa! Meluncurkan tinju gauntlet berenergi surya dengan hantaman super kuat, 3 poin.',
     speed: 2200, cooldown: 0.3, points: 3, half: 7.5, stick: 42, energy: true, recoil: 2.3, shake: 11, color: '#ef4444', trail: '251,146,60', trailFx: 'glow',
     sparks: ['#ffffff', '#fef08a', '#f97316', '#ef4444'], previewLen: 196, previewY: 44, stats: { rate: 2, speed: 3, power: 5 } },
-  { ...base, id: 'ironman_hand', name: 'IRONMAN HAND', emoji: '🦾', rarity: 'LEGENDARIS', perk: 'REPULSOR', desc: 'Tangan lapis baja Ironman meluncurkan tinju berenergi dan semburan repulsor, 3 poin!',
+  { ...base, id: 'ironman_hand', name: 'DEADBLAST', emoji: '🦾', rarity: 'LEGENDARIS', perk: 'REPULSOR', desc: 'Tangan lapis baja DEADBLAST meluncurkan tinju berenergi dan semburan repulsor, 3 poin!',
     speed: 2200, cooldown: 0.3, points: 3, half: 7.5, stick: 42, energy: true, recoil: 2.3, shake: 11, color: '#ef4444', trail: '251,146,60', trailFx: 'glow',
     sparks: ['#ffffff', '#fef08a', '#f97316', '#ef4444'], previewLen: 196, previewY: 44, stats: { rate: 2, speed: 3, power: 5 } },
   { ...base, id: 'pulse_rifle', name: 'PULSE RIFLE', emoji: '⚡', rarity: 'LANGKA', perk: 'TEMBAK LISTRIK', desc: 'Senapan pulsa listrik futuristik! Tembakan listrik cepat dengan kilatan biru elektrik.',

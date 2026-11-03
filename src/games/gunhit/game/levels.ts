@@ -71,7 +71,9 @@ export function makeLevel(n: number, forcedMode?: LevelMode): LevelCfg {
     : n % 5 === 4 ? pick<LevelMode>(['boulder', 'bonus', 'treasure'])
     : 'classic');
   return {
-    n, boss, ammo: isSpecial(mode) ? 12 : ammo, base, pattern, dir: Math.random() < 0.5 ? 1 : -1,
+    // Diamond Breaker is the tight, fast challenge: a half-size magazine
+    // forces saved shots while its rock spins up (BOULDER_SPIN_MULT in Game).
+    n, boss, ammo: mode === 'boulder' ? 6 : isSpecial(mode) ? 12 : ammo, base, pattern, dir: Math.random() < 0.5 ? 1 : -1,
     radius: boss ? 122 : mode === 'boulder' || mode === 'bonus' ? ROCK_RADIUS : 106, style,
     name: boss
       ? bossName

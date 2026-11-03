@@ -461,7 +461,7 @@ function getGunVariantOptionsBeforeSetTwo(id: VariantWeapon) {
 
 export function getGunEffectOptions(id: VariantWeapon): readonly { id: GunEffect; label: string }[] {
   if (RETIRED_WEAPONS.has(id)) return [];
-  if (id === 'ironman_hand') return [{ id: 'ironman_combo', label: 'Gabungan Efek 2 + 4' }];
+  if (id === 'ironman_hand') return [{ id: 'ironman_combo', label: 'Gabungan Efek 3 + 5' }];
   if (id === 'xeno') return [...getGunEffectOptionsBeforeSetTwo(id), { id: 'xeno_hybrid', label: 'Efek 4' }];
   const cards = isSetTwoEffectWeapon(id) && !isFixedClassicGun(id)
     ? [...getGunEffectOptionsBeforeSetTwo(id), SET_TWO_EFFECT]
