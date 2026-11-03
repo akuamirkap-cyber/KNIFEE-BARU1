@@ -5,7 +5,6 @@ import { readFileSync } from 'node:fs';
 const app = readFileSync('src/games/gunhit/App.tsx', 'utf8');
 const env = readFileSync('src/games/gunhit/components/MenuEnvironment.tsx', 'utf8');
 const backdrop = readFileSync('src/games/gunhit/components/MenuBackdrop.tsx', 'utf8');
-const burst = readFileSync('src/games/gunhit/components/MenuSunburst.tsx', 'utf8');
 const css = readFileSync('src/index.css', 'utf8');
 
 test('landscape menu paints the vivid night grade, portrait keeps the raw theme', () => {
@@ -28,15 +27,12 @@ test('the night grade is a blue sky with blue hills and gold particles', () => {
   assert.match(backdrop, /\.\.\.t,/);
 });
 
-test('the showroom burst is crisp white-blue rays, not the narrow gameplay ring', () => {
-  assert.ok(/rgba\(\$\{tint\},\.30\) 0deg 2\.8deg/.test(burst), 'solid ray wedges');
-  // The mask lets the fan reach most of the frame instead of 2%-18% of the box.
-  assert.match(burst, /radial-gradient\(circle, rgba\(0,0,0,0\) 3%, #000 15%, #000 36%, rgba\(0,0,0,\.45\) 50%, transparent 64%\)/);
-  // Two counter-rotating fans plus a hot core.
-  assert.match(burst, /animationDuration: `\$\{spin \* 3\}s`, animationDirection: "reverse"/);
-  assert.match(burst, /className="sunburst-hot"/);
-  // The gameplay burst stays untouched for portrait and for the effects system.
+test('the menu keeps Gun Hit\'s own sunburst in both orientations', () => {
+  // The showroom burst experiment was reverted: one SunburstFX, 430px, amber,
+  // exactly as the menu always had it - landscape included.
+  assert.equal(app.split('<SunburstFX size={430}').length - 1, 1, 'exactly one 430px menu burst');
   assert.match(app, /<SunburstFX size=\{430\} color=\{gunSunburstColor\(getWeapon\(weapon\)\.rarity\)\} intensity=\{0\.44\} speed=\{32\} core=\{false\} stars=\{false\}/);
+  assert.doesNotMatch(app, /MenuSunburst/);
 });
 
 test('gold sparkles and the warm corner light belong to the night grade only', () => {

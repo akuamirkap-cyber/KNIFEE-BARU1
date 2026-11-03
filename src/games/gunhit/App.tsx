@@ -70,7 +70,6 @@ import MenuEnvironment, { type MenuEnvironmentTheme } from './components/MenuEnv
 import { SGA_SPEED_OPTIONS, formatSgaSpeed, getSavedSgaSpeed } from './game/gameSpeed';
 import { useSgaGameSpeed } from './utils/useSgaGameSpeed';
 import { SGA_BG_THEMES, getSavedSgaBgTheme } from './game/backgroundThemes';
-import MenuSunburst from './components/MenuSunburst';
 import { useSgaBgTheme } from './utils/useSgaBgTheme';
 import { SGA_ORIENTATION_OPTIONS, getSavedSgaOrientation, isLandscape } from './game/orientation';
 import { useSgaOrientation } from './utils/useSgaOrientation';
@@ -2166,15 +2165,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                   {!menuDeparture && [18, 42, 64, 82].map((x, i) => <span key={x} className="mm-mote pointer-events-none absolute bottom-[14%] h-1.5 w-1.5 rounded-full bg-[#e0fbff]" style={{ left: `${x}%`, animationDelay: `${(3400 + i * 700) * menuPlan.k}ms` }} />)}
                   <div className="float relative h-full w-full" data-menu-gun>
                     <div ref={weaponPivotRef} className="pointer-events-none absolute inset-0" aria-hidden="true">
-                      {menuLandscape ? (
-                        <MenuSunburst
-                          size={640}
-                          spin={26}
-                          style={{ left: 'calc(50% + var(--weapon-pivot-x, 0px))', top: 'calc(50% + var(--weapon-pivot-y, 0px))' }}
-                        />
-                      ) : (
-                        <SunburstFX size={430} color={gunSunburstColor(getWeapon(weapon).rarity)} intensity={0.44} speed={32} core={false} stars={false} style={{ left: 'calc(50% + var(--weapon-pivot-x, 0px))', top: 'calc(50% + var(--weapon-pivot-y, 0px))' }} />
-                      )}
+                      <SunburstFX size={430} color={gunSunburstColor(getWeapon(weapon).rarity)} intensity={0.44} speed={32} core={false} stars={false} style={{ left: 'calc(50% + var(--weapon-pivot-x, 0px))', top: 'calc(50% + var(--weapon-pivot-y, 0px))' }} />
                       {!menuDeparture && menuPlan.gun === 'combo' && (
                         <div
                           aria-hidden="true"
