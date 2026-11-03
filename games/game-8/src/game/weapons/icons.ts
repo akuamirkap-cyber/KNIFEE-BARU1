@@ -165,176 +165,223 @@ export const tripodWeapon2: Weapon = {
 /* ================================================================================= */
 function drawIron2(ctx: C, _g: Game, s: WeaponState) {
   const t = s.t, ch = s.chan;
-  // DEADBLAST — gauntlet cannon. One symmetric weapon silhouette taken from
-  // the reference: a pointed crown carrying a wide glowing emitter (the
-  // muzzle), flaring red armour flanks, a gold spine with an energy core
-  // channel, two side emitter pods, and a gold base cap tapering to a point.
-  const RED = ['#ff7a72', '#e01c28', '#9a0c18', '#4a0610'];
-  const PLATE = ['#ff8a82', '#e8202c', '#a30e1a', '#560712'];
-  const RING = ['#fff3b8', '#e2ac3c', '#8a5a14', '#4a2c06'];
-  const OUT = 'rgba(40,0,6,.92)';
-  const GLINE = 'rgba(255,214,120,.9)';
+  // DEADBLAST — repulsor cannon. The reference silhouette rendered premium: a
+  // deep red outer shell under a bright inner shell, gold rim light on every
+  // edge, angular gold armour bands, a wide recessed energy core with
+  // travelling pulses, bezelled side pods and a bright crown emitter.
+  const RED = ['#ff8f86', '#e8263a', '#a80f22', '#5c0714'];
+  const DEEP = ['#9e101e', '#6e0716', '#3e040c', '#1e0206'];
+  const RING = ['#fff6c2', '#f0bf4e', '#a9701a', '#5e3a08'];
+  const OUT = 'rgba(26,0,5,.95)';
+  const GLINE = 'rgba(255,222,140,.95)';
   const CY = '#8fe8ff';
   ctx.lineJoin = 'round'; ctx.lineCap = 'round';
   ctx.save();
   ctx.translate(rand(-1, 1) * ch * 1.1, rand(-1, 1) * ch * 1.1);
 
-  /* ── silhouette: pointed crown → flaring flanks → pointed base ─────────── */
+  /* ── silhouette: pointed crown, flaring shoulders, pointed base ────────── */
   const plate = () => {
     ctx.beginPath();
     ctx.moveTo(272, 0);
-    ctx.bezierCurveTo(246, -15, 218, -36, 188, -47);
-    ctx.bezierCurveTo(144, -56, 92, -52, 50, -39);
-    ctx.bezierCurveTo(18, -30, -7, -17, -28, 0);
-    ctx.bezierCurveTo(-7, 17, 18, 30, 50, 39);
-    ctx.bezierCurveTo(92, 52, 144, 56, 188, 47);
-    ctx.bezierCurveTo(218, 36, 246, 15, 272, 0);
+    ctx.bezierCurveTo(250, -16, 222, -36, 194, -46);
+    ctx.bezierCurveTo(160, -58, 108, -58, 66, -44);
+    ctx.bezierCurveTo(30, -32, -6, -18, -28, 0);
+    ctx.bezierCurveTo(-6, 18, 30, 32, 66, 44);
+    ctx.bezierCurveTo(108, 58, 160, 58, 194, 46);
+    ctx.bezierCurveTo(222, 36, 250, 16, 272, 0);
     ctx.closePath();
   };
 
-  /* collar behind the base cap */
+  /* collar behind the base */
   ctx.fillStyle = vgrad(ctx, -20, 20, RING);
-  rr(ctx, -42, -20, 21, 40, 9); ctx.fill();
+  rr(ctx, -44, -20, 21, 40, 9); ctx.fill();
   ctx.strokeStyle = 'rgba(80,40,0,.85)'; ctx.lineWidth = 1.6; ctx.stroke();
-  ctx.fillStyle = '#2a0a10'; rr(ctx, -42, -12, 8, 24, 3); ctx.fill();
+  ctx.fillStyle = '#2a0a10'; rr(ctx, -44, -12, 8, 24, 3); ctx.fill();
 
-  /* base plate: red, shaded across the width so it reads round */
+  /* deep outer shell */
   plate();
-  ctx.fillStyle = vgrad(ctx, -56, 56, RED); ctx.fill();
+  ctx.fillStyle = vgrad(ctx, -58, 58, DEEP); ctx.fill();
   ctx.save();
   plate(); ctx.clip();
 
-  /* darker red toward both flanks */
-  const sg0 = ctx.createLinearGradient(0, -56, 0, 56);
-  sg0.addColorStop(0, 'rgba(40,0,6,.45)');
-  sg0.addColorStop(.45, 'rgba(40,0,6,0)');
-  sg0.addColorStop(.55, 'rgba(40,0,6,0)');
-  sg0.addColorStop(1, 'rgba(40,0,6,.45)');
-  ctx.fillStyle = sg0; ctx.fillRect(-36, -60, 320, 120);
+  /* bright inner shell, inset from the silhouette */
+  ctx.beginPath();
+  ctx.moveTo(266, 0);
+  ctx.bezierCurveTo(246, -14, 220, -32, 194, -41);
+  ctx.bezierCurveTo(160, -52, 110, -52, 68, -39);
+  ctx.bezierCurveTo(32, -28, -4, -15, -22, 0);
+  ctx.bezierCurveTo(-4, 15, 32, 28, 68, 39);
+  ctx.bezierCurveTo(110, 52, 160, 52, 194, 41);
+  ctx.bezierCurveTo(220, 32, 246, 14, 266, 0);
+  ctx.closePath();
+  ctx.fillStyle = vgrad(ctx, -52, 52, RED); ctx.fill();
 
-  /* gold base cap at the tail, tapering to a point */
+  /* dark seam just inside the rim */
+  ctx.strokeStyle = 'rgba(26,0,5,.7)'; ctx.lineWidth = 2.6;
+  ctx.beginPath();
+  ctx.moveTo(264, 0);
+  ctx.bezierCurveTo(245, -12, 219, -30, 193, -39);
+  ctx.bezierCurveTo(159, -50, 109, -50, 67, -37);
+  ctx.bezierCurveTo(31, -26, -4, -13, -22, 0);
+  ctx.bezierCurveTo(-4, 13, 31, 26, 67, 37);
+  ctx.bezierCurveTo(109, 50, 159, 50, 193, 39);
+  ctx.bezierCurveTo(219, 30, 245, 12, 264, 0);
+  ctx.stroke();
+
+  /* gold rim light along the whole outer edge */
+  ctx.strokeStyle = GLINE; ctx.lineWidth = 2.4;
+  ctx.beginPath();
+  ctx.moveTo(270, 0);
+  ctx.bezierCurveTo(249, -15, 221, -35, 193, -45);
+  ctx.bezierCurveTo(159, -57, 107, -57, 65, -43);
+  ctx.bezierCurveTo(29, -31, -6, -17, -27, 0);
+  ctx.bezierCurveTo(-6, 17, 29, 31, 65, 43);
+  ctx.bezierCurveTo(107, 57, 159, 57, 193, 45);
+  ctx.bezierCurveTo(221, 35, 249, 15, 270, 0);
+  ctx.stroke();
+  /* specular highlight just under the rim */
+  ctx.strokeStyle = 'rgba(255,255,255,.3)'; ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(258, -6);
+  ctx.bezierCurveTo(232, -22, 206, -34, 190, -38);
+  ctx.bezierCurveTo(158, -48, 112, -48, 74, -36);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(258, 6);
+  ctx.bezierCurveTo(232, 22, 206, 34, 190, 38);
+  ctx.bezierCurveTo(158, 48, 112, 48, 74, 36);
+  ctx.stroke();
+
+  /* angular gold armour bands along the flanks */
+  for (const sg of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(188, sg * 34);
+    ctx.bezierCurveTo(212, sg * 27, 234, sg * 19, 250, sg * 10);
+    ctx.lineTo(246, sg * 2);
+    ctx.bezierCurveTo(228, sg * 12, 206, sg * 19, 184, sg * 26);
+    ctx.closePath();
+    ctx.fillStyle = vgrad(ctx, sg * 2, sg * 34, RING); ctx.fill();
+    ctx.strokeStyle = 'rgba(80,40,0,.6)'; ctx.lineWidth = 1.1; ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(70, sg * 34);
+    ctx.bezierCurveTo(102, sg * 45, 138, sg * 47, 170, sg * 39);
+    ctx.lineTo(168, sg * 31);
+    ctx.bezierCurveTo(138, sg * 39, 102, sg * 37, 72, sg * 26);
+    ctx.closePath();
+    ctx.fillStyle = vgrad(ctx, sg * 26, sg * 47, RING); ctx.fill();
+    ctx.strokeStyle = 'rgba(80,40,0,.6)'; ctx.lineWidth = 1.1; ctx.stroke();
+  }
+
+  /* plate seams */
+  ctx.strokeStyle = 'rgba(26,0,5,.5)'; ctx.lineWidth = 1.5;
+  for (const sg of [-1, 1]) {
+    ctx.beginPath(); ctx.moveTo(80, sg * 20); ctx.lineTo(116, sg * 34); ctx.lineTo(154, sg * 38); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(122, sg * 8); ctx.lineTo(158, sg * 24); ctx.lineTo(192, sg * 26); ctx.stroke();
+  }
+
+  /* vent slats */
+  for (const sg of [-1, 1]) {
+    ctx.fillStyle = 'rgba(18,0,4,.65)';
+    for (let i = 0; i < 4; i++) {
+      ctx.save(); ctx.translate(76 + i * 12, sg * 24); ctx.rotate(sg * -0.45);
+      rr(ctx, -4, -1.7, 10, 3.4, 1.7); ctx.fill(); ctx.restore();
+    }
+  }
+
+  /* gold base cap at the tail */
   ctx.beginPath();
   ctx.moveTo(-28, 0);
-  ctx.bezierCurveTo(-15, -16, 4, -22, 22, -18);
-  ctx.lineTo(22, 18);
-  ctx.bezierCurveTo(4, 22, -15, 16, -28, 0);
+  ctx.lineTo(-6, -21);
+  ctx.lineTo(20, -18);
+  ctx.lineTo(20, 18);
+  ctx.lineTo(-6, 21);
   ctx.closePath();
-  ctx.fillStyle = vgrad(ctx, -22, 22, RING); ctx.fill();
-  ctx.strokeStyle = 'rgba(80,40,0,.65)'; ctx.lineWidth = 1.3; ctx.stroke();
-  /* vent slot */
-  ctx.fillStyle = 'rgba(40,0,6,.75)'; rr(ctx, -18, -4, 17, 8, 3.5); ctx.fill();
+  ctx.fillStyle = vgrad(ctx, -21, 21, RING); ctx.fill();
+  ctx.strokeStyle = 'rgba(80,40,0,.7)'; ctx.lineWidth = 1.3; ctx.stroke();
+  ctx.fillStyle = 'rgba(18,0,4,.8)'; rr(ctx, -18, -4, 16, 8, 3.5); ctx.fill();
+  add(ctx); drawGlow(ctx, -10, 0, 8 + 12 * ch, CY, 0.22 + 0.3 * ch); norm(ctx);
 
-  /* gold spine: lower oval + centre column */
-  ctx.fillStyle = vgrad(ctx, -25, 25, RING);
-  ctx.beginPath(); ctx.ellipse(52, 0, 27, 25, 0, 0, TAU); ctx.fill();
-  ctx.strokeStyle = 'rgba(80,40,0,.6)'; ctx.lineWidth = 1.3; ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(74, -12);
-  ctx.bezierCurveTo(120, -14, 168, -12, 208, -8);
-  ctx.lineTo(208, 8);
-  ctx.bezierCurveTo(168, 12, 120, 14, 74, 12);
-  ctx.closePath();
-  ctx.fillStyle = vgrad(ctx, -14, 14, RING); ctx.fill();
-  ctx.strokeStyle = 'rgba(80,40,0,.55)'; ctx.lineWidth = 1; ctx.stroke();
-  /* gold spine highlight */
-  ctx.strokeStyle = 'rgba(255,240,190,.35)'; ctx.lineWidth = 1.3;
-  ctx.beginPath(); ctx.moveTo(78, 0); ctx.lineTo(206, 0); ctx.stroke();
-
-  /* energy core channel inside the spine */
-  ctx.fillStyle = '#05121c'; rr(ctx, 78, -3.6, 124, 7.2, 3.6); ctx.fill();
+  /* ── recessed energy core ──────────────────────────────────────────────── */
+  const coreChan = () => {
+    ctx.beginPath();
+    ctx.moveTo(258, -17);
+    ctx.bezierCurveTo(214, -22, 140, -23, 66, -18);
+    ctx.bezierCurveTo(20, -14, -8, -8, -24, 0);
+    ctx.bezierCurveTo(-8, 8, 20, 14, 66, 18);
+    ctx.bezierCurveTo(140, 23, 214, 22, 258, 17);
+    ctx.closePath();
+  };
+  coreChan();
+  ctx.fillStyle = '#03101a'; ctx.fill();
+  for (const sg of [-1, 1]) {
+    ctx.strokeStyle = GLINE; ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.moveTo(258, sg * 13);
+    ctx.bezierCurveTo(214, sg * 18, 140, sg * 19, 66, sg * 14);
+    ctx.bezierCurveTo(20, sg * 10, -8, sg * 6, -24, 0);
+    ctx.stroke();
+  }
+  ctx.fillStyle = '#05202f'; rr(ctx, 58, -7, 192, 14, 7); ctx.fill();
   add(ctx);
-  const cg = ctx.createLinearGradient(80, 0, 200, 0);
-  cg.addColorStop(0, rgba('#2a7bff', 0.45)); cg.addColorStop(1, rgba(CY, 0.75 + 0.25 * ch));
-  ctx.fillStyle = cg; rr(ctx, 80, -2.3, 120, 4.6, 2.3); ctx.fill();
-  for (let i = 0; i < 3; i++) drawGlow(ctx, 80 + (((t * 0.9 + i / 3) % 1) * 120), 0, 9, '#ffffff', 0.6);
-  drawGlow(ctx, 140, 0, 38, CY, 0.1 + 0.18 * ch);
+  const core = ctx.createLinearGradient(58, 0, 250, 0);
+  core.addColorStop(0, rgba('#1c6bff', 0.5));
+  core.addColorStop(0.45, rgba(CY, 0.8 + 0.2 * ch));
+  core.addColorStop(1, `rgba(255,255,255,${0.88 + 0.12 * ch})`);
+  ctx.fillStyle = core; rr(ctx, 60, -4.6, 188, 9.2, 4.6); ctx.fill();
+  for (let i = 0; i < 3; i++) drawGlow(ctx, 60 + (((t * 1.1 + i / 3) % 1) * 188), 0, 14, '#ffffff', 0.85);
+  drawGlow(ctx, 150, 0, 62, CY, 0.18 + 0.24 * ch);
   norm(ctx);
 
-  /* gold V-chevron under the crown */
-  ctx.beginPath();
-  ctx.moveTo(206, -27);
-  ctx.lineTo(236, -12);
-  ctx.lineTo(236, 12);
-  ctx.lineTo(206, 27);
-  ctx.closePath();
-  ctx.fillStyle = vgrad(ctx, -27, 27, RING); ctx.fill();
-  ctx.strokeStyle = 'rgba(80,40,0,.7)'; ctx.lineWidth = 1.3; ctx.stroke();
-
-  /* swept gold trim along both red flanks */
-  for (const sg of [-1, 1]) {
-    ctx.strokeStyle = GLINE; ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(58, sg * 22);
-    ctx.bezierCurveTo(102, sg * 50, 154, sg * 55, 196, sg * 43);
-    ctx.stroke();
-    ctx.strokeStyle = 'rgba(80,40,0,.5)'; ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    ctx.moveTo(50, sg * 14);
-    ctx.bezierCurveTo(94, sg * 42, 146, sg * 47, 192, sg * 35);
-    ctx.stroke();
-  }
-  /* darker red inset on each flank for depth */
-  for (const sg of [-1, 1]) {
-    ctx.fillStyle = vgrad(ctx, sg * 16, sg * 52, PLATE);
-    ctx.beginPath();
-    ctx.moveTo(46, sg * 16);
-    ctx.bezierCurveTo(90, sg * 45, 148, sg * 51, 194, sg * 39);
-    ctx.bezierCurveTo(146, sg * 31, 90, sg * 24, 46, sg * 16);
-    ctx.closePath();
-    ctx.fill();
-  }
-
-  /* ── side emitter pods ─────────────────────────────────────────────────── */
+  /* ── side emitter pods with gold bezels ────────────────────────────────── */
   for (const sg of [-1, 1]) {
     ctx.save();
-    ctx.translate(126, sg * 43);
+    ctx.translate(120, sg * 38);
     ctx.rotate(sg * 0.3);
-    ctx.fillStyle = '#04121a';
-    rr(ctx, -11, -15, 22, 30, 8); ctx.fill();
-    const pg = ctx.createLinearGradient(0, -15, 0, 15);
+    ctx.fillStyle = vgrad(ctx, -18, 18, RING);
+    rr(ctx, -14, -18, 28, 36, 10); ctx.fill();
+    ctx.strokeStyle = 'rgba(80,40,0,.85)'; ctx.lineWidth = 1.3; ctx.stroke();
+    ctx.fillStyle = '#03101a'; rr(ctx, -8.5, -11.5, 17, 23, 6.5); ctx.fill();
+    add(ctx);
+    const pg = ctx.createLinearGradient(0, -11.5, 0, 11.5);
     pg.addColorStop(0, rgba('#2a7bff', 0.5 + 0.3 * ch));
-    pg.addColorStop(1, rgba(CY, 0.8 + 0.2 * ch));
-    ctx.fillStyle = pg;
-    rr(ctx, -11, -15, 22, 30, 8); ctx.fill();
+    pg.addColorStop(1, rgba(CY, 0.82 + 0.18 * ch));
+    ctx.fillStyle = pg; rr(ctx, -8.5, -11.5, 17, 23, 6.5); ctx.fill();
+    norm(ctx);
     ctx.restore();
   }
 
-  /* ── pointed gold crown carrying the emitter ───────────────────────────── */
+  /* ── gold crown carrying the wide emitter ──────────────────────────────── */
   ctx.beginPath();
   ctx.moveTo(272, 0);
-  ctx.bezierCurveTo(256, -13, 240, -21, 228, -21);
-  ctx.lineTo(228, 21);
-  ctx.bezierCurveTo(240, 21, 256, 13, 272, 0);
+  ctx.bezierCurveTo(258, -14, 242, -22, 228, -22);
+  ctx.lineTo(228, 22);
+  ctx.bezierCurveTo(242, 22, 258, 14, 272, 0);
   ctx.closePath();
-  ctx.fillStyle = vgrad(ctx, -21, 21, RING); ctx.fill();
+  ctx.fillStyle = vgrad(ctx, -22, 22, RING); ctx.fill();
   ctx.strokeStyle = 'rgba(80,40,0,.9)'; ctx.lineWidth = 1.7; ctx.stroke();
-
-  /* emitter lens inside the crown — the muzzle face */
-  ctx.beginPath();
-  ctx.moveTo(270, 0);
-  ctx.bezierCurveTo(256, -11, 244, -16, 234, -16);
-  ctx.lineTo(234, 16);
-  ctx.bezierCurveTo(244, 16, 256, 11, 270, 0);
-  ctx.closePath();
-  ctx.fillStyle = '#04121a'; ctx.fill();
+  ctx.strokeStyle = GLINE; ctx.lineWidth = 1.3;
+  for (const o of [-11, 0, 11]) { ctx.beginPath(); ctx.moveTo(268, o * 0.4); ctx.lineTo(232, o); ctx.stroke(); }
+  const lens = () => {
+    ctx.beginPath();
+    ctx.moveTo(270, 0);
+    ctx.bezierCurveTo(256, -11, 244, -16, 234, -16);
+    ctx.lineTo(234, 16);
+    ctx.bezierCurveTo(244, 16, 256, 11, 270, 0);
+    ctx.closePath();
+  };
+  lens();
+  ctx.fillStyle = '#03101a'; ctx.fill();
   add(ctx);
   const eg = ctx.createLinearGradient(234, 0, 270, 0);
   eg.addColorStop(0, rgba('#2a7bff', 0.5 + 0.3 * ch));
-  eg.addColorStop(1, rgba(CY, 0.85 + 0.15 * ch));
-  ctx.fillStyle = eg;
-  ctx.beginPath();
-  ctx.moveTo(270, 0);
-  ctx.bezierCurveTo(256, -11, 244, -16, 234, -16);
-  ctx.lineTo(234, 16);
-  ctx.bezierCurveTo(244, 16, 256, 11, 270, 0);
-  ctx.closePath();
-  ctx.fill();
+  eg.addColorStop(1, rgba(CY, 0.9 + 0.1 * ch));
+  ctx.fillStyle = eg; lens(); ctx.fill();
   norm(ctx);
   ctx.restore(); // end plate clip
 
   /* side pod glow, outside the clip so it blooms over the edge */
   add(ctx);
-  for (const sg of [-1, 1]) drawGlow(ctx, 126, sg * 43, 16 + 24 * ch, CY, 0.3 + 0.4 * ch);
+  for (const sg of [-1, 1]) drawGlow(ctx, 120, sg * 38, 16 + 26 * ch, CY, 0.28 + 0.4 * ch);
   norm(ctx);
 
   /* ── muzzle bloom at the crown ─────────────────────────────────────────── */
@@ -359,11 +406,10 @@ function drawIron2(ctx: C, _g: Game, s: WeaponState) {
   ctx.restore();
 }
 
-
 export const ironWeapon2: Weapon = {
   ...ironWeapon,
   name: 'Deadblast Repulsor', sub: 'Gauntlet Repulsor Laser', isNew: true,
-  desc: 'Gauntlet cannon merah-emas ramping modern: mahkota runcong dengan emitter lebar menyala sebagai muara, sayap merah melebar, tulang emas berinti energi, dua pod emitter samping, dan base cap emas meruncing.',
+  desc: 'Gauntlet cannon faceted merah-emas: shell merah tua di bawah shell merah terang, rim light emas di setiap tepi, band armour emas angular, core energy lebar berenda dengan pulsa berjalan, pod emitter berbezell emas, vent slat, dan emitter mahkota lebar sebagai muara.',
   muzzle: 278, muzzleY: 0,
   draw: drawIron2,
 };

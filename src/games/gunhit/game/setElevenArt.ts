@@ -153,7 +153,7 @@ export function slide1IdForEleven(id: ElevenId): string {
  */
 const ELEVEN_INK: Record<ElevenId, { len: number; wid: number; cx: number; cy: number }> = {
   'tripod': { len: 456, wid: 239, cx: 10, cy: 215 },
-  'ironman': { len: 329, wid: 111, cx: 0, cy: 156 },
+  'ironman': { len: 331, wid: 109, cx: 0, cy: 157 },
   'xenomorph': { len: 429, wid: 183, cx: -46, cy: 207 },
   'mega-buster': { len: 375, wid: 103, cx: -1, cy: 179 },
   'harmonic': { len: 412, wid: 156, cx: 12, cy: 153 },
