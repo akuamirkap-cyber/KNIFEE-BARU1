@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { SgaBackgroundTheme, SgaBgThemeOption } from '../game/backgroundThemes';
 import type { SgaGameSpeed } from '../game/gameSpeed';
+import { SGA_ORIENTATION_OPTIONS, type SgaOrientation } from '../game/orientation';
 import type { StyleId } from '../../perfect-shot/anim/presets';
 import CoinSprite from '../../shared/CoinSprite';
 import { LANGUAGES, type Language } from '../../../i18n/language';
@@ -24,6 +25,7 @@ type Props = {
   onAnimGunStyle: (style: StyleId) => void;
   themes: readonly SgaBgThemeOption[];
   theme: SgaBackgroundTheme;
+  orientation: SgaOrientation;
   onClose: () => void;
   onMute: () => void;
   onSfx: () => void;
@@ -31,6 +33,7 @@ type Props = {
   onVolume: (value: number) => void;
   onSpeed: (value: SgaGameSpeed) => void;
   onTheme: (value: SgaBackgroundTheme) => void;
+  onOrientation: (value: SgaOrientation) => void;
   onReplayIntro: () => void;
   /** Opens the in-app privacy policy (Play Console requires it to be reachable). */
   onPrivacy: () => void;
@@ -53,9 +56,9 @@ function Toggle({ on }: { on: boolean }) {
 }
 
 export default function SgaSettingsPanel({
-  closing, muted, volume, sfxEnabled, musicEnabled, speed, speedOptions, themes, theme,
+  closing, muted, volume, sfxEnabled, musicEnabled, speed, speedOptions, themes, theme, orientation,
   animSpeed, animGunStyle, animSpeeds, animStyles, onAnimSpeed, onAnimGunStyle,
-  onClose, onMute, onSfx, onMusic, onVolume, onSpeed, onTheme, onReplayIntro, onSpecial, formatSpeed, onPrivacy,
+  onClose, onMute, onSfx, onMusic, onVolume, onSpeed, onTheme, onOrientation, onReplayIntro, onSpecial, formatSpeed, onPrivacy,
   language, onLanguage, onHelp, onReset,
 }: Props) {
   const [advanced, setAdvanced] = useState(false);
@@ -141,6 +144,27 @@ export default function SgaSettingsPanel({
                 {speedOptions.map((value) => {
                   const active = speed === value;
                   return <button key={value} type="button" aria-pressed={active} onClick={() => onSpeed(value)} className={`font-title h-8 rounded-lg text-[12px] transition-all ${active ? 'bg-gradient-to-b from-[#ffe27a] to-[#f59e0b] text-[#4a2a00] shadow-[0_2px_0_#9a5b00]' : 'text-white/70 hover:bg-white/10'}`}>{formatSpeed(value)}</button>;
+                })}
+              </div>
+            </div>
+            <div className="mt-3">
+              <div className="font-title text-[10px] tracking-[.14em] text-white/55">📺 ORIENTASI LAYAR</div>
+              <p className="mt-1 text-[10px] text-white/55">{tr(language, 'Portrait: senjata di bawah, menembak ke atas. Landscape: senjata di KIRI menembak ke KANAN, target & musuh di kanan.')}</p>
+              <div className="mt-1.5 grid grid-cols-2 gap-1 rounded-xl bg-black/35 p-1">
+                {SGA_ORIENTATION_OPTIONS.map((value) => {
+                  const active = orientation === value;
+                  const label = value === 'landscape' ? 'LANDSCAPE' : 'PORTRAIT';
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => onOrientation(value)}
+                      className={`font-title h-8 rounded-lg text-[12px] transition-all ${active ? 'bg-gradient-to-b from-[#a5f3fc] to-[#0ea5e9] text-[#052a3a] shadow-[0_2px_0_#075985]' : 'text-white/70 hover:bg-white/10'}`}
+                    >
+                      {label}
+                    </button>
+                  );
                 })}
               </div>
             </div>

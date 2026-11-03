@@ -6,6 +6,7 @@ import { Game as GunHit } from '../src/games/gunhit/game/Game';
 import { Game as RifleRock } from '../src/games/rifle-rock/game/engine';
 import { GUN_SUNBURST_RGB, gunSunburstColor } from '../src/games/gunhit/game/sunburstPalette';
 import { getWeapon, type Rarity } from '../src/games/gunhit/game/weapons';
+import { getSavedSgaOrientation } from '../src/games/gunhit/game/orientation';
 
 test('Hub no longer embeds standalone iframe slides and renders only Slide 01 directly', () => {
   const app = fs.readFileSync(path.resolve(process.cwd(), 'src/App.tsx'), 'utf8');
@@ -46,8 +47,18 @@ test('Slides 02-05 and earlier extra slides are removed from the hub so only Sli
   }
   assert.ok(app.includes('<GunHitGame introReady={hasBooted && !loading} />'), 'App renders GunHitGame directly with synchronized intro state');
   assert.ok(!app.includes('SLIDE 01'), 'outer hub slide chrome is removed for pure 9:16 mobile SGA');
-  assert.ok(app.includes('baseWidth={420}'), '9:16 mobile portrait baseWidth is preserved');
-  assert.ok(app.includes('baseHeight={760}'), '9:16 mobile portrait baseHeight is preserved');
+  // The frame is still 9:16 portrait by default — landscape is an opt-in the
+  // player picks in Settings, so the hub keeps its mobile portrait shape until
+  // they ask for the gun-on-the-left layout.
+  assert.ok(
+    app.includes('<ScaledFrame baseWidth={frame.w} baseHeight={frame.h}>'),
+    'the frame size comes from the chosen orientation',
+  );
+  assert.ok(
+    app.includes('const frame = displaySize(gunHitOrientation);'),
+    'the frame is derived from the saved orientation',
+  );
+  assert.equal(getSavedSgaOrientation(), 'portrait', 'the default orientation stays 9:16 portrait');
 });
 
 test('Gun Hit tiers have their own FX Lab rays, including every equipped weapon', () => {

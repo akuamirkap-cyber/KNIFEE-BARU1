@@ -85,7 +85,19 @@ test('the running game clips the impact splinters to the boss it drew', () => {
   assert.match(game, /c\.clip\(surface\);/);
   assert.match(game, /this\.bossArtScreen = this\.level\.boss && typeof c\.getTransform === 'function' \? c\.getTransform\(\) : null;/);
   // The clip is released before the HUD, so no overlay inherits it.
-  assert.match(game, /setSplinterClip\(c, null\);\n\n    if \(this\.state !== 'idle'\) this\.drawHUD\(c\);/);
+  // The clip is released before the HUD, so no overlay inherits it. Asserted as
+  // an ordering rather than exact formatting: the HUD is now preceded by a
+  // transform reset (landscape draws it in display coordinates), which must not
+  // re-introduce the clip it just cleared.
+  const clipRelease = game.indexOf('setSplinterClip(c, null);');
+  const hudCall = game.indexOf('this.drawHUD(c)');
+  assert.ok(clipRelease !== -1, 'the clip is released at the end of the splinter pass');
+  assert.ok(hudCall !== -1, 'the HUD is drawn');
+  assert.ok(clipRelease < hudCall, 'the clip is released before the HUD draws');
+  // … and nothing between them may register a new clip. The slice starts after
+  // the release statement itself, otherwise it would match its own text.
+  const afterRelease = clipRelease + 'setSplinterClip(c, null);'.length;
+  assert.doesNotMatch(game.slice(afterRelease, hudCall), /setSplinterClip\(c, /);
   // Callouts are labels, not splatter: they are drawn after the clip.
   assert.match(game, /for \(const p of this\.particles\) \{\n\s*if \(p\.kind === 'text'\) this\.drawImpactText\(c, p\);/);
   // Every splinter layer runs its particle draw through the same hook, while

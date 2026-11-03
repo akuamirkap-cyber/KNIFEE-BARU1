@@ -1,5 +1,11 @@
 import { Component, lazy, Suspense, useCallback, useEffect, useState, type ReactNode } from 'react';
 import ScaledFrame from './components/ScaledFrame';
+import { displaySize } from './games/gunhit/game/layout';
+import {
+  getSavedSgaOrientation,
+  subscribeSgaOrientation,
+  type SgaOrientation,
+} from './games/gunhit/game/orientation';
 import { SlideActivityProvider } from './games/shared/SlideActivity';
 import { juicyAudio } from './utils/juicyAudio';
 import { useAndroidBack, installAndroidBack, exitAndroidApp } from './utils/androidBack';
@@ -58,10 +64,16 @@ export type SlideId = 'gunhit';
  */
 export default function App() {
   const [pageVisible, setPageVisible] = useState(() => !document.hidden);
+  // Game A's canvas can be laid out landscape (gun on the left firing right,
+  // target on the right). The frame has to know so it can hand ScaledFrame the
+  // swapped base size; the game itself re-reads this from storage.
+  const [gunHitOrientation, setGunHitOrientation] = useState<SgaOrientation>(() => getSavedSgaOrientation());
   // Play the SANS STUDIO opening once on startup; Settings can replay it later.
   const [loading, setLoading] = useState(true);
   const [hasBooted, setHasBooted] = useState(false);
   const [introRunKey, setIntroRunKey] = useState(0);
+
+  useEffect(() => subscribeSgaOrientation(setGunHitOrientation), []);
 
   useEffect(() => {
     // Telemetry boot: counts this launch (local only) and starts listening for
@@ -135,6 +147,11 @@ export default function App() {
     juicyAudio.suspendAfterIntro(550);
   }, []);
 
+  // The frame's base rectangle follows the chosen orientation so ScaledFrame
+  // scales the right shape into the viewport (portrait 420x760, landscape
+  // 760x420). The canvas inside sizes itself from the same source of truth.
+  const frame = displaySize(gunHitOrientation);
+
   return (
     <div
       className="fixed inset-0 flex h-dvh w-full flex-col overflow-hidden bg-[#05060a] select-none touch-manipulation"
@@ -159,8 +176,8 @@ export default function App() {
       >
         <SlideActivityProvider active={pageVisible && !loading}>
           <GameLoadBoundary>
-            <ScaledFrame baseWidth={420} baseHeight={760}>
-              <div className="relative h-[760px] w-[420px] overflow-hidden">
+            <ScaledFrame baseWidth={frame.w} baseHeight={frame.h}>
+              <div className="relative overflow-hidden" style={{ width: frame.w, height: frame.h }}>
                 {hasBooted ? (
                   <Suspense fallback={<GameBootFallback />}>
                     <GunHitGame introReady={hasBooted && !loading} />

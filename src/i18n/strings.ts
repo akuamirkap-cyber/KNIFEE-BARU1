@@ -165,6 +165,8 @@ const CORE_EN: Record<string, string> = {
   'TEMA LATAR': 'BACKGROUND THEME',
   'PENGATURAN LANJUTAN': 'ADVANCED SETTINGS',
   '⚡ KECEPATAN GAME SGA': '⚡ SGA GAME SPEED',
+  'Portrait: senjata di bawah, menembak ke atas. Landscape: senjata di KIRI menembak ke KANAN, target & musuh di kanan.':
+    'Portrait: gun at the bottom, firing up. Landscape: gun on the LEFT firing RIGHT, target & enemies on the right.',
   '🎬 PRESET ANIMASI SENJATA MENU': '🎬 MENU WEAPON ANIMATION PRESET',
   'Kecepatan & gaya masuk senjata. Tutup pengaturan untuk melihat dan mendengar animasinya.':
     'Speed & entrance style of the weapon. Close settings to see and hear the animation.',
