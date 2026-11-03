@@ -217,6 +217,17 @@ const BLEN = TOTAL_LEN;
 // projectile speed depends on weapon
 const TAU = Math.PI * 2;
 
+/**
+ * Landscape gun control (W/S + pointer aim).
+ *
+ * The gun lives at world (CX, GUN_Y); landscape shows the world rotated 90°, so
+ * screen-up is world -x. The caps keep the muzzle inside the wheel's width, so
+ * a full slide or tilt never sends every round past the target.
+ */
+export const GUN_SLIDE_MAX = 66; // world px, i.e. display px up/down
+export const GUN_SLIDE_SPEED = 230; // world px per second while held
+export const GUN_TILT_MAX = 0.45; // radians (~26°) either way
+
 // A new run brings the weapon in from beneath the screen. This is only a
 // drawing offset: collision, muzzle origins, recoil and weapon scale stay put.
 export const GAMEPLAY_GUN_ENTRY_DURATION = 0.8;
@@ -1684,6 +1695,34 @@ export class Game {
   private bulletMult: number = getSavedBulletSpeed();
 
   /**
+   * Player-posed gun in landscape: how far it slides along the screen's
+   * vertical axis (world +x is screen-down there) and how far it tilts towards
+   * the pointer. Portrait never touches them, so it keeps the still gun.
+   */
+  private gunSlide = 0;
+  private gunTilt = 0;
+  private gunSlideUp = false;
+  private gunSlideDown = false;
+  /** Last pointer position in *display* pixels (landscape aim). */
+  private aimPointer: { x: number; y: number } | null = null;
+
+  /** Guarded slide: harnesses build the game with `Object.create(prototype)`. */
+  private get gunLift(): number {
+    const slide = this.gunSlide;
+    return Number.isFinite(slide) ? slide : 0;
+  }
+
+  private get gunTiltNow(): number {
+    const tilt = this.gunTilt;
+    return Number.isFinite(tilt) ? tilt : 0;
+  }
+
+  /** Where the gun really stands: its muzzle, effects and rounds follow it. */
+  private get gunX(): number {
+    return CX + this.gunLift;
+  }
+
+  /**
    * Guarded read of {@link bulletMult}: a few harnesses build the game with
    * `Object.create(Game.prototype)`, where class fields are never initialised,
    * and a NaN multiplier would stop the round dead in the air.
@@ -2316,6 +2355,7 @@ export class Game {
     window.addEventListener('keydown', this.onKey);
     window.addEventListener('keyup', this.onKeyUp);
     canvas.addEventListener('pointerdown', this.onPointer);
+    canvas.addEventListener('pointermove', this.onPointerMove);
     window.addEventListener('pointerup', this.onRelease);
     window.addEventListener('pointercancel', this.onRelease);
     window.addEventListener('blur', this.onRelease);
@@ -2327,6 +2367,16 @@ export class Game {
 
   setGameSpeed(speed: number) {
     this.pace = normalizeSgaSpeed(speed, 1);
+  }
+
+  /** How far the landscape gun is slid along the screen (display px, + = down). */
+  getGunSlide(): number {
+    return this.gunLift;
+  }
+
+  /** Current tilt of the landscape gun in radians (0 = pointing at the wheel). */
+  getGunTilt(): number {
+    return this.gunTiltNow;
   }
 
   /** Multiplies the flight speed of every projectile the player fires. */
@@ -2404,6 +2454,7 @@ export class Game {
     window.removeEventListener('keydown', this.onKey);
     window.removeEventListener('keyup', this.onKeyUp);
     this.canvas.removeEventListener('pointerdown', this.onPointer);
+    this.canvas.removeEventListener('pointermove', this.onPointerMove);
     window.removeEventListener('pointerup', this.onRelease);
     window.removeEventListener('pointercancel', this.onRelease);
     window.removeEventListener('blur', this.onRelease);
@@ -2415,6 +2466,8 @@ export class Game {
   };
 
   private onKeyUp = (e: KeyboardEvent) => {
+    if (e.code === 'KeyW') this.gunSlideUp = false;
+    else if (e.code === 'KeyS') this.gunSlideDown = false;
     if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'Enter') {
       this.holding = false;
       this.releaseScope();
@@ -2525,6 +2578,16 @@ export class Game {
 
   private onKey = (e: KeyboardEvent) => {
     if (!this.active) return;
+    // W/S slide the landscape gun up and down the screen (portrait keeps them).
+    if (this.orientation === 'landscape' && (e.code === 'KeyW' || e.code === 'KeyS')) {
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') {
+        e.preventDefault();
+        if (e.code === 'KeyW') this.gunSlideUp = true;
+        else this.gunSlideDown = true;
+        return;
+      }
+    }
     if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'Enter') {
       if (this.state === 'play' || this.state === 'intro') {
         e.preventDefault();
@@ -2532,6 +2595,20 @@ export class Game {
         this.press();
       }
     }
+  };
+
+  /**
+   * Landscape aim: remember where the pointer is in *display* pixels. The angle
+   * itself is resolved in `updateGunPose`, where the gun's own position is known.
+   */
+  private onPointerMove = (e: PointerEvent) => {
+    const rect = this.canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const { w, h } = displaySize(this.orientation);
+    this.aimPointer = {
+      x: ((e.clientX - rect.left) / rect.width) * w,
+      y: ((e.clientY - rect.top) / rect.height) * h,
+    };
   };
 
   private onPointer = (e: PointerEvent) => {
@@ -3980,6 +4057,9 @@ export class Game {
     if (this.state !== 'play' || this.choosingBuff) return;
     if (this.cooldown > 0 || this.ammoLeft <= 0 || this.reloadT > 0) return;
     const w = this.weapon;
+    // The gun can be slid/tilted by the player in landscape; every muzzle,
+    // effect and round starts from its real position.
+    const GX = this.gunX;
     // Slide 3 (`fire()`) spends one round a trigger: no snowball hopper, no
     // burst, no held charge and no paint roulette — those are slide 1's.
     const s3 = this.setSevenLive;
@@ -4004,7 +4084,7 @@ export class Game {
     const fireworkMuzzle = (ox: number) => {
       const m = fireworkMouth(getGunVariant('firework'), tube);
       const mirror = this.hasTwinGuns && ox < 0 ? -1 : 1;
-      return { x: CX + ox + m.x * GAMEPLAY_GUN_SCALE * mirror, y: GUN_Y + m.y * GAMEPLAY_GUN_SCALE };
+      return { x: GX + ox + m.x * GAMEPLAY_GUN_SCALE * mirror, y: GUN_Y + m.y * GAMEPLAY_GUN_SCALE };
     };
     this.events?.onShotFired?.(n);
     const big = w.charge && !s3 ? this.chargeLevel : 0;
@@ -4027,7 +4107,7 @@ export class Game {
       fx.time = this.time;
       fx.syncWheel();
       const my = GUN_Y - 4;
-      fx.fire(CX + (offsets[0] ?? 0), my);
+      fx.fire(GX + (offsets[0] ?? 0), my);
       // Slide 6 shipped no audio at all (its component never opens an
       // AudioContext), so there is no voice to import: the gun keeps slide 1's
       // own fire sound instead of the export turning it silent.
@@ -4035,13 +4115,13 @@ export class Game {
       // The second barrel of the `double` star paints slide 6's muzzle burst
       // from its own muzzle. Silent: slide 1 plays one voice per trigger.
       if (this.hasTwinGuns) {
-        silentPreview(() => fx.fire(CX + (offsets[1] ?? offsets[0] ?? 0), my));
+        silentPreview(() => fx.fire(GX + (offsets[1] ?? offsets[0] ?? 0), my));
       }
       const beams = this.hasTwinGuns ? 2 : 1;
       const plan = this.carrierPlan(n, beams, SIX_BEAM_SPEED * this.bulletK);
       for (const step of plan) {
         this.projs.push({
-          x: CX + step.ox, originX: CX + step.ox, y: my,
+          x: GX + step.ox, originX: GX + step.ox, y: my,
           vx: vx + step.vx, vy: -SIX_BEAM_SPEED * this.speedMult * this.bulletK,
           big, tint, ...sizeBuff, setSix: true,
         });
@@ -4067,7 +4147,7 @@ export class Game {
       fx.selectWeapon(s9id);
       fx.time = this.time;
       fx.syncWheel();
-      const mx = CX + (offsets[0] ?? 0);
+      const mx = GX + (offsets[0] ?? 0);
       const my = GUN_Y - 4;
       unlockNineAudio();
       this.nineQueued = false;
@@ -4076,7 +4156,7 @@ export class Game {
       fx.fire(mx, my, -Math.PI / 2, charge);
       const made = fx.takeShots();
       this.fireTwinBarrel(made,
-        () => fx.fireQuiet(CX + (offsets[1] ?? offsets[0] ?? 0), my, -Math.PI / 2, charge),
+        () => fx.fireQuiet(GX + (offsets[1] ?? offsets[0] ?? 0), my, -Math.PI / 2, charge),
         () => fx.takeShots());
       // Slide 9's beams are hitscan: the carrier crosses the field at beam
       // speed — or exactly as fast as the dragon's flame travels — so the
@@ -4093,7 +4173,7 @@ export class Game {
         const own = made[i];
         const asBeam = beam && !own && plan[i].first;
         const proj: Proj = {
-          x: CX + plan[i].ox, originX: CX + plan[i].ox, y: own ? own.y : my,
+          x: GX + plan[i].ox, originX: GX + plan[i].ox, y: own ? own.y : my,
           vx: vx + plan[i].vx, vy: (asBeam ? -beamSpeed : -sp) * this.bulletK, big, tint, ...sizeBuff,
         };
         if (own) proj.setNine = own;
@@ -4125,13 +4205,13 @@ export class Game {
       fx.gunY = GUN_Y - 4;
       fx.selectWeapon(s11id);
       fx.syncWheel();
-      const mx = CX + (offsets[0] ?? 0);
+      const mx = GX + (offsets[0] ?? 0);
       const my = GUN_Y - 4;
       unlockElevenAudio(fx);
       fx.fire(mx, my, w.charge ? big : 0);
       const made = fx.takeShots();
       this.fireTwinBarrel(made,
-        () => fx.fire(CX + (offsets[1] ?? offsets[0] ?? 0), my, w.charge ? big : 0),
+        () => fx.fire(GX + (offsets[1] ?? offsets[0] ?? 0), my, w.charge ? big : 0),
         () => fx.takeShots());
       // One carrier per barrel: the round slide 7 scores (`scoringRounds()`:
       // the nano swarm's centre drone, not just whichever round came first).
@@ -4145,7 +4225,7 @@ export class Game {
       const scoring = fx.scoringRounds(made, lanes);
       for (let i = 0; i < lanes; i++) {
         const own = scoring[i];
-        const bx = CX + (offsets[i % barrels] ?? 0);
+        const bx = GX + (offsets[i % barrels] ?? 0);
         const sx = own ? fx.aimRound(own, bx) : bx;
         const proj: Proj = own
           ? { x: sx, originX: bx, y: own.y, vx: own.vx, vy: own.vy, big, tint, ...sizeBuff }
@@ -4187,7 +4267,7 @@ export class Game {
     if (s2id && this.setTwoLive) {
       const fx = this.s2w;
       const firstMuzzle = w.id === 'firework' ? fireworkMuzzle(offsets[0] ?? 0) : null;
-      fx.cx = firstMuzzle?.x ?? CX;
+      fx.cx = firstMuzzle?.x ?? GX;
       fx.cy = this.targetY;
       fx.radius = this.level.radius;
       fx.gunY = firstMuzzle ? firstMuzzle.y + 22 : GUN_Y;
@@ -4203,12 +4283,12 @@ export class Game {
         if (w.id === 'firework') { const m = fireworkMuzzle(offsets[1] ?? 0); fx.cx = m.x; fx.gunY = m.y + 22; }
         rounds.push(fx.fire(s2id, this.s2HueFor(s2id)));
       }, () => []);
-      fx.cx = CX; fx.gunY = GUN_Y;
+      fx.cx = GX; fx.gunY = GUN_Y;
       const plan = this.carrierPlan(n, rounds.length, w.speed * this.bulletK);
       for (let i = 0; i < plan.length; i++) {
         const mouth = w.id === 'firework' ? fireworkMuzzle(plan[i].ox) : null;
         this.projs.push({
-          x: mouth?.x ?? CX + plan[i].ox, originX: CX + plan[i].ox, y: mouth ? mouth.y - 8 : GUN_Y - 22,
+          x: mouth?.x ?? GX + plan[i].ox, originX: GX + plan[i].ox, y: mouth ? mouth.y - 8 : GUN_Y - 22,
           vx: vx + plan[i].vx, vy,
           big, tint, ...sizeBuff,
           setTwo: { ...(rounds[i] ?? round) },
@@ -4255,7 +4335,7 @@ export class Game {
           const mouth = fireworkMuzzle(ox);
           return { x: mouth.x - (tube - 1) * 15 * 0.92, y: mouth.y - (tube === 1 ? -4 : 8) * 0.92 };
         }
-        return { x: CX + ox + handShift(ox), y: w.id === 'ghost' ? GUN_Y + GHOST_HAND_Y * GAMEPLAY_GUN_SCALE + 6 : GUN_Y };
+        return { x: GX + ox + handShift(ox), y: w.id === 'ghost' ? GUN_Y + GHOST_HAND_Y * GAMEPLAY_GUN_SCALE + 6 : GUN_Y };
       };
       const firstPoint = recipePoint(firstOx);
       const mx = firstPoint.x, my = firstPoint.y;
@@ -4290,7 +4370,7 @@ export class Game {
           if (w.id === 'firework' && this.hasTwinGuns) {
             // The original rocket homes to wheel centre. Twin launchers need
             // separate targets so their two rockets cannot collide on landing.
-            (own as FireworkShot).targetX = CX + (offsets[i % offsets.length] ?? 0);
+            (own as FireworkShot).targetX = GX + (offsets[i % offsets.length] ?? 0);
           }
           const ownVy = -sevenCarrierSpeed(own, w.speed) * this.speedMult * this.bulletK;
           this.projs.push({
@@ -4303,7 +4383,7 @@ export class Game {
       } else {
         for (const ox of offsets.length ? offsets : [0]) {
           this.projs.push({
-            x: CX + ox, originX: CX + ox, y: my, vx: 0, vy: shotVy,
+            x: GX + ox, originX: GX + ox, y: my, vx: 0, vy: shotVy,
             big, tint, hue: undefined, ...sizeBuff, setSevenPending: true,
           });
         }
@@ -4335,7 +4415,7 @@ export class Game {
     // the black-hole staff releases the orb 0.28 s after the charge).
     const setOneLive = this.setOneLive;
     const s1Spawns = setOneLive
-      ? offsets.map((ox) => fireSetOne(this.s1, this.setOneId!, CX + ox, GUN_Y - 4, this.s1Hooks(), (n) => setOneSfx.play(n)))
+      ? offsets.map((ox) => fireSetOne(this.s1, this.setOneId!, GX + ox, GUN_Y - 4, this.s1Hooks(), (n) => setOneSfx.play(n)))
       : null;
     let s1i = 0;
     for (const ox of offsets) {
@@ -4360,7 +4440,7 @@ export class Game {
         : fwMouth ? fwMouth.y - 8
         : w.id === 'dora' ? GUN_Y + w.recoil * 22 - 50 : w.id === 'pred' ? GUN_Y - 72
           : w.id === 'ghost' ? GUN_Y + GHOST_HAND_Y * GAMEPLAY_GUN_SCALE : GUN_Y - 4;
-      const spawnX = s1spawn ? s1spawn.x : fwMouth ? fwMouth.x : CX + ox + (w.id === 'ghost'
+      const spawnX = s1spawn ? s1spawn.x : fwMouth ? fwMouth.x : GX + ox + (w.id === 'ghost'
         ? this.ghostHand * (this.hasTwinGuns && ox < 0 ? -1 : 1) * GHOST_HAND_X * GAMEPLAY_GUN_SCALE : 0);
       const isNewWeapon = w.id === 'dora' || w.id === 'xeno' || w.id === 'pred';
       const projExtra = isNewWeapon ? { wob: Math.random() * TAU, lastEcho: spawnY } : {};
@@ -4384,20 +4464,20 @@ export class Game {
         this.sink.push({ x: m.x, y: m.y, vx: 0, vy: 0, life: 0.3, max: 0.3, size: 38, color: '#ff80bf', kind: 'ring', rot: 0, vr: 0, g: 0 });
       }
       if (yoyo && shotHue !== undefined) {
-        spawnYoyoLaunch(yoyo, CX + ox, GUN_Y - 6, shotHue);
-        this.sink.light(CX + ox, GUN_Y - 6, 70, '255,160,220', 0.25);
+        spawnYoyoLaunch(yoyo, GX + ox, GUN_Y - 6, shotHue);
+        this.sink.light(GX + ox, GUN_Y - 6, 70, '255,160,220', 0.25);
       }
       if (keris) {
-        spawnKerisLaunch(keris, CX + ox, GUN_Y - 6);
-        this.sink.light(CX + ox, GUN_Y - 6, 70, '77,238,234', 0.25);
+        spawnKerisLaunch(keris, GX + ox, GUN_Y - 6);
+        this.sink.light(GX + ox, GUN_Y - 6, 70, '77,238,234', 0.25);
       }
       if (diamond) {
-        spawnDiamondLaunch(diamond, CX + ox, GUN_Y - 6);
-        this.sink.light(CX + ox, GUN_Y - 6, 75, '165,243,252', 0.28);
+        spawnDiamondLaunch(diamond, GX + ox, GUN_Y - 6);
+        this.sink.light(GX + ox, GUN_Y - 6, 75, '165,243,252', 0.28);
       }
       if (bazooka) {
-        bazooka.onShoot(CX + ox, GUN_Y - 6, H);
-        this.sink.light(CX + ox, GUN_Y - 6, 120, '255,150,55', 0.35);
+        bazooka.onShoot(GX + ox, GUN_Y - 6, H);
+        this.sink.light(GX + ox, GUN_Y - 6, 120, '255,150,55', 0.35);
       }
     }
     this.recoil = w.recoil;
@@ -4407,20 +4487,20 @@ export class Game {
       && !(w.id === 'blackhole' && this.slide2Void) && !setOneLive) {
       for (const ox of offsets) {
         const hand = w.id === 'ghost' ? this.ghostHand * (this.hasTwinGuns && ox < 0 ? -1 : 1) * GHOST_HAND_X * GAMEPLAY_GUN_SCALE : 0;
-        spawnMuzzle(this.sink, fxp, w, CX + ox + hand, w.id === 'ghost' ? GUN_Y + GHOST_HAND_Y * GAMEPLAY_GUN_SCALE : GUN_Y - 6);
+        spawnMuzzle(this.sink, fxp, w, GX + ox + hand, w.id === 'ghost' ? GUN_Y + GHOST_HAND_Y * GAMEPLAY_GUN_SCALE : GUN_Y - 6);
       }
     }
     // Slide 2 black hole: collapsing sparks into the muzzle, cosmic hue band.
     if (w.id === 'blackhole' && this.slide2Void) {
       this.s2Hue = 215 + ((gunState.shots * 53) % 105);
       for (const ox of offsets) {
-        fireBlackHole2(this.s2, CX + ox, GUN_Y - 4, this.s2Hue);
-        this.sink.light(CX + ox, GUN_Y - 6, 90, '170,120,255', 0.22);
+        fireBlackHole2(this.s2, GX + ox, GUN_Y - 4, this.s2Hue);
+        this.sink.light(GX + ox, GUN_Y - 6, 90, '170,120,255', 0.22);
       }
     }
     this.camY += fxp.kick * 0.5;
     if (fxp.speedLines) for (const ox of offsets) {
-      spawnSpeedLines(this.sink, CX + ox, this.targetY + this.level.radius + 20, GUN_Y - 30, w.trail);
+      spawnSpeedLines(this.sink, GX + ox, this.targetY + this.level.radius + 20, GUN_Y - 30, w.trail);
     }
     this.cooldown = (w.spinup ? 0.3 - 0.235 * this.spin : w.cooldown)
       * (this.buff === 'speed' || this.treasureBuff === 'rapid' ? 0.5 : this.treasureBuff === 'mini' ? 0.6 : 1);
@@ -4432,7 +4512,7 @@ export class Game {
         const a = rand(-Math.PI * 0.85, -Math.PI * 0.15);
         const v = rand(0.4, 1) * (b.spd ?? 200);
         this.particles.push({
-          x: CX + ox + rand(-6, 6), y: GUN_Y - 4, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: rand(0.35, 0.8), max: 0.8,
+          x: GX + ox + rand(-6, 6), y: GUN_Y - 4, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: rand(0.35, 0.8), max: 0.8,
           size: b.glow ? rand(3, b.size ?? 6) : rand(2, 4.5), color: pick(b.colors),
           kind: w.id === 'soaker' ? 'waterDrop' : w.id === 'snowball' ? 'snowflake' : b.glow ? 'glow' : 'chip',
           rot: rand(0, TAU), vr: rand(-12, 12), g: b.g ?? 600,
@@ -4447,28 +4527,28 @@ export class Game {
       this.camY += big * 3;
       for (const ox of offsets) {
         // flash: size 170, color PLASMA.glow, max 0.22 (game-3 releasePlasma)
-        this.sink.light(CX + ox, GUN_Y - 6, 170, '111,211,255', 0.22);
+        this.sink.light(GX + ox, GUN_Y - 6, 170, '111,211,255', 0.22);
         // flash: size 80, color #ffffff, max 0.12
-        this.sink.light(CX + ox, GUN_Y - 6, 80, '255,255,255', 0.12);
+        this.sink.light(GX + ox, GUN_Y - 6, 80, '255,255,255', 0.12);
         // ring: size 10 grow 420, color PLASMA.glow, max 0.3
-        this.sink.push({ x: CX + ox, y: GUN_Y - 6, vx: 0, vy: 0, life: 0.3, max: 0.3, size: 170, color: '111,211,255', kind: 'shock', rot: 0, vr: 0, g: 0 });
+        this.sink.push({ x: GX + ox, y: GUN_Y - 6, vx: 0, vy: 0, life: 0.3, max: 0.3, size: 170, color: '111,211,255', kind: 'shock', rot: 0, vr: 0, g: 0 });
         // ringE: size 8 grow 300, color #ffffff, max 0.28
-        this.sink.push({ x: CX + ox, y: GUN_Y - 6, vx: 0, vy: 0, life: 0.28, max: 0.28, size: 130, color: '255,255,255', kind: 'ring', rot: 0, vr: 0, g: 0 });
+        this.sink.push({ x: GX + ox, y: GUN_Y - 6, vx: 0, vy: 0, life: 0.28, max: 0.28, size: 130, color: '255,255,255', kind: 'ring', rot: 0, vr: 0, g: 0 });
         // 6 bolts: ang -PI/2 + rand(-1.4, 1.4), color i%2 ? #ffffff : PLASMA.glow (game-3)
         for (let i = 0; i < 6; i++) {
           const ang = -Math.PI / 2 + rand(-1.4, 1.4);
           const col = i % 2 ? '255,255,255' : '111,211,255';
-          this.sink.push({ x: CX + ox, y: GUN_Y - 6, vx: Math.cos(ang) * rand(30, 70), vy: Math.sin(ang) * rand(30, 70), life: rand(0.1, 0.2), max: 0.2, size: 3, color: col, kind: 'bolt', rot: 0, vr: 0, g: 0 });
+          this.sink.push({ x: GX + ox, y: GUN_Y - 6, vx: Math.cos(ang) * rand(30, 70), vy: Math.sin(ang) * rand(30, 70), life: rand(0.1, 0.2), max: 0.2, size: 3, color: col, kind: 'bolt', rot: 0, vr: 0, g: 0 });
         }
         // 26 spark burst (game-3: kind 'spark', size 1.8, drag 4, max 0.3)
         for (let i = 0; i < 26; i++) {
           const a = rand(-Math.PI / 2, 1.3);
           const sp = rand(200, 700);
-          this.sink.push({ x: CX + ox, y: GUN_Y - 6, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 0.3, max: 0.3, size: 1.8, color: i % 2 ? '255,255,255' : '111,211,255', kind: 'spark', rot: 0, vr: 0, g: 0, drag: 4 });
+          this.sink.push({ x: GX + ox, y: GUN_Y - 6, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 0.3, max: 0.3, size: 1.8, color: i % 2 ? '255,255,255' : '111,211,255', kind: 'spark', rot: 0, vr: 0, g: 0, drag: 4 });
         }
         // 6 smoke: color #3a4a60, size rand(12,22) (game-3)
         for (let i = 0; i < 6; i++) {
-          this.sink.push({ x: CX + ox + rand(-16, 16), y: GUN_Y - 6 + 10, vx: rand(-50, 50), vy: rand(-40, 20), life: rand(0.7, 1.2), max: 1.2, size: rand(12, 22), color: '58,74,96', kind: 'smoke', rot: 0, vr: 0, g: 0, drag: 2 });
+          this.sink.push({ x: GX + ox + rand(-16, 16), y: GUN_Y - 6 + 10, vx: rand(-50, 50), vy: rand(-40, 20), life: rand(0.7, 1.2), max: 1.2, size: rand(12, 22), color: '58,74,96', kind: 'smoke', rot: 0, vr: 0, g: 0, drag: 2 });
         }
       }
     } else if (w.charge && big > 0) {
@@ -4479,11 +4559,11 @@ export class Game {
       this.camY += big * 3;
       for (const ox of offsets) {
         const paired = offsets.length > 1;
-        this.sink.light(CX + ox, GUN_Y, big === 2 ? (paired ? 220 : 320) : (paired ? 130 : 180), big === 2 ? '254,240,138' : '125,211,252', 0.25);
-        this.sink.push({ x: CX + ox, y: GUN_Y - 8, vx: 0, vy: 0, life: 0.4, max: 0.4, size: big === 2 ? (paired ? 105 : 150) : (paired ? 60 : 80), color: '125,211,252', kind: 'shock', rot: 0, vr: 0, g: 0 });
+        this.sink.light(GX + ox, GUN_Y, big === 2 ? (paired ? 220 : 320) : (paired ? 130 : 180), big === 2 ? '254,240,138' : '125,211,252', 0.25);
+        this.sink.push({ x: GX + ox, y: GUN_Y - 8, vx: 0, vy: 0, life: 0.4, max: 0.4, size: big === 2 ? (paired ? 105 : 150) : (paired ? 60 : 80), color: '125,211,252', kind: 'shock', rot: 0, vr: 0, g: 0 });
       }
       if (big === 2) for (const ox of offsets) {
-        spawnSpeedLines(this.sink, CX + ox, this.targetY + this.level.radius + 20, GUN_Y - 30, '254,240,138');
+        spawnSpeedLines(this.sink, GX + ox, this.targetY + this.level.radius + 20, GUN_Y - 30, '254,240,138');
       }
     } else if (this.slide2Void) slide2Sfx.shootBH();
     else if (!setOneLive) playFireSfx(w.id);
@@ -4492,20 +4572,20 @@ export class Game {
         // 16 viscous droplets behind the glob (game-3 fire())
         for (let i = 0; i < 16; i++) {
           const k = i / 16;
-          this.sink.push({ x: CX + ox + rand(-3, 3), y: GUN_Y - 4 - k * 12, vx: rand(-25, 25), vy: vy * (0.45 + k * 0.5), life: rand(0.7, 1.2), max: 1.2, size: rand(2.5, 6.5) * (1 - k * 0.5) + 1.5, color: '#b6ff1a', kind: 'acid', rot: 0, vr: 0, g: 900 });
+          this.sink.push({ x: GX + ox + rand(-3, 3), y: GUN_Y - 4 - k * 12, vx: rand(-25, 25), vy: vy * (0.45 + k * 0.5), life: rand(0.7, 1.2), max: 1.2, size: rand(2.5, 6.5) * (1 - k * 0.5) + 1.5, color: '#b6ff1a', kind: 'acid', rot: 0, vr: 0, g: 900 });
         }
         // 10 fine mist (game-3: vy rand(-900, -300))
         for (let i = 0; i < 10; i++) {
-          this.sink.push({ x: CX + ox + rand(-6, 6), y: GUN_Y - 4 - rand(0, 4), vx: rand(-120, 120), vy: rand(-900, -300), life: rand(0.4, 0.8), max: 0.8, size: rand(1.2, 2.2), color: '#b6ff1a', kind: 'acid', rot: 0, vr: 0, g: 1200 });
+          this.sink.push({ x: GX + ox + rand(-6, 6), y: GUN_Y - 4 - rand(0, 4), vx: rand(-120, 120), vy: rand(-900, -300), life: rand(0.4, 0.8), max: 0.8, size: rand(1.2, 2.2), color: '#b6ff1a', kind: 'acid', rot: 0, vr: 0, g: 1200 });
         }
         // flash + ring (game-3: flash size 80, ring size 8 grow 220).
         // The flash is a soft bloom, not a filled disc.
-        this.sink.light(CX + ox, GUN_Y - 6, 80, '182,255,26', 0.2);
-        this.sink.push({ x: CX + ox, y: GUN_Y - 6, vx: 0, vy: 0, life: 0.2, max: 0.2, size: 34, color: '182,255,26', kind: 'glow', rot: 0, vr: 0, g: 0 });
-        this.sink.push({ x: CX + ox, y: GUN_Y - 6, vx: 0, vy: 0, life: 0.3, max: 0.3, size: 26, color: '182,255,26', kind: 'ring', rot: 0, vr: 0, g: 0 });
+        this.sink.light(GX + ox, GUN_Y - 6, 80, '182,255,26', 0.2);
+        this.sink.push({ x: GX + ox, y: GUN_Y - 6, vx: 0, vy: 0, life: 0.2, max: 0.2, size: 34, color: '182,255,26', kind: 'glow', rot: 0, vr: 0, g: 0 });
+        this.sink.push({ x: GX + ox, y: GUN_Y - 6, vx: 0, vy: 0, life: 0.3, max: 0.3, size: 26, color: '182,255,26', kind: 'ring', rot: 0, vr: 0, g: 0 });
         // 6 smoke puffs (game-3: color #9bd13a, size rand(10,20))
         for (let i = 0; i < 6; i++) {
-          this.sink.push({ x: CX + ox + rand(-14, 14), y: GUN_Y - 6, vx: rand(-40, 40), vy: rand(-90, -30), life: rand(0.8, 1.4), max: 1.4, size: rand(10, 20), color: '155,209,58', kind: 'smoke', rot: 0, vr: 0, g: 30, drag: 2 });
+          this.sink.push({ x: GX + ox + rand(-14, 14), y: GUN_Y - 6, vx: rand(-40, 40), vy: rand(-90, -30), life: rand(0.8, 1.4), max: 1.4, size: rand(10, 20), color: '155,209,58', kind: 'smoke', rot: 0, vr: 0, g: 30, drag: 2 });
         }
       }
     }
@@ -4514,25 +4594,25 @@ export class Game {
       const doraMuzzleY = GUN_Y + this.recoil * 22 - 70;
       for (const ox of offsets) {
         // flash + ringE (game-3 fireAir())
-        this.sink.light(CX + ox, doraMuzzleY, 120, '255,255,255', 0.16);
-        this.sink.push({ x: CX + ox, y: doraMuzzleY, vx: 0, vy: 0, life: 0.3, max: 0.3, size: 120, color: '255,255,255', kind: 'ring', rot: 0, vr: 0, g: 0 });
+        this.sink.light(GX + ox, doraMuzzleY, 120, '255,255,255', 0.16);
+        this.sink.push({ x: GX + ox, y: doraMuzzleY, vx: 0, vy: 0, life: 0.3, max: 0.3, size: 120, color: '255,255,255', kind: 'ring', rot: 0, vr: 0, g: 0 });
         // ringE #1: size 14, grow 420, white, max 0.3
-        this.sink.push({ x: CX + ox, y: doraMuzzleY, vx: 0, vy: 0, life: 0.3, max: 0.3, size: 14, color: '255,255,255', kind: 'ringE', rot: 0, vr: 0, g: 0 });
+        this.sink.push({ x: GX + ox, y: doraMuzzleY, vx: 0, vy: 0, life: 0.3, max: 0.3, size: 14, color: '255,255,255', kind: 'ringE', rot: 0, vr: 0, g: 0 });
         // ringE #2: size 8, grow 260, AIR.glow, max 0.36
-        this.sink.push({ x: CX + ox, y: doraMuzzleY, vx: 0, vy: 0, life: 0.36, max: 0.36, size: 8, color: '159,220,255', kind: 'ringE', rot: 0, vr: 0, g: 0 });
+        this.sink.push({ x: GX + ox, y: doraMuzzleY, vx: 0, vy: 0, life: 0.36, max: 0.36, size: 8, color: '159,220,255', kind: 'ringE', rot: 0, vr: 0, g: 0 });
         // 14 puff particles (game-3: size rand(12,22), grow 26, drag 3.2)
         for (let i = 0; i < 14; i++) {
           const a = rand(0, TAU);
           const sp = rand(90, 260);
-          this.sink.push({ x: CX + ox + Math.cos(a) * 14, y: doraMuzzleY + 6 + Math.sin(a) * 6, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.5 + 30, life: rand(0.5, 0.9), max: 0.9, size: rand(12, 22), color: '#ffffff', kind: 'puff', rot: rand(0, TAU), vr: rand(-2, 2), g: 0, drag: 3.2 });
+          this.sink.push({ x: GX + ox + Math.cos(a) * 14, y: doraMuzzleY + 6 + Math.sin(a) * 6, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.5 + 30, life: rand(0.5, 0.9), max: 0.9, size: rand(12, 22), color: '#ffffff', kind: 'puff', rot: rand(0, TAU), vr: rand(-2, 2), g: 0, drag: 3.2 });
         }
         // 10 wind streaks (game-3: size rand(14,30), speed rand(500,900))
         for (let i = 0; i < 10; i++) {
           const a = -Math.PI / 2 + rand(-0.5, 0.5);
-          this.sink.push({ x: CX + ox, y: doraMuzzleY, vx: Math.cos(a) * rand(500, 900), vy: Math.sin(a) * rand(500, 900), life: rand(0.18, 0.3), max: 0.3, size: rand(14, 30), color: '#ffffff', kind: 'wind', rot: 0, vr: 0, g: 0, drag: 1 });
+          this.sink.push({ x: GX + ox, y: doraMuzzleY, vx: Math.cos(a) * rand(500, 900), vy: Math.sin(a) * rand(500, 900), life: rand(0.18, 0.3), max: 0.3, size: rand(14, 30), color: '#ffffff', kind: 'wind', rot: 0, vr: 0, g: 0, drag: 1 });
         }
         // DOKAN! text (game-3: x+54, y-30, size 34, color #ffd23a, rot -0.18)
-        this.sink.push({ x: CX + ox + 54, y: doraMuzzleY - 30, vx: 0, vy: 0, life: 0.7, max: 0.7, size: 34, color: '#ffd23a', kind: 'text', rot: -0.18, vr: 0, g: 0, text: 'DOKAN!' });
+        this.sink.push({ x: GX + ox + 54, y: doraMuzzleY - 30, vx: 0, vy: 0, life: 0.7, max: 0.7, size: 34, color: '#ffd23a', kind: 'text', rot: -0.18, vr: 0, g: 0, text: 'DOKAN!' });
       }
       this.shake = Math.max(this.shake, 9);
     }
@@ -4541,15 +4621,15 @@ export class Game {
       for (const ox of offsets) {
         for (const s of [-1, 1]) {
           for (let i = 0; i < 4; i++) {
-            this.sink.push({ x: CX + ox + s * 24, y: GUN_Y + 6, vx: -s * rand(300, 600), vy: rand(-500, -200), life: 0.12, max: 0.12, size: rand(1, 2), color: 'rgba(255,220,200,0.9)', kind: 'streak', rot: 0, vr: 0, g: 0 });
+            this.sink.push({ x: GX + ox + s * 24, y: GUN_Y + 6, vx: -s * rand(300, 600), vy: rand(-500, -200), life: 0.12, max: 0.12, size: rand(1, 2), color: 'rgba(255,220,200,0.9)', kind: 'streak', rot: 0, vr: 0, g: 0 });
           }
         }
         for (let i = 0; i < 6; i++) {
-          this.sink.push({ x: CX + ox + rand(-10, 10), y: GUN_Y + 10, vx: rand(-80, 80), vy: rand(-60, 10), life: rand(0.4, 0.7), max: 0.7, size: rand(5, 10), color: 'rgba(210,190,160,', kind: 'smoke', rot: 0, vr: 0, g: -20, drag: 2 });
+          this.sink.push({ x: GX + ox + rand(-10, 10), y: GUN_Y + 10, vx: rand(-80, 80), vy: rand(-60, 10), life: rand(0.4, 0.7), max: 0.7, size: rand(5, 10), color: 'rgba(210,190,160,', kind: 'smoke', rot: 0, vr: 0, g: -20, drag: 2 });
         }
-        this.sink.push({ x: CX + ox, y: GUN_Y + 4, vx: 0, vy: 0, life: 0.25, max: 0.25, size: 70, color: '255,230,200', kind: 'shock', rot: 0, vr: 0, g: 0 });
+        this.sink.push({ x: GX + ox, y: GUN_Y + 4, vx: 0, vy: 0, life: 0.25, max: 0.25, size: 70, color: '255,230,200', kind: 'shock', rot: 0, vr: 0, g: 0 });
       }
-      this.addText('CTAK!', CX + rand(-50, 50), GUN_Y - 20, '#fde68a', 22);
+      this.addText('CTAK!', GX + rand(-50, 50), GUN_Y - 20, '#fde68a', 22);
     }
     if (w.id === 'obliterator') {
       this.flashWhite = Math.max(this.flashWhite, 0.2);
@@ -4560,7 +4640,7 @@ export class Game {
       for (const ox of offsets) {
         const side = ox < 0 ? -1 : 1; // cases eject outwards from mirrored guns
         this.particles.push({
-          x: CX + ox + side * 16, y: GUN_Y + (w.ejectY ?? 48), vx: side * rand(180, 320), vy: rand(-520, -380), life: 1.1, max: 1.1,
+          x: GX + ox + side * 16, y: GUN_Y + (w.ejectY ?? 48), vx: side * rand(180, 320), vy: rand(-520, -380), life: 1.1, max: 1.1,
           size: 1, color: w.casing, kind: 'shell', rot: rand(0, TAU), vr: side * rand(15, 28), g: 1600,
         });
       }
@@ -4569,7 +4649,7 @@ export class Game {
       const ns = w.backblast || w.id === 'bamboo' || w.id === 'pirate' ? 10 : 4;
       for (const ox of offsets) for (let i = 0; i < ns; i++) {
         this.particles.push({
-          x: CX + ox + rand(-6, 6), y: GUN_Y - 6, vx: rand(-50, 50), vy: rand(-90, -30), life: 0.5, max: 0.5,
+          x: GX + ox + rand(-6, 6), y: GUN_Y - 6, vx: rand(-50, 50), vy: rand(-90, -30), life: 0.5, max: 0.5,
           size: rand(6, w.backblast ? 18 : 12), color: 'rgba(200,200,200,', kind: 'smoke', rot: 0, vr: 0, g: -20,
         });
       }
@@ -4577,23 +4657,23 @@ export class Game {
     if (w.backblast) {
       for (const ox of offsets) for (let i = 0; i < 14; i++) {
         this.particles.push({
-          x: CX + ox + rand(-20, 20), y: H - rand(0, 30), vx: rand(-160, 160), vy: rand(-40, 80), life: rand(0.5, 1), max: 1,
+          x: GX + ox + rand(-20, 20), y: H - rand(0, 30), vx: rand(-160, 160), vy: rand(-40, 80), life: rand(0.5, 1), max: 1,
           size: rand(14, 30), color: 'rgba(180,180,180,', kind: 'smoke', rot: 0, vr: 0, g: -40,
         });
         this.particles.push({
-          x: CX + ox + rand(-14, 14), y: H - rand(0, 20), vx: rand(-120, 120), vy: rand(-30, 60), life: rand(0.2, 0.4), max: 0.4,
+          x: GX + ox + rand(-14, 14), y: H - rand(0, 20), vx: rand(-120, 120), vy: rand(-30, 60), life: rand(0.2, 0.4), max: 0.4,
           size: rand(6, 12), color: '255,150,40', kind: 'glow', rot: 0, vr: 0, g: 0,
         });
       }
     }
     if (w.energy && w.id !== 'laser') {
       for (const ox of offsets) {
-        this.particles.push({ x: CX + ox, y: GUN_Y + 10, vx: 0, vy: 0, life: 0.3, max: 0.3, size: w.id === 'cricket' ? 110 : 50, color: w.color, kind: 'ring', rot: 0, vr: 0, g: 0 });
+        this.particles.push({ x: GX + ox, y: GUN_Y + 10, vx: 0, vy: 0, life: 0.3, max: 0.3, size: w.id === 'cricket' ? 110 : 50, color: w.color, kind: 'ring', rot: 0, vr: 0, g: 0 });
         for (let i = 0; i < 10; i++) {
           const a = rand(0, TAU);
           const v = rand(60, 200);
           this.particles.push({
-            x: CX + ox, y: GUN_Y + 6, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 60, life: rand(0.25, 0.5), max: 0.5,
+            x: GX + ox, y: GUN_Y + 6, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 60, life: rand(0.25, 0.5), max: 0.5,
             size: rand(3, 6), color: w.trail, kind: 'glow', rot: 0, vr: 0, g: 0,
           });
         }
@@ -4601,7 +4681,7 @@ export class Game {
     }
     if (w.id === 'cricket') {
       this.flashWhite = Math.max(this.flashWhite, 0.25);
-      this.addText('BOOM!', CX + rand(-40, 40), GUN_Y - 40, '#9fd8ff', 26);
+      this.addText('BOOM!', GX + rand(-40, 40), GUN_Y - 40, '#9fd8ff', 26);
     }
     if (w.beam) {
       for (const ox of offsets) {
@@ -4609,16 +4689,16 @@ export class Game {
         // the target. Trace the same ink used by bullets instead of stopping
         // the visible beam at the obsolete circular radius.
         const by = this.level.boss
-          ? traceBossSegment(CX + ox, GUN_Y, CX + ox, -80, (x, y) => this.artHitAt(x, y) !== null)?.y ?? -80
+          ? traceBossSegment(GX + ox, GUN_Y, GX + ox, -80, (x, y) => this.artHitAt(x, y) !== null)?.y ?? -80
           : this.targetY + this.level.radius - 4;
-        this.beams.push({ x: CX + ox, y: by, life: 0.22, max: 0.22, rgb: w.trail });
+        this.beams.push({ x: GX + ox, y: by, life: 0.22, max: 0.22, rgb: w.trail });
         for (let i = 0; i < 14; i++) {
           const yy = rand(by, GUN_Y);
-          this.sink.push({ x: CX + ox + rand(-3, 3), y: yy, vx: rand(-160, 160), vy: rand(-60, 60), life: rand(0.2, 0.45), max: 0.45, size: rand(2, 4.5), color: w.trail, kind: 'glow', rot: 0, vr: 0, g: 0, drag: 4 });
+          this.sink.push({ x: GX + ox + rand(-3, 3), y: yy, vx: rand(-160, 160), vy: rand(-60, 60), life: rand(0.2, 0.45), max: 0.45, size: rand(2, 4.5), color: w.trail, kind: 'glow', rot: 0, vr: 0, g: 0, drag: 4 });
         }
         const starTrain = w.id === 'moonbeam' && getGunEffect(w.id) === 'new';
         for (let i = 0; i < (starTrain ? 16 : 6); i++) {
-          this.sink.push({ x: CX + ox + (starTrain ? rand(-13, 13) : 0),
+          this.sink.push({ x: GX + ox + (starTrain ? rand(-13, 13) : 0),
             y: rand(by, GUN_Y), vx: starTrain ? rand(-35, 35) : 0, vy: 0,
             life: starTrain ? 0.34 : 0.2, max: starTrain ? 0.34 : 0.2,
             size: rand(4, starTrain ? 10 : 7),
@@ -7107,10 +7187,45 @@ export class Game {
     if (this.weapon.id === 'snowball') this.snowLoaded = Math.min(SNOWBALL_MAG_SIZE, this.ammoLeft);
   }
 
+  /**
+   * Landscape gun control.
+   *
+   * W/S slide the gun along the screen's vertical axis (world +x), and the gun
+   * tilts towards the pointer — on screen it starts out aimed to the right, so a
+   * pointer above it tilts the barrel up. Both are eased and capped, and both
+   * are locked to 0 in portrait, where the gun stays exactly where it was.
+   */
+  private updateGunPose(dt: number) {
+    if (this.orientation !== 'landscape') {
+      if (this.gunSlide !== 0 || this.gunTilt !== 0) {
+        this.gunSlide = 0;
+        this.gunTilt = 0;
+      }
+      return;
+    }
+    const dir = (this.gunSlideDown ? 1 : 0) - (this.gunSlideUp ? 1 : 0);
+    if (dir !== 0) {
+      this.gunSlide = Math.max(-GUN_SLIDE_MAX, Math.min(GUN_SLIDE_MAX, this.gunLift + dir * GUN_SLIDE_SPEED * dt));
+    }
+    let want = 0;
+    const pointer = this.aimPointer;
+    if (pointer) {
+      // World (x, y) -> display (H - y, x): the gun sits at display
+      // (H - GUN_Y, gunX) and its barrel points along +x at zero tilt.
+      const dx = pointer.x - (H - GUN_Y);
+      const dy = pointer.y - this.gunX;
+      if (Math.abs(dx) + Math.abs(dy) > 24) {
+        want = Math.max(-GUN_TILT_MAX, Math.min(GUN_TILT_MAX, Math.atan2(dy, dx)));
+      }
+    }
+    this.gunTilt = this.gunTiltNow + (want - this.gunTiltNow) * Math.min(1, dt * 10);
+  }
+
   private update(rawDt: number) {
     const dt = rawDt * this.pace;
     // The stage clock and gun must stop while the player chooses a star upgrade.
     if (this.choosingBuff) return;
+    this.updateGunPose(dt);
     if (this.gunHiddenT > 0) this.gunHiddenT = Math.max(0, this.gunHiddenT - dt);
     if (this.gunEntryDelayT > 0) {
       this.gunEntryDelayT = Math.max(0, this.gunEntryDelayT - dt);
@@ -8769,7 +8884,7 @@ export class Game {
         const rarityRgb = gunSunburstColor(this.weapon.rarity);
         c.save();
         c.globalCompositeOperation = 'lighter';
-        drawRgbGlowSprite(c, CX, GUN_Y + entryOffset + 42, 165, 92, rarityRgb, 0.42);
+        drawRgbGlowSprite(c, this.gunX, GUN_Y + entryOffset + 42, 165, 92, rarityRgb, 0.42);
         c.restore();
       }
       if (this.setNineLive) this.drawNinePedestal(c, y0);
@@ -8781,7 +8896,8 @@ export class Game {
         // matching the side-by-side AK-47 silhouette rather than overlapping.
         for (const ox of this.gunOffsets) {
           c.save();
-          c.translate(CX + ox, y0);
+          c.translate(this.gunX + ox, y0);
+          if (this.gunTiltNow) c.rotate(this.gunTiltNow);
           this.sevenGunPose(c);
           c.scale(ox < 0 ? -GAMEPLAY_GUN_SCALE : GAMEPLAY_GUN_SCALE, GAMEPLAY_GUN_SCALE);
           drawGun(c, this.weapon.id, 0, 0, this.time, flash, ready, this.snowLoaded, undefined, liveGunFx);
@@ -8789,7 +8905,8 @@ export class Game {
         }
       } else {
         c.save();
-        c.translate(CX, y0);
+        c.translate(this.gunX, y0);
+        if (this.gunTiltNow) c.rotate(this.gunTiltNow);
         this.sevenGunPose(c);
         c.scale(GAMEPLAY_GUN_SCALE, GAMEPLAY_GUN_SCALE);
         drawGun(c, this.weapon.id, 0, 0, this.time, flash, ready, this.snowLoaded, undefined, liveGunFx);
