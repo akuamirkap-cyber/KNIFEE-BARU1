@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { SgaBackgroundTheme, SgaBgThemeOption } from '../game/backgroundThemes';
 import type { SgaGameSpeed } from '../game/gameSpeed';
+import {
+  BULLET_SPEED_MAX,
+  BULLET_SPEED_MIN,
+  BULLET_SPEED_STEP,
+  formatBulletSpeed,
+} from '../game/bulletSpeed';
 import { SGA_ORIENTATION_OPTIONS, type SgaOrientation } from '../game/orientation';
 import type { StyleId } from '../../perfect-shot/anim/presets';
 import CoinSprite from '../../shared/CoinSprite';
@@ -17,6 +23,8 @@ type Props = {
   musicEnabled: boolean;
   speed: SgaGameSpeed;
   speedOptions: readonly SgaGameSpeed[];
+  /** Player-tuned projectile speed, 1x (normal) to 3x. */
+  bulletSpeed: number;
   animSpeed: number;
   animGunStyle: StyleId;
   animSpeeds: readonly number[];
@@ -32,6 +40,7 @@ type Props = {
   onMusic: () => void;
   onVolume: (value: number) => void;
   onSpeed: (value: SgaGameSpeed) => void;
+  onBulletSpeed: (value: number) => void;
   onTheme: (value: SgaBackgroundTheme) => void;
   onOrientation: (value: SgaOrientation) => void;
   onReplayIntro: () => void;
@@ -56,9 +65,9 @@ function Toggle({ on }: { on: boolean }) {
 }
 
 export default function SgaSettingsPanel({
-  closing, muted, volume, sfxEnabled, musicEnabled, speed, speedOptions, themes, theme, orientation,
+  closing, muted, volume, sfxEnabled, musicEnabled, speed, speedOptions, bulletSpeed, themes, theme, orientation,
   animSpeed, animGunStyle, animSpeeds, animStyles, onAnimSpeed, onAnimGunStyle,
-  onClose, onMute, onSfx, onMusic, onVolume, onSpeed, onTheme, onOrientation, onReplayIntro, onSpecial, formatSpeed, onPrivacy,
+  onClose, onMute, onSfx, onMusic, onVolume, onSpeed, onBulletSpeed, onTheme, onOrientation, onReplayIntro, onSpecial, formatSpeed, onPrivacy,
   language, onLanguage, onHelp, onReset,
 }: Props) {
   const [advanced, setAdvanced] = useState(false);
@@ -144,6 +153,40 @@ export default function SgaSettingsPanel({
                 {speedOptions.map((value) => {
                   const active = speed === value;
                   return <button key={value} type="button" aria-pressed={active} onClick={() => onSpeed(value)} className={`font-title h-8 rounded-lg text-[12px] transition-all ${active ? 'bg-gradient-to-b from-[#ffe27a] to-[#f59e0b] text-[#4a2a00] shadow-[0_2px_0_#9a5b00]' : 'text-white/70 hover:bg-white/10'}`}>{formatSpeed(value)}</button>;
+                })}
+              </div>
+            </div>
+            <div className="mt-3">
+              <div className="flex items-center justify-between">
+                <div className="font-title text-[10px] tracking-[.14em] text-white/55">🚀 KECEPATAN PELURU (SEMUA SENJATA)</div>
+                <span className="font-title text-[12px] leading-none text-[#a5f3fc]">{formatBulletSpeed(bulletSpeed)}</span>
+              </div>
+              <input
+                type="range"
+                min={BULLET_SPEED_MIN}
+                max={BULLET_SPEED_MAX}
+                step={BULLET_SPEED_STEP}
+                value={bulletSpeed}
+                onChange={(event) => onBulletSpeed(Number(event.target.value))}
+                aria-label={tr(language, 'Kecepatan peluru semua senjata')}
+                className="mt-2 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-white/20 accent-[#38bdf8]"
+                style={{ accentColor: '#38bdf8' }}
+              />
+              <div className="font-title mt-1 flex justify-between text-[9px] leading-none text-white/40"><span>1X NORMAL</span><span>2X</span><span>3X</span></div>
+              <div className="mt-1.5 grid grid-cols-4 gap-1 rounded-xl bg-black/35 p-1">
+                {[1, 1.5, 2, 3].map((value) => {
+                  const active = Math.abs(bulletSpeed - value) < 1e-6;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => onBulletSpeed(value)}
+                      className={`font-title h-8 rounded-lg text-[12px] transition-all ${active ? 'bg-gradient-to-b from-[#a5f3fc] to-[#0ea5e9] text-[#052a3a] shadow-[0_2px_0_#075985]' : 'text-white/70 hover:bg-white/10'}`}
+                    >
+                      {formatBulletSpeed(value)}
+                    </button>
+                  );
                 })}
               </div>
             </div>

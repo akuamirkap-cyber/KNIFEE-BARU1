@@ -164,6 +164,7 @@ const CORE_EN: Record<string, string> = {
   '🎵 Musik': '🎵 Music',
   'TEMA LATAR': 'BACKGROUND THEME',
   'PENGATURAN LANJUTAN': 'ADVANCED SETTINGS',
+  'Kecepatan peluru semua senjata': 'Bullet speed for every weapon',
   '⚡ KECEPATAN GAME SGA': '⚡ SGA GAME SPEED',
   'Portrait: senjata di bawah, menembak ke atas. Landscape: senjata di KIRI menembak ke KANAN, target & musuh di kanan.':
     'Portrait: gun at the bottom, firing up. Landscape: gun on the LEFT firing RIGHT, target & enemies on the right.',

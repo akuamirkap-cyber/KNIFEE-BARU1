@@ -4,6 +4,7 @@ import { traceBossSegment } from './bossRaycast';
 import { advanceCosmeticTrail } from './cosmeticTrail';
 import { sfx, withSfxGain } from './audio';
 import { normalizeSgaSpeed, type SgaGameSpeed } from './gameSpeed';
+import { getSavedBulletSpeed, normalizeBulletSpeed } from './bulletSpeed';
 import { getFast2DContext, getOptimalCanvasDpr, isMobilePerfProfile } from '../utils/mobilePerf';
 import { AdaptiveCanvasDpr } from '../utils/adaptiveCanvasDpr';
 import { FrameCadence } from '../utils/frameCadence';
@@ -1679,6 +1680,18 @@ export class Game {
   private star: Star | null = null;
   private starTimer = 6;
   private speedMult = 1;
+  /** Player-tuned projectile speed (1x–3x), applied to every weapon's rounds. */
+  private bulletMult: number = getSavedBulletSpeed();
+
+  /**
+   * Guarded read of {@link bulletMult}: a few harnesses build the game with
+   * `Object.create(Game.prototype)`, where class fields are never initialised,
+   * and a NaN multiplier would stop the round dead in the air.
+   */
+  private get bulletK(): number {
+    const k = this.bulletMult;
+    return Number.isFinite(k) && k > 0 ? k : 1;
+  }
   private dmgMult = 1;
   private maxAmmoMult = 1;
   private bossProjs: BossProjectile[] = [];
@@ -2314,6 +2327,15 @@ export class Game {
 
   setGameSpeed(speed: number) {
     this.pace = normalizeSgaSpeed(speed, 1);
+  }
+
+  /** Multiplies the flight speed of every projectile the player fires. */
+  setBulletSpeed(speed: number) {
+    this.bulletMult = normalizeBulletSpeed(speed, 1);
+  }
+
+  getBulletSpeed(): number {
+    return this.bulletK;
   }
 
   getGameSpeed(): SgaGameSpeed {
@@ -3988,7 +4010,7 @@ export class Game {
     const big = w.charge && !s3 ? this.chargeLevel : 0;
     const tint = w.paint && !s3 ? pick(PAINT) : undefined;
     const vx = 0; // stars never steer the weapon or its shots
-    const vy = -w.speed * this.speedMult;
+    const vy = -w.speed * this.speedMult * this.bulletK;
     const offsets = this.gunOffsets;
     const sizeBuff = { mini: this.treasureBuff === 'mini', giant: this.treasureBuff === 'giant' };
     // ── Slide 6 (`games/game-2`) ───────────────────────────────────────────
@@ -4016,11 +4038,11 @@ export class Game {
         silentPreview(() => fx.fire(CX + (offsets[1] ?? offsets[0] ?? 0), my));
       }
       const beams = this.hasTwinGuns ? 2 : 1;
-      const plan = this.carrierPlan(n, beams, SIX_BEAM_SPEED);
+      const plan = this.carrierPlan(n, beams, SIX_BEAM_SPEED * this.bulletK);
       for (const step of plan) {
         this.projs.push({
           x: CX + step.ox, originX: CX + step.ox, y: my,
-          vx: vx + step.vx, vy: -SIX_BEAM_SPEED * this.speedMult,
+          vx: vx + step.vx, vy: -SIX_BEAM_SPEED * this.speedMult * this.bulletK,
           big, tint, ...sizeBuff, setSix: true,
         });
       }
@@ -4066,13 +4088,13 @@ export class Game {
       // A round flies at slide 9's own speed (the pistol 1800 px/s, the sword
       // 1300, the bow as fast as it was drawn), not at slide 1's.
       const sp = made[0] ? Math.hypot(made[0].vx, made[0].vy) : Math.abs(vy);
-      const plan = this.carrierPlan(n, made.length, beam ? beamSpeed : sp);
+      const plan = this.carrierPlan(n, made.length, (beam ? beamSpeed : sp) * this.bulletK);
       for (let i = 0; i < plan.length; i++) {
         const own = made[i];
         const asBeam = beam && !own && plan[i].first;
         const proj: Proj = {
           x: CX + plan[i].ox, originX: CX + plan[i].ox, y: own ? own.y : my,
-          vx: vx + plan[i].vx, vy: asBeam ? -beamSpeed : -sp, big, tint, ...sizeBuff,
+          vx: vx + plan[i].vx, vy: (asBeam ? -beamSpeed : -sp) * this.bulletK, big, tint, ...sizeBuff,
         };
         if (own) proj.setNine = own;
         else if (asBeam) proj.setNineBeam = delay;
@@ -4182,7 +4204,7 @@ export class Game {
         rounds.push(fx.fire(s2id, this.s2HueFor(s2id)));
       }, () => []);
       fx.cx = CX; fx.gunY = GUN_Y;
-      const plan = this.carrierPlan(n, rounds.length, w.speed);
+      const plan = this.carrierPlan(n, rounds.length, w.speed * this.bulletK);
       for (let i = 0; i < plan.length; i++) {
         const mouth = w.id === 'firework' ? fireworkMuzzle(plan[i].ox) : null;
         this.projs.push({
@@ -4255,7 +4277,7 @@ export class Game {
       // slide 7's timing instead of slide 1's (snowball 1050 instead of 2000,
       // holy light 900 instead of an instant 14000 beam…).
       const shotSpeed = made[0] ? sevenShotSpeed(made[0], w.speed) : w.speed;
-      const shotVy = -shotSpeed * this.speedMult;
+      const shotVy = -shotSpeed * this.speedMult * this.bulletK;
       // One carrier per round slide 3 made — every slide-3 recipe makes one a
       // barrel — starting exactly where slide 3 put it and flying straight up
       // at its own speed, as every slide-3 round does (no pellet spread: the
@@ -4270,7 +4292,7 @@ export class Game {
             // separate targets so their two rockets cannot collide on landing.
             (own as FireworkShot).targetX = CX + (offsets[i % offsets.length] ?? 0);
           }
-          const ownVy = -sevenCarrierSpeed(own, w.speed) * this.speedMult;
+          const ownVy = -sevenCarrierSpeed(own, w.speed) * this.speedMult * this.bulletK;
           this.projs.push({
             x: own.x, originX: own.x, y: own.y,
             vx: w.id === 'ghost' ? this.ghostAimVx(own.x, own.y, ownVy, own.tip) : 0,
