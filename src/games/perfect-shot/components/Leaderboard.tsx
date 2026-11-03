@@ -186,7 +186,7 @@ export function Leaderboard({ leaving, onBack, stats, rivals, subtitle, landscap
         <div className="absolute inset-0 opacity-[.06]" style={{ backgroundImage: "radial-gradient(#fff 1px, transparent 1.5px)", backgroundSize: "20px 20px" }} />
       </div>
 
-      <div className="relative flex h-full flex-col px-3.5 pb-3 pt-3">
+      <div className={`relative flex h-full flex-col ${landscape ? "px-3 pb-2 pt-2" : "px-3.5 pb-3 pt-3"}`}>
         {/* top bar */}
         <div className="relative z-10 flex items-center gap-2">
           <div {...A("in-down", LB_IN.top(0), "out-up")}>
@@ -195,11 +195,11 @@ export function Leaderboard({ leaving, onBack, stats, rivals, subtitle, landscap
             </button>
           </div>
           <div {...A("in-down", LB_IN.top(1), "out-up", "flex-1 text-center")}>
-            <div className="font-title text-[26px] leading-none text-white" style={STROKE("#140d3a", 2)}>
+            <div className={`font-title leading-none text-white ${landscape ? "text-[20px]" : "text-[26px]"}`} style={STROKE("#140d3a", 2)}>
               {view === "congrats" ? "RANKING" : "LEADERBOARD"}
             </div>
             {subtitle && (
-              <div className="font-title mt-1 text-[11px] leading-none tracking-[0.18em] text-white/55">{subtitle}</div>
+              <div className={`font-title leading-none tracking-[0.18em] text-white/55 ${landscape ? "mt-0.5 text-[9px]" : "mt-1 text-[11px]"}`}>{subtitle}</div>
             )}
           </div>
           <div {...A("in-down", LB_IN.top(2), "out-up")}>
@@ -207,7 +207,7 @@ export function Leaderboard({ leaving, onBack, stats, rivals, subtitle, landscap
               onPointerEnter={hoverSfx}
               onClick={view === "congrats" ? goBoard : goCongrats}
               aria-label="Switch view"
-              className="press grid h-12 w-12 place-items-center rounded-2xl border-2 border-white/20 bg-white/10 shadow-[0_4px_0_rgba(0,0,0,.35)]"
+              className={`press grid place-items-center rounded-2xl border-2 border-white/20 bg-white/10 shadow-[0_4px_0_rgba(0,0,0,.35)] ${landscape ? "h-10 w-10" : "h-12 w-12"}`}
             >
               <Ico name={view === "congrats" ? "trophy" : "star"} className="h-7 w-7" color="#fde68a" />
             </button>
@@ -322,7 +322,7 @@ export function Leaderboard({ leaving, onBack, stats, rivals, subtitle, landscap
           </div>
         ) : (
           /* ======================= LEADERBOARD ======================= */
-          <div key={`b${vk}`} style={boardGrid} className="relative mt-3 flex min-h-0 flex-1 flex-col">
+          <div key={`b${vk}`} style={boardGrid} className={`relative flex min-h-0 flex-1 flex-col ${landscape ? "mt-2" : "mt-3"}`}>
             <div style={area("tabs")} className="grid grid-cols-2 gap-1 rounded-2xl bg-black/35 p-1">
               {(["global", "week"] as const).map((s) => (
                 <button
@@ -342,29 +342,29 @@ export function Leaderboard({ leaving, onBack, stats, rivals, subtitle, landscap
             </div>
 
             {/* top 3 */}
-            <div style={area("podium")} className={`relative shrink-0 ${landscape ? "mt-0 h-auto min-h-0" : "mt-2 h-[276px]"}`}>
-              <Sunburst className="left-1/2 top-[44%] h-[420px] w-[420px] -translate-x-1/2 -translate-y-1/2" color="rgba(255,214,90,.22)" />
-              <div className="relative grid h-full grid-cols-3 items-end gap-2">
+            <div style={area("podium")} className={`relative ${landscape ? "flex min-h-0 items-center justify-center" : "mt-2 h-[276px] shrink-0"}`}>
+              <Sunburst className={landscape ? "left-1/2 top-1/2 h-[360px] w-[360px] -translate-x-1/2 -translate-y-1/2" : "left-1/2 top-[44%] h-[420px] w-[420px] -translate-x-1/2 -translate-y-1/2"} color="rgba(255,214,90,.22)" />
+              <div className={`relative grid w-full grid-cols-3 items-end gap-2 ${landscape ? "" : "h-full"}`}>
                 {top3.map(({ p, place }, i) => {
                   const c = PLACE[place];
                   const big = place === 1;
                   return (
                     <div key={p.id} {...A("q3-rise", LB_IN.podium(place - 1), "out-down", `relative flex flex-col items-center origin-bottom ${big ? (landscape ? "pb-1" : "pb-3") : ""}`)}>
-                      <div className={`relative z-10 ${landscape ? (big ? "-mb-5 h-[58px] w-[58px]" : "-mb-4 h-[50px] w-[50px]") : (big ? "-mb-7 h-[96px] w-[96px]" : "-mb-6 h-[80px] w-[80px]")}`}>
+                      <div className={`relative z-10 ${landscape ? (big ? "-mb-6 h-[68px] w-[68px]" : "-mb-5 h-[58px] w-[58px]") : (big ? "-mb-7 h-[96px] w-[96px]" : "-mb-6 h-[80px] w-[80px]")}`}>
                         <PodiumMedal n={place} className="h-full w-full drop-shadow-[0_5px_6px_rgba(0,0,0,.5)]" />
                       </div>
                       <div
-                        className={`relative flex w-full flex-col items-center rounded-[22px] border-[3px] ${landscape ? "px-1 pb-2 pt-5" : "px-1.5 pb-3 pt-7"}`}
+                        className={`relative flex w-full flex-col items-center rounded-[22px] border-[3px] ${landscape ? "px-1 pb-2 pt-6" : "px-1.5 pb-3 pt-7"}`}
                         style={{ borderColor: c.ring, background: `linear-gradient(180deg, ${c.card[0]}, ${c.card[1]})`, boxShadow: `0 0 22px ${c.glow}, 0 10px 18px rgba(0,0,0,.45)` }}
                       >
-                        <ProfileCircle seed={p.seed} me={p.me} country={p.country} size={landscape ? (big ? 54 : 46) : (big ? 84 : 66)} ring={`linear-gradient(180deg, #ffffff, ${c.ring})`} />
-                        <div className={`font-title w-full truncate text-center leading-none text-white ${landscape ? "mt-1" : "mt-2"} ${landscape ? (big ? "text-[12px]" : "text-[11px]") : (big ? "text-[16px]" : "text-[14px]")}`}>{p.me ? "YOU" : p.name.split(" ")[0].toUpperCase()}</div>
+                        <ProfileCircle seed={p.seed} me={p.me} country={p.country} size={landscape ? (big ? 64 : 54) : (big ? 84 : 66)} ring={`linear-gradient(180deg, #ffffff, ${c.ring})`} />
+                        <div className={`font-title w-full truncate text-center leading-none text-white ${landscape ? "mt-1" : "mt-2"} ${landscape ? (big ? "text-[13px]" : "text-[12px]") : (big ? "text-[16px]" : "text-[14px]")}`}>{p.me ? "YOU" : p.name.split(" ")[0].toUpperCase()}</div>
                         <div className="mt-1 flex items-center gap-1">
                           <Flag c={p.country} className="h-[10px] w-[15px]" />
-                          <span className={`font-title leading-none text-white/70 ${landscape ? "text-[8px]" : "text-[10px]"}`}>{COUNTRY_CODE[p.country]}</span>
+                          <span className={`font-title leading-none text-white/70 ${landscape ? "text-[9px]" : "text-[10px]"}`}>{COUNTRY_CODE[p.country]}</span>
                         </div>
                         <div className={landscape ? "mt-1" : "mt-1.5"}>
-                          <Score n={p.score} size={landscape ? (big ? 11 : 10) : (big ? 15 : 13)} />
+                          <Score n={p.score} size={landscape ? (big ? 12 : 11) : (big ? 15 : 13)} />
                         </div>
                       </div>
                       {i === 1 && <span className="pointer-events-none absolute -top-3 left-1/2 h-4 w-4 -translate-x-1/2 animate-ping rounded-full bg-[#fde68a]/40" />}
@@ -375,16 +375,16 @@ export function Leaderboard({ leaving, onBack, stats, rivals, subtitle, landscap
             </div>
 
             {/* list */}
-            <div style={area("list")} className={`relative flex min-h-0 flex-1 flex-col rounded-[24px] border-2 border-white/10 bg-gradient-to-b from-[#241a63]/95 to-[#120d36]/95 p-2 shadow-[0_10px_24px_rgba(0,0,0,.45)] ${landscape ? "mt-0" : "mt-2"}`}>
-              <div className="no-scrollbar smooth-scroll min-h-0 flex-1 space-y-2 overflow-y-auto pb-1">
+            <div style={area("list")} className={`relative flex min-h-0 flex-1 flex-col rounded-[24px] border-2 border-white/10 bg-gradient-to-b from-[#241a63]/95 to-[#120d36]/95 shadow-[0_10px_24px_rgba(0,0,0,.45)] ${landscape ? "mt-0 p-1.5" : "mt-2 p-2"}`}>
+              <div className={`no-scrollbar smooth-scroll min-h-0 flex-1 overflow-y-auto pb-1 ${landscape ? "space-y-1" : "space-y-2"}`}>
                 {board.slice(3).map((p, i) => (
                   <div key={`${scope}${p.id}`} {...A("ac-row-in", LB_IN.row(Math.min(i, 10)), "out-fade")}>
-                    <Row p={p} rank={i + 4} />
+                    <Row p={p} rank={i + 4} compact={landscape} />
                   </div>
                 ))}
               </div>
-              <div {...A("in-up", LB_IN.row(6), "out-down", "mt-2")}>
-                <Row p={me} rank={myRank} sticky />
+              <div {...A("in-up", LB_IN.row(6), "out-down", landscape ? "mt-1.5" : "mt-2")}>
+                <Row p={me} rank={myRank} sticky compact={landscape} />
               </div>
             </div>
           </div>
@@ -400,27 +400,27 @@ export function Leaderboard({ leaving, onBack, stats, rivals, subtitle, landscap
   );
 }
 
-function Row({ p, rank, sticky = false }: { p: Player; rank: number; sticky?: boolean }) {
+function Row({ p, rank, sticky = false, compact = false }: { p: Player; rank: number; sticky?: boolean; compact?: boolean }) {
   return (
     <div
-      className={`flex items-center gap-2.5 rounded-[20px] px-2.5 py-2 ${p.me ? "bg-gradient-to-r from-[#8a5a0c] via-[#6b4508] to-[#3b2a0a] ring-2 ring-[#fde68a]" : "bg-gradient-to-r from-[#2f2580]/80 to-[#211a5c]/80 ring-1 ring-white/[.08]"} ${sticky ? "shadow-[0_-6px_16px_rgba(0,0,0,.35)]" : ""}`}
+      className={`flex items-center ${compact ? "gap-1.5 rounded-[12px] px-2 py-[3px]" : "gap-2.5 rounded-[20px] px-2.5 py-2"} ${p.me ? "bg-gradient-to-r from-[#8a5a0c] via-[#6b4508] to-[#3b2a0a] ring-2 ring-[#fde68a]" : "bg-gradient-to-r from-[#2f2580]/80 to-[#211a5c]/80 ring-1 ring-white/[.08]"} ${sticky ? "shadow-[0_-6px_16px_rgba(0,0,0,.35)]" : ""}`}
     >
-      <RankNum n={rank} me={p.me} />
-      <ProfileCircle seed={p.seed} me={p.me} country={p.country} size={48} ring={p.me ? "linear-gradient(180deg,#fff3b0,#f5b82e)" : "linear-gradient(180deg,#ffffff,#8b7cf6)"} />
+      <RankNum n={rank} me={p.me} size={compact ? 24 : 38} />
+      <ProfileCircle seed={p.seed} me={p.me} country={p.country} size={compact ? 26 : 48} ring={p.me ? "linear-gradient(180deg,#fff3b0,#f5b82e)" : "linear-gradient(180deg,#ffffff,#8b7cf6)"} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
-          <span className={`font-title truncate text-[16px] leading-tight ${p.me ? "text-[#fde68a]" : "text-white"}`}>{p.me ? "YOU" : p.name}</span>
+          <span className={`font-title truncate leading-tight ${compact ? "text-[11.5px]" : "text-[16px]"} ${p.me ? "text-[#fde68a]" : "text-white"}`}>{p.me ? "YOU" : p.name}</span>
         </div>
-        <div className="mt-1 flex items-center gap-2">
-          <span className="font-title shrink-0 rounded-md bg-black/30 px-1.5 py-[2px] text-[10px] leading-none text-white/80">{COUNTRY_CODE[p.country]}</span>
-          <Score n={p.score} size={14} />
-          <span className="font-title flex items-center gap-0.5 text-[12px] leading-none text-[#4ade80]">
-            <Ico name="up" className="h-3 w-3" color="#4ade80" />
+        <div className={`flex items-center ${compact ? "mt-0.5 gap-1.5" : "mt-1 gap-2"}`}>
+          <span className={`font-title shrink-0 rounded bg-black/30 leading-none text-white/80 ${compact ? "px-1 py-px text-[7.5px]" : "rounded-md px-1.5 py-[2px] text-[10px]"}`}>{COUNTRY_CODE[p.country]}</span>
+          <Score n={p.score} size={compact ? 10 : 14} />
+          <span className={`font-title flex items-center gap-0.5 leading-none text-[#4ade80] ${compact ? "text-[8.5px]" : "text-[12px]"}`}>
+            <Ico name="up" className={compact ? "h-2 w-2" : "h-3 w-3"} color="#4ade80" />
             {fmt(p.trend)}
           </span>
         </div>
       </div>
-      <LevelBadge lv={p.stage} me={p.me} />
+      <LevelBadge lv={p.stage} me={p.me} size={compact ? 26 : 48} />
     </div>
   );
 }
