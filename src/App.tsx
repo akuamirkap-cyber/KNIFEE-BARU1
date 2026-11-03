@@ -1,5 +1,11 @@
 import { Component, lazy, Suspense, useCallback, useEffect, useState, type ReactNode } from 'react';
 import ScaledFrame from './components/ScaledFrame';
+import {
+  PORTRAIT_FRAME,
+  getActiveShellFrame,
+  subscribeActiveShellFrame,
+  type ShellFrame,
+} from './games/gunhit/game/orientation';
 import { SlideActivityProvider } from './games/shared/SlideActivity';
 import { juicyAudio } from './utils/juicyAudio';
 import { useAndroidBack, installAndroidBack, exitAndroidApp } from './utils/androidBack';
@@ -58,6 +64,12 @@ export type SlideId = 'gunhit';
  */
 export default function App() {
   const [pageVisible, setPageVisible] = useState(() => !document.hidden);
+  /**
+   * Bingkai yang diminta permainan: 420×760 (potret — menu, arsenal, hasil) atau
+   * 760×420 saat MODE LANDSCAPE sedang dimainkan. Game A menerbitkannya lewat
+   * `setActiveShellFrame`, shell tinggal mengikuti.
+   */
+  const [shellFrame, setShellFrame] = useState<ShellFrame>(() => getActiveShellFrame());
   // Play the SANS STUDIO opening once on startup; Settings can replay it later.
   const [loading, setLoading] = useState(true);
   const [hasBooted, setHasBooted] = useState(false);
@@ -71,6 +83,11 @@ export default function App() {
     installDebugSinkFromUrl(window.location.search, Boolean(env?.DEV));
     trackSessionStart();
     installErrorHooks();
+  }, []);
+
+  useEffect(() => {
+    setShellFrame(getActiveShellFrame());
+    return subscribeActiveShellFrame((next) => setShellFrame(next));
   }, []);
 
   useEffect(() => {
@@ -159,8 +176,12 @@ export default function App() {
       >
         <SlideActivityProvider active={pageVisible && !loading}>
           <GameLoadBoundary>
-            <ScaledFrame baseWidth={420} baseHeight={760}>
-              <div className="relative h-[760px] w-[420px] overflow-hidden">
+            <ScaledFrame baseWidth={shellFrame.width} baseHeight={shellFrame.height}>
+              <div
+                className="relative overflow-hidden"
+                style={{ width: shellFrame.width, height: shellFrame.height }}
+                data-shell-orientation={shellFrame === PORTRAIT_FRAME ? 'portrait' : 'landscape'}
+              >
                 {hasBooted ? (
                   <Suspense fallback={<GameBootFallback />}>
                     <GunHitGame introReady={hasBooted && !loading} />

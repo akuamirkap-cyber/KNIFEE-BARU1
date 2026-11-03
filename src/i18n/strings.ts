@@ -163,6 +163,15 @@ const CORE_EN: Record<string, string> = {
   '🎯 Efek': '🎯 Effects',
   '🎵 Musik': '🎵 Music',
   'TEMA LATAR': 'BACKGROUND THEME',
+  // MODE TAMPILAN: potret (senjata di bawah) / landscape (senjata di kiri).
+  'MODE TAMPILAN': 'DISPLAY MODE',
+  'Landscape: senjata di kiri menembak ke kanan, musuh di kanan':
+    'Landscape: the gun stands on the left and fires right, with enemies on the right',
+  POTRET: 'PORTRAIT',
+  'Klasik SGA: senjata di bawah, menembak naik ke roda di atas':
+    'SGA classic: the gun sits at the bottom and fires up into the wheel',
+  'Senjata di kiri menembak ke kanan, musuh & roda di kanan':
+    'The gun fires from the left to the right; enemies and the wheel sit on the right',
   'PENGATURAN LANJUTAN': 'ADVANCED SETTINGS',
   '⚡ KECEPATAN GAME SGA': '⚡ SGA GAME SPEED',
   '🎬 PRESET ANIMASI SENJATA MENU': '🎬 MENU WEAPON ANIMATION PRESET',

@@ -113,6 +113,7 @@ test('reset progres menghapus kemajuan, tapi pengaturan tetap', () => {
     gunhit_volume: '0.4',
     gunhit_game_speed: '1.2',
     gunhit_menu_theme: 'night',
+    gunhit_orientation: 'landscape',
     'sga.language.v1': 'en',
     'sga.onboarding.v1': '1',
   };

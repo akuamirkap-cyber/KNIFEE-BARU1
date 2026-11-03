@@ -6,6 +6,7 @@ import { Game as GunHit } from '../src/games/gunhit/game/Game';
 import { Game as RifleRock } from '../src/games/rifle-rock/game/engine';
 import { GUN_SUNBURST_RGB, gunSunburstColor } from '../src/games/gunhit/game/sunburstPalette';
 import { getWeapon, type Rarity } from '../src/games/gunhit/game/weapons';
+import { LANDSCAPE_FRAME, PORTRAIT_FRAME } from '../src/games/gunhit/game/orientation';
 
 test('Hub no longer embeds standalone iframe slides and renders only Slide 01 directly', () => {
   const app = fs.readFileSync(path.resolve(process.cwd(), 'src/App.tsx'), 'utf8');
@@ -46,8 +47,16 @@ test('Slides 02-05 and earlier extra slides are removed from the hub so only Sli
   }
   assert.ok(app.includes('<GunHitGame introReady={hasBooted && !loading} />'), 'App renders GunHitGame directly with synchronized intro state');
   assert.ok(!app.includes('SLIDE 01'), 'outer hub slide chrome is removed for pure 9:16 mobile SGA');
-  assert.ok(app.includes('baseWidth={420}'), '9:16 mobile portrait baseWidth is preserved');
-  assert.ok(app.includes('baseHeight={760}'), '9:16 mobile portrait baseHeight is preserved');
+  // Bingkai shell sekarang mengikuti MODE TAMPILAN: 420×760 untuk potret (bawaan,
+  // semua menu & layar hasil) dan 760×420 hanya saat permainan landscape berjalan.
+  assert.ok(app.includes('baseWidth={shellFrame.width}'), 'the shell frame drives ScaledFrame width');
+  assert.ok(app.includes('baseHeight={shellFrame.height}'), 'the shell frame drives ScaledFrame height');
+  assert.deepEqual(PORTRAIT_FRAME, { width: 420, height: 760 }, '9:16 mobile portrait baseWidth/baseHeight is preserved');
+  assert.deepEqual(
+    LANDSCAPE_FRAME,
+    { width: 760, height: 420 },
+    'the landscape frame is the same portrait world turned a quarter turn',
+  );
 });
 
 test('Gun Hit tiers have their own FX Lab rays, including every equipped weapon', () => {

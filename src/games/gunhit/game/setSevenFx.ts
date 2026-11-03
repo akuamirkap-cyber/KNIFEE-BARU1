@@ -621,11 +621,21 @@ export class SetSevenFx implements SevenHost, SevenWheelHost {
       }
     }
     const lensSource = this.lensSourceValid ? this.lensSource : null;
+    // MODE LANDSCAPE memutar frame seperempat putaran. Untuk frame yang tidak
+    // diputar (potret) jendela sampelnya tetap persis rumus lama — sudut kiri
+    // atas lensa dipetakan apa adanya — supaya hasil refraksinya tidak berubah
+    // satu piksel pun. Hanya frame yang benar-benar berputar yang memakai kotak
+    // device-space di sekeliling pusat lensa.
+    const lensRot = Math.abs(m.b) > 1e-6 || Math.abs(m.c) > 1e-6 ? Math.atan2(m.b, m.a) : 0;
     for (const l of this.lensReq) {
       const size = Math.ceil(l.r * 2 * k);
       if (size < 4) continue;
-      let sx = Math.round(m.a * (l.x - l.r) + m.c * (l.y - l.r) + m.e);
-      let sy = Math.round(m.b * (l.x - l.r) + m.d * (l.y - l.r) + m.f);
+      let sx = lensRot
+        ? Math.round(m.a * l.x + m.c * l.y + m.e - size / 2)
+        : Math.round(m.a * (l.x - l.r) + m.c * (l.y - l.r) + m.e);
+      let sy = lensRot
+        ? Math.round(m.b * l.x + m.d * l.y + m.f - size / 2)
+        : Math.round(m.b * (l.x - l.r) + m.d * (l.y - l.r) + m.f);
       let sw = size;
       let sh = size;
       let dx = 0;
@@ -658,6 +668,9 @@ export class SetSevenFx implements SevenHost, SevenWheelHost {
         ctx.arc(l.x, l.y, rr, 0, TAU);
         ctx.clip();
         ctx.translate(l.x, l.y);
+        // Undo the frame's own turn first (landscape only), so the refracted copy
+        // shows what the player sees instead of a quarter-turned slice of it.
+        if (lensRot) ctx.rotate(-lensRot);
         ctx.rotate(l.s * 1.2 * f * f + this.time * l.s * 0.9 * f);
         const z = 1 + l.s * 0.45 * f;
         ctx.scale(z, z);

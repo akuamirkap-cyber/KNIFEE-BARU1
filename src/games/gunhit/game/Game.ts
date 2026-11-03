@@ -176,11 +176,18 @@ import {
   GAMEPLAY_GUN_SCALE,
   GUN_Y,
   H,
+  LANDSCAPE_VIEW,
   SPECIAL_CY,
+  UPRIGHT_SPIN,
   W,
+  baseViewTransform,
   initialGameplayWheelCenterY,
+  viewSize,
+  viewToWorld,
+  worldToView,
 } from './layout';
 export { BASE_WHEEL_CY, CY, GAMEPLAY_GUN_SCALE, GUN_Y, H, SPECIAL_CY, W, initialGameplayWheelCenterY };
+import { normalizeSgaOrientation, type SgaOrientation } from './orientation';
 import {
   ROCK_RADIUS,
   allowsStarPowerups,
@@ -1468,7 +1475,11 @@ export interface GameEvents {
   onTreasureCoin?: (amount: number) => void;
   /** Bank any remaining special-stage reward at its end, exactly once. */
   onStageReward?: (mode: 'boulder' | SpecialMode, level: number, unbankedCoins: number, diamondReward: number) => void;
-  /** Separate shop-diamond currency, awarded by the boulder core and small diamond pickups. */
+  /**
+   * Separate shop-diamond currency, awarded by the boulder core and small diamond
+   * pickups. `origin` is in *view* pixels (what the player sees), so the DOM
+   * flight starts on the gem in portrait and in landscape alike.
+   */
   onDiamondCollected?: (amount: number, large: boolean, origin: { x: number; y: number }) => void;
   /** Called on successful standard-stage clears for the UI's short sunburst celebration. */
   onStageCleared?: (level: number, boss: boolean, origin: { x: number; y: number }) => void;
@@ -1479,6 +1490,53 @@ export interface GameEvents {
 }
 
 type State = 'idle' | 'intro' | 'play' | 'clear' | 'fail' | 'over';
+
+/**
+ * Angka tata letak HUD untuk satu orientasi.
+ *
+ * Potret melukis HUD di dunia 420×760; landscape melukisnya lurus ke layar
+ * 760×420. Keduanya memakai daerah yang sama (skor kiri atas, dompet kanan
+ * atas, baris stage tengah atas, magasin kiri bawah, kartu senjata kanan
+ * bawah) sehingga tidak ada satu pun unsur HUD yang pindah arti saat pemain
+ * mengubah mode tampilan.
+ */
+export interface HudLayout {
+  /** Ukuran permukaan yang dilukis HUD. */
+  w: number;
+  h: number;
+  cx: number;
+  /** Kolom kiri: skor, combo, magasin. */
+  scoreX: number;
+  scoreY: number;
+  specialScoreY: number;
+  comboX: number;
+  comboY: number;
+  ammoX: number;
+  ammoBaseY: number;
+  ammoSpan: number;
+  ammoTextX: number;
+  ammoTextY: number;
+  /** Kolom kanan: dompet dan kartu senjata. */
+  coinEdge: number;
+  rightX: number;
+  labelY: number;
+  infoY: number;
+  spinBarX: number;
+  spinBarY: number;
+  spinTextX: number;
+  spinTextY: number;
+  /** Baris tengah atas: nama stage, pil timer, bar HP bos, titik stage. */
+  modeLabelY: number;
+  specialModeLabelY: number;
+  pillY: number;
+  pillTextY: number;
+  pillHalfW: number;
+  barY: number;
+  dotsY: number;
+  /** Banner tengah (LEVEL n / BOSS FIGHT / STAGE CLEAR!). */
+  bannerY: number;
+  clearY: number;
+}
 
 export class Game {
   private canvas: HTMLCanvasElement;
@@ -1531,6 +1589,14 @@ export class Game {
   private timeScale = 1;
   private pace: SgaGameSpeed = 1;
   private bgTheme: SgaBackgroundTheme = 'auto';
+  /**
+   * MODE LANDSCAPE: dunia 420×760 yang sama digambar diputar seperempat
+   * putaran, jadi senjata berdiri di tepi kiri dan menembak ke kanan sementara
+   * roda/musuh pindah ke tepi kanan. Fisika, art, dan FX tetap memakai
+   * koordinat dunia potret — yang berubah hanya transform pandangannya
+   * (`applyViewTransform`) dan letak HUD (`hudLayout`).
+   */
+  private landscape = false;
   private bump = 0;
   private hitFlash = 0;
   /** game-3 wheelFlash: tints only the target, never the whole screen. */
@@ -2323,6 +2389,67 @@ export class Game {
     return this.bgTheme;
   }
 
+  /**
+   * Potret ↔ Landscape. Dunia tidak pernah dibangun ulang: hanya transformasi
+   * pandangannya yang berubah, jadi satu run bisa diputar tanpa kehilangan
+   * peluru, roda, atau partikel apa pun.
+   */
+  setOrientation(orientation: SgaOrientation) {
+    const landscape = normalizeSgaOrientation(orientation, this.landscape ? 'landscape' : 'portrait') === 'landscape';
+    if (landscape === this.landscape) return;
+    // Kepala bos digambar tegak (rot dikunci 0 saat stage dimuat). Kalau dunia
+    // diputar, wajah itu ikut terbaring, jadi fasenya digeser seperempat
+    // putaran. `this.rot` adalah satu-satunya sumber kebenaran roda — art,
+    // pisau, dan mask tumbukan semuanya membacanya — sehingga menggeser fase
+    // di sini tidak memisahkan gambar dari hitbox-nya.
+    if (this.level.boss) this.rot += landscape ? UPRIGHT_SPIN : -UPRIGHT_SPIN;
+    this.landscape = landscape;
+    this.resize();
+  }
+
+  getOrientation(): SgaOrientation {
+    return this.landscape ? 'landscape' : 'portrait';
+  }
+
+  /** True saat senjata di kiri menembak ke kanan (dunia diputar 90°). */
+  isLandscape(): boolean {
+    return this.landscape;
+  }
+
+  /**
+   * Transform dasar setiap frame. Potret = dunia apa adanya; landscape = dunia
+   * diputar +90° lalu digeser selebar dunia supaya senjata mendarat di kiri.
+   */
+  private applyViewTransform(c: CanvasRenderingContext2D): number {
+    const k = this.scale * this.dpr;
+    const [a, b, cx, d, e, f] = baseViewTransform(k, this.landscape);
+    c.setTransform(a, b, cx, d, e, f);
+    return k;
+  }
+
+  /** Satu titik dunia → titik di layar yang dilihat pemain. */
+  private toView(x: number, y: number): { x: number; y: number } {
+    return worldToView(x, y, this.landscape);
+  }
+
+  /** Sudut tambahan supaya teks/gambar tetap tegak di layar saat dunia diputar. */
+  private uprightSpin(): number {
+    return this.landscape ? UPRIGHT_SPIN : 0;
+  }
+
+  /**
+   * Masuk ke frame putar roda/target.
+   *
+   * Peti harta karun tidak pernah ikut `this.rot` (fasenya dibekukan pola
+   * stage), dan kepala bos hanya berputar pelan. Di landscape keduanya diputar
+   * balik seperempat putaran supaya peti dan wajah bos tetap tegak di layar,
+   * bukan terbaring miring.
+   */
+  private applyWheelSpin(c: CanvasRenderingContext2D) {
+    if (this.level.mode !== 'treasure') c.rotate(this.rot);
+    else c.rotate(this.uprightSpin());
+  }
+
   setActive(active: boolean) {
     if (this.active === active) return;
     this.active = active;
@@ -2444,7 +2571,10 @@ export class Game {
   /** Change only raster density; world coordinates, input and effects stay intact. */
   private applyCanvasDpr(dpr: number) {
     this.dpr = dpr;
-    const width = Math.round(W * dpr), height = Math.round(H * dpr);
+    // The backing store follows the *view* (760×420 in landscape), while every
+    // drawing routine keeps working in the 420×760 world.
+    const view = viewSize(this.landscape);
+    const width = Math.round(view.w * dpr), height = Math.round(view.h * dpr);
     if (this.canvas.width !== width) this.canvas.width = width;
     if (this.canvas.height !== height) this.canvas.height = height;
   }
@@ -2458,8 +2588,9 @@ export class Game {
     // Re-measure the cadence against the new backing store.
     this.cadence.reset();
     this.lastWork = 0;
-    this.canvas.style.width = `${W}px`;
-    this.canvas.style.height = `${H}px`;
+    const view = viewSize(this.landscape);
+    this.canvas.style.width = `${view.w}px`;
+    this.canvas.style.height = `${view.h}px`;
     this.applyCanvasDpr(baseDpr);
     this.acidFluid.resize(W, H);
     // Resizing clears the backing store. Restore a single still frame even
@@ -2483,9 +2614,14 @@ export class Game {
     // Cek tap pada bintang power-up lebih dulu
     if (this.star) {
       const rect = this.canvas.getBoundingClientRect();
-      const x = (e.clientX - rect.left) / rect.width * W;
-      const y = (e.clientY - rect.top) / rect.height * H;
-      if (this.tryTapStar(x, y)) return;
+      const view = viewSize(this.landscape);
+      // A tap lands in view pixels; the star lives in the (unrotated) world.
+      const point = viewToWorld(
+        (e.clientX - rect.left) / rect.width * view.w,
+        (e.clientY - rect.top) / rect.height * view.h,
+        this.landscape,
+      );
+      if (this.tryTapStar(point.x, point.y)) return;
     }
     this.press();
   };
@@ -2870,6 +3006,11 @@ export class Game {
     this.combo = 0;
     // Boss (kepala bos) tampil tegak dan TIDAK berputar seperti papan target biasa.
     this.rot = this.level.boss ? 0 : rand(0, TAU);
+    // MODE LANDSCAPE memutar seluruh dunia +90°, jadi fase awal kepala bos digeser
+    // -90° supaya wajahnya tetap tegak menghadap pemain. Art, pisau, dan mask
+    // tumbukan sama-sama membaca `this.rot`, jadi menggeser fase di sini tidak
+    // memisahkan gambar dari hitbox-nya.
+    if (this.level.boss && this.landscape) this.rot = UPRIGHT_SPIN;
     this.levelTime = 0;
     this.state = 'intro';
     this.introT = 0;
@@ -3663,7 +3804,9 @@ export class Game {
     const al = k > 0.7 ? 1 - (k - 0.7) / 0.3 : 1;
     c.save();
     c.translate(p.x, p.y);
-    c.rotate(p.rot);
+    // Callouts face the player, not the world: in landscape the whole scene is
+    // turned a quarter turn, so the text is turned back.
+    c.rotate(p.rot + this.uprightSpin());
     c.scale(pop, pop);
     c.globalAlpha = al;
     c.font = `italic 900 ${p.size}px Impact, 'Arial Black', sans-serif`;
@@ -3707,10 +3850,14 @@ export class Game {
     if (!this.level.boss || this.state === 'idle' || this.state === 'clear') return;
     const R = this.level.radius;
     // This layer lives in screen space, like Game B's, so it drops whatever
-    // wheel transform the renderer is standing in.
-    const k = this.scale * this.dpr;
+    // wheel transform the renderer is standing in. Everything below is written
+    // relative to the boss' centre, and the frame is turned back upright in
+    // landscape: the laugh pops stay to the right of the head, the steam still
+    // rises, and the MARAH! pill still hangs under the chin — on screen.
     c.save();
-    c.setTransform(k, 0, 0, k, 0, 0);
+    this.applyViewTransform(c);
+    c.translate(CX, this.targetY);
+    c.rotate(this.uprightSpin());
     const HA_KEYS: [number, number, number, number, number][] = [
       [0, 0, 14, 0.3, -14],
       [0.3, 1, -6, 1.15, 6],
@@ -3734,8 +3881,8 @@ export class Game {
         break;
       }
       if (alpha <= 0.01) continue;
-      const x = CX + R * 1.02 + (ha.i % 2) * 16;
-      const y = this.targetY - R * 0.72 + ha.i * 30;
+      const x = R * 1.02 + (ha.i % 2) * 16;
+      const y = -R * 0.72 + ha.i * 30;
       c.save();
       c.globalAlpha = alpha;
       c.translate(x, y + dy);
@@ -3752,7 +3899,7 @@ export class Game {
       c.fillText(ha.i === 2 ? 'HA!' : 'HA', 0, 0);
       c.restore();
     }
-    if (!this.bossRage) return;
+    if (!this.bossRage) { c.restore(); return; }
     // bm-steam: three puffs per side, drifting up and fading out.
     for (const sgn of [-1, 1]) {
       for (let i = 0; i < 3; i++) {
@@ -3760,8 +3907,8 @@ export class Game {
         const alpha = Math.sin(Math.PI * phase) * 0.85;
         if (alpha <= 0.02) continue;
         const size = (22 - i * 4) * (0.55 + phase * 0.95);
-        const x = CX + sgn * (R * 1.0 + Math.abs(12 + i * 10) * phase);
-        const y = this.targetY - R * 0.3 - phase * 52;
+        const x = sgn * (R * 1.0 + Math.abs(12 + i * 10) * phase);
+        const y = -R * 0.3 - phase * 52;
         c.save();
         c.globalAlpha = alpha;
         c.fillStyle = 'rgba(255,255,255,0.8)';
@@ -3779,8 +3926,8 @@ export class Game {
     c.textBaseline = 'middle';
     const w = c.measureText(label).width + 26;
     const h = 22;
-    const px = CX - w / 2;
-    const py = this.targetY + R * 1.14;
+    const px = -w / 2;
+    const py = R * 1.14;
     c.fillStyle = '#dc2626';
     c.beginPath();
     const r = h / 2;
@@ -3794,7 +3941,7 @@ export class Game {
     c.closePath();
     c.fill();
     c.fillStyle = '#ffffff';
-    c.fillText(label, CX, py + h / 2);
+    c.fillText(label, 0, py + h / 2);
     c.restore();
     c.restore();
   }
@@ -5920,7 +6067,9 @@ export class Game {
     const y = this.targetY + Math.sin(wa) * (R + 18);
     this.items = this.items.filter((i) => i !== it);
     this.coins += 5;
-    this.events.onDiamondCollected?.(10, false, { x, y });
+    // The React flight is positioned in shell pixels, so it gets the point the
+    // player actually sees (view space), not the world point under the rotation.
+    this.events.onDiamondCollected?.(10, false, this.toView(x, y));
     sfx3.chime();
     sfx2.jackpot();
     this.shake = Math.max(this.shake, 8);
@@ -6472,7 +6621,7 @@ export class Game {
       if (this.centerDiamondHits >= BOULDER_DIAMOND_HITS) {
         this.centerDiamondCollected = true;
         this.diamondHoldUntil = this.time + 3.1; // let the flight + reward burst finish before the next stage
-        this.events.onDiamondCollected?.(50, true, { x: p.x, y: p.y });
+        this.events.onDiamondCollected?.(50, true, this.toView(p.x, p.y));
         this.addText('DIAMOND DIDAPAT! +50', p.x, p.y - 54, '#e0f7ff', 28);
         this.sink.light(p.x, p.y, 190, '210,240,255', 0.8);
         this.burstSpecial(p.x, p.y, 'diamond', 56);
@@ -9144,8 +9293,9 @@ export class Game {
 
   private render() {
     const c = this.ctx;
-    const k = this.scale * this.dpr;
-    c.setTransform(k, 0, 0, k, 0, 0);
+    // Portrait: the world as it is. Landscape: the same world turned a quarter
+    // turn, so the gun stands on the left edge and fires right into the wheel.
+    this.applyViewTransform(c);
     const pal = STYLE_COLORS[this.level.style];
     const R = this.level.radius;
     let busterWheelTransform: DOMMatrix | null = null;
@@ -9348,7 +9498,7 @@ export class Game {
       if (this.rock && !this.centerDiamondCollected) drawRockDiamond(c, R, this.time, this.diamondPing);
       // Lapisan target berputar — bos juga berputar pelan (this.rot di update),
       // bukan terkunci diam. Kecepatan boss konstan agar tidak muter liar.
-      if (this.level.mode !== 'treasure') c.rotate(this.rot);
+      this.applyWheelSpin(c);
       // From here down the canvas is in the artwork's own frame. Remember it:
       // the boss' impact splinters are painted much later, in screen space, and
       // must be clipped to exactly this drawing.
@@ -9737,7 +9887,7 @@ export class Game {
         c.scale(fxFrame.sx, fxFrame.sy);
         const decor = this.bossDecorMatrix();
         c.transform(decor.a, decor.b, decor.c, decor.d, decor.e, decor.f);
-        if (this.level.mode !== 'treasure') c.rotate(this.rot);
+        this.applyWheelSpin(c);
         if (this.hitboxFlag) this.drawHitboxDebug(c);
         else this.drawBossSilhouette(c);
         c.restore();
@@ -10316,7 +10466,13 @@ export class Game {
       c.fillStyle = `rgba(255,80,80,${k2})`;
       c.font = "13px 'Russo One', sans-serif";
       c.textAlign = 'center';
-      c.fillText(T('LEPAS UNTUK MENEMBAK'), CX, this.targetY + R + rr2 * 0.55);
+      // The scope hint faces the player: in landscape the scene is turned a
+      // quarter turn, so the label is turned back around its own anchor.
+      const hintX = CX;
+      const hintY = this.targetY + R + rr2 * 0.55;
+      c.translate(hintX, hintY);
+      c.rotate(this.uprightSpin());
+      c.fillText(T('LEPAS UNTUK MENEMBAK'), 0, 0);
       c.restore();
     }
     // glitch screen
@@ -10348,17 +10504,72 @@ export class Game {
     }
   }
 
+  /**
+   * Letak setiap unsur HUD.
+   *
+   * Potret melukis HUD di dunia yang sama dengan senjata dan roda (420×760).
+   * Landscape melukisnya langsung ke layar (760×420) supaya angkanya tetap
+   * tegak sementara dunianya diputar seperempat putaran. Kedua tata letak
+   * memakai empat sudut yang sama: skor & combo kiri atas, dompet kanan atas,
+   * baris stage tengah atas, magasin kiri bawah, kartu senjata kanan bawah —
+   * di landscape sudut-sudut itu justru yang kosong (senjata menempati kiri
+   * tengah, roda kanan tengah).
+   */
+  private hudLayout(): HudLayout {
+    const R = this.level.radius;
+    if (!this.landscape) {
+      return {
+        w: W, h: H, cx: CX,
+        scoreX: 22, scoreY: 46, specialScoreY: 34,
+        comboX: 22, comboY: 74,
+        ammoX: 30, ammoBaseY: H - 40, ammoSpan: H * 0.48, ammoTextX: 46, ammoTextY: H - 30,
+        coinEdge: 8, rightX: W - 14, labelY: H - 16, infoY: H - 36,
+        spinBarX: W - 114, spinBarY: H - 46, spinTextX: W - 118, spinTextY: H - 40,
+        modeLabelY: 24, specialModeLabelY: 20,
+        pillY: 30, pillTextY: 42, pillHalfW: 118,
+        barY: 46, dotsY: 47,
+        bannerY: isSpecial(this.level.mode) ? this.targetY + R + 46 : CY + R + 115,
+        clearY: 330,
+      };
+    }
+    const w = LANDSCAPE_VIEW.w;
+    const h = LANDSCAPE_VIEW.h;
+    return {
+      w, h, cx: w / 2,
+      scoreX: 22, scoreY: 40, specialScoreY: 30,
+      comboX: 22, comboY: 66,
+      // Magasin jadi kolom pendek di bawah senjata, bukan tiang setinggi layar.
+      ammoX: 26, ammoBaseY: h - 26, ammoSpan: h * 0.34, ammoTextX: 42, ammoTextY: h - 14,
+      coinEdge: 8, rightX: w - 14, labelY: h - 14, infoY: h - 34,
+      spinBarX: w - 114, spinBarY: h - 44, spinTextX: w - 118, spinTextY: h - 38,
+      modeLabelY: 20, specialModeLabelY: 16,
+      pillY: 26, pillTextY: 38, pillHalfW: 118,
+      barY: 40, dotsY: 41,
+      // Banner berdiri tepat di tengah: di antara senjata (kiri) dan roda (kanan).
+      bannerY: h * 0.5,
+      clearY: h * 0.45,
+    };
+  }
+
   private drawHUD(c: CanvasRenderingContext2D) {
     const font = (s: number) => `${s}px 'Russo One', sans-serif`;
+    const L = this.hudLayout();
+    // Landscape: HUD dilukis lurus ke layar (tanpa rotasi dunia) supaya teks dan
+    // kotaknya tegak. Potret: tidak ada transform tambahan sama sekali.
+    if (this.landscape) {
+      const k = this.scale * this.dpr;
+      c.save();
+      c.setTransform(k, 0, 0, k, 0, 0);
+    }
     c.textBaseline = 'middle';
     // score
     c.textAlign = 'left';
     c.font = font(isSpecial(this.level.mode) ? 29 : 40);
     c.lineWidth = 5;
     c.strokeStyle = 'rgba(0,0,0,0.6)';
-    c.strokeText(String(this.score), 22, isSpecial(this.level.mode) ? 34 : 46);
+    c.strokeText(String(this.score), L.scoreX, isSpecial(this.level.mode) ? L.specialScoreY : L.scoreY);
     c.fillStyle = '#ffffff';
-    c.fillText(String(this.score), 22, isSpecial(this.level.mode) ? 34 : 46);
+    c.fillText(String(this.score), L.scoreX, isSpecial(this.level.mode) ? L.specialScoreY : L.scoreY);
 
     // combo badge di HUD kiri atas (di bawah skor angka, tidak menutupi target!)
     const cWindow = this.weapon.comboWindow ?? 0.5;
@@ -10367,7 +10578,7 @@ export class Game {
       const leftFrac = Math.max(0, 1 - (timeSinceHit / cWindow));
       const popScale = 1 + this.comboPop * 0.28;
       c.save();
-      c.translate(22, 74);
+      c.translate(L.comboX, L.comboY);
       c.scale(popScale, popScale);
       c.textAlign = 'left';
       c.font = font(13);
@@ -10392,10 +10603,10 @@ export class Game {
     // its first frame like a frozen icon.
     const scoreSize = isSpecial(this.level.mode) ? 29 : 40;
     const coinSize = scoreSize;
-    const coinY = isSpecial(this.level.mode) ? 34 : 46;
+    const coinY = isSpecial(this.level.mode) ? L.specialScoreY : L.scoreY;
     const coinR = isSpecial(this.level.mode) ? 13 : 17.5;
-    const coinCx = W - coinR - 8;
-    const coinCountX = coinCx - coinR - 8;
+    const coinCx = L.w - coinR - L.coinEdge;
+    const coinCountX = coinCx - coinR - L.coinEdge;
     c.textAlign = 'right';
     c.font = font(coinSize);
     // A long wallet must not run into the centred stage label (special stages)
@@ -10403,7 +10614,7 @@ export class Game {
     const coinText = String(this.coins);
     // Special stages put their timer pill on this row (ends at CX + 118);
     // boss stages put the health bar there (ends at CX + 103).
-    const coinRowLeft = isSpecial(this.level.mode) ? 336 : this.level.boss ? 316 : 0;
+    const coinRowLeft = isSpecial(this.level.mode) ? L.cx + 126 : this.level.boss ? L.cx + 106 : 0;
     const coinRoom = coinRowLeft ? coinCountX - coinRowLeft : coinCountX;
     if (coinRoom > 24 && typeof c.measureText === 'function') {
       const wide = c.measureText(coinText).width;
@@ -10438,25 +10649,25 @@ export class Game {
     c.font = font(isSpecial(this.level.mode) ? 13 : 16);
     c.fillStyle = this.level.mode === 'treasure' || this.level.mode === 'bonus' ? '#fde68a'
       : this.level.mode === 'boulder' ? '#a5f3fc' : this.level.boss ? '#ff5050' : '#ffffff';
-    c.fillText(modeLabel, CX, isSpecial(this.level.mode) ? 20 : 24);
+    c.fillText(modeLabel, L.cx, isSpecial(this.level.mode) ? L.specialModeLabelY : L.modeLabelY);
 
     if (isSpecial(this.level.mode)) {
       c.save();
       c.fillStyle = 'rgba(5,12,24,0.72)';
       c.strokeStyle = this.level.mode === 'boulder' ? 'rgba(103,232,249,0.7)' : 'rgba(252,211,77,0.7)';
       c.lineWidth = 1.4;
-      c.beginPath(); c.roundRect(CX - 118, 30, 236, 24, 11); c.fill(); c.stroke();
+      c.beginPath(); c.roundRect(L.cx - L.pillHalfW, L.pillY, L.pillHalfW * 2, 24, 11); c.fill(); c.stroke();
       c.font = font(12);
       const timeStr = `⏱ ${this.stageTime.toFixed(1)}s`;
       if (this.level.mode === 'boulder') {
         const ratio = 1 - this.level.hp / Math.max(1, this.level.maxHp);
         c.fillStyle = this.stageTime < 8 ? '#fb7185' : '#ffffff';
         c.textAlign = 'left';
-        c.fillText(timeStr, CX - 108, 42);
+        c.fillText(timeStr, L.cx - L.pillHalfW + 10, L.pillTextY);
         c.textAlign = 'right';
         c.fillStyle = '#a5f3fc';
-        c.fillText(`${T('BATU')} ${Math.round(ratio * 100)}%`, CX + 108, 42);
-        const barX = CX - 26, barY = 39, barW = 64;
+        c.fillText(`${T('BATU')} ${Math.round(ratio * 100)}%`, L.cx + L.pillHalfW - 10, L.pillTextY);
+        const barX = L.cx - 26, barY = L.pillTextY - 3, barW = 64;
         c.fillStyle = '#164e63'; c.fillRect(barX, barY, barW, 6);
         c.fillStyle = '#67e8f9'; c.fillRect(barX, barY, barW * ratio, 6);
       } else if (this.level.mode === 'bonus') {
@@ -10465,12 +10676,12 @@ export class Game {
           if (this.bonusCoins[ci].taken) taken++;
         }
         c.fillStyle = this.stageTime < 8 ? '#fb7185' : '#fde68a';
-        c.fillText(`${timeStr}  •  KOIN ${taken}/${this.bonusCoins.length}`, CX, 42);
+        c.fillText(`${timeStr}  •  KOIN ${taken}/${this.bonusCoins.length}`, L.cx, L.pillTextY);
       } else {
         const status = this.treasureBuff === 'double' ? T('2 SENJATA')
           : this.treasureBuff ? `${T('BONUS')} ${this.treasureBuff.toUpperCase()}` : T('BERONDONG PETI!');
         c.fillStyle = this.stageTime < 8 ? '#fb7185' : '#fde68a';
-        c.fillText(`${timeStr}  •  ${status}`, CX, 42);
+        c.fillText(`${timeStr}  •  ${status}`, L.cx, L.pillTextY);
       }
       c.restore();
     }
@@ -10479,8 +10690,8 @@ export class Game {
     if (this.level.boss) {
       const barW = 200;
       const barH = 12;
-      const barX = CX - barW / 2;
-      const barY = 46;
+      const barX = L.cx - barW / 2;
+      const barY = L.barY;
 
       const hpFrac = Math.max(0, Math.min(1, this.bossHp / this.bossMaxHp));
       const hpRedFrac = Math.max(0, Math.min(1, this.bossHpRed / this.bossMaxHp));
@@ -10519,13 +10730,13 @@ export class Game {
       c.font = 'bold 9px sans-serif';
       c.fillStyle = '#ffffff';
       c.textAlign = 'center';
-      c.fillText(`${Math.round(this.bossHp)} / ${this.bossMaxHp} HP`, CX, barY + barH * 0.7);
+      c.fillText(`${Math.round(this.bossHp)} / ${this.bossMaxHp} HP`, L.cx, barY + barH * 0.7);
       c.restore();
     } else if (!isSpecial(this.level.mode)) {
       const idx = (n - 1) % 5;
       for (let i = 0; i < 5; i++) {
-        const x = CX - 52 + i * 26;
-        const y = 47;
+        const x = L.cx - 52 + i * 26;
+        const y = L.dotsY;
         const isBoss = i === 4;
         if (i === idx) {
           c.fillStyle = isBoss ? 'rgba(255,59,59,0.28)' : 'rgba(255,255,255,0.26)';
@@ -10549,11 +10760,18 @@ export class Game {
 
     // Timed stages refill automatically; the regular ammo buff adds one finite magazine.
     const total = this.level.ammo * this.maxAmmoMult;
-    const spacing = Math.min(26, (H * 0.48) / total);
+    const spacing = Math.min(26, L.ammoSpan / total);
     for (let i = 0; i < total; i++) {
-      const x = 30;
-      const y = H - 40 - i * spacing;
+      const x = L.ammoX;
+      const y = L.ammoBaseY - i * spacing;
       c.save();
+      // Landscape: each round in the magazine points the way the gun fires —
+      // to the right — instead of standing upright in a world that is turned.
+      if (this.landscape) {
+        c.translate(x, y);
+        c.rotate(-this.uprightSpin());
+        c.translate(-x, -y);
+      }
       if (this.weapon.id === 'yoyo') {
         const used = i >= this.ammoLeft;
         const k = total - 1 - i;
@@ -10595,7 +10813,7 @@ export class Game {
     c.textAlign = 'left';
     c.font = font(14);
     c.fillStyle = 'rgba(255,255,255,0.75)';
-    c.fillText(this.reloadT > 0 ? 'ISI ULANG…' : `x${this.ammoLeft}`, 46, H - 30);
+    c.fillText(this.reloadT > 0 ? 'ISI ULANG…' : `x${this.ammoLeft}`, L.ammoTextX, L.ammoTextY);
 
     // weapon label
     c.textAlign = 'right';
@@ -10603,7 +10821,7 @@ export class Game {
     c.fillStyle = this.weapon.energy ? this.weapon.color : 'rgba(255,255,255,0.6)';
     // A slide-3 gun carries no slide-1 perk: the label names its card instead.
     const s3Card = this.sevenPlainTrigger;
-    c.fillText(`${this.weapon.name}${this.hasTwinGuns ? ' ×2' : ''} • ${s3Card ? 'SLIDE 3' : T(this.weapon.perk)}`, W - 14, H - 16);
+    c.fillText(`${this.weapon.name}${this.hasTwinGuns ? ' ×2' : ''} • ${s3Card ? 'SLIDE 3' : T(this.weapon.perk)}`, L.rightX, L.labelY);
     const wq = this.weapon;
     let info = '';
     if (s3Card) { /* slide 3: no perk counters, no charge meter, no spin-up */ }
@@ -10629,16 +10847,16 @@ export class Game {
     if (info) {
       c.font = font(13);
       c.fillStyle = wq.color;
-      c.fillText(info, W - 14, H - 36);
+      c.fillText(info, L.rightX, L.infoY);
     }
     if (wq.spinup && !s3Card) {
       c.fillStyle = 'rgba(255,255,255,0.15)';
-      c.fillRect(W - 114, H - 46, 100, 7);
+      c.fillRect(L.spinBarX, L.spinBarY, 100, 7);
       c.fillStyle = this.spin > 0.25 ? '#22c55e' : '#f59e0b';
-      c.fillRect(W - 114, H - 46, 100 * this.spin, 7);
+      c.fillRect(L.spinBarX, L.spinBarY, 100 * this.spin, 7);
       c.font = font(10);
       c.fillStyle = 'rgba(255,255,255,0.7)';
-      c.fillText('SPIN', W - 118, H - 40);
+      c.fillText('SPIN', L.spinTextX, L.spinTextY);
     }
 
     // banner
@@ -10647,13 +10865,13 @@ export class Game {
       const a = Math.min(1, t * 2.5) * Math.min(1, (1.8 - t) * 5);
       c.save();
       c.globalAlpha = a;
-      c.translate(CX, isSpecial(this.level.mode) ? this.targetY + this.level.radius + 46 : CY + this.level.radius + 115);
+      c.translate(L.cx, L.bannerY);
       const s = 1 + Math.max(0, (t - 1.5)) * 1.5;
       c.scale(s, s);
       c.textAlign = 'center';
       if (this.level.boss) {
         c.fillStyle = 'rgba(120,0,0,0.65)';
-        c.fillRect(-W / 2, -38, W, 76);
+        c.fillRect(-L.w / 2, -38, L.w, 76);
         c.font = font(34);
         c.lineWidth = 6;
         c.strokeStyle = 'rgba(0,0,0,0.7)';
@@ -10704,7 +10922,7 @@ export class Game {
       const w = this.weapon.id;
       c.save();
       c.globalAlpha = a;
-      c.translate(CX, 330);
+      c.translate(L.cx, L.clearY);
       c.scale(sc, sc);
       c.textAlign = 'center';
       c.textBaseline = 'middle';
@@ -10750,5 +10968,8 @@ export class Game {
       c.fillText(T('BONUS +3'), 0, 40);
       c.restore();
     }
+    // Landscape painted the HUD straight onto the screen: hand the canvas back
+    // in the world frame the rest of render() is standing in.
+    if (this.landscape) c.restore();
   }
 }

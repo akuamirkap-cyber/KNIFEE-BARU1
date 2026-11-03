@@ -6,6 +6,11 @@ Satu game arkade Android (Capacitor + Vite + React + TypeScript):
 |---|---|
 | **GUN HIT** (SGA) | 100 stage, 11 bos, 90 senjata, stage spesial, misi & achievement |
 
+Gameplay punya dua **mode tampilan** yang bisa dipilih pemain: **📱 POTRET**
+(bawaan, senjata di bawah menembak ke atas) dan **🎮 LANDSCAPE** (senjata di tepi
+kiri menembak ke kanan, roda/musuh di tepi kanan). Dunia, hitbox, dan 100 stage-nya
+sama persis — detailnya di `GAMES.md` bagian *Mode tampilan*.
+
 Game B (PERFECT SHOT) sudah **dihapus**; aset visual & audio bersamanya
 (`HeadArt`, `TargetArt`, `levels`, `FlatIcons`, `sfx`, `themes`, `GiftArt`,
 `index.css`) tetap dipakai Game A dan karena itu dipertahankan.
@@ -18,7 +23,7 @@ pengiriman data. Paket rilis: `com.gamearcade.hub`, nama tampil "Game Arcade Hub
 ```bash
 npm install
 npm run dev          # http://localhost:3000
-npm test             # 660 tes (node:test + tsx)
+npm test             # 678 tes (node:test + tsx)
 npx tsc --noEmit     # typecheck
 npm run build        # bundel web ke dist/
 ```
@@ -57,14 +62,14 @@ Detail keystore, signing, ikon & splash: **`BUILD-APK.md`**.
 ## Struktur
 
 ```
-src/games/gunhit/       Game A: App, komponen, engine (game/Game.ts), art
+src/games/gunhit/       Game A: App, komponen, engine (game/Game.ts), art, mode tampilan
 src/games/perfect-shot/ aset bersama (art, ikon, sfx, tema, index.css) — bukan game lagi
 src/games/knife-hit/    efek & komponen bersama
 src/i18n/               katalog teks id/en (strings, weaponEn, dataEn)
 src/storage/            simpanan berversi + checksum + leaderboard lokal
 src/telemetry/          analytics no-op, session, error hooks
 tools/                  build Android, render aset, audit performa
-tests/                  node:test (660 tes)
+tests/                  node:test (678 tes)
 store/                  aset & teks Play Console
 references/             zip referensi visual (arsip, tidak ikut bundel)
 ```

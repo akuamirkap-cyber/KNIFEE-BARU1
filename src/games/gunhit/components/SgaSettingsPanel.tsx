@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { SgaBackgroundTheme, SgaBgThemeOption } from '../game/backgroundThemes';
+import type { SgaOrientation, SgaOrientationOption } from '../game/orientation';
 import type { SgaGameSpeed } from '../game/gameSpeed';
 import type { StyleId } from '../../perfect-shot/anim/presets';
 import CoinSprite from '../../shared/CoinSprite';
@@ -24,6 +25,10 @@ type Props = {
   onAnimGunStyle: (style: StyleId) => void;
   themes: readonly SgaBgThemeOption[];
   theme: SgaBackgroundTheme;
+  /** MODE TAMPILAN: potret (senjata di bawah) atau landscape (senjata di kiri). */
+  orientation: SgaOrientation;
+  orientationOptions: readonly SgaOrientationOption[];
+  onOrientation: (value: SgaOrientation) => void;
   onClose: () => void;
   onMute: () => void;
   onSfx: () => void;
@@ -54,6 +59,7 @@ function Toggle({ on }: { on: boolean }) {
 
 export default function SgaSettingsPanel({
   closing, muted, volume, sfxEnabled, musicEnabled, speed, speedOptions, themes, theme,
+  orientation, orientationOptions, onOrientation,
   animSpeed, animGunStyle, animSpeeds, animStyles, onAnimSpeed, onAnimGunStyle,
   onClose, onMute, onSfx, onMusic, onVolume, onSpeed, onTheme, onReplayIntro, onSpecial, formatSpeed, onPrivacy,
   language, onLanguage, onHelp, onReset,
@@ -61,6 +67,7 @@ export default function SgaSettingsPanel({
   const [advanced, setAdvanced] = useState(false);
   const stripRef = useRef<HTMLDivElement>(null);
   const selectedTheme = themes.find((item) => item.id === theme) ?? themes[0];
+  const selectedOrientation = orientationOptions.find((item) => item.id === orientation) ?? orientationOptions[0];
   const percent = muted ? 0 : Math.round(volume * 100);
 
   useEffect(() => {
@@ -123,6 +130,38 @@ export default function SgaSettingsPanel({
                   <span className="text-[20px] leading-none drop-shadow">{item.icon}</span>
                   <span className="font-title text-[8px] leading-none text-white">{tr(language, item.label)}</span>
                   {active && <span className="absolute -right-1 -top-1 grid h-4 w-4 place-items-center rounded-full bg-[#22c55e] text-[9px] text-white ring-2 ring-[#0e1519]">✓</span>}
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="mt-3">
+          <div className="flex items-baseline justify-between">
+            <span className="font-title text-[11px] tracking-[.14em] text-white/55">{tr(language, 'MODE TAMPILAN')}</span>
+            <span className="font-title text-[11px] text-white">{selectedOrientation?.icon} {tr(language, selectedOrientation?.label ?? '')}</span>
+          </div>
+          <p className="mt-1 text-[10px] leading-tight text-white/55">{tr(language, selectedOrientation?.desc ?? '')}</p>
+          <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+            {orientationOptions.map((item) => {
+              const active = orientation === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  data-orientation={item.id}
+                  aria-pressed={active}
+                  onClick={() => onOrientation(item.id)}
+                  title={tr(language, item.desc)}
+                  className={`press font-title flex h-11 items-center justify-center gap-1.5 rounded-xl border-2 text-[11px] transition-all ${
+                    active
+                      ? 'border-[#ffd23f] bg-[#ffd23f]/20 text-[#ffe89a] shadow-[0_0_10px_rgba(255,210,63,.45)]'
+                      : 'border-white/15 bg-white/[.05] text-white/70 hover:bg-white/10'
+                  }`}
+                >
+                  <span aria-hidden="true" className="text-[15px] leading-none">{item.icon}</span>
+                  {tr(language, item.label)}
+                  {active && <span className="text-[10px] text-[#7cf06f]">✓</span>}
                 </button>
               );
             })}

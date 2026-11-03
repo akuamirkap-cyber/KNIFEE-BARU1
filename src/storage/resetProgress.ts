@@ -2,8 +2,8 @@
  * "RESET PROGRES" — menghapus kemajuan pemain tanpa menyentuh pengaturan.
  *
  * Daftar kuncinya eksplisit (bukan "hapus semua gunhit_*") supaya pilihan
- * bahasa, volume, kecepatan, tema, dan status CARA MAIN tetap ada: pemain yang
- * me-reset progres tidak ingin kehilangan pengaturannya.
+ * bahasa, volume, kecepatan, tema, mode tampilan, dan status CARA MAIN tetap
+ * ada: pemain yang me-reset progres tidak ingin kehilangan pengaturannya.
  */
 import type { KeyValueStore } from '../games/gunhit/game/safeStorage';
 
@@ -29,6 +29,7 @@ export const SETTINGS_KEYS_KEPT = [
   'gunhit_volume',
   'gunhit_game_speed',
   'gunhit_menu_theme',
+  'gunhit_orientation',
   'sga.language.v1',
   'sga.onboarding.v1',
 ] as const;

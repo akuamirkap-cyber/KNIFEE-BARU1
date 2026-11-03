@@ -1,6 +1,16 @@
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type { Game } from './game/Game';
-import { GAMEPLAY_GUN_SCALE, GUN_Y, H, initialGameplayWheelCenterY } from './game/layout';
+import { GAMEPLAY_GUN_SCALE, GUN_Y, H, LANDSCAPE_VIEW, initialGameplayWheelCenterY, worldToView } from './game/layout';
+import {
+  LANDSCAPE_FRAME,
+  PORTRAIT_FRAME,
+  SGA_ORIENTATION_OPTIONS,
+  setActiveShellFrame,
+  type SgaOrientation,
+} from './game/orientation';
+import { useSgaOrientation } from './utils/useSgaOrientation';
+import { requestScreenOrientation } from '../../utils/screenOrientation';
+import FitLandscape from './components/FitLandscape';
 import { makeLevel } from './game/levels';
 import { savedValues, storage } from './game/safeStorage';
 import { setMasterVolume, setMuted, sfx } from './game/audio';
@@ -354,6 +364,8 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   // Latest "is the engine allowed to simulate" flag, so a late engine starts
   // in the right state instead of waiting for the next dependency change.
   const activeRef = useRef(false);
+  /** Mode tampilan yang sedang dipakai permainan: dibaca boot engine & transisi. */
+  const landscapeGameplayRef = useRef(false);
   // Gun art for the menu showcase, once its chunk has landed.
   const [gunArt, setGunArt] = useState<MenuGunArt | null>(null);
   useEffect(() => {
@@ -469,6 +481,11 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   const [soundVolume, setSoundVolumeState] = useState<number>(initialSoundVolume);
   const [gameSpeed, setGameSpeed] = useSgaGameSpeed();
   const [menuTheme, setMenuTheme] = useSgaBgTheme();
+  /**
+   * MODE TAMPILAN: 'portrait' (bawaan) atau 'landscape' — senjata berdiri di
+   * tepi kiri dan menembak ke kanan, roda/musuh pindah ke tepi kanan.
+   */
+  const [orientation, setOrientation] = useSgaOrientation();
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Kebijakan privasi: halaman in-app yang teksnya sama dengan docs/PRIVACY.md.
   const [privacyOpen, setPrivacyOpen] = useState(false);
@@ -914,6 +931,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       g.setWeapon(getWeapon(storage.getItem(LS.weapon) || 'pistol').id);
       g.setGameSpeed(getSavedSgaSpeed());
       g.setBackgroundTheme(getSavedSgaBgTheme());
+      g.setOrientation(landscapeGameplayRef.current ? 'landscape' : 'portrait');
       gameRef.current = g;
       // The mount effects that ran while the chunk was in flight could not touch
       // the engine; replay their state once it exists.
@@ -1042,12 +1060,16 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     if (!diamondFlight) return;
     const node = diamondFlightRef.current;
     if (!node) return;
-    const startX = Math.max(28, Math.min(392, diamondFlight.x));
-    const startY = Math.max(76, Math.min(690, diamondFlight.y));
+    // Dompet HUD menempati sudut kanan atas bingkai mana pun (420×760 potret,
+    // 760×420 landscape), jadi tujuan terbangnya dihitung dari bingkai aktif.
+    const walletX = shellFrame.width - 28;
+    const walletY = landscapeGameplay ? 40 : 34;
+    const startX = Math.max(28, Math.min(walletX, diamondFlight.x));
+    const startY = Math.max(76, Math.min(shellFrame.height - 70, diamondFlight.y));
     const flight = node.animate([
       { left: `${startX}px`, top: `${startY}px`, transform: 'translate(-50%, -50%) scale(1.25) rotate(0deg)', opacity: 1 },
-      { left: '392px', top: '34px', transform: 'translate(-50%, -50%) scale(.18) rotate(540deg)', opacity: .25, offset: .82 },
-      { left: '392px', top: '34px', transform: 'translate(-50%, -50%) scale(.12) rotate(720deg)', opacity: 0 },
+      { left: `${walletX}px`, top: `${walletY}px`, transform: 'translate(-50%, -50%) scale(.18) rotate(540deg)', opacity: .25, offset: .82 },
+      { left: `${walletX}px`, top: `${walletY}px`, transform: 'translate(-50%, -50%) scale(.12) rotate(720deg)', opacity: 0 },
     ], { duration: Math.round(900 / gameSpeed), easing: 'cubic-bezier(.2,.7,.18,1)', fill: 'forwards' });
     flight.onfinish = () => {
       setDiamondFlight((current) => current?.id === diamondFlight.id ? null : current);
@@ -1096,6 +1118,31 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     if (screen === 'menu') gameRef.current?.toIdle();
     gameRef.current?.setActive(simulate);
   }, [simulate, screen, inGameSettingsOpen]);
+
+  /**
+   * Landscape hanya dipakai permainan yang sedang berjalan: menu, arsenal, peta
+   * stage, dan layar hasil semuanya dirancang potret 420×760 dan tetap begitu.
+   * Begitu run dimulai bingkainya jadi 760×420, engine memutarnya (senjata kiri
+   * → musuh kanan), shell aplikasi mengikuti, dan di Android HP-nya ikut
+   * diputar.
+   */
+  const landscapeGameplay = orientation === 'landscape' && screen === 'playing';
+  const shellFrame = landscapeGameplay ? LANDSCAPE_FRAME : PORTRAIT_FRAME;
+  landscapeGameplayRef.current = landscapeGameplay;
+  useEffect(() => {
+    setActiveShellFrame(shellFrame);
+    whenEngine((engine) => engine.setOrientation(landscapeGameplay ? 'landscape' : 'portrait'));
+    void requestScreenOrientation(landscapeGameplay ? 'landscape' : 'portrait');
+  }, [landscapeGameplay]);
+  // Shell aplikasi tidak boleh tertinggal di bingkai landscape kalau permainan
+  // ini dilepas (mis. kembali ke menu lalu slide ditutup).
+  useEffect(() => () => setActiveShellFrame(PORTRAIT_FRAME), []);
+  /** Pusat roda/musuh dalam piksel bingkai: dipakai overlay DOM (reveal diamond). */
+  const wheelViewPoint = worldToView(
+    210,
+    initialGameplayWheelCenterY(false, true),
+    landscapeGameplay,
+  );
 
   // Upright weapon preview on the main menu (-10% from 374x328 -> 337x295, native VSync FPS)
   useEffect(() => {
@@ -1325,7 +1372,10 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     requestWheelArt(level);
     const fromMap = mapOpen;
     const fromMenu = screenRef.current === 'menu' && !fromMap && !settingsOpen && !fromSettings;
-    const wantsWeaponFlight = fromMenu && captureMenuWeaponFlight();
+    // The captured menu frame flies in upright (portrait world). In landscape
+    // the gun stands on its side on the left edge, so the flight is skipped and
+    // the engine's own rise-in plays instead.
+    const wantsWeaponFlight = orientation !== 'landscape' && fromMenu && captureMenuWeaponFlight();
     if (fromMenu) {
       setPlayMenuExiting(true);
       setMenuDeparture('play');
@@ -1347,10 +1397,17 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     const gunEntryDelay = fromMap || fromSettings ? hold / 1000 : 0;
     // Aim the scope lens exactly at the stage target: same centre as the wheel
     // and a radius that frames it (106 normal / 122 boss / 166 boulder).
-    const origin = {
-      x: 50,
-      y: (initialGameplayWheelCenterY(stageConfig.boss, Boolean(specialMode)) / H) * 100,
-    };
+    // Lensa scope mengunci ke roda: di potret roda itu di tengah atas, di
+    // landscape roda yang sama pindah ke tengah kanan (dunia diputar +90°).
+    const origin = orientation === 'landscape'
+      ? {
+          x: ((H - initialGameplayWheelCenterY(stageConfig.boss, Boolean(specialMode))) / LANDSCAPE_VIEW.w) * 100,
+          y: 50,
+        }
+      : {
+          x: 50,
+          y: (initialGameplayWheelCenterY(stageConfig.boss, Boolean(specialMode)) / H) * 100,
+        };
     const lens = stageConfig.radius + 14;
     const label = `STAGE ${level} · ${stageConfig.name.toUpperCase()}`;
 
@@ -1877,9 +1934,19 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
           <span>{tr(language, 'Pilih Game Lain')}</span>
         </button>
       )}
-      <div ref={gameShellRef} className="relative overflow-hidden shadow-[0_0_80px_rgba(0,0,0,0.9)] w-[420px] h-[760px] flex-shrink-0">
+      <div
+        ref={gameShellRef}
+        className="relative overflow-hidden shadow-[0_0_80px_rgba(0,0,0,0.9)] flex-shrink-0"
+        style={{ width: shellFrame.width, height: shellFrame.height }}
+        data-orientation={landscapeGameplay ? 'landscape' : 'portrait'}
+      >
         {/* Canvas Engine (zero permanent translucent DOM overlays during gameplay so desynchronized:true scans out directly) */}
-        <canvas ref={canvasRef} className="block touch-none w-[420px] h-[760px]" />
+        <canvas
+          ref={canvasRef}
+          className="block touch-none"
+          style={{ width: shellFrame.width, height: shellFrame.height }}
+          data-orientation={landscapeGameplay ? 'landscape' : 'portrait'}
+        />
         {diamondToast && (
           <div key={diamondToast.id} className="pointer-events-none absolute inset-x-0 top-[34%] z-40 flex flex-col items-center diamond-reward-pop" aria-live="polite">
             <div className="relative flex h-36 w-64 items-center justify-center">
@@ -1986,7 +2053,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
             }}
             aria-label="Pengaturan permainan"
             title="Pengaturan (Menu, Suara & Kecepatan)"
-            className="absolute right-2.5 top-[62px] z-30 flex h-10 w-10 items-center justify-center rounded-2xl border border-white/25 bg-[#0a1d28]/85 text-lg text-white shadow-[0_6px_18px_rgba(0,0,0,0.58)] backdrop-blur-sm transition hover:scale-105 hover:border-cyan-200/70 hover:bg-[#133244] active:scale-95"
+            className={`absolute right-2.5 ${landscapeGameplay ? 'top-[52px]' : 'top-[62px]'} z-30 flex h-10 w-10 items-center justify-center rounded-2xl border border-white/25 bg-[#0a1d28]/85 text-lg text-white shadow-[0_6px_18px_rgba(0,0,0,0.58)] backdrop-blur-sm transition hover:scale-105 hover:border-cyan-200/70 hover:bg-[#133244] active:scale-95`}
           >
             ⚙️
           </button>
@@ -1995,7 +2062,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
           <div
             key={diamondReveal.id}
             className="pointer-events-none absolute z-45"
-            style={{ left: 210, top: 184, transform: 'translate(-50%, -50%)' }}
+            style={{ left: wheelViewPoint.x, top: wheelViewPoint.y, transform: 'translate(-50%, -50%)' }}
             aria-live="polite"
           >
             <div className="diamond-reveal">
@@ -2222,6 +2289,8 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
             speedOptions={SGA_SPEED_OPTIONS}
             themes={SGA_BG_THEMES}
             theme={menuTheme}
+            orientation={orientation}
+            orientationOptions={SGA_ORIENTATION_OPTIONS}
             onClose={closeSettingsPage}
             onMute={toggleMute}
             onSfx={toggleEffects}
@@ -2229,6 +2298,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
             onVolume={changeSoundVolume}
             onSpeed={setGameSpeed}
             onTheme={chooseMenuTheme}
+            onOrientation={setOrientation}
             animSpeed={psAnimationConfig.speed}
             animGunStyle={psAnimationConfig.groups.gun.style}
             animSpeeds={SPEEDS}
@@ -2284,6 +2354,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
 
         {/* Modals */}
         {screen === 'playing' && inGameSettingsOpen && (
+          <FitLandscape active={landscapeGameplay} z={50}>
           <div
             onPointerDown={(e) => e.stopPropagation()}
             className="absolute inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-[2px]"
@@ -2403,6 +2474,36 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                 </div>
               </div>
 
+              {/* Mode tampilan: senjata di bawah (potret) atau di kiri (landscape) */}
+              <div className="mb-4 rounded-2xl border border-white/15 bg-white/[0.04] p-3">
+                <div className="text-center text-[11px] font-black tracking-[0.18em] text-cyan-200">
+                  🧭 {tr(language, 'MODE TAMPILAN')}
+                </div>
+                <p className="mt-1 text-center text-[9.5px] leading-tight text-white/55">
+                  {tr(language, 'Landscape: senjata di kiri menembak ke kanan, musuh di kanan')}
+                </p>
+                <div className="mt-2 grid grid-cols-2 gap-1.5">
+                  {SGA_ORIENTATION_OPTIONS.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      aria-pressed={orientation === option.id}
+                      title={tr(language, option.desc)}
+                      onClick={() => setOrientation(option.id)}
+                      className={`rounded-xl border px-1 py-2 text-center transition active:scale-95 ${
+                        orientation === option.id
+                          ? 'border-cyan-300/90 bg-cyan-400/25 text-cyan-100 shadow-[0_0_14px_rgba(34,211,238,.3)]'
+                          : 'border-white/10 bg-white/[.04] text-white/80 hover:bg-white/10'
+                      }`}
+                    >
+                      <span className="block text-xs font-black tracking-wide">
+                        {option.icon} {tr(language, option.label)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* Resume & Back to Menu Actions */}
               <div className="flex flex-col gap-2">
                 <button
@@ -2427,6 +2528,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
               </div>
             </section>
           </div>
+          </FitLandscape>
         )}
         {screen === 'menu' && arsenalOpen && (
           <Overlay><Arsenal
@@ -2485,7 +2587,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
 
         {/* BOSS DEFEATED Modal Celebration (Exact Screenshot 2!) */}
         {bossDefeatedData && (
-          <Overlay><BossDefeatedModal
+          <Overlay><FitLandscape active={landscapeGameplay} z={40}><BossDefeatedModal
             bossName={bossDefeatedData.name}
             bossHead={bossDefeatedData.bossHead}
             stage={bossDefeatedData.level}
@@ -2496,28 +2598,28 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
             xpGained={bossDefeatedData.xpGained}
             leveledUp={bossDefeatedData.leveledUp}
             onContinue={handleContinueAfterBoss}
-          /></Overlay>
+          /></FitLandscape></Overlay>
         )}
 
         {/* PILIHAN POWER UP DARI BINTANG */}
         {starBuffOpen && (
-          <Overlay><StarBuffModal
+          <Overlay><FitLandscape active={landscapeGameplay} z={40}><StarBuffModal
             treasure={starBuffTreasure}
             onPick={(kind) => {
               gameRef.current?.applyBuff(kind);
               setStarBuffOpen(false);
             }}
-          /></Overlay>
+          /></FitLandscape></Overlay>
         )}
 
         {/* BONUS STAGE: KOTAK HADIAH ala Knife Boss 100 Lv — efek kotak + senjata baru Gun Hit */}
         {bonusStageOpen && (
-          <Overlay><BossGiftBoxModal
+          <Overlay><FitLandscape active={landscapeGameplay} z={50}><BossGiftBoxModal
             bossName={bonusAfterBoss.bossName}
             stage={bonusAfterBoss.stage}
             currentWeaponId={weapon}
             onClaim={handleGiftBoxClaim}
-          /></Overlay>
+          /></FitLandscape></Overlay>
         )}
 
         {/* Game Over Screen (DIBESARKAN TEKSNYA 2X + ANIMASI MEWAH!) */}
