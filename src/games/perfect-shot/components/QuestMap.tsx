@@ -39,6 +39,12 @@ type Props = {
    * the map still reads normally, and the real current stage keeps its marker.
    */
   unlockAll?: boolean;
+  /**
+   * Travel axis of the map. `y` is the original portrait corridor (stages climb
+   * the screen). `x` lays the very same perspective out sideways, so stages run
+   * left → right and the map reads comfortably in a landscape frame.
+   */
+  axis?: "y" | "x";
 };
 
 /* ---------------- camera / projection ---------------- */
@@ -71,7 +77,8 @@ const capKey = (t: StageType, s: StageState) =>
   s === "current" ? "current" : s === "locked" ? (t === "boss" ? "lockB" : t === "special" ? "lockS" : "lockN") : t === "normal" ? "done" : t;
 
 /* ================================================================== */
-export function QuestMap({ leaving, onBack, onPlay, progress, unlockAll = false }: Props) {
+export function QuestMap({ leaving, onBack, onPlay, progress, unlockAll = false, axis = "y" }: Props) {
+  const onX = axis === "x";
   const g = useGame();
   const st = useSettings();
   const cur = progress?.stage ?? g.stage;
@@ -145,12 +152,16 @@ export function QuestMap({ leaving, onBack, onPlay, progress, unlockAll = false 
   }, [leaving]);
 
   /* ---------------- drag + inertia ---------------- */
+  /** Where the pointer sits along the travel axis (negated for x: the row moves
+   *  left as the camera advances, so grabbing and pulling follows the content). */
+  const grab = (e: { clientX: number; clientY: number }) => (onX ? -e.clientX : e.clientY);
   useEffect(() => {
     const move = (e: PointerEvent) => {
       const d = drag.current;
       if (!d) return;
-      const unit = size.h * 0.17;
-      const dy = e.clientY - d.y;
+      const unit = (onX ? size.w : size.h) * 0.17;
+      const cur = grab(e);
+      const dy = cur - d.y;
       if (Math.abs(dy) > 6) moved.current = true;
       pendingCam.current = d.c + dy / unit;
       if (!moveRaf.current)
@@ -160,8 +171,8 @@ export function QuestMap({ leaving, onBack, onPlay, progress, unlockAll = false 
         });
       const now = performance.now();
       const dt = Math.max(1, now - d.lt);
-      d.v = 0.75 * (((e.clientY - d.ly) / unit / dt) * 1000) + 0.25 * d.v;
-      d.ly = e.clientY;
+      d.v = 0.75 * (((cur - d.ly) / unit / dt) * 1000) + 0.25 * d.v;
+      d.ly = cur;
       d.lt = now;
     };
     const up = () => {
@@ -191,7 +202,7 @@ export function QuestMap({ leaving, onBack, onPlay, progress, unlockAll = false 
       window.removeEventListener("pointercancel", up);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [size.h]);
+  }, [size.h, size.w, onX]);
 
   const onDown = (e: React.PointerEvent) => {
     if (!entered || out) return;
@@ -199,7 +210,8 @@ export function QuestMap({ leaving, onBack, onPlay, progress, unlockAll = false 
     cancelAnimationFrame(wheelRaf.current);
     wheelRaf.current = 0;
     wheelTarget.current = null;
-    drag.current = { y: e.clientY, c: camRef.current, ly: e.clientY, lt: performance.now(), v: 0 };
+    const cur = grab(e);
+    drag.current = { y: cur, c: camRef.current, ly: cur, lt: performance.now(), v: 0 };
     moved.current = false;
   };
 
@@ -229,14 +241,30 @@ export function QuestMap({ leaving, onBack, onPlay, progress, unlockAll = false 
     wheelRaf.current = requestAnimationFrame(step);
   };
 
-  /* ---------------- projection ---------------- */
+  /* ---------------- projection ----------------
+   * One depth curve, two axes. Portrait turns depth into screen y (stages climb
+   * away from the camera); landscape turns it into screen x (stages run to the
+   * right), and the zig-zag that used to spread them across the width now fans
+   * them up and down. Both read the same constants, so the rhythm, the sizes and
+   * the fade of every pillar stay identical. */
   const W = size.w;
   const H = size.h;
+  const travel = (s: number) => HOR + (BOT - HOR) * s;
+  /** depth of the stage the camera settles on, as a fraction of the travel axis */
+  const T_FOCUS = travel(1 / (1 + K * FOCUS_D));
+  /** on-screen position along the travel axis */
+  const along = (s: number) => (onX ? W * 0.42 + (T_FOCUS - travel(s)) * W * 1.15 : H * travel(s));
+  /** on-screen position across the path (the gentle zig-zag) */
+  const lateral = (xw: number, s: number) => (onX ? H * 0.62 + xw * s * H * 0.30 : W / 2 + xw * s * W * 0.37);
+  /** place a (lateral, along) pair on the real screen axes */
+  const at = (lat: number, ax: number) => (onX ? { x: ax, y: lat } : { x: lat, y: ax });
   const proj = (d: number) => {
     const s = 1 / (1 + K * d);
-    return { s, y: H * (HOR + (BOT - HOR) * s) };
+    return { s, y: along(s) };
   };
-  const px = (xw: number, s: number) => W / 2 + xw * s * W * 0.37;
+  const px = (xw: number, s: number) => lateral(xw, s);
+  /** Landscape draws the same pillars smaller: the frame is only 420px tall. */
+  const PILLAR_K = onX ? 0.72 : 1;
   const auto = st.theme === "auto";
 
   const nStart = Math.max(1, Math.ceil(cam + 1 + NEAR));
@@ -287,7 +315,8 @@ export function QuestMap({ leaving, onBack, onPlay, progress, unlockAll = false 
       const d = n - 1 + t - cam;
       if (d < NEAR || d > FAR) continue;
       const p = proj(d);
-      dots.push({ x: px(worldX(n) + (worldX(n + 1) - worldX(n)) * t, p.s), y: p.y, s: p.s, done: n < cur });
+      const pt = at(px(worldX(n) + (worldX(n + 1) - worldX(n)) * t, p.s), p.y);
+      dots.push({ x: pt.x, y: pt.y, s: p.s, done: n < cur });
     }
   }
 
@@ -327,7 +356,9 @@ export function QuestMap({ leaving, onBack, onPlay, progress, unlockAll = false 
             const d = 5 * (c + 1) - 0.5 - cam;
             if (d < NEAR || d > FAR) return null;
             const p = proj(d);
-            return <line key={`c${c}`} x1={0} x2={W} y1={p.y} y2={p.y} stroke="#ffffff" strokeWidth={2 * p.s + 0.6} strokeDasharray={`${12 * p.s + 4} ${10 * p.s + 4}`} opacity={0.55} />;
+            const a = at(0, p.y);
+            const b = at(onX ? H : W, p.y);
+            return <line key={`c${c}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#ffffff" strokeWidth={2 * p.s + 0.6} strokeDasharray={`${12 * p.s + 4} ${10 * p.s + 4}`} opacity={0.55} />;
           })}
           {/* path dots */}
           {dots.map((d, i) => (
@@ -353,7 +384,7 @@ export function QuestMap({ leaving, onBack, onPlay, progress, unlockAll = false 
             <div
               key={`p${n}`}
               className="pointer-events-none absolute"
-              style={{ left: px(side * (1.12 + ((n * 7) % 3) * 0.12), p.s), top: p.y, transform: `translate(-50%,-50%) scale(${p.s})`, zIndex: Math.round(3000 - d * 100) - 50, opacity: Math.max(0, Math.min(1, (d - NEAR) / 0.6)) }}
+              style={{ ...(() => { const pt = at(px(side * (1.12 + ((n * 7) % 3) * 0.12), p.s), p.y); return { left: pt.x, top: pt.y }; })(), transform: `translate(-50%,-50%) scale(${p.s})`, zIndex: Math.round(3000 - d * 100) - 50, opacity: Math.max(0, Math.min(1, (d - NEAR) / 0.6)) }}
             >
               <BeachProp kind={kind} n={n} />
             </div>
@@ -368,7 +399,7 @@ export function QuestMap({ leaving, onBack, onPlay, progress, unlockAll = false 
           const xs = worldX(5 * (c + 1)) > 0 ? -1.6 : 1.6;
           const th = themeFor(st.theme, c + 1);
           return (
-            <div key={`s${c}`} className="pointer-events-none absolute" style={{ left: Math.max(64, Math.min(W - 64, px(xs, p.s))), top: p.y, transform: `translate(-50%,-100%) scale(${Math.max(p.s, 0.72)})`, transformOrigin: "50% 100%", zIndex: Math.round(3000 - d * 100), opacity: Math.max(0, Math.min(1, (d - NEAR) / 0.45)) }}>
+            <div key={`s${c}`} className="pointer-events-none absolute" style={{ left: Math.max(64, Math.min(W - 64, onX ? p.y : px(xs, p.s))), top: onX ? H * 0.26 : p.y, transform: `translate(-50%,-100%) scale(${Math.max(p.s, 0.72)})`, transformOrigin: "50% 100%", zIndex: Math.round(3000 - d * 100), opacity: Math.max(0, Math.min(1, (d - NEAR) / 0.45)) }}>
               <div className="flex flex-col items-center">
                 <div className="font-title rounded-xl border-[3px] border-[#5b3714] bg-gradient-to-b from-[#d39556] to-[#8a5526] px-3.5 py-1.5 text-center text-[17px] leading-tight text-[#fff3dc] shadow-[0_4px_0_#3d230b]" style={{ textShadow: "0 2px 0 #5b3714" }}>
                   PULAU {c + 2}
@@ -387,6 +418,8 @@ export function QuestMap({ leaving, onBack, onPlay, progress, unlockAll = false 
           const b = stages[n - 1];
           const d = n - 1 - cam;
           const p = proj(d);
+          const ps = p.s * PILLAR_K;
+          const pos = at(px(worldX(n), p.s), p.y);
           const state = stateFor(n);
           const k = Math.max(0, n - firstFinal);
           const kOut = Math.max(0, n - nStart);
@@ -399,9 +432,9 @@ export function QuestMap({ leaving, onBack, onPlay, progress, unlockAll = false 
             <Pillar
               key={n}
               b={b}
-              s={p.s}
-              x={px(worldX(n), p.s)}
-              y={p.y}
+              s={ps}
+              x={pos.x}
+              y={pos.y}
               z={Math.round(3000 - d * 100)}
               state={state}
               stars={starsAt(n)}
@@ -412,13 +445,13 @@ export function QuestMap({ leaving, onBack, onPlay, progress, unlockAll = false 
               splashKey={splash?.n === n ? splash.k : 0}
               anim={anim}
               tagSpace={(() => {
-                const cx = px(worldX(n), p.s);
-                const half = (pillarW(b.type) * p.s * PIL) / 2;
+                const cx = pos.x;
+                const half = (pillarW(b.type) * ps * PIL) / 2;
                 return Math.max(W - (cx + half), cx - half);
               })()}
               tagRight={(() => {
-                const cx = px(worldX(n), p.s);
-                const half = (pillarW(b.type) * p.s * PIL) / 2;
+                const cx = pos.x;
+                const half = (pillarW(b.type) * ps * PIL) / 2;
                 const right = W - (cx + half);
                 const left = cx - half;
                 // a boss head sits on the previous pillar → put this tag on the side away from it

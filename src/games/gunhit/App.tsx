@@ -2313,6 +2313,9 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
             leaving={mapLeaving}
             progress={{ stage: Math.max(1, Math.min(GUN_HIT_MAP_MAX_LEVEL, bestLevel)), stages: SGA_QUEST_STAGES }}
             unlockAll={allStagesOpen}
+            // Landscape runs the map left → right; portrait keeps the corridor
+            // climbing up the screen.
+            axis={menuLandscape ? 'x' : 'y'}
             onBack={closeLevelMap}
             onPlay={(_event, level) => beginStage(level)}
           /></Overlay>
