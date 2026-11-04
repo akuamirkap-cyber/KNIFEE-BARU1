@@ -16,8 +16,49 @@ export function initialGameplayWheelCenterY(boss = false, special = false) {
   return boss ? CY + 36 : CY;
 }
 
-export const GAMEPLAY_GUN_SCALE = 1.08; // -10% from 1.2x (1.2 * 0.9 = 1.08)
-export const GUN_Y = H - Math.round(185 * GAMEPLAY_GUN_SCALE); // muzzle tip raised so +20% gun never clips bottom
+/**
+ * The weapon package: 20% smaller than the 1.08x rig that was tuned before it.
+ */
+export const GUN_PACKAGE_SCALE = 0.8;
+
+/**
+ * The board-side packages — the wheel it shoots at (rim gems, coins and
+ * everything buried in it), the boss head, the Diamond Breaker rock and the
+ * treasure chest — are 10% smaller, not 20% (corrected request).
+ *
+ * The board's radius is the single knob behind all four: gems, coins, knives
+ * and the boss' artwork are radius-derived, so they shrink together instead of
+ * drifting apart piece by piece.
+ */
+export const BOARD_PACKAGE_SCALE = 0.9;
+
+/** The weapon rig itself. */
+export const GAMEPLAY_GUN_SCALE = 1.08 * GUN_PACKAGE_SCALE; // 0.864
+
+/** The ordinary wheel's radius, kept here so the muzzle gap stays measurable. */
+const WHEEL_RADIUS = 106;
+/** Muzzle Y the 1.08x rig used: the gap it left is the one that grows. */
+const PREVIOUS_GUN_Y = H - Math.round(185 * 1.08); // 560
+
+/**
+ * The weapon also stands 20% farther from whatever it shoots at.
+ *
+ * The gap is muzzle tip -> nearest rim, so shrinking the board on its own would
+ * already open it a little; growing it by a fifth on top is what the request
+ * asks for. `GUN_Y` is solved from that gap instead of an art-extent rule, then
+ * held above the arm's own reach (muzzle 600 + arm 160 = 760) so the shorter
+ * rig is never cut off by the bottom edge.
+ */
+export const GUN_GAP_GROWTH = 1.2;
+/** How far this rig's arm reaches below its muzzle (`185 * scale`). */
+const RIG_FOOT = Math.round(185 * GAMEPLAY_GUN_SCALE); // 160
+export const GUN_Y = Math.min(
+  // The bottom of the screen wins: a muzzle lower than this would cut the grip
+  // off, so the gap keeps 1.19x instead of a clipped 1.2x.
+  H - RIG_FOOT,
+  CY + Math.round(WHEEL_RADIUS * BOARD_PACKAGE_SCALE)
+    + Math.round((PREVIOUS_GUN_Y - (CY + WHEEL_RADIUS)) * GUN_GAP_GROWTH),
+); // 600
 /**
  * How far the landscape presentation lifts the weapon rig in world space.
  *

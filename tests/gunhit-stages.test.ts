@@ -26,9 +26,13 @@ test('boss cycles contain three normal stages, one random special, then the boss
     // carries a half-size one so shots must be saved (requested challenge).
     assert.equal(level.ammo, level.mode === 'boulder' ? 6 : 12);
   }
-  assert.equal(makeLevel(4, 'boulder').radius, 166);
-  assert.equal(makeLevel(4, 'bonus').radius, 166);
-  assert.equal(makeLevel(4, 'treasure').radius, 106);
+  // The board-side packages (wheel, rock, boss head, chest) draw 10% smaller
+  // than the reference board, so the radii are 0.9 of 166 / 106 / 122.
+  assert.equal(makeLevel(4, 'boulder').radius, 149);
+  assert.equal(makeLevel(4, 'bonus').radius, 149);
+  assert.equal(makeLevel(4, 'treasure').radius, 95);
+  assert.equal(makeLevel(1).radius, 95);
+  assert.equal(makeLevel(5).radius, 110, 'the boss head is 0.9 of 122');
 });
 
 test('pre-placed rusty bullet obstacles on the stage board are enlarged 2x', () => {

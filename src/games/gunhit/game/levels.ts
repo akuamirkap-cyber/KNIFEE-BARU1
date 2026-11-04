@@ -4,11 +4,16 @@
  * engine — so the menu can build a stage config (and the "GO!!" banner) without
  * loading the whole game.
  */
+import { BOARD_PACKAGE_SCALE } from './layout';
 import { bossDef } from './bossCatalog';
 import { bossNameFor, bossStyleFor } from './bossIdentity';
 import type { Style } from './faces';
 
-export const ROCK_RADIUS = 166; // ~80% of the 420px screen, as on Diamond Breaker's 480px screen.
+/**
+ * The Diamond Breaker rock: ~80% of the screen, as on Diamond Breaker's 480px
+ * screen, then 10% smaller like every other board-side package.
+ */
+export const ROCK_RADIUS = Math.round(166 * BOARD_PACKAGE_SCALE); // 149
 
 export type SpecialMode = 'bonus' | 'treasure';
 export type LevelMode = 'classic' | 'boulder' | 'double' | SpecialMode;
@@ -74,7 +79,13 @@ export function makeLevel(n: number, forcedMode?: LevelMode): LevelCfg {
     // Diamond Breaker is the tight, fast challenge: a half-size magazine
     // forces saved shots while its rock spins up (BOULDER_SPIN_MULT in Game).
     n, boss, ammo: mode === 'boulder' ? 6 : isSpecial(mode) ? 12 : ammo, base, pattern, dir: Math.random() < 0.5 ? 1 : -1,
-    radius: boss ? 122 : mode === 'boulder' || mode === 'bonus' ? ROCK_RADIUS : 106, style,
+    // The board itself is the "wheel package": its rim, its gems and every round
+    // buried in it are radius-derived, so one scaled radius shrinks them all
+    // — 10% smaller, while the weapon above keeps its own 20%.
+    radius: boss ? Math.round(122 * BOARD_PACKAGE_SCALE) // 110
+      : mode === 'boulder' || mode === 'bonus' ? ROCK_RADIUS // 149
+      : Math.round(106 * BOARD_PACKAGE_SCALE), // 95
+    style,
     name: boss
       ? bossName
       // the HUD prints the level name as-is for non-boss stages

@@ -182,6 +182,7 @@ import {
   BASE_WHEEL_CY,
   CX,
   CY,
+  BOARD_PACKAGE_SCALE,
   GAMEPLAY_GUN_SCALE,
   GUN_Y,
   LAND_GUN_LIFT,
@@ -190,7 +191,7 @@ import {
   W,
   initialGameplayWheelCenterY,
 } from './layout';
-export { BASE_WHEEL_CY, CY, GAMEPLAY_GUN_SCALE, GUN_Y, H, SPECIAL_CY, W, initialGameplayWheelCenterY };
+export { BASE_WHEEL_CY, BOARD_PACKAGE_SCALE, CY, GAMEPLAY_GUN_SCALE, GUN_Y, H, SPECIAL_CY, W, initialGameplayWheelCenterY };
 import { displaySize, displayToWorld, worldTransform } from './layout';
 import {
   getSavedSgaOrientation,
@@ -1474,6 +1475,20 @@ export type TreasureBuff = 'rapid' | 'double' | 'mini' | 'giant';
 export type BuffKind = 'speed' | 'ammo' | 'power' | TreasureBuff;
 
 const STAGE_SECONDS: Record<'boulder' | SpecialMode, number> = { boulder: 65, bonus: 45, treasure: 10 };
+
+/**
+ * The treasure chest, as the box the rounds are tested against.
+ *
+ * The chest is baked at one sprite size, so it shrinks by painting it through
+ * `BOARD_PACKAGE_SCALE` — and the hit box has to take the same 10% or rounds
+ * would stop in the air beside it. Values are the world-space half width, the
+ * height of the open lid and the foot of the chest, measured before the shrink.
+ */
+const CHEST_HALF_W = Math.round(97 * BOARD_PACKAGE_SCALE); // 87
+const CHEST_TOP = Math.round(90 * BOARD_PACKAGE_SCALE); // 81
+const CHEST_BOTTOM = Math.round(88 * BOARD_PACKAGE_SCALE); // 79
+/** Where the chest sprite sits below the board centre (`translate(0, 15)`). */
+const CHEST_LIFT = 15 * BOARD_PACKAGE_SCALE; // 13.5
 /** Diamond Breaker: how many shots the core diamond takes before it is won. */
 const BOULDER_DIAMOND_HITS = 4;
 /** Diamond Breaker's rock spins this much faster than an ordinary wheel. */
@@ -2362,7 +2377,7 @@ export class Game {
 
   /** Centre of the target's lower edge, accounting for the imported ghost's tip. */
   private ghostAimY(tip = 0): number {
-    const radius = this.level.mode === 'treasure' ? 88
+    const radius = this.level.mode === 'treasure' ? Math.round(88 * BOARD_PACKAGE_SCALE)
       : this.bossRadiusAt(norm(Math.PI / 2 - this.rot));
     return this.targetY + radius + (isSpecial(this.level.mode) ? 0 : tip);
   }
@@ -6746,7 +6761,8 @@ export class Game {
     const ty = this.targetY;
     if (mode === 'treasure') {
       // Same open, coin-filled chest as the 10-second Diamond Breaker round.
-      if (!this.chest || Math.abs(p.x - CX) > 97 || p.y < ty - 90 || p.y > ty + 88) return { res: 'none' };
+      if (!this.chest || Math.abs(p.x - CX) > CHEST_HALF_W
+        || p.y < ty + CHEST_LIFT - CHEST_TOP || p.y > ty + CHEST_LIFT + CHEST_BOTTOM) return { res: 'none' };
       const power = Math.max(1, this.weapon.stats.power + (p.big ?? 0) * 2);
       this.chest.hit(power);
       const reward = Math.max(1, Math.round(power * 0.48 + rand(0, 1))) * (this.treasureBuff === 'giant' ? 2 : 1);
@@ -6759,7 +6775,7 @@ export class Game {
       this.treasureCoins.push(...throwTreasureCoins(gold.x, gold.y, reward, Math.random, this.showerScreen));
       // Embedded rounds move with the rattling chest, not with the screen.
       const len = this.weapon.stick + EMBED;
-      const embedded = this.makeEmbeddedShot(p, p.x - CX, 68 - len * 0.5, Math.PI / 2);
+      const embedded = this.makeEmbeddedShot(p, (p.x - CX) / BOARD_PACKAGE_SCALE, 68 - len * 0.5, Math.PI / 2);
       // A new hit in the same spot knocks the previous round loose instead of
       // stacking dozens of identical sprites into one blinding column.
       for (let i = this.chestBullets.length - 1; i >= 0; i--) {
@@ -6900,7 +6916,7 @@ export class Game {
   private dislodgeChestShot(shot: EmbeddedShot) {
     const side = shot.x < 0 ? -1 : 1;
     this.flyers.push({
-      x: CX + shot.x, y: this.targetY + 15 + shot.y + BLEN / 2,
+      x: CX + shot.x * BOARD_PACKAGE_SCALE, y: this.targetY + CHEST_LIFT + shot.y * BOARD_PACKAGE_SCALE + BLEN / 2,
       vx: side * rand(100, 240), vy: rand(-160, 50), rot: 0, vr: side * rand(7, 14),
       kind: 'bullet', w: shot.w, hue: shot.hue, busterPellet: shot.busterPellet, scale: shot.scale,
     });
@@ -10131,7 +10147,11 @@ export class Game {
         if (this.bonusCoins?.length) this.drawBonusRing(c, R);
       } else if (this.chest) {
         c.save();
-        c.translate(0, 15);
+        // 10% smaller like every other board-side package: the sprites are baked
+        // at one size, so the painting is scaled about the board centre and the
+        // hit box above shrinks with it.
+        c.translate(0, CHEST_LIFT);
+        c.scale(BOARD_PACKAGE_SCALE, BOARD_PACKAGE_SCALE);
         this.chest.draw(c, this.time, cc => {
           for (const shot of this.chestBullets) this.drawEmbeddedShot(cc, shot, shot.x, shot.y,
             (getWeapon(shot.w).stick + EMBED) * 0.5);

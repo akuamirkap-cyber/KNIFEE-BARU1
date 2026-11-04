@@ -47,7 +47,7 @@ type Live = any;
 const near = (a: number, b: number) => Math.abs(a - b) < 1e-7;
 
 test('gameplay weapon rises from below and settles without changing its resting size or muzzle', () => {
-  assert.equal(GAMEPLAY_GUN_SCALE, 1.08);
+  assert.equal(GAMEPLAY_GUN_SCALE, 1.08 * 0.8, 'the rig is 20% smaller than the tuned 1.08x');
   assert.equal(gameplayGunEntryOffset(0), GAMEPLAY_GUN_ENTRY_DISTANCE);
   const offsets = [0, 0.2, 0.4, 0.6, GAMEPLAY_GUN_ENTRY_DURATION].map(gameplayGunEntryOffset);
   assert.ok(offsets.every((offset, i) => i === 0 || offset < offsets[i - 1]), 'the motion rises steadily');

@@ -50,7 +50,7 @@ test('HUD boss indicator uses a 5-point star instead of a rotated square (wajik)
   assert.ok(!hudSlice.includes('c.rect(-6, -6, 12, 12)'), 'old wajik rotated rect is removed from drawHUD');
 });
 
-test('Gameplay & menu weapons are scaled -10% (1.08x / 337x295) and wheel position is 28% higher up', async () => {
+test('The weapon draws 20% smaller (0.864x) and the wheel position is 28% higher up', async () => {
   const {
     BASE_WHEEL_CY,
     CY,
@@ -66,8 +66,12 @@ test('Gameplay & menu weapons are scaled -10% (1.08x / 337x295) and wheel positi
   assert.equal(CY, 184);
   assert.equal(SPECIAL_CY, CY, 'bonus/special stage wheel sits at the exact same Y (184) as normal wheel');
 
-  assert.equal(GAMEPLAY_GUN_SCALE, 1.08, 'gameplay weapon scale is -10% from 1.2x (1.08x)');
-  assert.equal(GUN_Y, H - Math.round(185 * 1.08), 'muzzle Y matches 1.08x weapon height cleanly');
+  // Requested: the weapon 20% smaller than the tuned 1.08x rig, standing 20%
+  // farther from a board that is itself 10% smaller (rim 279, gap 270 -> 321).
+  assert.ok(Math.abs(GAMEPLAY_GUN_SCALE - 0.864) < 1e-9, 'the weapon draws at 0.864x');
+  assert.equal(GUN_Y, 600, 'muzzle Y grows the muzzle-to-rim gap by a fifth');
+  const rim = CY + Math.round(106 * 0.9); // 279
+  assert.equal(Math.round((GUN_Y - rim) / (560 - (CY + 106)) * 100), 119, 'the gap is ~1.2x');
 
   const scales: [number, number][] = [];
   const gradient = { addColorStop: () => undefined };
@@ -121,20 +125,20 @@ test('Gameplay & menu weapons are scaled -10% (1.08x / 337x295) and wheel positi
     scales.length = 0;
     internal.render();
     assert.ok(
-      scales.some(([sx, sy]) => Math.abs(sx - 1.08) < 1e-6 && Math.abs(sy - 1.08) < 1e-6),
-      'single gameplay weapon renders with 1.08x scale',
+      scales.some(([sx, sy]) => Math.abs(sx - GAMEPLAY_GUN_SCALE) < 1e-6 && Math.abs(sy - GAMEPLAY_GUN_SCALE) < 1e-6),
+      'single gameplay weapon renders at the (0.864x) package scale',
     );
 
     scales.length = 0;
     internal.twinGuns = true;
     internal.render();
     assert.ok(
-      scales.some(([sx, sy]) => Math.abs(sx + 1.08) < 1e-6 && Math.abs(sy - 1.08) < 1e-6),
-      'mirrored left twin gun renders with (-1.08, 1.08) scale',
+      scales.some(([sx, sy]) => Math.abs(sx + GAMEPLAY_GUN_SCALE) < 1e-6 && Math.abs(sy - GAMEPLAY_GUN_SCALE) < 1e-6),
+      'mirrored left twin gun renders with (-scale, scale)',
     );
     assert.ok(
-      scales.some(([sx, sy]) => Math.abs(sx - 1.08) < 1e-6 && Math.abs(sy - 1.08) < 1e-6),
-      'right twin gun renders with (1.08, 1.08) scale',
+      scales.some(([sx, sy]) => Math.abs(sx - GAMEPLAY_GUN_SCALE) < 1e-6 && Math.abs(sy - GAMEPLAY_GUN_SCALE) < 1e-6),
+      'right twin gun renders with (scale, scale)',
     );
   } finally {
     game.destroy();

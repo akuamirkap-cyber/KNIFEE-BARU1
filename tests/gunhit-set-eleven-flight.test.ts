@@ -49,6 +49,9 @@ const { Game } = await import('../src/games/gunhit/game/Game.ts');
 const variants = await import('../src/games/gunhit/game/art/gunVariants.ts');
 const { SET_ELEVEN_IDS, SLIDE1_ID_FOR_ELEVEN, elevenWeapon } = await import('../src/games/gunhit/game/setElevenArt.ts');
 const { getWeapon } = await import('../src/games/gunhit/game/weapons.ts');
+const { CY, GUN_Y } = await import('../src/games/gunhit/game/layout.ts');
+/** How long a flat 380 px/s flight would need to reach the rim of an ordinary board. */
+const FLAT_FLIGHT = (GUN_Y - (CY + 85)) / 380;
 const { setElevenMuted } = await import('../src/games/gunhit/game/setElevenFx.ts');
 const { sfx } = await import('../src/games/gunhit/game/audio.ts');
 setElevenMuted(true);
@@ -187,7 +190,8 @@ test('a carried Slide 7 round flies slide 7’s own flight: the singularity spee
     assert.ok(Math.abs(p.vy) > 560, `and speeds up at 2200 px/s² (${p.vy})`);
     play(game, log, 0.5);
     assert.equal(log.sticks.length, 1);
-    assert.ok(log.sticks[0] < 0.35, `it lands when slide 7’s does (${log.sticks[0].toFixed(3)} s), not at a constant 380 px/s`);
+    assert.ok(log.sticks[0] < FLAT_FLIGHT * 0.6,
+      `it lands when slide 7’s does (${log.sticks[0].toFixed(3)} s), not at a constant ${FLAT_FLIGHT.toFixed(2)} s`);
     assert.ok(Math.abs(log.sticks[0] - log.hits[0].t) < 1e-9, 'slide 1’s knife sticks on slide 7’s own hit');
   });
 });

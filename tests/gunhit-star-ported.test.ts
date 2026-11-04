@@ -95,9 +95,12 @@ test('the double card really fires the second barrel of every imported layer', (
     const twin = newGame(weapon, effect, { twin: true });
     twin.shoot();
     assert.equal(twin.projs.length, oneBarrel * 2, `${weapon}:${effect} must fire from both barrels`);
+    // The muzzle the round left from, not where a homing round has already
+    // drifted: the firework's rockets steer toward the board on the very first
+    // frame, so their live `x` depends on the board's size.
     assert.deepEqual(
-      twin.projs.map((p: AnyGame) => Math.round(p.x)).sort((a: number, b: number) => a - b),
-      weapon === 'firework' ? [195, 225] : [180, 240],
+      twin.projs.map((p: AnyGame) => Math.round(p.originX)).sort((a: number, b: number) => a - b),
+      [180, 240],
       `${weapon}:${effect} keeps one round per barrel`,
     );
 
