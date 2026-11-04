@@ -236,12 +236,17 @@ test('every real boss round stops on the blue line the player sees', async () =>
   }
 });
 
-test('the only hitbox marker in a boss fight is the blue outline itself', () => {
+test('a boss fight shows no hitbox marker at all — the artwork is the target', () => {
   const game = read('src/games/gunhit/game/Game.ts');
-  // Play path: no debug overlay, no legend, no fill, no old circle.
+  // Play path: no debug overlay, no legend, no fill, no old circle, and the blue
+  // contour is gone from the boss display too (player request). Only `?hitbox=1`
+  // may paint geometry.
   assert.doesNotMatch(game, /drawHitboxLegend/);
   assert.ok(!game.includes('HITBOX = BENTUK GAMBAR'));
-  assert.match(game, /if \(this\.hitboxFlag\) this\.drawHitboxDebug\(c\);\n\s*else this\.drawBossSilhouette\(c\);/);
+  assert.match(game, /if \(this\.hitboxFlag\) this\.drawHitboxDebug\(c\);\n\s*c\.restore\(\);/,
+    'di play tidak ada garis biru: hanya overlay debug ?hitbox=1');
+  assert.ok(!/else this\.drawBossSilhouette\(c\);/.test(game), 'garis biru tidak dipanggil dari render');
+  // The line still exists for inspection, and hit testing still reads it.
   assert.ok(game.includes('private drawBossSilhouette('));
   assert.match(game, /c\.strokeStyle = 'rgba\(56,189,248,0\.95\)';/);
   // `?hitbox=1` is the only way into the inspection overlay.

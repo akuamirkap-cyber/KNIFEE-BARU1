@@ -88,7 +88,13 @@ import { WEAPONS, getWeapon, type Weapon, type WeaponId, type ProjKind } from '.
 import { drawStar, drawRockFragment } from './art/boulder';
 import { DiamondRock, drawRockDiamond, type BrokenRockCell } from './art/diamondRock';
 import { drawBonusCoin, TreasureChest } from './art/bonusArt';
-import { advanceTreasureCoins, throwTreasureCoins, type TreasureCoin } from './treasureShower';
+import {
+  advanceTreasureCoins,
+  throwTreasureCoins,
+  SHOWER_LANDSCAPE,
+  SHOWER_PORTRAIT,
+  type TreasureCoin,
+} from './treasureShower';
 import { drawBreakerCoin } from '../../shared/coinArt';
 import { drawBreakerDiamond } from '../../shared/diamondArt';
 import { bossDef, type BossAttackFamily, type BossHead } from './bossCatalog';
@@ -3594,6 +3600,16 @@ export class Game {
   }
 
   private drawBossSilhouette(c: CanvasRenderingContext2D) {
+    /**
+     * A treasure chest is not a boss head.
+     *
+     * On a boss the blue line is the hitbox the player aims at — the round stops
+     * exactly there. A chest is hit as a box, so the same line is only geometry
+     * leaking onto the screen: on the opened kado it reads as a stray blue
+     * outline hanging beside the loot. Keep the line for the bosses that need
+     * it, and leave the treasure stage clean.
+     */
+    if (this.level.mode === 'treasure') return;
     const mask = this.ensureArtMask();
     const surface = this.maskSolidEdge ?? this.maskSurface;
     if (!mask || !surface) return;
@@ -6457,6 +6473,26 @@ export class Game {
     return this.orientation === 'landscape';
   }
 
+  /**
+   * Screen space for effects that have to respect *gravity on the screen* —
+   * the treasure shower — rather than the world the engine simulates in.
+   * Screen x is right, screen y is down; portrait and world are the same thing,
+   * landscape swaps them (`layout.ts`).
+   */
+  private get showerScreen() {
+    return this.debrisFallsAlongX ? SHOWER_LANDSCAPE : SHOWER_PORTRAIT;
+  }
+
+  /** Screen (right, down) → world, for a piece of a screen-space effect. */
+  private screenToWorld(sx: number, sy: number): { x: number; y: number } {
+    return this.debrisFallsAlongX ? { x: sy, y: H - sx } : { x: sx, y: sy };
+  }
+
+  /** World → screen (right, down); the inverse of `screenToWorld`. */
+  private worldToScreen(x: number, y: number): { x: number; y: number } {
+    return this.debrisFallsAlongX ? { x: H - y, y: x } : { x, y };
+  }
+
   /** Has a falling piece reached the floor the player can see? `m` may be negative for a lip. */
   private pastDebrisFloor(x: number, y: number, m: number): boolean {
     return this.debrisFallsAlongX ? x > W + m : y > H + m;
@@ -6716,7 +6752,11 @@ export class Game {
       const reward = Math.max(1, Math.round(power * 0.48 + rand(0, 1))) * (this.treasureBuff === 'giant' ? 2 : 1);
       // The reward is not credited on impact: it physically erupts from the
       // chest, bounces on the floor, then reaches the counter in small steps.
-      this.treasureCoins.push(...throwTreasureCoins(p.x, ty, reward));
+      // The shower is simulated on the *screen* (see `treasureShower`), so the
+      // hit point goes in as screen coordinates: gold then always leaps up the
+      // screen and drops to its floor, in landscape just as in portrait.
+      const gold = this.worldToScreen(p.x, ty);
+      this.treasureCoins.push(...throwTreasureCoins(gold.x, gold.y, reward, Math.random, this.showerScreen));
       // Embedded rounds move with the rattling chest, not with the screen.
       const len = this.weapon.stick + EMBED;
       const embedded = this.makeEmbeddedShot(p, p.x - CX, 68 - len * 0.5, Math.PI / 2);
@@ -7349,7 +7389,12 @@ export class Game {
   private updateTreasureShower(dt: number) {
     this.coinPulse = Math.max(0, this.coinPulse - dt * 5);
     if (!this.treasureCoins.length) return;
-    const landed = advanceTreasureCoins(this.treasureCoins, dt, (x, y) => this.burstSpecial(x, y, 'gold', 3));
+    const landed = advanceTreasureCoins(
+      this.treasureCoins,
+      dt,
+      (sx, sy) => { const at = this.screenToWorld(sx, sy); this.burstSpecial(at.x, at.y, 'gold', 3); },
+      this.showerScreen,
+    );
     if (landed > 0) {
       this.coins += landed;
       this.score += landed * 25;
@@ -10256,8 +10301,11 @@ export class Game {
         const decor = this.bossDecorMatrix();
         c.transform(decor.a, decor.b, decor.c, decor.d, decor.e, decor.f);
         if (this.level.mode !== 'treasure') c.rotate(this.rot);
+        // The blue contour is inspection geometry, not artwork: the player asked
+        // for it to be hidden from the boss display, so the game itself no longer
+        // paints it. `?hitbox=1` still swaps in the full developer overlay, and
+        // the hit test is untouched — it reads the same mask bytes either way.
         if (this.hitboxFlag) this.drawHitboxDebug(c);
-        else this.drawBossSilhouette(c);
         c.restore();
       }
       if (s7w) {
@@ -10629,7 +10677,9 @@ export class Game {
     for (const coin of this.treasureCoins) {
       if (coin.delay > 0) continue;
       const scale = coin.state === 'collect' ? 1 - 0.45 * coin.collectT / coin.collectDuration : 1;
-      drawBonusCoin(c, coin.x, coin.y, coin.r * scale, this.time, coin.phase, true);
+      // Stored on the screen, drawn in the world (see `treasureShower`).
+      const at = this.screenToWorld(coin.x, coin.y);
+      drawBonusCoin(c, at.x, at.y, coin.r * scale, this.time, coin.phase, true);
     }
 
     withSplinterClip(c, () => this.drawSplinters(c));
