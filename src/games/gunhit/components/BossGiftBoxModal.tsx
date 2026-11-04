@@ -26,6 +26,8 @@ import {
 import { drawGunCentered } from '../game/art/drawCentered';
 import { getGunMetrics } from '../game/art/metrics';
 import { getSavedSgaSpeed } from '../game/gameSpeed';
+import { isLandscape } from '../game/orientation';
+import { useSgaOrientation } from '../utils/useSgaOrientation';
 import CoinSprite from '../../shared/CoinSprite';
 
 type BoxState = 'drop' | 'ready' | 'charging' | 'open';
@@ -162,6 +164,14 @@ export function GiftBoxScene({
 }: GiftBoxSceneProps) {
   const [language] = useLanguage();
   const active = useSlideActive();
+  // Landscape has the width for two columns — the box on the left, the reward on
+  // the right — instead of a portrait stack that runs off the bottom edge.
+  const [orientation] = useSgaOrientation();
+  const landscape = isLandscape(orientation);
+  const stageColumn = landscape ? { left: 0, width: '46%' } : { left: 0, right: 0 };
+  const boxSpot = landscape
+    ? { left: '23%', top: '58%', transform: 'translate(-50%, -50%) scale(1.18)' }
+    : { left: '50%', top: 300, transform: 'translateX(-50%)' };
   const wrapRef = useRef<HTMLDivElement>(null);
   const punchRef = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<BoxState>('drop');
@@ -236,18 +246,18 @@ export function GiftBoxScene({
       <div className={`absolute inset-0 transition-colors duration-700 ${isOpen ? 'bg-black/20' : 'bg-black/45'}`} />
 
       {/* Judul */}
-      <div className="absolute inset-x-0 top-4 text-center">
+      <div className="absolute top-4 text-center" style={stageColumn}>
         <span className="inline-block rounded-full bg-amber-400 px-3 py-0.5 text-[10px] font-black tracking-widest text-black shadow-md">
           {badge}
         </span>
       </div>
-      <div className="absolute inset-x-0 top-[72px] text-center">
+      <div className="absolute text-center" style={{ ...stageColumn, top: landscape ? 44 : 72 }}>
         {!showInfo ? (
           <div className={`transition-all duration-300 ${isOpen ? 'scale-75 opacity-0' : ''}`}>
-            <h2 className="text-[30px] font-black leading-none text-amber-300 drop-shadow-[0_3px_0_#9a5b00]">
+            <h2 className={`${landscape ? 'text-[22px]' : 'text-[30px]'} font-black leading-none text-amber-300 drop-shadow-[0_3px_0_#9a5b00]`}>
               <LetterPop text={headline} delay={0.2} />
             </h2>
-            <p className="fade-up mt-2 text-base text-white/80" style={{ animationDelay: '.8s' }}>
+            <p className={`fade-up mt-2 ${landscape ? 'text-sm' : 'text-base'} text-white/80`} style={{ animationDelay: '.8s' }}>
               {hint}
             </p>
           </div>
@@ -296,7 +306,7 @@ export function GiftBoxScene({
 
       {/* Ledakan efek saat kotak terbuka — sama dengan slide Knife */}
       {isOpen && (
-        <div className="absolute left-1/2 top-[300px] h-0 w-0">
+        <div className="absolute h-0 w-0" style={boxSpot}>
           <GodRays size={620} intensity={1.1} color={rayColor} />
           <Shockwave size={500} color={`rgba(${rayColor},.9)`} />
           <Shockwave size={360} delay={0.15} />
@@ -308,17 +318,22 @@ export function GiftBoxScene({
       )}
 
       {(taps >= 2 || charging) && !isOpen && (
-        <div className="absolute left-1/2 top-[345px] h-0 w-0 transition-opacity" style={{ opacity: charging ? 0.9 : 0.45 }}>
+        <div className="absolute h-0 w-0 transition-opacity" style={{ ...boxSpot, top: landscape ? '58%' : 345, opacity: charging ? 0.9 : 0.45 }}>
           <GodRays size={charging ? 420 : 280} intensity={charging ? 1 : 0.6} color={rayColor} core={false} />
         </div>
       )}
 
       {/* Kotak hadiah */}
-      <div className="absolute left-1/2 top-[300px] w-[200px] -translate-x-1/2">
+      <div className="absolute w-[200px]" style={boxSpot}>
         {isOpen && <div className="beam-up pointer-events-none absolute bottom-[110px] left-1/2 h-[520px] w-[150px] bg-gradient-to-t from-white via-amber-100/60 to-transparent blur-md" />}
 
         {isOpen && (
-          <div className="absolute left-1/2 top-[-62px] z-20 h-[240px] w-[336px] -translate-x-1/2">
+          <div
+            className="absolute left-1/2 z-20 h-[240px] w-[336px] -translate-x-1/2"
+            // Landscape stacks the reward title above this art, so the weapon
+            // rises from the box top instead of climbing into the headline.
+            style={{ top: landscape ? 104 : -62 }}
+          >
             <div className="weapon-rise h-full w-full">
               <div className={`float relative flex h-full w-full items-center justify-center ${showInfo ? 'reveal-pop' : ''}`}>
                 {weapon ? (
@@ -384,7 +399,7 @@ export function GiftBoxScene({
       </div>
 
       {taps > 0 && !isOpen && (
-        <div key={`t${taps}`} className="pointer-events-none absolute left-1/2 top-[380px] h-0 w-0">
+        <div key={`t${taps}`} className="pointer-events-none absolute h-0 w-0" style={{ ...boxSpot, top: landscape ? '62%' : 380 }}>
           <Burst count={7 + taps * 3} distance={100 + taps * 25} shape="star" size={11} />
         </div>
       )}
@@ -392,7 +407,10 @@ export function GiftBoxScene({
       {isOpen && <div className="flash pointer-events-none absolute inset-0 bg-white" />}
 
       {/* Info hadiah + aksi */}
-      <div className={`absolute inset-x-0 ${showInfo ? 'top-[390px]' : 'bottom-[36px]'} flex flex-col items-center gap-2 px-6`}>
+      <div
+        className={`absolute flex flex-col items-center gap-2 px-6 ${landscape ? '' : showInfo ? 'inset-x-0 top-[390px]' : 'inset-x-0 bottom-[36px]'}`}
+        style={landscape ? { left: '48%', right: '4%', top: '50%', transform: 'translateY(-50%)' } : undefined}
+      >
         {state === 'ready' && (
           <>
             <div className="flex gap-2.5">

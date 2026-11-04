@@ -68,7 +68,9 @@ test('landscape gun pose', () => {
   // The aim assist keeps the barrel inside the target face, so a wide swing
   // still lands: the angle is clamped to the wheel's width, not to 36 degrees.
   const R = game.level.radius;
-  const travel = Math.max(40, (560 - 6) - (game.targetY + R));
+  // The muzzle moved up in landscape so the grip clears the screen edge: read it
+  // from the engine instead of pinning the portrait constant.
+  const travel = Math.max(40, (game.gunBaseY - 6) - (game.targetY + R));
   const limit = Math.atan2(R * 0.9, travel);
   game.aimPointer = { x: 1200, y: 400 };
   for (let i = 0; i < 90; i++) game.update(1 / 60);
@@ -136,7 +138,9 @@ test('the aim assist keeps every shot on the target, whatever the slide', () => 
   const R = game.level.radius;
   const CX = 210;
   const face = R * 0.9;
-  const travel = Math.max(40, (560 - 6) - (game.targetY + R));
+  // The landscape muzzle sits higher so the grip clears the screen edge: read
+  // it from the engine instead of pinning the portrait constant.
+  const travel = Math.max(40, (game.gunBaseY - 6) - (game.targetY + R));
   let checked = 0;
   for (const slide of [-150, -90, 0, 90, 150]) {
     for (const pointerY of [0, 60, 210, 360, 420]) {

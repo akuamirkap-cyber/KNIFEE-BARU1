@@ -18,6 +18,15 @@ export function initialGameplayWheelCenterY(boss = false, special = false) {
 
 export const GAMEPLAY_GUN_SCALE = 1.08; // -10% from 1.2x (1.2 * 0.9 = 1.08)
 export const GUN_Y = H - Math.round(185 * GAMEPLAY_GUN_SCALE); // muzzle tip raised so +20% gun never clips bottom
+/**
+ * How far the landscape presentation lifts the weapon rig in world space.
+ *
+ * Landscape turns the world on its side, so world Y becomes screen X and the
+ * gun's grip would otherwise sit flush against — and slightly past — the left
+ * edge of the screen. Lifting the rig by this many world units moves it right
+ * on screen without changing the weapon, its scale or its firing lane.
+ */
+export const LAND_GUN_LIFT = 30;
 
 /**
  * Landscape presentation.

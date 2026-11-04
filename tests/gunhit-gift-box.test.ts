@@ -120,9 +120,16 @@ test('GiftBoxScene memakai adegan buka kado Knife untuk kado mana pun', () => {
 
 test('reward details sit close below the fixed weapon reveal position', () => {
   const modal = readFileSync(path.join(ROOT, 'src/games/gunhit/components/BossGiftBoxModal.tsx'), 'utf8');
-  assert.ok(modal.includes('absolute left-1/2 top-[300px] w-[200px]'));
-  assert.ok(modal.includes("showInfo ? 'top-[390px]' : 'bottom-[36px]'"));
+  // Portrait keeps the original stack (box at 300, details under it).
+  assert.ok(modal.includes("{ left: '50%', top: 300, transform: 'translateX(-50%)' }"));
+  assert.ok(modal.includes("showInfo ? 'inset-x-0 top-[390px]' : 'inset-x-0 bottom-[36px]'"));
   assert.ok(modal.includes('max-w-[300px] px-4 py-2 text-[18px]'));
+  // Landscape has no 390px to spare: the box takes the left column and the
+  // details (with both buttons) move into a right-hand column instead of
+  // running off the bottom edge.
+  assert.ok(modal.includes("{ left: '48%', right: '4%', top: '50%', transform: 'translateY(-50%)' }"));
+  assert.ok(modal.includes("useSgaOrientation"));
+  assert.ok(modal.includes('isLandscape(orientation)'));
 });
 
 test('stage-clear sunburst stays pinned behind the board pivot without a front DOM overlay or completion label', () => {

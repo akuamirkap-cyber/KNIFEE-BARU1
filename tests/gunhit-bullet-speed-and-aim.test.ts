@@ -139,20 +139,20 @@ test('settings expose a 1x-3x bullet speed slider for all weapons', () => {
   assert.match(app, /onBulletSpeed=\{setBulletSpeed\}/);
 });
 
-test('landscape menu weapon lifts with W/S and swivels towards the pointer', () => {
+test('landscape menu weapon only lifts with W/S — the aiming angle belongs to the run', () => {
   const app = readFileSync('src/games/gunhit/App.tsx', 'utf8');
   assert.match(app, /const gunAimRef = useRef<HTMLDivElement>\(null\);/);
-  assert.match(app, /const gunTiltRef = useRef<HTMLDivElement>\(null\);/);
   assert.match(app, /if \(!menuLandscape \|\| !menuSceneOpen\) return;/);
   assert.match(app, /event\.code === 'KeyW'/);
   assert.match(app, /event\.code === 'KeyS'/);
   assert.match(app, /const dir = \(aim\.up \? 1 : 0\) - \(aim\.down \? 1 : 0\); \/\/ W lifts, S lowers/);
   assert.match(app, /const LIFT_MAX = 92;/);
-  // Mouse heading: angle taken from the pointer against the grip, clamped.
-  assert.match(app, /const raw = \(Math\.atan2\(dx, Math\.max\(up, 12\)\) \* 180\) \/ Math\.PI;/);
-  assert.match(app, /const ANGLE_MAX = 46;/);
   assert.match(app, /rig\.style\.transform = `translate3d\(0, \$\{\(-aim\.lift\)\.toFixed\(2\)\}px, 0\)`/);
-  assert.match(app, /tilt\.style\.transform = `rotate\(\$\{aim\.angle\.toFixed\(2\)\}deg\)`/);
   assert.match(app, /data-menu-aim/);
-  assert.match(app, /data-menu-aim-tilt/);
+  // The showcase no longer reads the cursor: no heading maths and no rotation.
+  assert.doesNotMatch(app, /Math\.atan2\(dx, Math\.max\(up, 12\)\)/);
+  assert.doesNotMatch(app, /ANGLE_MAX/);
+  assert.doesNotMatch(app, /aim\.angle/);
+  assert.doesNotMatch(app, /rotate\(\$\{aim\./);
+  assert.doesNotMatch(app, /window\.addEventListener\('pointermove', onPointerMove/);
 });

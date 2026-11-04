@@ -5,6 +5,7 @@ import { advanceCosmeticTrail } from './cosmeticTrail';
 import { sfx, withSfxGain } from './audio';
 import { normalizeSgaSpeed, type SgaGameSpeed } from './gameSpeed';
 import { getSavedBulletSpeed, normalizeBulletSpeed } from './bulletSpeed';
+import { SPOT_COMBO_COIN_VALUE, SPOT_COMBO_RADIUS, SPOT_COMBO_STEP, getSavedSpotCombo } from './spotCombo';
 import { getFast2DContext, getOptimalCanvasDpr, isMobilePerfProfile } from '../utils/mobilePerf';
 import { AdaptiveCanvasDpr } from '../utils/adaptiveCanvasDpr';
 import { FrameCadence } from '../utils/frameCadence';
@@ -177,6 +178,7 @@ import {
   CY,
   GAMEPLAY_GUN_SCALE,
   GUN_Y,
+  LAND_GUN_LIFT,
   H,
   SPECIAL_CY,
   W,
@@ -226,7 +228,7 @@ const TAU = Math.PI * 2;
  * a full slide or tilt never sends every round past the target.
  */
 export const GUN_SLIDE_MAX = 150; // world px, i.e. display px up/down
-export const GUN_SLIDE_SPEED = 230; // world px per second while held
+export const GUN_SLIDE_SPEED = 368; // world px per second while held (1.6× the original 230)
 export const GUN_TILT_MAX = 0.62; // radians (~36°) — the aim-assist clamp is tighter
 
 // A new run brings the weapon in from beneath the screen. This is only a
@@ -1675,6 +1677,11 @@ export class Game {
   private chest: TreasureChest | null = null;
   private stageTime = 0;
   private reloadT = 0;
+  private hudHidden = false;
+  /** COMBO TITIK (SETTING): same-spot scoring ladder 10 · 20 · 30 … */
+  private spotComboOn = getSavedSpotCombo();
+  private spotHits = 0;
+  private spotAngle = 0;
   private snowLoaded = SNOWBALL_MAG_SIZE;
   private stageStartCoins = 0;
   private bankedCoins = 0;
@@ -3012,6 +3019,7 @@ export class Game {
     this.snowLoaded = Math.min(SNOWBALL_MAG_SIZE, this.ammoLeft);
     this.stuck = 0;
     this.combo = 0;
+    this.spotHits = 0;
     // Boss (kepala bos) tampil tegak dan TIDAK berputar seperti papan target biasa.
     this.rot = this.level.boss ? 0 : rand(0, TAU);
     this.levelTime = 0;
@@ -4066,7 +4074,52 @@ export class Game {
   }
 
   // ---------- actions ----------
+  /**
+   * Fire, then bring the shot's own spray with the barrel.
+   *
+   * Every weapon family paints its muzzle effects in world coordinates that
+   * assume an upright gun. Rather than rewiring each of them, the particles and
+   * lights a single `shoot()` call adds are rotated into the pose the gun is
+   * actually drawn at — the same map `gunPosePoint` applies to the round itself.
+   */
   shoot() {
+    if (this.orientation !== 'landscape' || !this.gunTiltNow) {
+      this.shootInner();
+      return;
+    }
+    const firstParticle = this.particles.length;
+    const firstLight = this.lights.length;
+    this.shootInner();
+    this.poseShotSpawns(firstParticle, firstLight);
+  }
+
+  private poseShotSpawns(firstParticle: number, firstLight: number) {
+    const tilt = this.gunTiltNow;
+    if (!tilt) return;
+    const cos = Math.cos(tilt);
+    const sin = Math.sin(tilt);
+    const pivotX = this.gunX;
+    const pivotY = this.gunBaseY;
+    const pose = <T extends { x: number; y: number; vx?: number; vy?: number }>(item: T) => {
+      const dx = item.x - pivotX;
+      const dy = item.y - pivotY;
+      // Only the spray that leaves the gun is turned: anything the same call
+      // drops at the target keeps the target's own frame.
+      if (dy > -150) return;
+      item.x = pivotX + dx * cos - dy * sin;
+      item.y = pivotY + dx * sin + dy * cos;
+      if (item.vx !== undefined && item.vy !== undefined) {
+        const vx = item.vx;
+        const vy = item.vy;
+        item.vx = vx * cos - vy * sin;
+        item.vy = vx * sin + vy * cos;
+      }
+    };
+    for (let i = firstParticle; i < this.particles.length; i++) pose(this.particles[i]);
+    for (let i = firstLight; i < this.lights.length; i++) pose(this.lights[i]);
+  }
+
+  private shootInner() {
     if (this.state !== 'play' || this.choosingBuff) return;
     if (this.cooldown > 0 || this.ammoLeft <= 0 || this.reloadT > 0) return;
     const w = this.weapon;
@@ -4097,7 +4150,7 @@ export class Game {
     const fireworkMuzzle = (ox: number) => {
       const m = fireworkMouth(getGunVariant('firework'), tube);
       const mirror = this.hasTwinGuns && ox < 0 ? -1 : 1;
-      return { x: GX + ox + m.x * GAMEPLAY_GUN_SCALE * mirror, y: GUN_Y + m.y * GAMEPLAY_GUN_SCALE };
+      return { x: GX + ox + m.x * GAMEPLAY_GUN_SCALE * mirror, y: this.gunBaseY + m.y * GAMEPLAY_GUN_SCALE };
     };
     this.events?.onShotFired?.(n);
     const big = w.charge && !s3 ? this.chargeLevel : 0;
@@ -4119,8 +4172,9 @@ export class Game {
       fx.selectWeapon(s6id);
       fx.time = this.time;
       fx.syncWheel();
-      const my = GUN_Y - 4;
-      fx.fire(GX + (offsets[0] ?? 0), my);
+      const mouth = this.gunPosePoint(GX + (offsets[0] ?? 0), this.gunBaseY - 4);
+      const my = mouth.y;
+      fx.fire(mouth.x, my);
       // Slide 6 shipped no audio at all (its component never opens an
       // AudioContext), so there is no voice to import: the gun keeps slide 1's
       // own fire sound instead of the export turning it silent.
@@ -4128,7 +4182,7 @@ export class Game {
       // The second barrel of the `double` star paints slide 6's muzzle burst
       // from its own muzzle. Silent: slide 1 plays one voice per trigger.
       if (this.hasTwinGuns) {
-        silentPreview(() => fx.fire(GX + (offsets[1] ?? offsets[0] ?? 0), my));
+        silentPreview(() => fx.fire(this.gunPosePoint(GX + (offsets[1] ?? offsets[0] ?? 0), this.gunBaseY - 4).x, my));
       }
       const beams = this.hasTwinGuns ? 2 : 1;
       const plan = this.carrierPlan(n, beams, SIX_BEAM_SPEED * this.bulletK);
@@ -4160,8 +4214,9 @@ export class Game {
       fx.selectWeapon(s9id);
       fx.time = this.time;
       fx.syncWheel();
-      const mx = GX + (offsets[0] ?? 0);
-      const my = GUN_Y - 4;
+      const mouth = this.gunPosePoint(GX + (offsets[0] ?? 0), this.gunBaseY - 4);
+      const mx = mouth.x;
+      const my = mouth.y;
       unlockNineAudio();
       this.nineQueued = false;
       // Only slide 9's bow is charged: it flies as far as it was drawn.
@@ -4169,7 +4224,7 @@ export class Game {
       fx.fire(mx, my, -Math.PI / 2, charge);
       const made = fx.takeShots();
       this.fireTwinBarrel(made,
-        () => fx.fireQuiet(GX + (offsets[1] ?? offsets[0] ?? 0), my, -Math.PI / 2, charge),
+        () => fx.fireQuiet(this.gunPosePoint(GX + (offsets[1] ?? offsets[0] ?? 0), this.gunBaseY - 4).x, my, -Math.PI / 2, charge),
         () => fx.takeShots());
       // Slide 9's beams are hitscan: the carrier crosses the field at beam
       // speed — or exactly as fast as the dragon's flame travels — so the
@@ -4215,16 +4270,17 @@ export class Game {
     const s11id = this.setElevenId;
     if (s11id && this.setElevenLive) {
       const fx = this.s11;
-      fx.gunY = GUN_Y - 4;
+      fx.gunY = this.gunPosePoint(GX, this.gunBaseY - 4).y;
       fx.selectWeapon(s11id);
       fx.syncWheel();
-      const mx = GX + (offsets[0] ?? 0);
-      const my = GUN_Y - 4;
+      const mouth = this.gunPosePoint(GX + (offsets[0] ?? 0), this.gunBaseY - 4);
+      const mx = mouth.x;
+      const my = mouth.y;
       unlockElevenAudio(fx);
       fx.fire(mx, my, w.charge ? big : 0);
       const made = fx.takeShots();
       this.fireTwinBarrel(made,
-        () => fx.fire(GX + (offsets[1] ?? offsets[0] ?? 0), my, w.charge ? big : 0),
+        () => fx.fire(this.gunPosePoint(GX + (offsets[1] ?? offsets[0] ?? 0), this.gunBaseY - 4).x, my, w.charge ? big : 0),
         () => fx.takeShots());
       // One carrier per barrel: the round slide 7 scores (`scoringRounds()`:
       // the nano swarm's centre drone, not just whichever round came first).
@@ -4283,7 +4339,7 @@ export class Game {
       fx.cx = firstMuzzle?.x ?? GX;
       fx.cy = this.targetY;
       fx.radius = this.level.radius;
-      fx.gunY = firstMuzzle ? firstMuzzle.y + 22 : GUN_Y;
+      fx.gunY = firstMuzzle ? firstMuzzle.y + 22 : this.gunBaseY;
       fx.h = H;
       slide2Sfx.unlock();
       // `fire()` also hands back the round slide 2 just loaded (its own seed),
@@ -4296,12 +4352,12 @@ export class Game {
         if (w.id === 'firework') { const m = fireworkMuzzle(offsets[1] ?? 0); fx.cx = m.x; fx.gunY = m.y + 22; }
         rounds.push(fx.fire(s2id, this.s2HueFor(s2id)));
       }, () => []);
-      fx.cx = GX; fx.gunY = GUN_Y;
+      fx.cx = GX; fx.gunY = this.gunBaseY;
       const plan = this.carrierPlan(n, rounds.length, w.speed * this.bulletK);
       for (let i = 0; i < plan.length; i++) {
         const mouth = w.id === 'firework' ? fireworkMuzzle(plan[i].ox) : null;
         this.projs.push({
-          x: mouth?.x ?? GX + plan[i].ox, originX: GX + plan[i].ox, y: mouth ? mouth.y - 8 : GUN_Y - 22,
+          x: mouth?.x ?? GX + plan[i].ox, originX: GX + plan[i].ox, y: mouth ? mouth.y - 8 : this.gunBaseY - 22,
           vx: vx + plan[i].vx, vy,
           big, tint, ...sizeBuff,
           setTwo: { ...(rounds[i] ?? round) },
@@ -4339,7 +4395,7 @@ export class Game {
       fx.weaponId = s7id;
       fx.syncWheel();
       // Slide 3's muzzle is its gun's own origin (`fire()`: mx = GUN_X,
-      // my = GUN_Y, the point `drawWeaponLayer()` draws the gun from).
+      // my = this.gunBaseY, the point `drawWeaponLayer()` draws the gun from).
       const firstOx = offsets[0] ?? 0;
       const handShift = (ox: number) => w.id === 'ghost'
         ? this.ghostHand * (this.hasTwinGuns && ox < 0 ? -1 : 1) * GHOST_HAND_X * GAMEPLAY_GUN_SCALE : 0;
@@ -4348,7 +4404,7 @@ export class Game {
           const mouth = fireworkMuzzle(ox);
           return { x: mouth.x - (tube - 1) * 15 * 0.92, y: mouth.y - (tube === 1 ? -4 : 8) * 0.92 };
         }
-        return { x: GX + ox + handShift(ox), y: w.id === 'ghost' ? GUN_Y + GHOST_HAND_Y * GAMEPLAY_GUN_SCALE + 6 : GUN_Y };
+        return { x: GX + ox + handShift(ox), y: w.id === 'ghost' ? this.gunBaseY + GHOST_HAND_Y * GAMEPLAY_GUN_SCALE + 6 : this.gunBaseY };
       };
       const firstPoint = recipePoint(firstOx);
       const mx = firstPoint.x, my = firstPoint.y;
@@ -4428,7 +4484,7 @@ export class Game {
     // the black-hole staff releases the orb 0.28 s after the charge).
     const setOneLive = this.setOneLive;
     const s1Spawns = setOneLive
-      ? offsets.map((ox) => fireSetOne(this.s1, this.setOneId!, GX + ox, GUN_Y - 4, this.s1Hooks(), (n) => setOneSfx.play(n)))
+      ? offsets.map((ox) => fireSetOne(this.s1, this.setOneId!, ...(this.poseMuzzleXY(GX + ox, this.gunBaseY - 4)), this.s1Hooks(), (n) => setOneSfx.play(n)))
       : null;
     let s1i = 0;
     for (const ox of offsets) {
@@ -4447,12 +4503,12 @@ export class Game {
       if (fw && shotHue !== undefined) gunState.rocketHue = shotHue;
       if (yoyo && shotHue !== undefined) gunState.yoyoHue = shotHue;
       if (bazooka && shotHue !== undefined) gunState.bazookaHue = shotHue;
-      // Weapon-specific spawn Y: dora barrel extends 70px above gun base, pred muzzle at GUN_Y-72 (game-3: my-68)
+      // Weapon-specific spawn Y: dora barrel extends 70px above gun base, pred muzzle at this.gunBaseY-72 (game-3: my-68)
       const fwMouth = fw ? fireworkMuzzle(ox) : null;
       const spawnY = s1spawn ? s1spawn.y
         : fwMouth ? fwMouth.y - 8
-        : w.id === 'dora' ? GUN_Y + w.recoil * 22 - 50 : w.id === 'pred' ? GUN_Y - 72
-          : w.id === 'ghost' ? GUN_Y + GHOST_HAND_Y * GAMEPLAY_GUN_SCALE : GUN_Y - 4;
+        : w.id === 'dora' ? this.gunBaseY + w.recoil * 22 - 50 : w.id === 'pred' ? this.gunBaseY - 72
+          : w.id === 'ghost' ? this.gunBaseY + GHOST_HAND_Y * GAMEPLAY_GUN_SCALE : this.gunBaseY - 4;
       const spawnX = s1spawn ? s1spawn.x : fwMouth ? fwMouth.x : GX + ox + (w.id === 'ghost'
         ? this.ghostHand * (this.hasTwinGuns && ox < 0 ? -1 : 1) * GHOST_HAND_X * GAMEPLAY_GUN_SCALE : 0);
       const isNewWeapon = w.id === 'dora' || w.id === 'xeno' || w.id === 'pred';
@@ -4461,7 +4517,7 @@ export class Game {
       if (s1State) this.s1Last = s1State;
       if (n === 1) this.projs.push({ x: spawnX, originX: spawnX, y: spawnY, vx: w.id === 'ghost' ? this.ghostAimVx(spawnX, spawnY, vy) : vx, vy, ghostAim: w.id === 'ghost', ghostVolley, big, tint, hue: shotHue, spawnDelay, setOne: s1State, ...sizeBuff, ...projExtra });
       else {
-        const travel = GUN_Y - (this.targetY + this.level.radius);
+        const travel = this.gunBaseY - (this.targetY + this.level.radius);
         for (let i = 0; i < n; i++) {
           const off = (i - (n - 1) / 2) * 26;
           // Multi-shot guns get their own slide-7 round each, so the pellets
@@ -4477,20 +4533,20 @@ export class Game {
         this.sink.push({ x: m.x, y: m.y, vx: 0, vy: 0, life: 0.3, max: 0.3, size: 38, color: '#ff80bf', kind: 'ring', rot: 0, vr: 0, g: 0 });
       }
       if (yoyo && shotHue !== undefined) {
-        spawnYoyoLaunch(yoyo, GX + ox, GUN_Y - 6, shotHue);
-        this.sink.light(GX + ox, GUN_Y - 6, 70, '255,160,220', 0.25);
+        spawnYoyoLaunch(yoyo, GX + ox, this.gunBaseY - 6, shotHue);
+        this.sink.light(GX + ox, this.gunBaseY - 6, 70, '255,160,220', 0.25);
       }
       if (keris) {
-        spawnKerisLaunch(keris, GX + ox, GUN_Y - 6);
-        this.sink.light(GX + ox, GUN_Y - 6, 70, '77,238,234', 0.25);
+        spawnKerisLaunch(keris, GX + ox, this.gunBaseY - 6);
+        this.sink.light(GX + ox, this.gunBaseY - 6, 70, '77,238,234', 0.25);
       }
       if (diamond) {
-        spawnDiamondLaunch(diamond, GX + ox, GUN_Y - 6);
-        this.sink.light(GX + ox, GUN_Y - 6, 75, '165,243,252', 0.28);
+        spawnDiamondLaunch(diamond, GX + ox, this.gunBaseY - 6);
+        this.sink.light(GX + ox, this.gunBaseY - 6, 75, '165,243,252', 0.28);
       }
       if (bazooka) {
-        bazooka.onShoot(GX + ox, GUN_Y - 6, H);
-        this.sink.light(GX + ox, GUN_Y - 6, 120, '255,150,55', 0.35);
+        { const mouth = this.gunPosePoint(GX + ox, this.gunBaseY - 6); bazooka.onShoot(mouth.x, mouth.y, H); }
+        this.sink.light(GX + ox, this.gunBaseY - 6, 120, '255,150,55', 0.35);
       }
     }
     this.recoil = w.recoil;
@@ -4500,20 +4556,20 @@ export class Game {
       && !(w.id === 'blackhole' && this.slide2Void) && !setOneLive) {
       for (const ox of offsets) {
         const hand = w.id === 'ghost' ? this.ghostHand * (this.hasTwinGuns && ox < 0 ? -1 : 1) * GHOST_HAND_X * GAMEPLAY_GUN_SCALE : 0;
-        spawnMuzzle(this.sink, fxp, w, GX + ox + hand, w.id === 'ghost' ? GUN_Y + GHOST_HAND_Y * GAMEPLAY_GUN_SCALE : GUN_Y - 6);
+        spawnMuzzle(this.sink, fxp, w, GX + ox + hand, w.id === 'ghost' ? this.gunBaseY + GHOST_HAND_Y * GAMEPLAY_GUN_SCALE : this.gunBaseY - 6);
       }
     }
     // Slide 2 black hole: collapsing sparks into the muzzle, cosmic hue band.
     if (w.id === 'blackhole' && this.slide2Void) {
       this.s2Hue = 215 + ((gunState.shots * 53) % 105);
       for (const ox of offsets) {
-        fireBlackHole2(this.s2, GX + ox, GUN_Y - 4, this.s2Hue);
-        this.sink.light(GX + ox, GUN_Y - 6, 90, '170,120,255', 0.22);
+        fireBlackHole2(this.s2, ...(this.poseMuzzleXY(GX + ox, this.gunBaseY - 4)), this.s2Hue);
+        this.sink.light(GX + ox, this.gunBaseY - 6, 90, '170,120,255', 0.22);
       }
     }
     this.camY += fxp.kick * 0.5;
     if (fxp.speedLines) for (const ox of offsets) {
-      spawnSpeedLines(this.sink, GX + ox, this.targetY + this.level.radius + 20, GUN_Y - 30, w.trail);
+      spawnSpeedLines(this.sink, GX + ox, this.targetY + this.level.radius + 20, this.gunBaseY - 30, w.trail);
     }
     this.cooldown = (w.spinup ? 0.3 - 0.235 * this.spin : w.cooldown)
       * (this.buff === 'speed' || this.treasureBuff === 'rapid' ? 0.5 : this.treasureBuff === 'mini' ? 0.6 : 1);
@@ -4525,7 +4581,7 @@ export class Game {
         const a = rand(-Math.PI * 0.85, -Math.PI * 0.15);
         const v = rand(0.4, 1) * (b.spd ?? 200);
         this.particles.push({
-          x: GX + ox + rand(-6, 6), y: GUN_Y - 4, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: rand(0.35, 0.8), max: 0.8,
+          x: GX + ox + rand(-6, 6), y: this.gunBaseY - 4, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: rand(0.35, 0.8), max: 0.8,
           size: b.glow ? rand(3, b.size ?? 6) : rand(2, 4.5), color: pick(b.colors),
           kind: w.id === 'soaker' ? 'waterDrop' : w.id === 'snowball' ? 'snowflake' : b.glow ? 'glow' : 'chip',
           rot: rand(0, TAU), vr: rand(-12, 12), g: b.g ?? 600,
@@ -4540,28 +4596,28 @@ export class Game {
       this.camY += big * 3;
       for (const ox of offsets) {
         // flash: size 170, color PLASMA.glow, max 0.22 (game-3 releasePlasma)
-        this.sink.light(GX + ox, GUN_Y - 6, 170, '111,211,255', 0.22);
+        this.sink.light(GX + ox, this.gunBaseY - 6, 170, '111,211,255', 0.22);
         // flash: size 80, color #ffffff, max 0.12
-        this.sink.light(GX + ox, GUN_Y - 6, 80, '255,255,255', 0.12);
+        this.sink.light(GX + ox, this.gunBaseY - 6, 80, '255,255,255', 0.12);
         // ring: size 10 grow 420, color PLASMA.glow, max 0.3
-        this.sink.push({ x: GX + ox, y: GUN_Y - 6, vx: 0, vy: 0, life: 0.3, max: 0.3, size: 170, color: '111,211,255', kind: 'shock', rot: 0, vr: 0, g: 0 });
+        this.sink.push({ x: GX + ox, y: this.gunBaseY - 6, vx: 0, vy: 0, life: 0.3, max: 0.3, size: 170, color: '111,211,255', kind: 'shock', rot: 0, vr: 0, g: 0 });
         // ringE: size 8 grow 300, color #ffffff, max 0.28
-        this.sink.push({ x: GX + ox, y: GUN_Y - 6, vx: 0, vy: 0, life: 0.28, max: 0.28, size: 130, color: '255,255,255', kind: 'ring', rot: 0, vr: 0, g: 0 });
+        this.sink.push({ x: GX + ox, y: this.gunBaseY - 6, vx: 0, vy: 0, life: 0.28, max: 0.28, size: 130, color: '255,255,255', kind: 'ring', rot: 0, vr: 0, g: 0 });
         // 6 bolts: ang -PI/2 + rand(-1.4, 1.4), color i%2 ? #ffffff : PLASMA.glow (game-3)
         for (let i = 0; i < 6; i++) {
           const ang = -Math.PI / 2 + rand(-1.4, 1.4);
           const col = i % 2 ? '255,255,255' : '111,211,255';
-          this.sink.push({ x: GX + ox, y: GUN_Y - 6, vx: Math.cos(ang) * rand(30, 70), vy: Math.sin(ang) * rand(30, 70), life: rand(0.1, 0.2), max: 0.2, size: 3, color: col, kind: 'bolt', rot: 0, vr: 0, g: 0 });
+          this.sink.push({ x: GX + ox, y: this.gunBaseY - 6, vx: Math.cos(ang) * rand(30, 70), vy: Math.sin(ang) * rand(30, 70), life: rand(0.1, 0.2), max: 0.2, size: 3, color: col, kind: 'bolt', rot: 0, vr: 0, g: 0 });
         }
         // 26 spark burst (game-3: kind 'spark', size 1.8, drag 4, max 0.3)
         for (let i = 0; i < 26; i++) {
           const a = rand(-Math.PI / 2, 1.3);
           const sp = rand(200, 700);
-          this.sink.push({ x: GX + ox, y: GUN_Y - 6, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 0.3, max: 0.3, size: 1.8, color: i % 2 ? '255,255,255' : '111,211,255', kind: 'spark', rot: 0, vr: 0, g: 0, drag: 4 });
+          this.sink.push({ x: GX + ox, y: this.gunBaseY - 6, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 0.3, max: 0.3, size: 1.8, color: i % 2 ? '255,255,255' : '111,211,255', kind: 'spark', rot: 0, vr: 0, g: 0, drag: 4 });
         }
         // 6 smoke: color #3a4a60, size rand(12,22) (game-3)
         for (let i = 0; i < 6; i++) {
-          this.sink.push({ x: GX + ox + rand(-16, 16), y: GUN_Y - 6 + 10, vx: rand(-50, 50), vy: rand(-40, 20), life: rand(0.7, 1.2), max: 1.2, size: rand(12, 22), color: '58,74,96', kind: 'smoke', rot: 0, vr: 0, g: 0, drag: 2 });
+          this.sink.push({ x: GX + ox + rand(-16, 16), y: this.gunBaseY - 6 + 10, vx: rand(-50, 50), vy: rand(-40, 20), life: rand(0.7, 1.2), max: 1.2, size: rand(12, 22), color: '58,74,96', kind: 'smoke', rot: 0, vr: 0, g: 0, drag: 2 });
         }
       }
     } else if (w.charge && big > 0) {
@@ -4572,11 +4628,11 @@ export class Game {
       this.camY += big * 3;
       for (const ox of offsets) {
         const paired = offsets.length > 1;
-        this.sink.light(GX + ox, GUN_Y, big === 2 ? (paired ? 220 : 320) : (paired ? 130 : 180), big === 2 ? '254,240,138' : '125,211,252', 0.25);
-        this.sink.push({ x: GX + ox, y: GUN_Y - 8, vx: 0, vy: 0, life: 0.4, max: 0.4, size: big === 2 ? (paired ? 105 : 150) : (paired ? 60 : 80), color: '125,211,252', kind: 'shock', rot: 0, vr: 0, g: 0 });
+        this.sink.light(GX + ox, this.gunBaseY, big === 2 ? (paired ? 220 : 320) : (paired ? 130 : 180), big === 2 ? '254,240,138' : '125,211,252', 0.25);
+        this.sink.push({ x: GX + ox, y: this.gunBaseY - 8, vx: 0, vy: 0, life: 0.4, max: 0.4, size: big === 2 ? (paired ? 105 : 150) : (paired ? 60 : 80), color: '125,211,252', kind: 'shock', rot: 0, vr: 0, g: 0 });
       }
       if (big === 2) for (const ox of offsets) {
-        spawnSpeedLines(this.sink, GX + ox, this.targetY + this.level.radius + 20, GUN_Y - 30, '254,240,138');
+        spawnSpeedLines(this.sink, GX + ox, this.targetY + this.level.radius + 20, this.gunBaseY - 30, '254,240,138');
       }
     } else if (this.slide2Void) slide2Sfx.shootBH();
     else if (!setOneLive) playFireSfx(w.id);
@@ -4585,26 +4641,26 @@ export class Game {
         // 16 viscous droplets behind the glob (game-3 fire())
         for (let i = 0; i < 16; i++) {
           const k = i / 16;
-          this.sink.push({ x: GX + ox + rand(-3, 3), y: GUN_Y - 4 - k * 12, vx: rand(-25, 25), vy: vy * (0.45 + k * 0.5), life: rand(0.7, 1.2), max: 1.2, size: rand(2.5, 6.5) * (1 - k * 0.5) + 1.5, color: '#b6ff1a', kind: 'acid', rot: 0, vr: 0, g: 900 });
+          this.sink.push({ x: GX + ox + rand(-3, 3), y: this.gunBaseY - 4 - k * 12, vx: rand(-25, 25), vy: vy * (0.45 + k * 0.5), life: rand(0.7, 1.2), max: 1.2, size: rand(2.5, 6.5) * (1 - k * 0.5) + 1.5, color: '#b6ff1a', kind: 'acid', rot: 0, vr: 0, g: 900 });
         }
         // 10 fine mist (game-3: vy rand(-900, -300))
         for (let i = 0; i < 10; i++) {
-          this.sink.push({ x: GX + ox + rand(-6, 6), y: GUN_Y - 4 - rand(0, 4), vx: rand(-120, 120), vy: rand(-900, -300), life: rand(0.4, 0.8), max: 0.8, size: rand(1.2, 2.2), color: '#b6ff1a', kind: 'acid', rot: 0, vr: 0, g: 1200 });
+          this.sink.push({ x: GX + ox + rand(-6, 6), y: this.gunBaseY - 4 - rand(0, 4), vx: rand(-120, 120), vy: rand(-900, -300), life: rand(0.4, 0.8), max: 0.8, size: rand(1.2, 2.2), color: '#b6ff1a', kind: 'acid', rot: 0, vr: 0, g: 1200 });
         }
         // flash + ring (game-3: flash size 80, ring size 8 grow 220).
         // The flash is a soft bloom, not a filled disc.
-        this.sink.light(GX + ox, GUN_Y - 6, 80, '182,255,26', 0.2);
-        this.sink.push({ x: GX + ox, y: GUN_Y - 6, vx: 0, vy: 0, life: 0.2, max: 0.2, size: 34, color: '182,255,26', kind: 'glow', rot: 0, vr: 0, g: 0 });
-        this.sink.push({ x: GX + ox, y: GUN_Y - 6, vx: 0, vy: 0, life: 0.3, max: 0.3, size: 26, color: '182,255,26', kind: 'ring', rot: 0, vr: 0, g: 0 });
+        this.sink.light(GX + ox, this.gunBaseY - 6, 80, '182,255,26', 0.2);
+        this.sink.push({ x: GX + ox, y: this.gunBaseY - 6, vx: 0, vy: 0, life: 0.2, max: 0.2, size: 34, color: '182,255,26', kind: 'glow', rot: 0, vr: 0, g: 0 });
+        this.sink.push({ x: GX + ox, y: this.gunBaseY - 6, vx: 0, vy: 0, life: 0.3, max: 0.3, size: 26, color: '182,255,26', kind: 'ring', rot: 0, vr: 0, g: 0 });
         // 6 smoke puffs (game-3: color #9bd13a, size rand(10,20))
         for (let i = 0; i < 6; i++) {
-          this.sink.push({ x: GX + ox + rand(-14, 14), y: GUN_Y - 6, vx: rand(-40, 40), vy: rand(-90, -30), life: rand(0.8, 1.4), max: 1.4, size: rand(10, 20), color: '155,209,58', kind: 'smoke', rot: 0, vr: 0, g: 30, drag: 2 });
+          this.sink.push({ x: GX + ox + rand(-14, 14), y: this.gunBaseY - 6, vx: rand(-40, 40), vy: rand(-90, -30), life: rand(0.8, 1.4), max: 1.4, size: rand(10, 20), color: '155,209,58', kind: 'smoke', rot: 0, vr: 0, g: 30, drag: 2 });
         }
       }
     }
     if (w.id === 'dora') {
-      // Dora muzzle = y0 - 70 where y0 = GUN_Y + recoil*22 (barrel extends 150px upward from y0+80)
-      const doraMuzzleY = GUN_Y + this.recoil * 22 - 70;
+      // Dora muzzle = y0 - 70 where y0 = this.gunBaseY + recoil*22 (barrel extends 150px upward from y0+80)
+      const doraMuzzleY = this.gunBaseY + this.recoil * 22 - 70;
       for (const ox of offsets) {
         // flash + ringE (game-3 fireAir())
         this.sink.light(GX + ox, doraMuzzleY, 120, '255,255,255', 0.16);
@@ -4634,15 +4690,15 @@ export class Game {
       for (const ox of offsets) {
         for (const s of [-1, 1]) {
           for (let i = 0; i < 4; i++) {
-            this.sink.push({ x: GX + ox + s * 24, y: GUN_Y + 6, vx: -s * rand(300, 600), vy: rand(-500, -200), life: 0.12, max: 0.12, size: rand(1, 2), color: 'rgba(255,220,200,0.9)', kind: 'streak', rot: 0, vr: 0, g: 0 });
+            this.sink.push({ x: GX + ox + s * 24, y: this.gunBaseY + 6, vx: -s * rand(300, 600), vy: rand(-500, -200), life: 0.12, max: 0.12, size: rand(1, 2), color: 'rgba(255,220,200,0.9)', kind: 'streak', rot: 0, vr: 0, g: 0 });
           }
         }
         for (let i = 0; i < 6; i++) {
-          this.sink.push({ x: GX + ox + rand(-10, 10), y: GUN_Y + 10, vx: rand(-80, 80), vy: rand(-60, 10), life: rand(0.4, 0.7), max: 0.7, size: rand(5, 10), color: 'rgba(210,190,160,', kind: 'smoke', rot: 0, vr: 0, g: -20, drag: 2 });
+          this.sink.push({ x: GX + ox + rand(-10, 10), y: this.gunBaseY + 10, vx: rand(-80, 80), vy: rand(-60, 10), life: rand(0.4, 0.7), max: 0.7, size: rand(5, 10), color: 'rgba(210,190,160,', kind: 'smoke', rot: 0, vr: 0, g: -20, drag: 2 });
         }
-        this.sink.push({ x: GX + ox, y: GUN_Y + 4, vx: 0, vy: 0, life: 0.25, max: 0.25, size: 70, color: '255,230,200', kind: 'shock', rot: 0, vr: 0, g: 0 });
+        this.sink.push({ x: GX + ox, y: this.gunBaseY + 4, vx: 0, vy: 0, life: 0.25, max: 0.25, size: 70, color: '255,230,200', kind: 'shock', rot: 0, vr: 0, g: 0 });
       }
-      this.addText('CTAK!', GX + rand(-50, 50), GUN_Y - 20, '#fde68a', 22);
+      this.addText('CTAK!', GX + rand(-50, 50), this.gunBaseY - 20, '#fde68a', 22);
     }
     if (w.id === 'obliterator') {
       this.flashWhite = Math.max(this.flashWhite, 0.2);
@@ -4653,7 +4709,7 @@ export class Game {
       for (const ox of offsets) {
         const side = ox < 0 ? -1 : 1; // cases eject outwards from mirrored guns
         this.particles.push({
-          x: GX + ox + side * 16, y: GUN_Y + (w.ejectY ?? 48), vx: side * rand(180, 320), vy: rand(-520, -380), life: 1.1, max: 1.1,
+          x: GX + ox + side * 16, y: this.gunBaseY + (w.ejectY ?? 48), vx: side * rand(180, 320), vy: rand(-520, -380), life: 1.1, max: 1.1,
           size: 1, color: w.casing, kind: 'shell', rot: rand(0, TAU), vr: side * rand(15, 28), g: 1600,
         });
       }
@@ -4662,7 +4718,7 @@ export class Game {
       const ns = w.backblast || w.id === 'bamboo' || w.id === 'pirate' ? 10 : 4;
       for (const ox of offsets) for (let i = 0; i < ns; i++) {
         this.particles.push({
-          x: GX + ox + rand(-6, 6), y: GUN_Y - 6, vx: rand(-50, 50), vy: rand(-90, -30), life: 0.5, max: 0.5,
+          x: GX + ox + rand(-6, 6), y: this.gunBaseY - 6, vx: rand(-50, 50), vy: rand(-90, -30), life: 0.5, max: 0.5,
           size: rand(6, w.backblast ? 18 : 12), color: 'rgba(200,200,200,', kind: 'smoke', rot: 0, vr: 0, g: -20,
         });
       }
@@ -4681,12 +4737,12 @@ export class Game {
     }
     if (w.energy && w.id !== 'laser') {
       for (const ox of offsets) {
-        this.particles.push({ x: GX + ox, y: GUN_Y + 10, vx: 0, vy: 0, life: 0.3, max: 0.3, size: w.id === 'cricket' ? 110 : 50, color: w.color, kind: 'ring', rot: 0, vr: 0, g: 0 });
+        this.particles.push({ x: GX + ox, y: this.gunBaseY + 10, vx: 0, vy: 0, life: 0.3, max: 0.3, size: w.id === 'cricket' ? 110 : 50, color: w.color, kind: 'ring', rot: 0, vr: 0, g: 0 });
         for (let i = 0; i < 10; i++) {
           const a = rand(0, TAU);
           const v = rand(60, 200);
           this.particles.push({
-            x: GX + ox, y: GUN_Y + 6, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 60, life: rand(0.25, 0.5), max: 0.5,
+            x: GX + ox, y: this.gunBaseY + 6, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 60, life: rand(0.25, 0.5), max: 0.5,
             size: rand(3, 6), color: w.trail, kind: 'glow', rot: 0, vr: 0, g: 0,
           });
         }
@@ -4694,7 +4750,7 @@ export class Game {
     }
     if (w.id === 'cricket') {
       this.flashWhite = Math.max(this.flashWhite, 0.25);
-      this.addText('BOOM!', GX + rand(-40, 40), GUN_Y - 40, '#9fd8ff', 26);
+      this.addText('BOOM!', GX + rand(-40, 40), this.gunBaseY - 40, '#9fd8ff', 26);
     }
     if (w.beam) {
       for (const ox of offsets) {
@@ -4702,17 +4758,17 @@ export class Game {
         // the target. Trace the same ink used by bullets instead of stopping
         // the visible beam at the obsolete circular radius.
         const by = this.level.boss
-          ? traceBossSegment(GX + ox, GUN_Y, GX + ox, -80, (x, y) => this.artHitAt(x, y) !== null)?.y ?? -80
+          ? traceBossSegment(GX + ox, this.gunBaseY, GX + ox, -80, (x, y) => this.artHitAt(x, y) !== null)?.y ?? -80
           : this.targetY + this.level.radius - 4;
         this.beams.push({ x: GX + ox, y: by, life: 0.22, max: 0.22, rgb: w.trail });
         for (let i = 0; i < 14; i++) {
-          const yy = rand(by, GUN_Y);
+          const yy = rand(by, this.gunBaseY);
           this.sink.push({ x: GX + ox + rand(-3, 3), y: yy, vx: rand(-160, 160), vy: rand(-60, 60), life: rand(0.2, 0.45), max: 0.45, size: rand(2, 4.5), color: w.trail, kind: 'glow', rot: 0, vr: 0, g: 0, drag: 4 });
         }
         const starTrain = w.id === 'moonbeam' && getGunEffect(w.id) === 'new';
         for (let i = 0; i < (starTrain ? 16 : 6); i++) {
           this.sink.push({ x: GX + ox + (starTrain ? rand(-13, 13) : 0),
-            y: rand(by, GUN_Y), vx: starTrain ? rand(-35, 35) : 0, vy: 0,
+            y: rand(by, this.gunBaseY), vx: starTrain ? rand(-35, 35) : 0, vy: 0,
             life: starTrain ? 0.34 : 0.2, max: starTrain ? 0.34 : 0.2,
             size: rand(4, starTrain ? 10 : 7),
             color: starTrain ? pick(['#ffffff', '#e9ddff', '#ffeabb']) : '#ffffff',
@@ -5863,6 +5919,19 @@ export class Game {
     if (this.time - this.lastHit < (w.comboWindow ?? 0.5)) this.combo++;
     else this.combo = 1;
     this.lastHit = this.time;
+    // COMBO TITIK (SETTING): a round that bites the spot the previous one left
+    // scores 10, then 20, 30, 40… and the award is banked as bonus coins.
+    if (this.spotComboOn) {
+      const arc = this.spotHits > 0
+        ? Math.abs(Math.atan2(Math.sin(local - this.spotAngle), Math.cos(local - this.spotAngle))) * R
+        : Infinity;
+      this.spotHits = arc <= SPOT_COMBO_RADIUS ? this.spotHits + 1 : 1;
+      this.spotAngle = local;
+      const spotBonus = SPOT_COMBO_STEP * this.spotHits;
+      this.score += spotBonus;
+      this.coins += spotBonus;
+      this.addText(`🔥 TITIK SAMA +${spotBonus} 💰`, CX, this.targetY + R + 30, '#fbbf24', this.spotHits > 2 ? 26 : 22);
+    }
     let pts = w.points * (big === 2 ? 4 : big === 1 ? 2 : 1);
     if (big) {
       this.addText(big === 2 ? '⚡ FULL CHARGE x4!' : 'CHARGE x2', CX + rand(-40, 40), this.targetY + R + 60, big === 2 ? '#fde047' : '#7dd3fc', big === 2 ? 28 : 20);
@@ -6035,7 +6104,9 @@ export class Game {
     const x = CX + Math.cos(wa) * (R + 14);
     const y = this.targetY + Math.sin(wa) * (R + 14);
     this.items = this.items.filter((i) => i !== it);
-    const v = this.weapon.coinValue;
+    // COMBO TITIK prices every shot coin at a flat 10 instead of the weapon's
+    // own coin value.
+    const v = this.spotComboOn ? SPOT_COMBO_COIN_VALUE : this.weapon.coinValue;
     this.coins += v;
     sfx.coin();
     this.addText(`+${v} 💰`, x, y - 10, '#ffd23f', v > 1 ? 26 : 20);
@@ -7251,7 +7322,7 @@ export class Game {
     const pointer = this.aimPointer;
     if (this.orientation !== 'landscape' || !pointer) return 0;
     const pointerWorld = { x: pointer.y, y: H - pointer.x };
-    const muzzleY = GUN_Y - 6;
+    const muzzleY = this.gunBaseY - 6;
     const dx = pointerWorld.x - this.gunX;
     const dy = pointerWorld.y - muzzleY;
     if (Math.abs(dx) + Math.abs(dy) < 12) return 0;
@@ -7279,11 +7350,22 @@ export class Game {
     if (this.orientation !== 'landscape') return;
     const tilt = this.gunTiltNow;
     if (!tilt) return;
+    const cos = Math.cos(tilt);
+    const sin = Math.sin(tilt);
+    // The muzzle the player sees is the posed one, so the round also starts
+    // there: gun-side spawns are rotated about the gun's pivot, exactly like the
+    // transform the weapon is drawn through. Anything spawned on the target's
+    // side of the stage keeps its own position.
+    if (p.y > this.gunBaseY - 150) {
+      const dx = p.x - this.gunX;
+      const dy = p.y - this.gunBaseY;
+      p.x = this.gunX + dx * cos - dy * sin;
+      p.y = this.gunBaseY + dx * sin + dy * cos;
+      if (p.originX !== undefined) p.originX = p.x;
+    }
     const vx = p.vx;
     const vy = p.vy;
     if (!vx && !vy) return;
-    const cos = Math.cos(tilt);
-    const sin = Math.sin(tilt);
     p.vx = vx * cos - vy * sin;
     p.vy = vx * sin + vy * cos;
   }
@@ -8724,6 +8806,67 @@ export class Game {
     }
   }
 
+  /**
+   * World Y the weapon rig stands on.
+   *
+   * Portrait keeps the muzzle exactly at `GUN_Y`. Landscape rotates the world,
+   * which turns world Y into screen X, so the rig is lifted by `LAND_GUN_LIFT`
+   * to keep the grip (the widest part) clear of the screen's left edge.
+   */
+  /**
+   * Hide the corner HUD while a celebration overlay owns the screen.
+   *
+   * The boss/victory panels keep the live stage visible behind them and print
+   * their own stage and reward rows along the edges, so the score, wallet and
+   * ammo corners would collide with that copy (in landscape they sit on exactly
+   * the same pixels).
+   */
+  /** Turn the COMBO TITIK scoring mode on/off for the next (and current) run. */
+  setSpotCombo(on: boolean) {
+    this.spotComboOn = Boolean(on);
+    if (!this.spotComboOn) this.spotHits = 0;
+  }
+
+  setHudHidden(hidden: boolean) {
+    if (this.hudHidden === hidden) return;
+    this.hudHidden = hidden;
+    // The stage stops simulating behind a modal, so its last frame would stay on
+    // screen — corners and all. Repaint once so the change is actually visible.
+    if (this.canvas && typeof this.render === 'function') {
+      try { this.render(); } catch { /* no 2D context yet */ }
+    }
+  }
+
+  private get gunBaseY() {
+    return this.orientation === 'landscape' ? GUN_Y - LAND_GUN_LIFT : GUN_Y;
+  }
+
+  /**
+   * A point of the gun's rig in world space, including the landscape pose.
+   *
+   * Landscape draws the weapon through `translate(gunX, y) · rotate(tilt) ·
+   * translate(-CX, -y)`, so the muzzle, every muzzle offset and every spark the
+   * shot throws have to go through the same rotation — otherwise the rounds and
+   * their effects leave from where the gun used to be before the player slid or
+   * tilted it.
+   */
+  private gunPosePoint(x: number, y: number): { x: number; y: number } {
+    if (this.orientation !== 'landscape') return { x, y };
+    const tilt = this.gunTiltNow;
+    if (!tilt) return { x, y };
+    const cos = Math.cos(tilt);
+    const sin = Math.sin(tilt);
+    const dx = x - this.gunX;
+    const dy = y - this.gunBaseY;
+    return { x: this.gunX + dx * cos - dy * sin, y: this.gunBaseY + dx * sin + dy * cos };
+  }
+
+  /** `gunPosePoint` as the `(x, y)` tuple module fire calls take. */
+  private poseMuzzleXY(x: number, y: number): [number, number] {
+    const p = this.gunPosePoint(x, y);
+    return [p.x, p.y];
+  }
+
   private drawGunNow(c: CanvasRenderingContext2D) {
     // One weapon only: the captured menu frame is still travelling here.
     if (this.gunHiddenT > 0) return;
@@ -8734,7 +8877,7 @@ export class Game {
       ? -3.5 * Math.sin((sinceShot / KERIS_GLEAM_DUR) * Math.PI)
       : this.recoil * 22 - (this.state === 'idle' ? Math.sin(this.time * 2) * 3 : 0);
     const entryOffset = gameplayGunEntryOffset(this.gunEntryT);
-    const y0 = GUN_Y + ry + entryOffset;
+    const y0 = this.gunBaseY + ry + entryOffset;
     const R = this.level.radius;
 
     // Two upright barrels get two straight sights; a star never steers either.
@@ -10515,7 +10658,7 @@ export class Game {
     // sit on the real screen edges in both orientations.
     const { w: dw, h: dh } = displaySize(this.orientation);
     c.setTransform(k, 0, 0, k, 0, 0);
-    if (this.state !== 'idle') this.drawHUD(c);
+    if (this.state !== 'idle' && !this.hudHidden) this.drawHUD(c);
 
     if (this.flashWhite > 0) {
       c.fillStyle = `rgba(255,255,255,${this.flashWhite * 0.6})`;
@@ -10837,13 +10980,20 @@ export class Game {
       const a = Math.min(1, t * 2.5) * Math.min(1, (1.8 - t) * 5);
       c.save();
       c.globalAlpha = a;
-      c.translate(DCX, isSpecial(this.level.mode) ? this.targetY + this.level.radius + 46 : CY + this.level.radius + 115);
+      // The banner is screen furniture as well. Portrait drops it just under the
+      // wheel; landscape has no room there (that spot lands on the very bottom
+      // edge and the text would be cut), so it uses the free strip along the
+      // bottom of the display, above the weapon label and clear of the HUD.
+      const bannerWorldY = isSpecial(this.level.mode) ? this.targetY + this.level.radius + 46 : CY + this.level.radius + 115;
+      c.translate(DCX, this.orientation === 'landscape' ? DH - 58 : bannerWorldY);
       const s = 1 + Math.max(0, (t - 1.5)) * 1.5;
       c.scale(s, s);
       c.textAlign = 'center';
       if (this.level.boss) {
+        // A full-width band would swallow the wheel and the gun in landscape.
+        const bandW = this.orientation === 'landscape' ? Math.min(DW, 420) : DW;
         c.fillStyle = 'rgba(120,0,0,0.65)';
-        c.fillRect(-DW / 2, -38, DW, 76);
+        c.fillRect(-bandW / 2, -38, bandW, 76);
         c.font = font(34);
         c.lineWidth = 6;
         c.strokeStyle = 'rgba(0,0,0,0.7)';

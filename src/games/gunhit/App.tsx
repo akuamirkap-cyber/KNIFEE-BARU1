@@ -70,6 +70,7 @@ import { WheelArtBridge } from './components/WheelArtBridge';
 import MenuEnvironment, { type MenuEnvironmentTheme } from './components/MenuEnvironment';
 import { SGA_SPEED_OPTIONS, formatSgaSpeed, getSavedSgaSpeed } from './game/gameSpeed';
 import { useSgaBulletSpeed } from './utils/useSgaBulletSpeed';
+import { useSgaSpotCombo } from './utils/useSgaSpotCombo';
 import { useSgaGameSpeed } from './utils/useSgaGameSpeed';
 import { SGA_BG_THEMES, getSavedSgaBgTheme } from './game/backgroundThemes';
 import { useSgaBgTheme } from './utils/useSgaBgTheme';
@@ -355,7 +356,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   /** Landscape-only aim rig for the menu weapon (W/S lift + mouse heading). */
   const gunAimRef = useRef<HTMLDivElement>(null);
   const gunTiltRef = useRef<HTMLDivElement>(null);
-  const gunAimState = useRef({ lift: 0, angle: 0, up: false, down: false, px: 0, py: 0, seen: false });
+  const gunAimState = useRef({ lift: 0, up: false, down: false });
   const gameShellRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Game | null>(null);
   // Runs asked for while the engine chunk is still in flight.
@@ -478,6 +479,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   const [soundVolume, setSoundVolumeState] = useState<number>(initialSoundVolume);
   const [gameSpeed, setGameSpeed] = useSgaGameSpeed();
   const [bulletSpeed, setBulletSpeed] = useSgaBulletSpeed();
+  const [spotCombo, setSpotCombo] = useSgaSpotCombo();
   const [menuTheme, setMenuTheme] = useSgaBgTheme();
   const [orientation, setOrientation] = useSgaOrientation();
   // The shell and the canvas are the *display* rectangle: 420x760 portrait, or
@@ -1003,6 +1005,11 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     gameRef.current?.setBulletSpeed(bulletSpeed);
   }, [bulletSpeed, screen]);
 
+  // COMBO TITIK scoring mode (SETTING) — same-spot ladder into bonus coins.
+  useEffect(() => {
+    gameRef.current?.setSpotCombo(spotCombo);
+  }, [spotCombo, screen]);
+
   useEffect(() => {
     gameRef.current?.setBackgroundTheme(menuTheme);
   }, [menuTheme]);
@@ -1121,6 +1128,12 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     if (screen === 'menu') gameRef.current?.toIdle();
     gameRef.current?.setActive(simulate);
   }, [simulate, screen, inGameSettingsOpen]);
+
+  // The boss celebration keeps the live stage behind it and prints its own stage
+  // and reward rows on the edges: the corner HUD would sit right on top of them.
+  useEffect(() => {
+    gameRef.current?.setHudHidden(Boolean(bossDefeatedData));
+  }, [bossDefeatedData, screen]);
 
   // Upright weapon preview on the main menu (-10% from 374x328 -> 337x295, native VSync FPS)
   useEffect(() => {
@@ -1817,20 +1830,21 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   const menuSceneOpen = screen === 'menu' && !mapOpen && !questOpen && !leaderboardOpen && !arsenalOpen && !settingsOpen;
 
   /**
-   * Landscape menu aim rig.
+   * Landscape menu showcase rig.
    *
-   * The showcase weapon can be raised/lowered with W and S, and it swivels to
-   * follow the pointer, so the player can pose it before playing. Portrait has
-   * no cursor and a much shorter menu, so it keeps the still showcase.
-   * The transform is written straight to the DOM inside one rAF loop — this is
-   * a 60fps interaction and must never re-render the whole menu.
+   * The showcase weapon can be raised/lowered with W and S so the player can
+   * pose it before playing. It deliberately does NOT follow the pointer: the
+   * aiming angle belongs to the run, where the barrel is what the round leaves
+   * from, so a menu preview that swivels would promise a heading the gun never
+   * has. Portrait has no cursor and a shorter menu, so it keeps the still
+   * showcase. The lift is written straight to the DOM inside one rAF loop — this
+   * is a 60fps interaction and must never re-render the whole menu.
    */
   useEffect(() => {
     if (!menuLandscape || !menuSceneOpen) return;
     const aim = gunAimState.current;
     const LIFT_MAX = 92;
-    const LIFT_SPEED = 260; // px per second
-    const ANGLE_MAX = 46; // degrees
+    const LIFT_SPEED = 416; // px per second (1.6× the original 260)
     let last = performance.now();
     let raf = 0;
 
@@ -1849,51 +1863,27 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       if (event.code === 'KeyW') aim.up = false;
       else if (event.code === 'KeyS') aim.down = false;
     };
-    const onPointerMove = (event: PointerEvent) => {
-      aim.px = event.clientX;
-      aim.py = event.clientY;
-      aim.seen = true;
-    };
-
     const tick = (now: number) => {
       const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
       last = now;
       const dir = (aim.up ? 1 : 0) - (aim.down ? 1 : 0); // W lifts, S lowers
       if (dir !== 0) aim.lift = Math.max(-LIFT_MAX, Math.min(LIFT_MAX, aim.lift + dir * LIFT_SPEED * dt));
 
-      let target = 0;
-      const canvas = previewCanvasRef.current;
-      if (canvas && aim.seen) {
-        const rect = canvas.getBoundingClientRect();
-        if (rect.width > 0 && rect.height > 0) {
-          const dx = aim.px - (rect.left + rect.width / 2);
-          const up = rect.top + rect.height * 0.62 - aim.py; // positive while the pointer is above the grip
-          const raw = (Math.atan2(dx, Math.max(up, 12)) * 180) / Math.PI;
-          target = Math.max(-ANGLE_MAX, Math.min(ANGLE_MAX, raw));
-        }
-      }
-      aim.angle += (target - aim.angle) * Math.min(1, dt * 9);
-
       const rig = gunAimRef.current;
       if (rig) rig.style.transform = `translate3d(0, ${(-aim.lift).toFixed(2)}px, 0)`;
-      const tilt = gunTiltRef.current;
-      if (tilt) tilt.style.transform = `rotate(${aim.angle.toFixed(2)}deg)`;
       raf = requestAnimationFrame(tick);
     };
 
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
-    window.addEventListener('pointermove', onPointerMove, { passive: true });
     raf = requestAnimationFrame(tick);
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
-      window.removeEventListener('pointermove', onPointerMove);
       aim.up = false;
       aim.down = false;
       if (gunAimRef.current) gunAimRef.current.style.transform = '';
-      if (gunTiltRef.current) gunTiltRef.current.style.transform = '';
     };
   }, [menuLandscape, menuSceneOpen]);
   const menuArea = (name: 'gun' | 'hud' | 'title' | 'btns' | 'line' | 'nav'): CSSProperties =>
@@ -2396,6 +2386,8 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
             speed={gameSpeed}
             bulletSpeed={bulletSpeed}
             onBulletSpeed={setBulletSpeed}
+            spotCombo={spotCombo}
+            onSpotCombo={() => setSpotCombo(!spotCombo)}
             speedOptions={SGA_SPEED_OPTIONS}
             themes={SGA_BG_THEMES}
             theme={menuTheme}

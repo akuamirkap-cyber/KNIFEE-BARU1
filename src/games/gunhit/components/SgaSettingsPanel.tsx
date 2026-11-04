@@ -41,6 +41,9 @@ type Props = {
   onVolume: (value: number) => void;
   onSpeed: (value: SgaGameSpeed) => void;
   onBulletSpeed: (value: number) => void;
+  /** COMBO TITIK mode: same-spot hits score 10 · 20 · 30 … as bonus coins. */
+  spotCombo: boolean;
+  onSpotCombo: () => void;
   onTheme: (value: SgaBackgroundTheme) => void;
   onOrientation: (value: SgaOrientation) => void;
   onReplayIntro: () => void;
@@ -65,7 +68,7 @@ function Toggle({ on }: { on: boolean }) {
 }
 
 export default function SgaSettingsPanel({
-  closing, muted, volume, sfxEnabled, musicEnabled, speed, speedOptions, bulletSpeed, themes, theme, orientation,
+  closing, muted, volume, sfxEnabled, musicEnabled, speed, speedOptions, bulletSpeed, spotCombo, onSpotCombo, themes, theme, orientation,
   animSpeed, animGunStyle, animSpeeds, animStyles, onAnimSpeed, onAnimGunStyle,
   onClose, onMute, onSfx, onMusic, onVolume, onSpeed, onBulletSpeed, onTheme, onOrientation, onReplayIntro, onSpecial, formatSpeed, onPrivacy,
   language, onLanguage, onHelp, onReset,
@@ -120,6 +123,15 @@ export default function SgaSettingsPanel({
               <span>{tr(language, '🎵 Musik')}</span><Toggle on={musicEnabled} />
             </button>
           </div>
+        </section>
+
+        <section className="mt-3 rounded-2xl border border-white/10 bg-black/35 p-2.5">
+          <button type="button" onClick={onSpotCombo} aria-pressed={spotCombo} className="press font-title flex h-9 w-full items-center justify-between gap-2 rounded-xl bg-white/[.06] px-3 text-[12px] text-white">
+            <span>🔥 {tr(language, 'COMBO TITIK')}</span><Toggle on={spotCombo} />
+          </button>
+          <p className="mt-1.5 text-[10px] leading-snug text-white/55">
+            {tr(language, 'Tembak titik yang sama (atau dekat bekas tembakan): 10 · 20 · 30 · 40 … masuk bonus coin. Koin yang ditembak bernilai 10.')}
+          </p>
         </section>
 
         <section className="mt-3">
