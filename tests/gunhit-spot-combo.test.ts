@@ -6,7 +6,9 @@ import { installCanvasShim } from './supportCanvas';
 import { installSilentAudio } from '../tools/supportAudioSilent';
 import {
   DEFAULT_SPOT_COMBO,
+  SPOT_COMBO_ACCURACY,
   SPOT_COMBO_COIN_VALUE,
+  SPOT_COMBO_REACH,
   SPOT_COMBO_RADIUS,
   SPOT_COMBO_STEP,
   getSavedSpotCombo,
@@ -60,7 +62,11 @@ test('the mode ships off, and the setting round-trips', () => {
 test('same-spot ladder is 10 · 20 · 30 … and a shot coin is worth 10 in the mode', () => {
   assert.equal(SPOT_COMBO_STEP, 10);
   assert.equal(SPOT_COMBO_COIN_VALUE, 10);
-  assert.ok(SPOT_COMBO_RADIUS > 0);
+  // "Very close": the mark has to land inside 80 % of a tight tolerance, so the
+  // two holes really overlap.
+  assert.equal(SPOT_COMBO_ACCURACY, 0.8);
+  assert.ok(SPOT_COMBO_REACH <= 18, 'the chain only survives a near-perfect repeat');
+  assert.equal(SPOT_COMBO_REACH, SPOT_COMBO_RADIUS * SPOT_COMBO_ACCURACY);
 
   const game = liveGame();
   game.items.push({ angle: 0, type: 'coin', age: 0, r: 100 });
@@ -84,7 +90,10 @@ test('the ladder only climbs while the rounds keep landing on the same spot', ()
   // Angle distance inside the target frame decides "same spot" (the marks rotate
   // with the wheel, so world coordinates would drift).
   assert.match(src, /const arc = this\.spotHits > 0\s*\n?\s*\? Math\.abs\(Math\.atan2\(Math\.sin\(local - this\.spotAngle\), Math\.cos\(local - this\.spotAngle\)\)\) \* R/);
-  assert.match(src, /this\.spotHits = arc <= SPOT_COMBO_RADIUS \? this\.spotHits \+ 1 : 1;/);
+  assert.match(src, /this\.spotHits = arc <= SPOT_COMBO_REACH \? this\.spotHits \+ 1 : 1;/);
+  // A short, plain line — just the coins, no fire emoji, no size ramp.
+  assert.match(src, /this\.addText\(`\+\$\{spotBonus\} 💰`, CX, this\.targetY \+ R \+ 30, '#fbbf24', 20\);/);
+  assert.ok(!src.includes('TITIK SAMA +'), 'the old noisy label is gone');
   assert.match(src, /const spotBonus = SPOT_COMBO_STEP \* this\.spotHits;/);
   assert.match(src, /this\.coins \+= spotBonus;/);
   assert.match(src, /setSpotCombo\(on: boolean\)/);

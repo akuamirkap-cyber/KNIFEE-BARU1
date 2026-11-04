@@ -166,8 +166,8 @@ const CORE_EN: Record<string, string> = {
   'PENGATURAN LANJUTAN': 'ADVANCED SETTINGS',
   'Kecepatan peluru semua senjata': 'Bullet speed for every weapon',
   'COMBO TITIK': 'SPOT COMBO',
-  'Tembak titik yang sama (atau dekat bekas tembakan): 10 · 20 · 30 · 40 … masuk bonus coin. Koin yang ditembak bernilai 10.':
-    'Hit the same spot (or right next to the previous mark): 10 · 20 · 30 · 40 … into bonus coins. A shot coin is worth 10.',
+  'Tembak hampir tepat di bekas tembakan sebelumnya (minimal 80% akurat): 10 · 20 · 30 · 40 … masuk bonus coin. Koin yang ditembak bernilai 10.':
+    'Land within 80% of the previous mark: 10 · 20 · 30 · 40 … into bonus coins. A shot coin is worth 10.',
   '⚡ KECEPATAN GAME SGA': '⚡ SGA GAME SPEED',
   'Portrait: senjata di bawah, menembak ke atas. Landscape: senjata di KIRI menembak ke KANAN, target & musuh di kanan.':
     'Portrait: gun at the bottom, firing up. Landscape: gun on the LEFT firing RIGHT, target & enemies on the right.',

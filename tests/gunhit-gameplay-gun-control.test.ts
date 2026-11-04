@@ -100,7 +100,12 @@ test('the live game wires the landscape gun control end to end', () => {
   assert.match(src, /const hitX = Math\.max\(CX - face, Math\.min\(CX \+ face, this\.gunX \+ Math\.tan\(want\) \* travel\)\);/);
   // Rounds leave along the barrel, once each.
   assert.match(src, /private aimRoundAt\(p: Proj\)/);
-  assert.match(src, /p\.vx = vx \* cos - vy \* sin;\s+p\.vy = vx \* sin \+ vy \* cos;/);
+  assert.match(src, /const posed = this\.poseVelocity\(p\.vx, p\.vy\);\s+p\.vx = posed\.vx;\s+p\.vy = posed\.vy;/);
+  // Every layer that hands slide 1 a round (slide 11's flight, slide 3's own
+  // movement) turns that velocity onto the barrel through the same helper.
+  assert.match(src, /private poseVelocity\(vx: number, vy: number\)/);
+  assert.match(src, /const dir = this\.poseVelocity\(f\.vx, f\.vy\);/);
+  assert.match(src, /const dir = this\.poseVelocity\(own\.vx, own\.vy\);/);
   assert.match(src, /if \(!this\.aimedProjs\.has\(p\)\) \{\s+this\.aimedProjs\.add\(p\);\s+this\.aimRoundAt\(p\);/);
   // The gun art, its halo, its sights, its muzzle and every round follow the pose.
   assert.match(src, /c\.translate\(this\.gunX \+ ox, y0\);\s+if \(this\.gunTiltNow\) c\.rotate\(this\.gunTiltNow\);/);

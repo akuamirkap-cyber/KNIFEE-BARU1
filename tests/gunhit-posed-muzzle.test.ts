@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { installCanvasShim } from './supportCanvas';
 import { installSilentAudio } from '../tools/supportAudioSilent';
+import { readFileSync } from 'node:fs';
 import { CX } from '../src/games/gunhit/game/layout';
 
 installCanvasShim();
@@ -103,4 +104,38 @@ test('every gun family fires from the barrel, not from the old centre line', asy
       );
     }
   }
+});
+
+test('every round flies along the barrel it left', async () => {
+  for (const weapon of ['pistol', 'ak47', 'mp5', 'sniper', 'bazooka', 'shotgun', 'nail', 'crossbow', 'plasma', 'laser', 'freeze', 'rocket']) {
+    const game = await posedRun(weapon);
+    const tilt = game.getGunTilt();
+    assert.ok(Math.abs(tilt) > 0.05, `${weapon}: the barrel leans`);
+    game.cooldown = 0;
+    game.shoot();
+    for (let i = 0; i < 4; i++) game.update(1 / 240);
+    const flying = game.projs.filter((p: any) => !(p.spawnDelay > 0));
+    assert.ok(flying.length > 0, `${weapon} fires`);
+    for (const p of flying) {
+      // Lean from "straight up the world": positive when the barrel leans one
+      // way, negative the other, and it has to be the barrel's own lean.
+      const lean = Math.atan2(p.vx, -p.vy);
+      assert.ok(
+        Math.abs(lean - tilt) < 0.18,
+        `${weapon}: round leans ${lean.toFixed(3)} rad, barrel ${tilt.toFixed(3)}`,
+      );
+    }
+  }
+});
+
+test('a callout reads upright in landscape, and round art leans with the flight', () => {
+  const game = readFileSync('src/games/gunhit/game/Game.ts', 'utf8');
+  // Damage / combo callouts are text: the sideways world must not turn them.
+  assert.match(game, /if \(this\.orientation === 'landscape'\) c\.rotate\(-Math\.PI \/ 2\);/);
+  // Module rounds are painted along the direction slide 1 flies them, not along
+  // the layer's own straight-up frame.
+  const eleven = readFileSync('src/games/gunhit/game/setElevenFx.ts', 'utf8');
+  assert.match(eleven, /this\.aimAt\.set\(p, angle\);/);
+  assert.match(eleven, /const aim = this\.aimAt\.get\(p\);/);
+  assert.match(eleven, /p\.vx = Math\.cos\(aim\) \* speed;/);
 });

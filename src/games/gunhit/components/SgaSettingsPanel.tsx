@@ -130,7 +130,7 @@ export default function SgaSettingsPanel({
             <span>🔥 {tr(language, 'COMBO TITIK')}</span><Toggle on={spotCombo} />
           </button>
           <p className="mt-1.5 text-[10px] leading-snug text-white/55">
-            {tr(language, 'Tembak titik yang sama (atau dekat bekas tembakan): 10 · 20 · 30 · 40 … masuk bonus coin. Koin yang ditembak bernilai 10.')}
+            {tr(language, 'Tembak hampir tepat di bekas tembakan sebelumnya (minimal 80% akurat): 10 · 20 · 30 · 40 … masuk bonus coin. Koin yang ditembak bernilai 10.')}
           </p>
         </section>
 

@@ -5,7 +5,7 @@ import { advanceCosmeticTrail } from './cosmeticTrail';
 import { sfx, withSfxGain } from './audio';
 import { normalizeSgaSpeed, type SgaGameSpeed } from './gameSpeed';
 import { getSavedBulletSpeed, normalizeBulletSpeed } from './bulletSpeed';
-import { SPOT_COMBO_COIN_VALUE, SPOT_COMBO_RADIUS, SPOT_COMBO_STEP, getSavedSpotCombo } from './spotCombo';
+import { SPOT_COMBO_COIN_VALUE, SPOT_COMBO_REACH, SPOT_COMBO_STEP, getSavedSpotCombo } from './spotCombo';
 import { getFast2DContext, getOptimalCanvasDpr, isMobilePerfProfile } from '../utils/mobilePerf';
 import { AdaptiveCanvasDpr } from '../utils/adaptiveCanvasDpr';
 import { FrameCadence } from '../utils/frameCadence';
@@ -3826,6 +3826,9 @@ export class Game {
     const al = k > 0.7 ? 1 - (k - 0.7) / 0.3 : 1;
     c.save();
     c.translate(p.x, p.y);
+    // Landscape shows the whole world on its side. A callout is still text, so
+    // it is turned back upright — otherwise every "+10" reads sideways.
+    if (this.orientation === 'landscape') c.rotate(-Math.PI / 2);
     c.rotate(p.rot);
     c.scale(pop, pop);
     c.globalAlpha = al;
@@ -5944,12 +5947,16 @@ export class Game {
       const arc = this.spotHits > 0
         ? Math.abs(Math.atan2(Math.sin(local - this.spotAngle), Math.cos(local - this.spotAngle))) * R
         : Infinity;
-      this.spotHits = arc <= SPOT_COMBO_RADIUS ? this.spotHits + 1 : 1;
+      // Only an almost-perfect repeat (inside 80 % of the tolerance, so the two
+      // holes overlap) keeps the chain alive; anything looser starts over.
+      this.spotHits = arc <= SPOT_COMBO_REACH ? this.spotHits + 1 : 1;
       this.spotAngle = local;
       const spotBonus = SPOT_COMBO_STEP * this.spotHits;
       this.score += spotBonus;
       this.coins += spotBonus;
-      this.addText(`🔥 TITIK SAMA +${spotBonus} 💰`, CX, this.targetY + R + 30, '#fbbf24', this.spotHits > 2 ? 26 : 22);
+      // One short, plain line — no glow sprite, no extra particles: the combo is
+      // fired on every hit of an auto weapon, so it has to stay cheap.
+      this.addText(`+${spotBonus} 💰`, CX, this.targetY + R + 30, '#fbbf24', 20);
     }
     let pts = w.points * (big === 2 ? 4 : big === 1 ? 2 : 1);
     if (big) {
@@ -7393,6 +7400,23 @@ export class Game {
    * barrel instead of straight up the screen. Only the direction of travel
    * changes: speed, spread and every weapon's own recipe stay as they were.
    */
+  /**
+   * Turn a velocity onto the barrel line.
+   *
+   * Module weapons (slide 11, slide 3, slide 2…) build their rounds in their own
+   * upright frame, so a round adopted from them still pointed straight up: the
+   * tracer left the muzzle sideways while the gun leaned. Everything that takes
+   * a velocity from a layer goes through here.
+   */
+  private poseVelocity(vx: number, vy: number): { vx: number; vy: number } {
+    if (this.orientation !== 'landscape') return { vx, vy };
+    const tilt = this.gunTiltNow;
+    if (!tilt) return { vx, vy };
+    const cos = Math.cos(tilt);
+    const sin = Math.sin(tilt);
+    return { vx: vx * cos - vy * sin, vy: vx * sin + vy * cos };
+  }
+
   private aimRoundAt(p: Proj) {
     if (this.orientation !== 'landscape') return;
     const tilt = this.gunTiltNow;
@@ -7410,11 +7434,9 @@ export class Game {
       p.y = this.gunBaseY + dx * sin + dy * cos;
       if (p.originX !== undefined) p.originX = p.x;
     }
-    const vx = p.vx;
-    const vy = p.vy;
-    if (!vx && !vy) return;
-    p.vx = vx * cos - vy * sin;
-    p.vy = vx * sin + vy * cos;
+    const posed = this.poseVelocity(p.vx, p.vy);
+    p.vx = posed.vx;
+    p.vy = posed.vy;
   }
 
   private update(rawDt: number) {
@@ -7961,8 +7983,11 @@ export class Game {
           p.s11Wait = false;
           p.x = this.s11.aimRound(own, bx);
           p.y = own.y;
-          p.vx = own.vx;
-          p.vy = own.vy;
+          // The layer's round points straight up its own frame: the carrier
+          // takes its speed but leaves along this barrel.
+          const dir = this.poseVelocity(own.vx, own.vy);
+          p.vx = dir.vx;
+          p.vy = dir.vy;
         } else if (this.strandCarrier(p)) continue;
       }
       if (p.s11Ghost) continue; // extra pellet of a burst gun: slide 11 fired it
@@ -8038,8 +8063,9 @@ export class Game {
         shot.y = y0;
         shot.update(s);
         if (this.setSevenLive && s > 0 && !isSevenBeam(shot)) {
-          p.vx = (shot.x - x0) / s;
-          p.vy = (shot.y - y0) / s;
+          const dir = this.poseVelocity((shot.x - x0) / s, (shot.y - y0) / s);
+          p.vx = dir.vx;
+          p.vy = dir.vy;
         }
         shot.x = x0;
         shot.y = y0;
@@ -8536,10 +8562,16 @@ export class Game {
           f = this.s11.flight(f.next) ?? f;
         }
         if (f) {
-          p.x = f.x;
-          p.y = f.y;
-          p.vx = f.vx;
-          p.vy = f.vy;
+          // Slide 11 flies the round straight up its own frame. Turn both its
+          // step and its velocity onto this barrel, so the round leaves along
+          // the muzzle it came out of instead of sliding back to the screen's
+          // centre line.
+          const step = this.poseVelocity(f.x - p.x, f.y - p.y);
+          p.x += step.vx;
+          p.y += step.vy;
+          const dir = this.poseVelocity(f.vx, f.vy);
+          p.vx = dir.vx;
+          p.vy = dir.vy;
         }
       }
       const ghostN = FX[this.weapon.id].ghost;

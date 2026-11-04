@@ -222,6 +222,8 @@ export class SetElevenFx {
   /** Rounds slide 1 already took from slide 11. */
   private taken = new Set<Proj>();
   private carried = new Set<Proj>();
+  /** The direction slide 1 is flying each carried round, for its art. */
+  private aimAt = new WeakMap<Proj, number>();
   /**
    * The step each carried round was last carried in. Slide 1 hands every
    * carried round's position over once per frame (`carry()`); a round it no
@@ -708,6 +710,11 @@ export class SetElevenFx {
   carry(p: Proj, x: number, y: number, angle: number) {
     p.x = x;
     p.y = y;
+    // Where slide 1 is actually flying this round. Slide 11's recipes paint
+    // their tracers along the round's own velocity — straight up its frame — so
+    // the art is turned onto this angle while it is painted (`drawShot`), and a
+    // leaning barrel's tracer leans with it.
+    this.aimAt.set(p, angle);
     if (!p.noCollide) p.data = { ...(p.data ?? {}), aim: angle };
     this.taken.add(p);
     this.carried.add(p);
@@ -1320,6 +1327,20 @@ export class SetElevenFx {
     // A round that burst by itself in flight (the prism tracer after its
     // split) is gone, even while slide 1's carrier finishes the flight.
     if (!g || !p.alive) return;
+    // Slide 11 paints a tracer from its tail to its tip along `(vx, vy)`, which
+    // is the layer's own straight-up flight. Point that at the path slide 1
+    // flies the round along (the barrel), so the streak really leans and its
+    // tail stays behind the round.
+    const aim = this.aimAt.get(p);
+    const vx = p.vx;
+    const vy = p.vy;
+    if (typeof aim === 'number' && Number.isFinite(aim)) {
+      const speed = Math.hypot(vx, vy);
+      if (speed > 1) {
+        p.vx = Math.cos(aim) * speed;
+        p.vy = Math.sin(aim) * speed;
+      }
+    }
     ctx.save();
     try {
       p.draw(ctx, g, p);
@@ -1327,6 +1348,8 @@ export class SetElevenFx {
       /* a single round's art must not break the frame */
     }
     ctx.restore();
+    p.vx = vx;
+    p.vy = vy;
   }
 
   /**
