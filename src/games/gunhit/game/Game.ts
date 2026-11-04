@@ -6563,9 +6563,13 @@ export class Game {
         const otherHalf = (it.type === 'old' ? 4.5 : getWeapon(it.w || 'pistol').half) * sc;
         if (shot7 && it.s7Half !== undefined) {
           // Two slide-3 rounds: blocked when their `half` angles overlap where
-          // the stuck one protrudes — slide 3's rule, number for number.
+          // the stuck one protrudes — slide 3's rule, number for number. COMBO
+          // TITIK (SETTING) makes that repeat a hit instead of a wasted shot.
           const lim = itemR + (it.s7Protrude ?? 12);
-          if (d < it.s7Half + shot7.half && reach <= lim && reach >= itemR - 8) return { res: 'fail', spike: false };
+          if (d < it.s7Half + shot7.half && reach <= lim && reach >= itemR - 8) {
+            if (!this.spotComboOn) return { res: 'fail', spike: false };
+            continue;
+          }
           continue;
         }
         const myHalf = shot7 ? shot7.half * Math.max(50, itemR) : w.half * (1 + (p.big ?? 0) * 0.3);
@@ -6581,6 +6585,20 @@ export class Game {
             this.flyers.push({ x: pos.x, y: pos.y, vx: rand(-250, 250), vy: -350, rot: wa - Math.PI / 2, vr: rand(-20, 20), kind: 'old' });
             this.addText('🧲 TEMBUS!', pos.x, pos.y - 20, '#7dd3fc', 22);
             sfx2.metal();
+            continue;
+          }
+          // COMBO TITIK (SETTING): landing on the previous mark is the point of
+          // the mode — the round bites where it aimed instead of being wasted on
+          // the round already stuck there. The old round is knocked loose so a
+          // long chain does not stack a dozen sprites on one spot.
+          if (this.spotComboOn) {
+            this.items = this.items.filter((x) => x !== it);
+            const pos = this.worldPos(it.angle, itemR + 12);
+            this.flyers.push({
+              x: pos.x, y: pos.y, vx: rand(-220, 220), vy: rand(140, 360),
+              rot: it.angle + this.rot - Math.PI / 2, vr: rand(-18, 18),
+              kind: it.type === 'old' ? 'old' : 'bullet', w: it.w,
+            });
             continue;
           }
           return { res: 'fail', spike: false };

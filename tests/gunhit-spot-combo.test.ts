@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { CX } from '../src/games/gunhit/game/layout';
 import { createCanvas } from '@napi-rs/canvas';
 import { installCanvasShim } from './supportCanvas';
 import { installSilentAudio } from '../tools/supportAudioSilent';
@@ -99,4 +100,39 @@ test('the ladder only climbs while the rounds keep landing on the same spot', ()
   assert.match(src, /setSpotCombo\(on: boolean\)/);
   // A new stage starts the ladder over.
   assert.match(src, /this\.spotHits = 0;/);
+});
+
+test('in the mode a round that lands on a stuck round is a hit, not a violation', () => {
+  const fire = (combo: boolean) => {
+    const game = liveGame();
+    game.setSpotCombo(combo);
+    const R = game.level.radius;
+    const local = -Math.PI / 2 - game.rot;
+    // A round already stuck right where the next one is aimed.
+    game.items.push({ angle: local, type: 'bullet', age: 0, r: R, w: 'pistol' });
+    const before = game.items.length;
+    const proj = { x: CX, y: game.targetY - R + 3, vx: 0, vy: -900 };
+    const res = game.stepProj(proj);
+    return { res, game, before };
+  };
+
+  const off = fire(false);
+  assert.equal(off.res.res, 'fail', 'outside the mode the old rule still wastes the shot');
+
+  const on = fire(true);
+  assert.equal(on.res.res, 'stick', 'in COMBO TITIK it bites the same spot');
+  // The mark it replaced is knocked loose instead of piling up on one spot: the
+  // wheel holds one mark here, and the caller adds the new round on top of it.
+  assert.equal(on.game.items.length, on.before - 1, 'the old mark leaves the wheel');
+  assert.ok(on.game.flyers.length > 0, 'the replaced round flies off');
+});
+
+test('a spike is still a violation, even in the mode', () => {
+  const game = liveGame();
+  game.setSpotCombo(true);
+  const R = game.level.radius;
+  const local = -Math.PI / 2 - game.rot;
+  game.items.push({ angle: local, type: 'spike', age: 0, r: R });
+  const res = game.stepProj({ x: CX, y: game.targetY - R + 3, vx: 0, vy: -900 });
+  assert.equal(res.res, 'fail', 'hazards keep their teeth');
 });
