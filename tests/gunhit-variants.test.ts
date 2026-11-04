@@ -62,8 +62,9 @@ function pathsFor(id: VariantWeapon, variant: GunVariant) {
 test('user loadouts use the requested classic/new combination; only real alternatives can be selected', () => {
   assert.deepEqual(GUN_VARIANTS.map(v => v.label), ['Sebelumnya', 'Sekarang', 'Terbaru']);
   assert.deepEqual(GUN_EFFECTS.map(v => v.label), ['Sebelumnya', 'Baru']);
-  assert.equal(VARIANT_WEAPONS.length, 92);
-  assert.equal(EDITABLE_WEAPONS.length, 92);
+  // 90 cards: the imported roster minus the retired Shrink and Grow rays.
+  assert.equal(VARIANT_WEAPONS.length, 90);
+  assert.equal(EDITABLE_WEAPONS.length, 90);
   // PISTOL removes the Slide 5 ('set11') weapon design, uses Slide 01's classic
   // pistol ('original') as its default design, uses Slide 4 ('set9') as its
   // default shot effect, and keeps Slide 5 ('set11') in its shot effects.
@@ -106,7 +107,7 @@ test('user loadouts use the requested classic/new combination; only real alterna
     flamethrower: ['original', 'set7'], bubble: ['original', 'set7'], bamboo: ['original', 'set7'],
     banana: ['original', 'new'], harpoon: ['set7', 'set7'], chicken: ['set7', 'set7'], confetti: ['set7', 'set7'],
     seed: ['original', 'set7'], pizza: ['original', 'set7'], minigun: ['set7', 'new'], railgun: ['set11', 'set7'],
-    magnet: ['original', 'set7'], shrink: ['set7', 'set7'], pirate: ['original', 'set7'], card: ['set7', 'set7'],
+    magnet: ['original', 'set7'], pirate: ['original', 'set7'], card: ['set7', 'set7'],
     gauntlet_cannon: ['original', 'set7'], photon_saber: ['set11', 'set9'], ironman_hand: ['set11', 'ironman_combo'],
   };
   for (const id of EDITABLE_WEAPONS) {

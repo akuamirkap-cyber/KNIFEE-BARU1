@@ -32,7 +32,6 @@ const requested = [
   ['minigun', 'set7', 2, 2, 'new', 2, 3],
   ['railgun', 'set11', 5, 5, 'set7', 4, 6],
   ['magnet', 'original', 1, 2, 'set7', 3, 3],
-  ['shrink', 'set7', 2, 2, 'set7', 3, 3],
   ['pirate', 'original', 1, 2, 'set7', 3, 3],
   ['card', 'set7', 2, 2, 'set7', 3, 3],
 ] as const;
@@ -76,13 +75,13 @@ function assertRequestedDefaults(m: GunVariantsModule) {
   }
 }
 
-test('all 30 supplied skin and effect cards are marked factory defaults on a fresh profile', async () => {
+test('all 29 supplied skin and effect cards are marked factory defaults on a fresh profile', async () => {
   await withStorage(mockStorage(), async () => {
     const m = await freshModule();
     assertRequestedDefaults(m);
-    assert.equal(m.getMarkedGunDefaultCount(), 31);
+    assert.equal(m.getMarkedGunDefaultCount(), 30);
     const entries = m.getWeaponDefaultExportEntries('marked_only');
-    assert.equal(entries.length, 31);
+    assert.equal(entries.length, 30);
     assert.deepEqual(m.getMarkedGunDefault('gauntlet_cannon'), { variant: 'original', effect: 'set7' });
     for (const row of requested) {
       const entry = entries.find(e => e.id === row[0]);
@@ -101,7 +100,7 @@ test('all 30 supplied skin and effect cards are marked factory defaults on a fre
   });
 });
 
-test('upgrade replaces only the 30 old selections and marks, preserving other saved weapons', async () => {
+test('upgrade replaces only the 29 old selections and marks, preserving other saved weapons', async () => {
   const store = mockStorage({
     'gunhit:requested-defaults:v1': '1',
     'gunhit:gun-designs:v3': JSON.stringify({ fish: 'set7', ak47: 'set11', chicken: 'original', seed: 'set7', minigun: 'original', pistol: 'set9', golden: 'latest', honey: 'current' }),
@@ -117,7 +116,7 @@ test('upgrade replaces only the 30 old selections and marks, preserving other sa
     assert.deepEqual([m.getGunVariant('honey'), m.getGunEffect('honey')], ['current', 'new']);
     assert.deepEqual(m.getMarkedGunDefault('pistol'), { variant: 'set9', effect: 'set11' });
     assert.deepEqual(m.getMarkedGunDefault('honey'), { variant: 'current', effect: 'new' });
-    assert.equal(m.getMarkedGunDefaultCount(), 33);
+    assert.equal(m.getMarkedGunDefaultCount(), 32);
     assert.equal(store.getItem('gunhit:requested-defaults:v2'), '1');
 
     // Player changes after the upgrade must not be overwritten on each load.

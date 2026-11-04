@@ -284,18 +284,19 @@ test('every weapon slide bites the artwork, never the old circle', async () => {
 });
 
 /**
- * The Grow Ray enlarges the head mid-stage. Artwork-local spots must ride out
- * with the drawing: a round stuck before the growth may not drift off it.
+ * A boss stage can enlarge the head mid-stage. Artwork-local spots must ride
+ * out with the drawing: a round stuck before the growth may not drift off it.
+ * (The Grow Ray that used to do this was removed on request, so the growth is
+ * driven directly.)
  */
 test('a round stays on the drawing while the head grows under it', async () => {
   const { game, kind } = await bossStage(5);
-  game.setWeapon('grow');
   let it: any = null;
   for (const deg of [270, 250, 300, 90, 210]) {
     it = shootAtLocal(game, (deg * Math.PI) / 180);
     if (it) break;
   }
-  assert.ok(it, `${kind}: a grow round bit into the head`);
+  assert.ok(it, `${kind}: a round bit into the head`);
   assert.ok(game.artHitAt(game.artToWorld(it.px, it.py).x, game.artToWorld(it.px, it.py).y),
     `${kind}: it bit the blue outline`);
   const R0 = game.level.radius as number;

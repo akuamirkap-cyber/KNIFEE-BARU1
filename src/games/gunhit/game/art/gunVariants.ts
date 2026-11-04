@@ -600,8 +600,9 @@ export interface MarkedWeaponDefault {
   effect: GunEffect;
 }
 
-// The 30 combinations exported by the player. IDs refer to the existing cards;
-// their order, labels, projectile mechanics and other weapons remain unchanged.
+// The 29 combinations exported by the player (the imported list minus the
+// retired Shrink Ray). IDs refer to the existing cards; their order, labels,
+// projectile mechanics and other weapons remain unchanged.
 const REQUESTED_DEFAULT_PRESETS = {
   ak47: { variant: 'original', effect: 'set11' },
   crossbow: { variant: 'original', effect: 'set7' },
@@ -630,7 +631,6 @@ const REQUESTED_DEFAULT_PRESETS = {
   minigun: { variant: 'set7', effect: 'new' },
   railgun: { variant: 'set11', effect: 'set7' },
   magnet: { variant: 'original', effect: 'set7' },
-  shrink: { variant: 'set7', effect: 'set7' },
   pirate: { variant: 'original', effect: 'set7' },
   card: { variant: 'set7', effect: 'set7' },
 } as const satisfies Partial<Record<EditableWeapon, MarkedWeaponDefault>>;
@@ -759,7 +759,7 @@ function restoreSavedLoadouts(): void {
   for (const id of EDITABLE_WEAPONS) {
     if (id === 'pistol' && !keepSavedPistol) continue;
     if (id === 'gauntlet_cannon' && applyGauntletDefault) continue;
-    // Discard only these 30 older selections during the one-time migration.
+    // Discard only these 29 older selections during the one-time migration.
     if (applyRequestedDefaults && Object.hasOwn(REQUESTED_DEFAULT_PRESETS, id)) continue;
     const design = designsOnDisk?.[id];
     if (getGunVariantOptions(id).some(option => option.id === design)) saved[id] = design as GunVariant;
@@ -910,7 +910,13 @@ export function isGunModifiedFromFactory(id: WeaponId): boolean {
 }
 
 export function getMarkedGunDefaultCount(): number {
-  return Object.keys(markedDefaults).length;
+  // Retired weapons can still sit in an older save; they are not part of the
+  // arsenal any more, so they never count as marked defaults.
+  let count = 0;
+  for (const id of Object.keys(markedDefaults) as EditableWeapon[]) {
+    if (canChooseGunDesign(id)) count++;
+  }
+  return count;
 }
 
 export function getWeaponDefaultExportEntries(

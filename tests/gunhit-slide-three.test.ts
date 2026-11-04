@@ -319,17 +319,22 @@ test('slide 3’s hit-stop runs its world at 22 %', () => {
   });
 });
 
-test('the shrink ray pulses the wheel with slide 3’s own spring', () => {
-  seeded(7, () => {
-    const game = stage('shrink');
-    tap(game);
-    let frames = 0;
-    while (game.stuck === 0 && frames++ < 90) game.update(DT);
-    assert.equal(game.stuck, 1);
-    assert.ok(game.s7.feel.pulseS < -0.05, `the wheel shrinks for a moment (${game.s7.feel.pulseS})`);
-    run(game, 2);
-    assert.ok(Math.abs(game.s7.feel.pulseS) < 0.01, 'and springs back');
-  });
+// Player request: the two size rays left the arsenal. Their ids stay retired,
+// so an old save or a stale card can never bring the wheel pulse back.
+test('the retired shrink and grow rays can no longer be equipped on slide 3', () => {
+  for (const id of ['shrink', 'grow'] as const) {
+    seeded(7, () => {
+      const game = stage(id);
+      assert.notEqual(game.weapon.id, id, `${id} is not a weapon any more`);
+      assert.equal(game.weapon.id, 'pistol', `${id} falls back to the pistol card`);
+      tap(game);
+      let frames = 0;
+      while (game.stuck === 0 && frames++ < 90) game.update(DT);
+      assert.equal(game.stuck, 1);
+      assert.ok(Math.abs(game.s7.feel.pulseS) < 0.01,
+        `${id} never pulses the wheel (${game.s7.feel.pulseS})`);
+    });
+  }
 });
 
 /* ── no slide-1 perks ────────────────────────────────────────────────────── */

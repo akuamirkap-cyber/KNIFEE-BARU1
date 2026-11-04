@@ -342,6 +342,13 @@ function pistol(c: CanvasRenderingContext2D, cx: number, y0: number, t: number) 
   c.scale(sc, sc);
 
   // ══════════════════ 1. LARAS (BARREL, BUSHING & RECOIL PLUG) ══════════════════
+  // The laras rides back WITH the slide. On a short-recoil pistol the barrel and
+  // the slide travel rearward together for the first part of the cycle, so while
+  // the slide above retracted the barrel used to stay nailed to the frame: the
+  // muzzle hung out in front of a gap with the dust cover behind it, which read
+  // as a detached muzzle. Same travel, same frame, no seam.
+  c.save();
+  c.translate(-s, 0);
   // Precision crowned .45 ACP barrel protruding cleanly from the front bushing
   c.beginPath();
   c.roundRect(78, -13.2, 18, 10.8, [0, 2.5, 2.5, 0]);
@@ -368,6 +375,8 @@ function pistol(c: CanvasRenderingContext2D, cx: number, y0: number, t: number) 
   c.moveTo(88.5, -1);
   c.lineTo(88.5, 4);
   c.stroke();
+
+  c.restore();
 
   // ══════════════════ 2. BADAN BAWAH PISTOL (STEEL FRAME & DUST COVER) ══════════════════
   // Substantial forged-steel receiver & dust cover supporting the slide
