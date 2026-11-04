@@ -52,7 +52,10 @@ test('Gun Hit menu uses PERFECT SHOT branding and keeps special-stage picks in S
   assert.match(menu, /from-\[#ff6a3d\].*to-\[#e0331e\]/s);
   assert.match(menu, /from-\[#4cef6a\].*to-\[#18b93a\]/s);
   assert.doesNotMatch(menu, /🍎|\{getWeapon\(weapon\)\.name\}/);
-  assert.match(app, /const pw = 337;\s+const ph = 295;/);
+  // The showcase canvas stays 337x295 CSS px; the paint reads that from the
+  // shared constants so the cached shortcut frame cannot size it differently.
+  assert.match(app, /const MENU_GUN_CANVAS_W = 337;\s+const MENU_GUN_CANVAS_H = 295;/);
+  assert.match(app, /const pw = MENU_GUN_CANVAS_W;\s+const ph = MENU_GUN_CANVAS_H;/);
   assert.match(menu, /width:\s*'min\(337px,\s*90vw\)',\s*height:\s*'min\(295px,\s*54vh\)'/);
   const bottomBar = menu.slice(menu.indexOf('Right game\'s four framed vector icons'));
   assert.equal((bottomBar.match(/<GameIcon name=\{item\.icon\}/g) ?? []).length, 1);

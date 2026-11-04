@@ -3,6 +3,7 @@ import type { Game } from './game/Game';
 import { CX as WORLD_CX, GAMEPLAY_GUN_SCALE, GUN_Y, H, initialGameplayWheelCenterY, LAND_H, LAND_W } from './game/layout';
 import { makeLevel } from './game/levels';
 import { savedValues, storage } from './game/safeStorage';
+import { APP_VERSION } from '../../telemetry/version';
 import { setMasterVolume, setMuted, sfx } from './game/audio';
 import type { BossHead } from './game/bossCatalog';
 import { bossXpReward, getPlayerProgress } from './game/playerProgress';
@@ -21,6 +22,85 @@ import { gunSunburstColor } from './game/sunburstPalette';
 type MenuGunArt = typeof import('./game/menuGunArt');
 let menuGunArtPromise: Promise<MenuGunArt> | null = null;
 const loadMenuGunArt = () => (menuGunArtPromise ??= import('./game/menuGunArt'));
+void loadMenuGunArt();
+/**
+ * Why the artwork is asked for here, at module scope, and not in an effect.
+ *
+ * The chain behind `menuGunArt` (the gun modules and the ported slides they
+ * import) is the largest thing the menu needs, and it used to be requested only
+ * after React had committed — so the hero weapon arrived a beat or two after the
+ * title. Requesting it with the shell lets the download overlap everything else
+ * the first render does, and the matching `modulepreload` hints in `index.html`
+ * (see `preloadMenuGunArt()` in `vite.config.ts`) start it even earlier.
+ */
+
+/**
+ * The last weapon the menu painted, kept as a bitmap.
+ *
+ * Even preloaded, the artwork is a lazy chunk, so on a cold start the showcase
+ * is empty until it lands. A painted frame is a few dozen KB, so it is kept (per
+ * weapon, per app version) and drawn the moment the menu mounts: the weapon is
+ * on screen immediately, and the live artwork replaces it as soon as it parses.
+ */
+/** Backing size of the showcase canvas, in CSS pixels (-10% of the old 374x328). */
+const MENU_GUN_CANVAS_W = 337;
+const MENU_GUN_CANVAS_H = 295;
+const MENU_GUN_BITMAP_KEY = 'sga_menu_gun_frame';
+/**
+ * Ceiling for the kept frame.
+ *
+ * It rides in the same store as the progress, and in a frame where the browser
+ * refuses web storage that store is mirrored into `window.name`, which the
+ * browser truncates at a couple of megabytes. A quarter of a megabyte keeps the
+ * whole snapshot comfortably inside that.
+ */
+const MENU_GUN_BITMAP_MAX = 260_000;
+interface MenuGunBitmap { v: string; id: string; png: string }
+/** Mirrors the live artwork's readiness so a late bitmap never paints over it. */
+const menuGunArtReady = { current: false };
+
+function readMenuGunBitmap(): MenuGunBitmap | null {
+  try {
+    const raw = storage.getItem(MENU_GUN_BITMAP_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as MenuGunBitmap;
+    if (!parsed || parsed.v !== APP_VERSION || typeof parsed.png !== 'string') return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+/** A PNG of the frame, halved when the device-pixel copy is too heavy to keep. */
+function frameToPng(cv: HTMLCanvasElement): string | null {
+  try {
+    if (typeof cv.toDataURL !== 'function') return null;
+    const full = cv.toDataURL('image/png');
+    if (full && full.length <= MENU_GUN_BITMAP_MAX) return full;
+    if (typeof document === 'undefined' || !cv.width || !cv.height) return null;
+    const half = document.createElement('canvas');
+    half.width = Math.max(1, Math.round(cv.width / 2));
+    half.height = Math.max(1, Math.round(cv.height / 2));
+    const ctx = half.getContext('2d');
+    if (!ctx) return null;
+    ctx.drawImage(cv, 0, 0, half.width, half.height);
+    const small = half.toDataURL('image/png');
+    return small && small.length <= MENU_GUN_BITMAP_MAX ? small : null;
+  } catch {
+    return null;
+  }
+}
+
+function rememberMenuGunBitmap(cv: HTMLCanvasElement, id: string) {
+  try {
+    const png = frameToPng(cv);
+    if (!png) return;
+    storage.setItem(MENU_GUN_BITMAP_KEY, JSON.stringify({ v: APP_VERSION, id, png } satisfies MenuGunBitmap));
+  } catch {
+    // Storage refused: the live artwork is enough.
+  }
+}
+
 import { juicyAudio } from '../../utils/juicyAudio';
 import DiamondSprite from '../shared/DiamondSprite';
 import CoinSprite from '../shared/CoinSprite';
@@ -366,6 +446,9 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   const activeRef = useRef(false);
   // Gun art for the menu showcase, once its chunk has landed.
   const [gunArt, setGunArt] = useState<MenuGunArt | null>(null);
+  /** Bumped when the paint effect found no canvas yet, so it runs again. */
+  const [gunPaintTick, setGunPaintTick] = useState(0);
+  menuGunArtReady.current = Boolean(gunArt);
   useEffect(() => {
     let alive = true;
     void loadMenuGunArt().then((mod) => {
@@ -1135,15 +1218,52 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     gameRef.current?.setHudHidden(Boolean(bossDefeatedData));
   }, [bossDefeatedData, screen]);
 
+  /**
+   * Show the cached frame straight away, then let the live artwork take over.
+   *
+   * The showcase used to be an empty box until the gun artwork chunk landed. The
+   * previous paint is drawn here the moment the menu mounts, so the hero weapon
+   * is never missing; `menuGunArtReady` keeps a slow image decode from painting
+   * over the real thing once it is there.
+   */
+  useEffect(() => {
+    if (gunArt) return;
+    if (screen !== 'menu' || arsenalOpen || questOpen || leaderboardOpen || mapOpen || settingsOpen) return;
+    const cv = previewCanvasRef.current;
+    const cached = readMenuGunBitmap();
+    if (!cv || !cached || cached.id !== weapon) return;
+    // Size the canvas exactly like the live paint does, so the shortcut frame
+    // lands in the same box instead of being stretched from the 300x150 default.
+    const dpr = getOptimalCanvasDpr(2);
+    cv.width = Math.round(MENU_GUN_CANVAS_W * dpr);
+    cv.height = Math.round(MENU_GUN_CANVAS_H * dpr);
+    const img = new Image();
+    img.onload = () => {
+      if (menuGunArtReady.current) return;
+      const ctx = getFast2DContext(cv);
+      if (!ctx) return;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, cv.width, cv.height);
+      ctx.drawImage(img, 0, 0, cv.width, cv.height);
+    };
+    img.src = cached.png;
+  }, [gunArt, screen, weapon, arsenalOpen, questOpen, leaderboardOpen, mapOpen, settingsOpen]);
+
   // Upright weapon preview on the main menu (-10% from 374x328 -> 337x295, native VSync FPS)
   useEffect(() => {
     if (!gunArt) return;
     if (screen !== 'menu' || arsenalOpen || questOpen || leaderboardOpen || mapOpen || settingsOpen) return;
     const cv = previewCanvasRef.current;
-    if (!cv) return;
+    if (!cv) {
+      // A menu re-entrance can mount the canvas a frame after this effect runs.
+      // Skipping the paint here used to leave the showcase blank until some
+      // other dependency changed, which is what made the weapon look "late".
+      const retry = window.setTimeout(() => setGunPaintTick((n) => n + 1), 16);
+      return () => window.clearTimeout(retry);
+    }
     const dpr = getOptimalCanvasDpr(2);
-    const pw = 337;
-    const ph = 295;
+    const pw = MENU_GUN_CANVAS_W;
+    const ph = MENU_GUN_CANVAS_H;
     cv.width = Math.round(pw * dpr);
     cv.height = Math.round(ph * dpr);
     const ctx = getFast2DContext(cv);
@@ -1229,7 +1349,9 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     } catch {
       // Some low-end canvas contexts disable readback; fall back to the shared frame center.
     }
-  }, [gunArt, screen, weapon, arsenalOpen, questOpen, leaderboardOpen, mapOpen, settingsOpen]);
+    // Keep this frame for the next cold start.
+    rememberMenuGunBitmap(cv, weapon);
+  }, [gunArt, gunPaintTick, screen, weapon, arsenalOpen, questOpen, leaderboardOpen, mapOpen, settingsOpen]);
 
   // Roll up score only while the slide is active; pause at the current number.
   useEffect(() => {
