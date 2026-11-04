@@ -1,6 +1,6 @@
 import { rarityLabel, tr } from '../../../i18n/strings';
 import { useLanguage } from '../../../i18n/useLanguage';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { GiftBoxBody, GiftBoxLid } from '../../knife-hit/components/Art';
 import {
   Burst,
@@ -168,15 +168,48 @@ export function GiftBoxScene({
   // the right — instead of a portrait stack that runs off the bottom edge.
   const [orientation] = useSgaOrientation();
   const landscape = isLandscape(orientation);
-  const stageColumn = landscape ? { left: 0, width: '46%' } : { left: 0, right: 0 };
-  const boxSpot = landscape
-    ? { left: '23%', top: '58%', transform: 'translate(-50%, -50%) scale(1.18)' }
-    : { left: '50%', top: 300, transform: 'translateX(-50%)' };
   const wrapRef = useRef<HTMLDivElement>(null);
   const punchRef = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<BoxState>('drop');
   const [taps, setTaps] = useState(0);
   const [showInfo, setShowInfo] = useState(false);
+
+  /**
+   * Landscape reads as two beats, not two columns from the first frame.
+   *
+   * While the kado is still closed it owns the middle of the screen — that is
+   * what the player is being asked to tap — with the headline and the tap hint
+   * stacked around it. The moment the reward is revealed the whole picture
+   * glides one column to the left (`REVEAL_SLIDE`), so the new weapon sits where
+   * the box was and the loot card gets the right half to itself. Every anchor
+   * below shares the same transition, so the burst, the rays, the box and the
+   * rising weapon travel together instead of snapping.
+   */
+  const REVEAL_SLIDE = 'left .7s cubic-bezier(.22,.9,.28,1), top .7s cubic-bezier(.22,.9,.28,1), width .7s cubic-bezier(.22,.9,.28,1), right .7s cubic-bezier(.22,.9,.28,1)';
+  const stageColumn: CSSProperties = landscape
+    ? { left: showInfo ? 0 : '27%', width: '46%', transition: REVEAL_SLIDE }
+    : { left: 0, right: 0 };
+  const boxSpot: CSSProperties = landscape
+    ? {
+      left: showInfo ? '23%' : '50%',
+      top: showInfo ? '58%' : '52%',
+      transform: `translate(-50%, -50%) scale(${showInfo ? 1.18 : 1.12})`,
+      transition: REVEAL_SLIDE,
+    }
+    : { left: '50%', top: 300, transform: 'translateX(-50%)' };
+  /**
+   * The tap hint waits under the centred kado; the loot card takes the right
+   * column once the weapon is out. Same transition, so it slides across.
+   */
+  const infoPanelStyle: CSSProperties | undefined = landscape
+    ? {
+      left: showInfo ? '48%' : '6%',
+      right: showInfo ? '4%' : '6%',
+      top: showInfo ? '50%' : '88%',
+      transform: 'translateY(-50%)',
+      transition: REVEAL_SLIDE,
+    }
+    : undefined;
 
   const rayColor = weapon ? RARITY_RGB[weapon.rarity] : COIN_RGB;
 
@@ -318,7 +351,7 @@ export function GiftBoxScene({
       )}
 
       {(taps >= 2 || charging) && !isOpen && (
-        <div className="absolute h-0 w-0 transition-opacity" style={{ ...boxSpot, top: landscape ? '58%' : 345, opacity: charging ? 0.9 : 0.45 }}>
+        <div className="absolute h-0 w-0 transition-opacity" style={{ ...boxSpot, top: landscape ? boxSpot.top : 345, opacity: charging ? 0.9 : 0.45 }}>
           <GodRays size={charging ? 420 : 280} intensity={charging ? 1 : 0.6} color={rayColor} core={false} />
         </div>
       )}
@@ -399,7 +432,7 @@ export function GiftBoxScene({
       </div>
 
       {taps > 0 && !isOpen && (
-        <div key={`t${taps}`} className="pointer-events-none absolute h-0 w-0" style={{ ...boxSpot, top: landscape ? '62%' : 380 }}>
+        <div key={`t${taps}`} className="pointer-events-none absolute h-0 w-0" style={{ ...boxSpot, top: landscape ? boxSpot.top : 380 }}>
           <Burst count={7 + taps * 3} distance={100 + taps * 25} shape="star" size={11} />
         </div>
       )}
@@ -409,7 +442,7 @@ export function GiftBoxScene({
       {/* Info hadiah + aksi */}
       <div
         className={`absolute flex flex-col items-center gap-2 px-6 ${landscape ? '' : showInfo ? 'inset-x-0 top-[390px]' : 'inset-x-0 bottom-[36px]'}`}
-        style={landscape ? { left: '48%', right: '4%', top: '50%', transform: 'translateY(-50%)' } : undefined}
+        style={infoPanelStyle}
       >
         {state === 'ready' && (
           <>
