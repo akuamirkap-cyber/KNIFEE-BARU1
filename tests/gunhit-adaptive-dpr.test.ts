@@ -120,6 +120,10 @@ test('the real game loop resizes only its backing store and continues the same s
   // produce sparse RAFs; none of those should lower the visual quality.
   const update = game.update;
   game.update = () => undefined; game.render = () => undefined;
+  // A genuine surface rebuild resets the governor; a browser resize that cannot
+  // change the fixed world-sized canvas deliberately does not (that is what made
+  // a mobile resize storm reallocate the backing store and flash the screen).
+  game.cssSurface = '';
   game.resize();
   let now = game.last;
   const runLoop = () => { for (let i = 0; i < 80; i++) { now += 33.4; game.loop(now); } };

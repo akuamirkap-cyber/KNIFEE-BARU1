@@ -1676,6 +1676,12 @@ export class Game {
   private portals: Portal[] = [];
   private glitchT = 0;
   private rockFragments: RockFragment[] = [];
+  /** World surface the canvas was last built for (`'420x760'` style key). */
+  private cssSurface = '';
+  /** Has `resize()` ever built a surface? The very first call always must. */
+  private hasSized = false;
+  /** Pieces already turned into the landscape screen's gravity frame (see `turnDebris`). */
+  private readonly turnedDebris = new WeakSet<object>();
   private rockBullets: EmbeddedShot[] = [];
   private fallenCells: FallingCell[] = [];
   private chestBullets: EmbeddedShot[] = [];
@@ -2442,6 +2448,7 @@ export class Game {
     this.vignetteBackdropDpr = 0;
     this.specialOverlayCanvas = null;
     this.specialOverlayKey = '';
+    this.cssSurface = '';
     this.resize();
   }
 
@@ -2581,6 +2588,19 @@ export class Game {
 
   private resize = () => {
     this.scale = 1;
+    // The canvas is a fixed world-sized surface (portrait 420x760, landscape
+    // 760x420) that CSS scales to the screen, so a mobile browser's resize storm
+    // — the address bar collapsing while the player scrolls, the keyboard
+    // opening, a rotation the presentation already handled — usually asks for
+    // exactly the surface we already have. Rebuilding it anyway meant a fresh
+    // backing store (which starts out *empty*), a fresh fluid field and a reset
+    // resolution governor, many times a minute: that is the blank flash plus the
+    // hitch. Bail out before touching anything when the surface cannot change.
+    const { w, h } = displaySize(this.orientation);
+    const surface = `${w}x${h}`;
+    if (surface === this.cssSurface && this.hasSized) return;
+    this.cssSurface = surface;
+    this.hasSized = true;
     // Start at the usual sharp mobile DPR; sustained slow frames may reduce it
     // gradually, and sustained smooth play restores it. No effects are removed.
     const baseDpr = getOptimalCanvasDpr(2);
@@ -2590,15 +2610,15 @@ export class Game {
     this.lastWork = 0;
     // CSS size follows the *display* rectangle (landscape swaps W and H); the
     // engine keeps drawing in world units underneath.
-    const { w, h } = displaySize(this.orientation);
     this.canvas.style.width = `${w}px`;
     this.canvas.style.height = `${h}px`;
     this.applyCanvasDpr(baseDpr);
     // The fluid field is a world-space effect, so it keeps the world's size.
     this.acidFluid.resize(W, H);
-    // Resizing clears the backing store. Restore a single still frame even
-    // if the game is paused rather than leaving an empty thumbnail.
-    if (this.hasRendered && !this.active) this.render();
+    // Resizing clears the backing store and the next tick is up to a frame away
+    // (further when the loop is throttled for an idle backdrop). Paint straight
+    // away so the player never catches an empty canvas.
+    if (this.hasRendered) this.render();
   };
 
   private onKey = (e: KeyboardEvent) => {
@@ -6424,6 +6444,43 @@ export class Game {
     this.particles.push({ x, y: safeY, vx: 0, vy: 25, life: 0.65, max: 0.65, size: Math.min(size, 24), color, kind: 'text', rot: 0, vr: 0, g: 0, text });
   }
 
+  /**
+   * Debris gravity, expressed for the screen the world is shown on.
+   *
+   * Portrait draws the world as-is, so wreckage falls along world +y. Landscape
+   * lays the world on its side (`layout.ts`: world (x, y) is display (H - y, x)),
+   * which makes the screen's floor world **+x**. Keeping the portrait's +y pull
+   * there is what made chips, sparks and casings slide sideways across the
+   * landscape screen instead of dropping: they all have to fall along +x now.
+   */
+  private get debrisFallsAlongX(): boolean {
+    return this.orientation === 'landscape';
+  }
+
+  /** Has a falling piece reached the floor the player can see? `m` may be negative for a lip. */
+  private pastDebrisFloor(x: number, y: number, m: number): boolean {
+    return this.debrisFallsAlongX ? x > W + m : y > H + m;
+  }
+
+  /**
+   * Turn a freshly launched piece into the screen's gravity frame, once.
+   *
+   * Every burst in the engine is written for the portrait world (a shard thrown
+   * "up" is -y, a casing thrown "down" is +y). On the landscape screen world +x
+   * is down and world -y is right, so the launch velocity is rotated a quarter
+   * turn; without it the debris drops away from the impact instead of tumbling
+   * toward the floor. The mark lives in a WeakSet so this costs one lookup per
+   * piece per frame and nothing is ever written onto the piece itself.
+   */
+  private turnDebris<T extends { vx: number; vy: number }>(o: T): T {
+    if (!this.debrisFallsAlongX || this.turnedDebris.has(o)) return o;
+    this.turnedDebris.add(o);
+    const vx = o.vx;
+    o.vx = o.vy;
+    o.vy = -vx;
+    return o;
+  }
+
   // ---------- loop ----------
   private loop = (now: number) => {
     if (!this.active) return;
@@ -6438,9 +6495,15 @@ export class Game {
         this.last = now;
         const live = this.state === 'play' && !this.choosingBuff &&
           (typeof document === 'undefined' || document.visibilityState !== 'hidden');
+        let resized = false;
         if (live) {
           const dpr = this.adaptiveDpr.recordFrame(elapsed);
-          if (dpr !== null) this.applyCanvasDpr(dpr);
+          if (dpr !== null) {
+            this.applyCanvasDpr(dpr);
+            // A new backing store starts out empty; skipping this frame's draw
+            // would show that emptiness as a flash.
+            resized = true;
+          }
         } else {
           this.adaptiveDpr.pause();
         }
@@ -6450,7 +6513,7 @@ export class Game {
         // the 60 Hz grid instead is the difference between "high fps" and
         // "smooth". Only drawing is skipped — the simulation above always runs.
         // The governor keeps working on its own; this never touches artwork.
-        if (live ? this.cadence.shouldRender(now, elapsed, this.lastWork) : true) {
+        if (live ? resized || this.cadence.shouldRender(now, elapsed, this.lastWork) : true) {
           this.render();
           // Measured only on frames that really drew: a skipped render is not
           // evidence of headroom, and feeding it back would make the lock
@@ -7747,24 +7810,28 @@ export class Game {
     for (const shot of this.chestBullets) shot.age += s;
     for (let i = this.fallenCells.length - 1; i >= 0; i--) {
       const f = this.fallenCells[i];
-      f.vy += 1500 * s;
+      this.turnDebris(f);
+      if (this.debrisFallsAlongX) f.vx += 1500 * s;
+      else f.vy += 1500 * s;
       f.x += f.vx * s;
       f.y += f.vy * s;
       f.rot += f.vr * s;
       f.life -= dt;
       for (const shot of f.bullets) shot.age += s;
-      if (f.life <= 0 || f.y > H + 90) this.fallenCells.splice(i, 1);
+      if (f.life <= 0 || this.pastDebrisFloor(f.x, f.y, 90)) this.fallenCells.splice(i, 1);
     }
 
     // ═══════ FRAGMEN BATU ═══════
     for (let i = this.rockFragments.length - 1; i >= 0; i--) {
       const f = this.rockFragments[i];
-      f.vy += 1500 * s;
+      this.turnDebris(f);
+      if (this.debrisFallsAlongX) f.vx += 1500 * s;
+      else f.vy += 1500 * s;
       f.x += f.vx * s;
       f.y += f.vy * s;
       f.rot += f.vr * s;
       f.life -= dt;
-      if (f.life <= 0 || f.y > H + 200) this.rockFragments.splice(i, 1);
+      if (f.life <= 0 || this.pastDebrisFloor(f.x, f.y, 200)) this.rockFragments.splice(i, 1);
     }
 
     // ---------------- BOSS SHOOTING ATTACK MECHANIC ----------------
@@ -8661,7 +8728,9 @@ export class Game {
         dropped++;
         continue;
       }
-      p.vy += p.g * s;
+      this.turnDebris(p);
+      if (this.debrisFallsAlongX) p.vx += p.g * s;
+      else p.vy += p.g * s;
       if (p.drag) {
         const k = Math.exp(-p.drag * s);
         p.vx *= k;
@@ -8672,15 +8741,27 @@ export class Game {
       p.rot += p.vr * s;
       if (p.kind === 'text') p.vy *= Math.exp(-s * 3);
       if ((p.kind === 'chip' || p.kind === 'shard' || p.kind === 'drop' || p.kind === 'snowChunk' || p.kind === 'waterDrop')
-        && p.y > H - 14 && p.vy > 0) {
-        p.y = H - 14;
-        p.vy *= -0.35;
-        p.vx *= 0.7;
+        && this.pastDebrisFloor(p.x, p.y, -14)) {
+        if (this.debrisFallsAlongX) {
+          p.x = W - 14;
+          p.vx *= -0.35;
+          p.vy *= 0.7;
+        } else {
+          p.y = H - 14;
+          p.vy *= -0.35;
+          p.vx *= 0.7;
+        }
       }
-      if (p.kind === 'shell' && p.y > H - 20 && p.vy > 0) {
-        p.y = H - 20;
-        p.vy *= -0.4;
-        p.vx *= 0.6;
+      if (p.kind === 'shell' && this.pastDebrisFloor(p.x, p.y, -20)) {
+        if (this.debrisFallsAlongX) {
+          p.x = W - 20;
+          p.vx *= -0.4;
+          p.vy *= 0.6;
+        } else {
+          p.y = H - 20;
+          p.vy *= -0.4;
+          p.vx *= 0.6;
+        }
       }
       this.particles[pWrite++] = p;
     }
@@ -8689,7 +8770,9 @@ export class Game {
     let fragWrite = 0;
     for (let i = 0; i < this.frags.length; i++) {
       const f = this.frags[i];
-      f.vy += 1300 * s;
+      this.turnDebris(f);
+      if (this.debrisFallsAlongX) f.vx += 1300 * s;
+      else f.vy += 1300 * s;
       f.x += f.vx * s;
       f.y += f.vy * s;
       f.rot += f.vr * s;
@@ -8698,26 +8781,39 @@ export class Game {
         f.pitch = Math.max(0.58, Math.min(1.4, f.pitch));
         f.pitchV *= -1;
       }
-      if (f.y <= H + 200) this.frags[fragWrite++] = f;
+      if (!this.pastDebrisFloor(f.x, f.y, 200)) this.frags[fragWrite++] = f;
     }
     this.frags.length = fragWrite;
 
     let flyerWrite = 0;
     for (let i = 0; i < this.flyers.length; i++) {
       const f = this.flyers[i];
-      f.vy += 1400 * s;
+      this.turnDebris(f);
+      if (this.debrisFallsAlongX) f.vx += 1400 * s;
+      else f.vy += 1400 * s;
       f.x += f.vx * s;
       f.y += f.vy * s;
       f.rot += f.vr * s;
-      if (f.y <= H + 150) this.flyers[flyerWrite++] = f;
+      if (!this.pastDebrisFloor(f.x, f.y, 150)) this.flyers[flyerWrite++] = f;
     }
     this.flyers.length = flyerWrite;
     for (const d of this.dust) {
-      d.y -= d.v * dt;
-      d.x += Math.sin(this.time + d.y * 0.01) * 4 * dt;
-      if (d.y < -5) {
-        d.y = H + 5;
-        d.x = Math.random() * W;
+      if (this.debrisFallsAlongX) {
+        // The motes drift *up the screen*: world -x is up once the world is
+        // laid on its side, so they leave by world x = -5 and re-enter at W.
+        d.x -= d.v * dt;
+        d.y += Math.sin(this.time + d.x * 0.01) * 4 * dt;
+        if (d.x < -5) {
+          d.x = W + 5;
+          d.y = Math.random() * H;
+        }
+      } else {
+        d.y -= d.v * dt;
+        d.x += Math.sin(this.time + d.y * 0.01) * 4 * dt;
+        if (d.y < -5) {
+          d.y = H + 5;
+          d.x = Math.random() * W;
+        }
       }
     }
 
