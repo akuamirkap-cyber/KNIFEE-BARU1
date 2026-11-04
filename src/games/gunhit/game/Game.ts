@@ -7141,15 +7141,40 @@ export class Game {
    * is why the buff looked like it did nothing at all. The carried round is
    * drawn through the same multiplier here.
    */
-  private drawCarriedRound(c: CanvasRenderingContext2D, p: Proj, paint: () => void) {
+  /**
+   * How far a round leans off the world's "straight up" flight line.
+   *
+   * Every shot sprite is built for an upright muzzle: nose up its own frame,
+   * tail behind. The round travels along its *live* velocity — a speed buff, a
+   * charge and the landscape aim all move it — so the angle has to come from
+   * the round, never from the weapon's base speed.
+   */
+  private flightAngle(p: { vx: number; vy: number }): number {
+    return Math.atan2(p.vx, -p.vy);
+  }
+
+  /**
+   * Draw a round a ported layer paints, in the frame the round is flying.
+   *
+   * Those layers author their artwork for an upright muzzle. Landscape lets the
+   * barrel lean, so a round kept in the layer's upright frame leaves the muzzle
+   * pointing straight across the screen while its tracer flies off at an angle:
+   * the whole shot (and its tail) leans against its own path. Turning the
+   * painting about the round's own centre puts it back on the flight line.
+   * Slide 9 and slide 11 already turn their own tracers, so they pass
+   * `turn: false`.
+   */
+  private drawCarriedRound(c: CanvasRenderingContext2D, p: Proj, paint: () => void, turn = true) {
     const k = projectileSizeMultiplier(this.weapon.id, !!p.mini, !!p.giant);
-    if (k === 1) {
+    const ang = turn ? this.flightAngle(p) : 0;
+    if (k === 1 && ang === 0) {
       paint();
       return;
     }
     c.save();
     c.translate(p.x, p.y);
-    c.scale(k, k);
+    if (ang !== 0) c.rotate(ang);
+    if (k !== 1) c.scale(k, k);
     c.translate(-p.x, -p.y);
     paint();
     c.restore();
@@ -10437,7 +10462,7 @@ export class Game {
       if (p.spawnDelay && p.spawnDelay > 0) continue;
       const wid = this.weapon.id;
       const trailCol = this.weapon.trail;
-      const ang = Math.atan2(p.vx, this.weapon.speed);
+      const ang = this.flightAngle(p);
       // Slide-7 SET 1 rounds are painted by slide 7's own renderers.
       if (p.setOne) {
         this.drawCarriedRound(c, p, () => this.s1.drawShot(c, p.setOne!, p.x, p.y));
@@ -10463,7 +10488,7 @@ export class Game {
         // moved, not where it was at the top of the frame).
         p.setEleven.x = p.x;
         p.setEleven.y = p.y;
-        this.drawCarriedRound(c, p, () => this.s11.drawShot(c, p.setEleven!));
+        this.drawCarriedRound(c, p, () => this.s11.drawShot(c, p.setEleven!), false);
         continue;
       }
       if (p.setElevenPending || p.s11Ghost) continue;
@@ -10505,7 +10530,7 @@ export class Game {
           c.save();
           c.globalAlpha = ((gi + 1) / (p.hist.length + 1)) * 0.32;
           c.translate(h.x, h.y);
-          c.rotate(-ang);
+          c.rotate(ang);
           if (this.weapon.energy) c.globalCompositeOperation = 'lighter';
           this.drawProj(c, wid);
           c.restore();
@@ -10523,7 +10548,7 @@ export class Game {
       }
       c.save();
       c.translate(p.x, p.y);
-      c.rotate(-ang);
+      c.rotate(ang);
       // Water/snow have material trails, and a portal must remain a compact
       // ring; the usual white laser wedge made all three look like tadpoles.
       // The xenomorph glob is painted by the metaball layer; drawing the old
