@@ -88,7 +88,8 @@ test('SGA menu keeps its intro choreography, art, background and currency', () =
   assert.match(psMotionCss, /\.st-in-combo::after \{ content: none !important; animation: none !important; \}/);
   assert.match(app, /menuPlan\.gun === 'combo'[\s\S]*?menu-pop-burst/);
   assert.match(app, /subscribeMenuPlan\(setMenuPlan\)/);
-  assert.match(app, /initialGameplayWheelCenterY\(stageConfig\.boss, Boolean\(specialMode\)\) \/ H/);
+  assert.match(app, /const wheelWorldY = initialGameplayWheelCenterY\(stageConfig\.boss, Boolean\(specialMode\)\)/);
+  assert.match(app, /orientation === 'landscape'[\s\S]{0,120}LAND_W - wheelWorldY/);
   assert.match(app, /origin=\{playTransition\.origin\}/);
   assert.doesNotMatch(app, /origin=\{\{ x: 50, y: 29 \}\}/);
   assert.match(psMotionCss, /\.gunhit-menu \.in-gun \{ animation-name: sgaGunIn; \}/);

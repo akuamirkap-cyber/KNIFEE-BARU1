@@ -3896,7 +3896,13 @@ export class Game {
       c.fillText(ha.i === 2 ? 'HA!' : 'HA', 0, 0);
       c.restore();
     }
-    if (!this.bossRage) return;
+    if (!this.bossRage) {
+      // The magazine can be full of HA!s with no rage: leave the canvas in the
+      // stage's world frame, because everything drawn after this layer (the gun
+      // above all) expects the rotated world transform, not screen space.
+      c.restore();
+      return;
+    }
     // bm-steam: three puffs per side, drifting up and fading out.
     for (const sgn of [-1, 1]) {
       for (let i = 0; i < 3; i++) {
@@ -7184,13 +7190,29 @@ export class Game {
     if (this.state === 'clear' && !this.treasureCoins.length) this.payStageReward();
   }
 
+  /**
+   * A spent magazine on a live stage reloads itself.
+   *
+   * Running the allowance dry while the wheel or the boss is still standing used
+   * to leave the player holding a gun that could not fire — a soft dead end the
+   * stage never recovered from. The gun now goes into its usual `ISI ULANG…`
+   * beat (inside the gun's own reload time, no extra delay) and comes back full.
+   */
+  private startDryReload() {
+    if (this.state !== 'play' || this.reloadT > 0 || this.ammoLeft > 0) return;
+    if (this.projs.length || this.aiming || this.charging || this.choosingBuff) return;
+    if (this.weapon.id === 'snowball' && this.snowLoaded > 0) return;
+    this.reloadT = 0.65;
+  }
+
   private advanceReload(dt: number) {
     if (this.reloadT <= 0) return;
     this.reloadT = Math.max(0, this.reloadT - dt);
     if (this.reloadT > 0) return;
-    // Special stages also refill their stage allowance; ordinary stages only
-    // reload the snow hopper, never granting extra shots beyond their quota.
-    if (isSpecial(this.level.mode) && this.ammoLeft === 0) this.ammoLeft = this.level.ammo * this.maxAmmoMult;
+    // Every stage refills its allowance here: the quota is a budget for one
+    // magazine, not a life, so an empty gun with the wheel (or the boss) still
+    // standing reloads instead of ending the run.
+    if (this.ammoLeft === 0) this.ammoLeft = this.level.ammo * this.maxAmmoMult;
     if (this.weapon.id === 'snowball') this.snowLoaded = Math.min(SNOWBALL_MAG_SIZE, this.ammoLeft);
   }
 
@@ -7294,6 +7316,7 @@ export class Game {
         } else this.finishSpecialStage();
       }
     }
+    this.startDryReload();
     this.advanceReload(dt);
     this.timeScale += (1 - this.timeScale) * Math.min(1, dt * 2.5);
     // Slide 7's clock for this frame, read before its hit-stop ticks down, as

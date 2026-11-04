@@ -1,6 +1,6 @@
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type { Game } from './game/Game';
-import { GAMEPLAY_GUN_SCALE, GUN_Y, H, initialGameplayWheelCenterY } from './game/layout';
+import { CX as WORLD_CX, GAMEPLAY_GUN_SCALE, GUN_Y, H, initialGameplayWheelCenterY, LAND_H, LAND_W } from './game/layout';
 import { makeLevel } from './game/levels';
 import { savedValues, storage } from './game/safeStorage';
 import { setMasterVolume, setMuted, sfx } from './game/audio';
@@ -1350,7 +1350,10 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     requestWheelArt(level);
     const fromMap = mapOpen;
     const fromMenu = screenRef.current === 'menu' && !fromMap && !settingsOpen && !fromSettings;
-    const wantsWeaponFlight = fromMenu && captureMenuWeaponFlight();
+    // Landscape keeps the menu weapon exactly where the gameplay gun lands, so
+    // the hand-off there is a straight swap: a flight would have to rotate the
+    // upright menu frame onto the lying gun and land it on a second spot.
+    const wantsWeaponFlight = fromMenu && orientation !== 'landscape' && captureMenuWeaponFlight();
     if (fromMenu) {
       setPlayMenuExiting(true);
       setMenuDeparture('play');
@@ -1372,10 +1375,15 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     const gunEntryDelay = fromMap || fromSettings ? hold / 1000 : 0;
     // Aim the scope lens exactly at the stage target: same centre as the wheel
     // and a radius that frames it (106 normal / 122 boss / 166 boulder).
-    const origin = {
-      x: 50,
-      y: (initialGameplayWheelCenterY(stageConfig.boss, Boolean(specialMode)) / H) * 100,
-    };
+    // Landscape lays the world on its side, so the wheel's display position is
+    // (H - y, CX) rather than (CX, y): the lens has to close on the wheel the
+    // player is about to shoot, not on the empty spot the portrait centre maps to.
+    const wheelWorldY = initialGameplayWheelCenterY(stageConfig.boss, Boolean(specialMode));
+    const origin = orientation === 'landscape'
+      ? { x: ((LAND_W - wheelWorldY) / LAND_W) * 100, y: (WORLD_CX / LAND_H) * 100 }
+      : { x: 50, y: (wheelWorldY / H) * 100 };
+    // The overlay lives inside the shell the whole stage is scaled with, so the
+    // lens can stay in the engine's own stage units.
     const lens = stageConfig.radius + 14;
     const label = `STAGE ${level} · ${stageConfig.name.toUpperCase()}`;
 
@@ -2259,7 +2267,13 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                   always used), never the reference menu's conic ray disc. */}
               <div className={`relative flex items-center justify-center ${menuLandscape ? '' : 'min-h-0 flex-1'}`} style={menuArea('gun')}>
                 <div {...(menuDeparture === 'play'
-                  ? { className: `relative z-10 ${gunBoxClass} opacity-0`, style: {} as CSSProperties }
+                  ? {
+                    // Only the captured flight frame replaces the menu weapon; without
+                    // one (landscape, or a blocked capture) it stays on screen until
+                    // the menu itself unmounts instead of blinking out early.
+                    className: `relative z-10 ${gunBoxClass} ${weaponFlight ? 'opacity-0' : ''}`,
+                    style: {} as CSSProperties,
+                  }
                   : planStyleMotion(menuPlan.gun, gunTiming(menuPlan.gun), ['in-gun', 'out-spin'], `relative z-10 ${gunBoxClass}`, 1))}>
                   {/* No ring or shadow on the floor: the weapon stands on the
                       light of the sunburst alone. */}
