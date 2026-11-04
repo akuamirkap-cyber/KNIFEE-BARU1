@@ -162,7 +162,12 @@ export class DiamondRock {
   }
 
   /** Projectile position is in rock-local Diamond Breaker coordinates. */
-  hitAt(p: Point, damage: number, splash: number, projectileRadius = 0): RockHit | null {
+  /**
+   * `splashDamage` defaults to the old "two less than the hit" falloff; the game
+   * passes the full damage so one shot always takes a couple of chunks with it.
+   */
+  hitAt(p: Point, damage: number, splash: number, projectileRadius = 0,
+    splashDamage = Math.max(1, damage - 2)): RockHit | null {
     const r = Math.hypot(p.x, p.y);
     if (r > 215) return null;
     // The gem is visible beneath the inner rock rim. Give its full silhouette a
@@ -173,7 +178,21 @@ export class DiamondRock {
     // Keep an untouched texture for chunks that later fall away. In the game
     // this is normally baked by the first render, before a shot can arrive.
     if (typeof document !== 'undefined' && !this.intactCanvas) this.bake();
-    const struck = this.cells.find(c => c.alive && r >= c.rMin - 2 && r <= c.rMax + 2 && pointInPoly(p, c.poly));
+    let struck = this.cells.find(c => c.alive && r >= c.rMin - 2 && r <= c.rMax + 2 && pointInPoly(p, c.poly));
+    if (!struck) {
+      // The stone is a soup of jagged polygons, so a round can slip through the
+      // seam between two chunk edges and out the back of the rock — it reads as
+      // a shot that simply vanished. A hit anywhere on the stone is a hit: fall
+      // back to the nearest surviving chunk within a chunk's own width.
+      let nearest: RockCell | undefined;
+      let nearestD = Infinity;
+      for (const c of this.cells) {
+        if (!c.alive) continue;
+        const d = Math.hypot(c.center.x - p.x, c.center.y - p.y);
+        if (d < nearestD) { nearestD = d; nearest = c; }
+      }
+      if (nearest && nearestD <= 34) struck = nearest;
+    }
     if (!struck) return null;
 
     const broken: BrokenRockCell[] = [];
@@ -201,7 +220,7 @@ export class DiamondRock {
       for (const c of this.cells) {
         if (!c.alive || c === struck) continue;
         if (Math.hypot(c.center.x - p.x, c.center.y - p.y) < splash) {
-          damageCell(c, Math.max(1, damage - 2), c.center);
+          damageCell(c, Math.max(1, splashDamage), c.center);
         }
       }
     }

@@ -1477,6 +1477,26 @@ export type BuffKind = 'speed' | 'ammo' | 'power' | TreasureBuff;
 const STAGE_SECONDS: Record<'boulder' | SpecialMode, number> = { boulder: 65, bonus: 45, treasure: 10 };
 
 /**
+ * How far one hit reaches across the Diamond Breaker / bonus rock.
+ *
+ * Requested: the stone has to give way, "one shot and two chunks fall". The
+ * rock's rings sit ~26px apart in its own 196px art space, so a 38px ring takes
+ * the struck chunk plus the neighbour above or below it, while the old 43/32
+ * rings mostly spent a whole shell on a single chunk (a `-2` damage falloff left
+ * every 3hp chunk standing).
+ */
+const ROCK_SPLASH = 40;
+
+/**
+ * What the splash ring deals: the full damage of the shot.
+ *
+ * The old falloff (`damage - 2`) left every 3hp chunk standing, so a hit was
+ * worth one chunk even when four neighbours were inside the ring. The hard 6hp
+ * reef still needs the shot itself — it only lands the ring's damage.
+ */
+const rockSplashDamage = (dmg: number) => Math.max(1, dmg);
+
+/**
  * The treasure chest, as the box the rounds are tested against.
  *
  * The chest is baked at one sprite size, so it shrinks by painting it through
@@ -6833,12 +6853,15 @@ export class Game {
     }
 
     const dmg = Math.round((4 + (this.weapon.points - 1) * 2 + (p.big ?? 0) * 2) * this.dmgMult);
-    const splash = (mode === 'boulder' ? 43 : 32) + (this.weapon.explode ? 30 : 0);
+    // Both rounds use the same rock, and both must fall apart at a decent clip:
+    // one shot shatters the chunk it lands on plus the neighbours inside the
+    // splash ring.
+    const splash = ROCK_SPLASH + (this.weapon.explode ? 30 : 0);
     const projectileRadius = diamondCoreProjectileRadius(
       this.weapon.half * (1 + (p.big ?? 0) * 0.3),
       projectileSizeMultiplier(this.weapon.id, !!p.mini, !!p.giant), sc,
     );
-    const hit = rock.hitAt(local, dmg, splash, projectileRadius);
+    const hit = rock.hitAt(local, dmg, splash, projectileRadius, rockSplashDamage(dmg));
     if (!hit) return { res: 'none' };
     if (hit.kind === 'diamond') {
       this.diamondPing = 1;
