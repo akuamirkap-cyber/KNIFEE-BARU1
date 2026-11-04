@@ -198,3 +198,38 @@ test('rounds fired while aiming land on the target, not past it', () => {
     assert.equal(failed, 0, `slide ${slide} pointer ${pointerY}: the round was lost past the target`);
   }
 });
+
+test('the barrel snaps onto a new pointer within a couple of frames', () => {
+  const game = new Game(canvas as never, { onGameOver(){}, onStageChange(){}, onStageCleared(){}, onShotFired(){}, onBossDefeated(){} } as never) as any;
+  game.setOrientation('landscape');
+  game.active = true;
+  game.startAtLevel(1);
+  for (let i = 0; i < 200 && game.state === 'intro'; i++) game.update(1 / 60);
+
+  // Settle on a pointer well below the gun.
+  game.aimPointer = { x: 700, y: 400 };
+  for (let i = 0; i < 30; i++) game.update(1 / 60);
+  const settled = game.getGunTilt();
+
+  // Flick to the very top of the screen.
+  game.aimPointer = { x: 700, y: 0 };
+  const target = game.gunAimAngleAt();
+  const gap = Math.abs(target - settled);
+  assert.ok(gap > 0.15, 'the flick is a real swing, not a nudge');
+
+  game.update(1 / 60);
+  game.update(1 / 60);
+  const after2 = Math.abs(target - game.getGunTilt());
+  assert.ok(after2 <= gap * 0.15, `two frames should get most of the way there, ${(after2 / gap).toFixed(2)} of the gap left`);
+
+  for (let i = 0; i < 4; i++) game.update(1 / 60);
+  const after6 = Math.abs(target - game.getGunTilt());
+  assert.ok(after6 <= gap * 0.02 + 1e-6, `six frames should have landed, ${after6.toFixed(4)} rad off`);
+
+  // A long frame must not overshoot the pointer.
+  game.aimPointer = { x: 700, y: 400 };
+  const back = game.gunAimAngleAt();
+  game.update(0.35);
+  const afterLong = game.getGunTilt();
+  assert.ok(Math.abs(afterLong - back) <= Math.abs(back - target) + 1e-6, 'a slow frame eases towards the pointer, never past it');
+});

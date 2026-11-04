@@ -163,6 +163,55 @@ export class SetElevenFx {
   gunX = 210;
   gunY = 575;
 
+  /**
+   * Slide 1's landscape gun pose: the barrel tilts and the whole gun slides.
+   *
+   * Slide 11 places every flash, spark and mark in its own upright frame, so on
+   * a tilted gun those left the muzzle the gun *used* to have — an AK's burst
+   * hung in mid-air a barrel's width away. Every point this module hands to
+   * slide 1 now goes through the same rotation slide 1 draws the gun with.
+   */
+  private poseTilt = 0;
+  /** The gun's own x on slide 1 (it slides away from the wheel's centre). */
+  private poseGunX = 210;
+  /** Slide 11's upright pivot: the wheel's centre on the muzzle line. */
+  private poseX = 210;
+  private poseY = 560;
+  /** The muzzle flash being added right now, so its spikes can lean too. */
+  private flashAnchor: { x: number; y: number } | null = null;
+
+  /**
+   * @param tilt  the barrel's lean (0 when upright)
+   * @param gunX  where slide 1 draws the gun's own x
+   * @param pivotX slide 11's centre (the gun sits here when upright)
+   * @param pivotY the muzzle line, upright
+   */
+  setGunPose(tilt: number, gunX: number, pivotX: number, pivotY: number) {
+    this.poseTilt = Number.isFinite(tilt) ? tilt : 0;
+    this.poseGunX = Number.isFinite(gunX) ? gunX : 210;
+    this.poseX = Number.isFinite(pivotX) ? pivotX : 210;
+    this.poseY = Number.isFinite(pivotY) ? pivotY : 560;
+  }
+
+  /**
+   * A slide-11 point, mapped onto the pose slide 1 draws the gun in: the gun
+   * slides from its upright centre to `gunX` and the barrel leans by `tilt`.
+   * Slide 11's own frame never slides — its `cx` is both gun and wheel — so the
+   * pivot stays at the centre and the slide is a translation on top of it.
+   */
+  private posed(x: number, y: number): { x: number; y: number } {
+    const tilt = this.poseTilt;
+    const dx = x - this.poseX;
+    const dy = y - this.poseY;
+    if (!tilt) return { x: this.poseGunX + dx, y: this.poseY + dy };
+    const cos = Math.cos(tilt);
+    const sin = Math.sin(tilt);
+    return {
+      x: this.poseGunX + dx * cos - dy * sin,
+      y: this.poseY + dx * sin + dy * cos,
+    };
+  }
+
   /** Slide 11's live world (this is the real object slide 11 authored). */
   raw: Game | null = null;
   /** True once slide 11's world helpers have been bound to slide 1's scale. */
@@ -303,19 +352,41 @@ export class SetElevenFx {
         const weapon = self.raw?.weapon;
         const k = self.scaleOf();
         const base = (self.raw as unknown as { baseY: number }).baseY;
-        return {
-          x: self.cx + (y - (weapon?.muzzleY ?? 0)) * k,
-          y: base - (x - (self.state.recoil * (weapon?.kick ?? 0))) * k,
-        };
+        return self.posed(
+          self.cx + (y - (weapon?.muzzleY ?? 0)) * k,
+          base - (x - (self.state.recoil * (weapon?.kick ?? 0))) * k,
+        );
       };
       host.muzzlePos = () => {
         const weapon = self.raw?.weapon;
         const k = self.scaleOf();
         const base = (self.raw as unknown as { baseY: number }).baseY;
-        return {
-          x: self.cx,
-          y: base - ((weapon?.muzzle ?? 0) - self.state.recoil * (weapon?.kick ?? 0)) * k,
-        };
+        return self.posed(
+          self.cx,
+          base - ((weapon?.muzzle ?? 0) - self.state.recoil * (weapon?.kick ?? 0)) * k,
+        );
+      };
+      // The muzzle burst's spikes are drawn pointing straight up, so a tilted
+      // barrel has to turn the whole flash about its own muzzle as well.
+      const flashHost = g as unknown as {
+        muzzleFlash(x: number, y: number, o: Record<string, unknown>): void;
+        addFx(f: Record<string, unknown>): void;
+      };
+      const addFx = flashHost.addFx.bind(g);
+      const muzzleFlash = flashHost.muzzleFlash.bind(g);
+      flashHost.addFx = (f: Record<string, unknown>) => {
+        const anchor = self.flashAnchor;
+        if (anchor && f && !f.poseAnchor) f.poseAnchor = { x: anchor.x, y: anchor.y };
+        addFx(f);
+      };
+      flashHost.muzzleFlash = (x: number, y: number, o: Record<string, unknown>) => {
+        const was = self.flashAnchor;
+        self.flashAnchor = { x, y };
+        try {
+          muzzleFlash(x, y, o);
+        } finally {
+          self.flashAnchor = was;
+        }
       };
       this.worldPatched = true;
     }
@@ -489,7 +560,7 @@ export class SetElevenFx {
 
   /** Slide-11's muzzle in slide-1 screen space (the anchor slide 1 draws at). */
   muzzlePos() {
-    return { x: this.gunX, y: this.gunY };
+    return this.posed(this.gunX, this.gunY);
   }
 
   /**
@@ -1221,6 +1292,14 @@ export class SetElevenFx {
       ctx.save();
       if (f.add) ctx.globalCompositeOperation = 'lighter';
       try {
+        // A muzzle burst is painted around a point: turning that geometry about
+        // its own muzzle makes its spikes lean along the barrel.
+        const anchor = (f as unknown as { poseAnchor?: { x: number; y: number } }).poseAnchor;
+        if (anchor && this.poseTilt) {
+          ctx.translate(anchor.x, anchor.y);
+          ctx.rotate(this.poseTilt);
+          ctx.translate(-anchor.x, -anchor.y);
+        }
         f.draw(ctx, clamp(f.age / f.max), f);
       } catch {
         /* ignore */

@@ -231,6 +231,17 @@ export const GUN_SLIDE_MAX = 150; // world px, i.e. display px up/down
 export const GUN_SLIDE_SPEED = 368; // world px per second while held (1.6× the original 230)
 export const GUN_TILT_MAX = 0.62; // radians (~36°) — the aim-assist clamp is tighter
 
+/**
+ * How quickly the barrel chases the pointer, in 1/s.
+ *
+ * The first pass eased at 12/s, which left the muzzle about a tenth of a second
+ * behind the mouse and felt sluggish on a flick. 55/s closes 60% of the gap
+ * every frame, so a wide swing settles in two or three frames, and the rate
+ * floor below makes short flicks land on the very next one.
+ */
+export const GUN_TILT_EASE = 65;
+export const GUN_TILT_MIN_RATE = 22; // radians per second
+
 // A new run brings the weapon in from beneath the screen. This is only a
 // drawing offset: collision, muzzle origins, recoil and weapon scale stay put.
 export const GAMEPLAY_GUN_ENTRY_DURATION = 0.8;
@@ -4217,14 +4228,17 @@ export class Game {
       const mouth = this.gunPosePoint(GX + (offsets[0] ?? 0), this.gunBaseY - 4);
       const mx = mouth.x;
       const my = mouth.y;
+      // Slide 9 fans its sparks and aims its beams along the angle it is given,
+      // so a tilted barrel has to hand it the barrel's own direction.
+      const barrel = this.barrelAngle;
       unlockNineAudio();
       this.nineQueued = false;
       // Only slide 9's bow is charged: it flies as far as it was drawn.
       const charge = nw.charged ? this.nineDraw : 0;
-      fx.fire(mx, my, -Math.PI / 2, charge);
+      fx.fire(mx, my, barrel, charge);
       const made = fx.takeShots();
       this.fireTwinBarrel(made,
-        () => fx.fireQuiet(this.gunPosePoint(GX + (offsets[1] ?? offsets[0] ?? 0), this.gunBaseY - 4).x, my, -Math.PI / 2, charge),
+        () => fx.fireQuiet(this.gunPosePoint(GX + (offsets[1] ?? offsets[0] ?? 0), this.gunBaseY - 4).x, my, barrel, charge),
         () => fx.takeShots());
       // Slide 9's beams are hitscan: the carrier crosses the field at beam
       // speed — or exactly as fast as the dragon's flame travels — so the
@@ -4270,17 +4284,22 @@ export class Game {
     const s11id = this.setElevenId;
     if (s11id && this.setElevenLive) {
       const fx = this.s11;
-      fx.gunY = this.gunPosePoint(GX, this.gunBaseY - 4).y;
+      // Slide 11 works in its own upright frame (`cx`, `baseY`) and maps every
+      // point it paints through `setGunPose()`, so it is handed the *upright*
+      // muzzle and turns it itself — posing the input as well would rotate the
+      // flash twice and throw it off the barrel.
+      this.syncElevenPose();
+      fx.gunY = this.gunBaseY - 4;
       fx.selectWeapon(s11id);
       fx.syncWheel();
-      const mouth = this.gunPosePoint(GX + (offsets[0] ?? 0), this.gunBaseY - 4);
-      const mx = mouth.x;
-      const my = mouth.y;
+      const my = this.gunBaseY - 4;
       unlockElevenAudio(fx);
-      fx.fire(mx, my, w.charge ? big : 0);
+      // Upright coordinates: slide 11 turns them into the drawn pose itself,
+      // so handing it the slid muzzle as well would rotate its flash twice.
+      fx.fire(CX + (offsets[0] ?? 0), my, w.charge ? big : 0);
       const made = fx.takeShots();
       this.fireTwinBarrel(made,
-        () => fx.fire(this.gunPosePoint(GX + (offsets[1] ?? offsets[0] ?? 0), this.gunBaseY - 4).x, my, w.charge ? big : 0),
+        () => fx.fire(CX + (offsets[1] ?? offsets[0] ?? 0), my, w.charge ? big : 0),
         () => fx.takeShots());
       // One carrier per barrel: the round slide 7 scores (`scoringRounds()`:
       // the nano swarm's centre drone, not just whichever round came first).
@@ -7307,7 +7326,16 @@ export class Game {
     if (dir !== 0) {
       this.gunSlide = Math.max(-GUN_SLIDE_MAX, Math.min(GUN_SLIDE_MAX, this.gunLift + dir * GUN_SLIDE_SPEED * dt));
     }
-    this.gunTilt = this.gunTiltNow + (this.gunAimAngleAt() - this.gunTiltNow) * Math.min(1, dt * 12);
+    // Chase the pointer with a fast exponential ease plus a rate floor: the
+    // barrel is never more than a frame or two behind the mouse, yet it still
+    // sweeps instead of teleporting when the pointer jumps across the screen.
+    const target = this.gunAimAngleAt();
+    const now = this.gunTiltNow;
+    const step = Math.max(0, Number.isFinite(dt) ? dt : 0);
+    const eased = now + (target - now) * (1 - Math.exp(-step * GUN_TILT_EASE));
+    const least = GUN_TILT_MIN_RATE * step;
+    this.gunTilt = Math.abs(target - eased) <= least ? target : eased;
+    this.syncElevenPose();
   }
 
   /**
@@ -7318,6 +7346,25 @@ export class Game {
    * width of the target face: the gun may follow the pointer anywhere on the
    * screen, but the round still lands on the wheel instead of flying past it.
    */
+  /**
+   * Which way the barrel points, as the atan2 angle slide 9 expects: straight
+   * up (world -y) when upright, leaning with the landscape tilt otherwise.
+   */
+  private get barrelAngle(): number {
+    const tilt = this.orientation === 'landscape' ? this.gunTiltNow : 0;
+    return -Math.PI / 2 + tilt;
+  }
+
+  /** Keep slide 11's own world in the pose the gun is drawn at. */
+  private syncElevenPose() {
+    const tilt = this.orientation === 'landscape' ? this.gunTiltNow : 0;
+    try {
+      this.s11?.setGunPose(tilt, this.gunX, CX, this.gunBaseY);
+    } catch {
+      /* a layer without a gun pose simply stays upright */
+    }
+  }
+
   private gunAimAngleAt(): number {
     const pointer = this.aimPointer;
     if (this.orientation !== 'landscape' || !pointer) return 0;
@@ -9468,6 +9515,9 @@ export class Game {
     // left firing right and the wheel on the right — without the engine ever
     // learning which way the screen is facing.
     c.setTransform(...worldTransform(this.orientation, k));
+    // The gun pose is a frame input: an overlay repaint (a modal closing) must
+    // draw slide 11's effects where the barrel is now, without waiting for a tick.
+    this.syncElevenPose();
     const pal = STYLE_COLORS[this.level.style];
     const R = this.level.radius;
     let busterWheelTransform: DOMMatrix | null = null;
