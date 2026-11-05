@@ -455,7 +455,9 @@ test('treasure hits use normal weapon impacts at each lane and embed rounds in t
   Object.assign(game, { chest: { hit: () => { hits++; } }, treasureBuff: 'double', twinGuns: true });
   for (const x of [180, 240]) assert.equal(game.stepSpecialProjectile({ x, y: SPECIAL_CY + 80, vx: 0, vy: -1700 }).res, 'hit');
   assert.equal(hits, 2);
-  assert.deepEqual(game.chestBullets.map(b => b.x), [-30, 30]);
+  // Chest-space x: the chest paints 10% smaller (BOARD_PACKAGE_SCALE), so a lane
+  // 30px off the centre lands at 33.3 in the chest's own frame.
+  assert.deepEqual(game.chestBullets.map(b => b.x), [-30 / 0.9, 30 / 0.9]);
   assert.equal(game.coins, 0, 'coins must wait for the shower to land before being credited');
   assert.ok((game as unknown as { treasureCoins: { value: number }[] }).treasureCoins.reduce((n, c) => n + c.value, 0) >= 2);
   assert.ok(game.lights.some(l => l.x === 180));
@@ -465,7 +467,7 @@ test('treasure hits use normal weapon impacts at each lane and embed rounds in t
 
   game.stepSpecialProjectile({ x: 180, y: SPECIAL_CY + 80, vx: 0, vy: -1700 });
   assert.equal(hits, 3);
-  assert.deepEqual(game.chestBullets.map(b => b.x), [30, -30]);
+  assert.deepEqual(game.chestBullets.map(b => b.x), [30 / 0.9, -30 / 0.9]);
   assert.equal(game.flyers.filter(f => f.kind === 'bullet').length, 1, 'a repeat hit dislodges only the previous round');
 });
 

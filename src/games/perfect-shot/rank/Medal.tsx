@@ -149,10 +149,10 @@ export function PodiumMedal({ n, className = "" }: { n: 1 | 2 | 3; className?: s
 /* =====================================================================
    RANK NUMBER (4th and below) & LEVEL BADGE
    ===================================================================== */
-export function RankNum({ n, me = false }: { n: number; me?: boolean }) {
+export function RankNum({ n, me = false, size = 38 }: { n: number; me?: boolean; size?: number }) {
   const [a, b, d] = me ? ["#fff3b0", "#f5b82e", "#8a4b00"] : ["#c4b5fd", "#7c3aed", "#2e1065"];
   return (
-    <span className="relative grid h-[38px] w-[38px] shrink-0 place-items-center">
+    <span className="relative grid shrink-0 place-items-center" style={{ height: size, width: size }}>
       <svg viewBox="0 0 40 40" className="absolute inset-0 h-full w-full">
         <defs>
           <linearGradient id={`rn${me ? "m" : "o"}`} x1="0" y1="0" x2="1" y2="1">
@@ -164,7 +164,7 @@ export function RankNum({ n, me = false }: { n: number; me?: boolean }) {
         <circle cx="20" cy="20" r="14.5" fill={d} opacity=".55" />
         <path d="M8 14 A13 13 0 0 1 20 7" stroke="#fff" strokeOpacity=".6" strokeWidth="2" strokeLinecap="round" fill="none" />
       </svg>
-      <span className="font-title relative leading-none text-white" style={{ fontSize: n >= 100 ? 12 : 16, textShadow: "0 1px 0 rgba(0,0,0,.35)" }}>
+      <span className="font-title relative leading-none text-white" style={{ fontSize: n >= 100 ? size * 0.32 : size * 0.42, textShadow: "0 1px 0 rgba(0,0,0,.35)" }}>
         {n}
       </span>
     </span>
@@ -172,11 +172,11 @@ export function RankNum({ n, me = false }: { n: number; me?: boolean }) {
 }
 
 /** stage level shown as a gem-cut shield; colour tier grows with progress */
-export function LevelBadge({ lv, me = false }: { lv: number; me?: boolean }) {
+export function LevelBadge({ lv, me = false, size = 48 }: { lv: number; me?: boolean; size?: number }) {
   const tier = me ? ["#fff3b0", "#f5b82e", "#a35c06"] : lv >= 60 ? ["#fbcfe8", "#ec4899", "#831843"] : lv >= 35 ? ["#ddd6fe", "#8b5cf6", "#4c1d95"] : lv >= 15 ? ["#bae6fd", "#0ea5e9", "#0c4a6e"] : ["#bbf7d0", "#22c55e", "#14532d"];
   const id = `lv${tier[1].slice(1)}`;
   return (
-    <span className="relative grid h-[48px] w-[42px] shrink-0 place-items-center">
+    <span className="relative grid shrink-0 place-items-center" style={{ height: size, width: Math.round(size * 0.875) }}>
       <svg viewBox="0 0 42 48" className="absolute inset-0 h-full w-full drop-shadow-[0_3px_3px_rgba(0,0,0,.35)]">
         <defs>
           <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
@@ -190,8 +190,8 @@ export function LevelBadge({ lv, me = false }: { lv: number; me?: boolean }) {
         <path d="M6 12 L21 5.5 L21 18 Z" fill="#fff" opacity=".35" />
       </svg>
       <span className="relative -mt-1 flex flex-col items-center leading-none text-white" style={{ textShadow: "0 1px 0 rgba(0,0,0,.4)" }}>
-        <span className="font-title text-[8.5px] tracking-wider opacity-90">LV</span>
-        <span className="font-title" style={{ fontSize: lv >= 100 ? 12 : 15 }}>
+        <span className="font-title tracking-wider opacity-90" style={{ fontSize: size * 0.18 }}>LV</span>
+        <span className="font-title" style={{ fontSize: lv >= 100 ? size * 0.25 : size * 0.31 }}>
           {lv}
         </span>
       </span>

@@ -2,7 +2,10 @@ import type { Style } from './faces';
 import type { Rarity } from './weapons';
 
 // Knife Boss's SunburstFX accepts RGB triplets. The four Gun Hit tiers use
-// separate silver, aqua, violet and gold light on the Menu / Arsenal showcase.
+// separate silver, aqua, violet and gold light for the rarity halo under the gun
+// and for a weapon-unlock celebration. The Menu and Arsenal showcases do *not*
+// use this: their light is plain white, so a purple EPIC tint can never leak
+// into the cover screen.
 export const GUN_SUNBURST_RGB: Record<Rarity, string> = {
   UMUM: '201,220,238',
   LANGKA: '56,204,248',

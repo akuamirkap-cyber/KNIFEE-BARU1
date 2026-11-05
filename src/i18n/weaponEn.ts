@@ -67,8 +67,8 @@ export const WEAPON_EN: Record<string, string> = {
     '3 bullets spread at once. Stages finish fast, but you risk hitting other bullets!',
   'BASAH':
     'SOAKED',
-  'Pistol air neon. Target yang basah berputar lebih lambat. Tahan untuk semprot!':
-    'A neon water pistol. Wet targets spin slower. Hold to spray!',
+  'Pistol air neon. Target yang basah berputar lebih lambat. Tahan untuk semprot, tapi tiap semburan ada jeda.':
+    'A neon water pistol. Wet targets spin slower. Hold to spray, with a pause between squirts.',
   'MANUSIA SALJU':
     'SNOWMAN',
   'Bola salju bertumpuk. Tiap 3 bola salju menempel, muncul manusia salju dan bonus +3 poin!':

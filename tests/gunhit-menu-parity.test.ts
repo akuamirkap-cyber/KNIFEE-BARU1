@@ -41,7 +41,14 @@ test('scope transition frames the real stage target and lets the wheel drop afte
   assert.match(game, /perfectShotWheelEntry\(\s*this\.wheelEntryT - this\.wheelEntryDelayT,\s*this\.pace,\s*this\.level\.radius,?\s*\)/);
   assert.match(game, /perfectShotWheelEntry\(wheelEntryT, this\.pace, R\)/);
   assert.doesNotMatch(app, /wheelSettleMs/);
-  assert.match(app, /y: \(initialGameplayWheelCenterY\(stageConfig\.boss, Boolean\(specialMode\)\) \/ H\) \* 100/);
+  // Landscape lays the world on its side, so the lens has to sit on the wheel's
+  // display position (H - y, CX) instead of the portrait centre it maps to.
+  assert.match(app, /const wheelWorldY = initialGameplayWheelCenterY\(stageConfig\.boss, Boolean\(specialMode\)\)/);
+  assert.match(app, /orientation === 'landscape'\s*\? \{ x: \(\(LAND_W - wheelWorldY\) \/ LAND_W\) \* 100, y: \(WORLD_CX \/ LAND_H\) \* 100 \}/);
+  assert.match(app, /: \{ x: 50, y: \(wheelWorldY \/ H\) \* 100 \}/);
+  // Landscape keeps the menu weapon where the gameplay gun lands: no flight, so
+  // the menu gun never blinks out before the frame swap.
+  assert.match(app, /orientation !== 'landscape' && captureMenuWeaponFlight\(\)/);
   assert.match(app, /variant="scope" lens=\{playTransition\.lens\}/);
   // The shared overlay keeps a CSS-variable lens radius so Perfect Shot is untouched.
   assert.match(overlay, /lens\?: number/);

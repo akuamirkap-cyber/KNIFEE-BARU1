@@ -61,7 +61,13 @@ test('legacy projectile trails keep their 60 Hz density across refresh rates', (
             list.push = function (...items) {
               // Keris and Diamond also have time-scaled ambient gun motes;
               // count the actual flight trail, not those random ambient ticks.
-              count += items.filter((p) => id === 'keris' ? p.kind === 'streak' : id === 'diamond' ? p.y < 520 : true).length;
+              // The motes sit around the muzzle, so the window follows the
+              // projectile's lane instead of a fixed Y (the rig moved).
+              // The diamond also throws time-scaled ambient motes from the gun's
+              // own lane; the flight trail is spawned on the round's lane, so
+              // count by X instead of a fixed Y (the rig's Y moved this pass).
+              count += items.filter((p) => id === 'keris' ? p.kind === 'streak'
+                : id === 'diamond' ? Math.abs(p.x - 210) < 20 : true).length;
               return push.apply(this, items);
             };
           }

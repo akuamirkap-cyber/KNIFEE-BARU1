@@ -607,6 +607,21 @@ html, body, #root {
   animation: glarePulse 2.6s ease-in-out infinite;
 }
 
+/* Menu night sky: four-point gold sparkles */
+.mm-spark {
+  pointer-events: none;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fffbe6 0%, #ffd76a 42%, rgba(255,190,60,0) 70%);
+  clip-path: polygon(50% 0%, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0% 50%, 39% 39%);
+  filter: drop-shadow(0 0 6px rgba(255,205,90,.9));
+  animation: mmSpark 3.2s ease-in-out infinite;
+}
+
+@keyframes mmSpark {
+  0%, 100% { opacity: .28; transform: scale(.65) rotate(0deg); }
+  50% { opacity: 1; transform: scale(1.2) rotate(6deg); }
+}
+
 .star-dot-fx {
   position: absolute;
   border-radius: 9999px;

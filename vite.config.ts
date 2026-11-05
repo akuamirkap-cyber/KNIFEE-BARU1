@@ -1,7 +1,7 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import {defineConfig} from 'vite';
+import {defineConfig, type Plugin} from 'vite';
 import { readFileSync } from 'node:fs';
 
 /**
@@ -317,9 +317,48 @@ function standbyControlPlugin() {
   };
 }
 
+/**
+ * The menu's weapon showcase is the first thing a player looks at, but its art
+ * sits behind a dynamic import (`menuGunArt` → `gunhit-art` → the gun modules →
+ * the ported slides). Vite cannot preload a chain it only discovers *after*
+ * `App.tsx` runs, so the weapon used to pop in a second or more after the title
+ * every time the app opened.
+ *
+ * The chain is known at build time, so announce it in `index.html`: the browser
+ * then downloads it beside the app shell instead of after it, and the gun is
+ * parsed and on screen with the first paint.
+ */
+export function preloadMenuGunArt(): Plugin {
+  /** Chunks the menu needs before it can draw a single weapon. */
+  const MENU_ART = [
+    /^menuGunArt-/, /^gunhit-art-/, /^gunhit-art-guns-/, /^gunhit-art-variants-/,
+    /^ported-4-/, /^ported-6-/, /^ported-8-/, /^gunhit-audio-/,
+  ];
+  return {
+    name: 'sga-menu-gun-art-preload',
+    apply: 'build',
+    transformIndexHtml: {
+      order: 'post',
+      handler(html, context) {
+        // Only scripts: a `modulepreload` on a stylesheet is meaningless.
+        const files = Object.keys(context.bundle ?? {}).filter((file) => /\.m?js$/.test(file));
+        const hrefs = files.filter((file) => MENU_ART.some((pattern) => pattern.test(file.split('/').pop() ?? '')));
+        return {
+          html,
+          tags: hrefs.map((href) => ({
+            tag: 'link',
+            attrs: { rel: 'modulepreload', crossorigin: '', href: `/${href}` },
+            injectTo: 'head' as const,
+          })),
+        };
+      },
+    },
+  };
+}
+
 export default defineConfig(() => {
   return {
-    plugins: [react(), tailwindcss(), standbyControlPlugin()],
+    plugins: [react(), tailwindcss(), preloadMenuGunArt(), standbyControlPlugin()],
     resolve: {
       alias: {
         '@': path.resolve(process.cwd(), './src'),

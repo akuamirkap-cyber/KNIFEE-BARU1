@@ -56,9 +56,13 @@ test('each wedge gets a wall and a bevel in its own artwork hue', () => {
 test('the cleared wheel and the cleared boss use their own artwork colours', () => {
   // Both stages go through the same clear path, and the face on a boss stage is
   // the boss artwork, so the debris palette is the boss's own.
+  // The palette is read once per stage (in `prepareWedges`), not on the frame the
+  // wheel breaks, and the clear path consumes exactly that.
   assert.match(game, /const pix = readTargetPixels\(this\.face \?\? null\);/);
-  assert.match(game, /const debris = \(pix \? artChips\(pix\) : null\) \?\? STYLE_COLORS\[this\.level\.style\]\.chips;/);
-  assert.match(game, /const ink = pix \? wedgeInk\(pix, R, facePad, this\.faceScale, a0, a1\) : null;/);
+  assert.match(game, /debris: pix \? artChips\(pix\) : null/);
+  assert.match(game, /const debris = prepared\.debris \?\? STYLE_COLORS\[this\.level\.style\]\.chips;/);
+  assert.match(game, /const wedge = pix \? wedgeInk\(pix, R, pad, this\.faceScale, a0, a1\) : null;/);
+  assert.match(game, /const ink = prepared\.ink\[i\];/);
   assert.match(game, /side: ink\?\.side, edge: ink\?\.edge, depth,/);
   assert.match(game, /const cols = debris;/);
   assert.match(game, /const cc = debris;/);

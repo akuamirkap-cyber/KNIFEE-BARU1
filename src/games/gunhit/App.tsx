@@ -1,8 +1,9 @@
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type { Game } from './game/Game';
-import { GAMEPLAY_GUN_SCALE, GUN_Y, H, initialGameplayWheelCenterY } from './game/layout';
+import { CX as WORLD_CX, GAMEPLAY_GUN_SCALE, GUN_Y, H, initialGameplayWheelCenterY, LAND_H, LAND_W } from './game/layout';
 import { makeLevel } from './game/levels';
 import { savedValues, storage } from './game/safeStorage';
+import { APP_VERSION } from '../../telemetry/version';
 import { setMasterVolume, setMuted, sfx } from './game/audio';
 import type { BossHead } from './game/bossCatalog';
 import { bossXpReward, getPlayerProgress } from './game/playerProgress';
@@ -12,6 +13,10 @@ import { getWeapon, isWeaponUnlocked, RARITY_COLOR, WEAPONS, type WeaponId } fro
 import { useSlideActive } from '../shared/SlideActivity';
 import { useAndroidBack } from '../../utils/androidBack';
 import { Burst, Dust, Flare, Shockwave, SparkleField, SunburstFX } from '../knife-hit/components/Effects';
+import MenuStageBackdrop from './components/MenuStageBackdrop';
+import ZipWeaponArt from './components/ZipWeaponArt';
+import ZipWeaponOverlay from './components/ZipWeaponOverlay';
+import { hasZipArt } from './zipWeapons/ids';
 import { gunSunburstColor } from './game/sunburstPalette';
 /**
  * Weapon artwork for the menu showcase: a dynamic import, so the title screen
@@ -19,7 +24,119 @@ import { gunSunburstColor } from './game/sunburstPalette';
  */
 type MenuGunArt = typeof import('./game/menuGunArt');
 let menuGunArtPromise: Promise<MenuGunArt> | null = null;
+/**
+ * The art module itself, once the chunk has parsed.
+ *
+ * The page is mounted again every time the player enters it, and React state
+ * starts empty each time. Keeping the resolved module here lets the second and
+ * every later entry paint the live weapon on its first frame, instead of
+ * replaying a 260 KB snapshot and painting over it a moment later.
+ */
+let menuGunArtModule: MenuGunArt | null = null;
 const loadMenuGunArt = () => (menuGunArtPromise ??= import('./game/menuGunArt'));
+void loadMenuGunArt().then((mod) => { menuGunArtModule = mod; });
+/**
+ * Why the artwork is asked for here, at module scope, and not in an effect.
+ *
+ * The chain behind `menuGunArt` (the gun modules and the ported slides they
+ * import) is the largest thing the menu needs, and it used to be requested only
+ * after React had committed — so the hero weapon arrived a beat or two after the
+ * title. Requesting it with the shell lets the download overlap everything else
+ * the first render does, and the matching `modulepreload` hints in `index.html`
+ * (see `preloadMenuGunArt()` in `vite.config.ts`) start it even earlier.
+ */
+
+/**
+ * The last weapon the menu painted, kept as a bitmap.
+ *
+ * Even preloaded, the artwork is a lazy chunk, so on a cold start the showcase
+ * is empty until it lands. A painted frame is a few dozen KB, so it is kept (per
+ * weapon, per app version) and drawn the moment the menu mounts: the weapon is
+ * on screen immediately, and the live artwork replaces it as soon as it parses.
+ */
+/** Backing size of the showcase canvas, in CSS pixels (-10% of the old 374x328). */
+const MENU_GUN_CANVAS_W = 337;
+const MENU_GUN_CANVAS_H = 295;
+const MENU_GUN_BITMAP_KEY = 'sga_menu_gun_frame';
+/**
+ * Ceiling for the kept frame.
+ *
+ * It rides in the same store as the progress, and in a frame where the browser
+ * refuses web storage that store is mirrored into `window.name`, which the
+ * browser truncates at a couple of megabytes. A quarter of a megabyte keeps the
+ * whole snapshot comfortably inside that.
+ */
+const MENU_GUN_BITMAP_MAX = 260_000;
+interface MenuGunBitmap { v: string; id: string; png: string }
+/** Mirrors the live artwork's readiness so a late bitmap never paints over it. */
+const menuGunArtReady = { current: false };
+
+function readMenuGunBitmap(): MenuGunBitmap | null {
+  try {
+    const raw = storage.getItem(MENU_GUN_BITMAP_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as MenuGunBitmap;
+    if (!parsed || parsed.v !== APP_VERSION || typeof parsed.png !== 'string') return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+/** A PNG of the frame, halved when the device-pixel copy is too heavy to keep. */
+function frameToPng(cv: HTMLCanvasElement): string | null {
+  try {
+    if (typeof cv.toDataURL !== 'function') return null;
+    const full = cv.toDataURL('image/png');
+    if (full && full.length <= MENU_GUN_BITMAP_MAX) return full;
+    if (typeof document === 'undefined' || !cv.width || !cv.height) return null;
+    const half = document.createElement('canvas');
+    half.width = Math.max(1, Math.round(cv.width / 2));
+    half.height = Math.max(1, Math.round(cv.height / 2));
+    const ctx = half.getContext('2d');
+    if (!ctx) return null;
+    ctx.drawImage(cv, 0, 0, half.width, half.height);
+    const small = half.toDataURL('image/png');
+    return small && small.length <= MENU_GUN_BITMAP_MAX ? small : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Weapon pivot (CSS px from the canvas centre) already measured by a live paint. */
+const menuGunPivot = new Map<string, { x: number; y: number }>();
+/** The frame already encoded for the cold-start snapshot (`weapon|art|canvas`). */
+let keptMenuGunFrame = '';
+/** Key of the newest paint, so a deferred snapshot never keeps a stale weapon. */
+let latestMenuGunPaint = '';
+
+/**
+ * Keep the painted frame for the next cold start — after the menu is up.
+ *
+ * Encoding a 674x590 canvas to PNG and writing the base64 into web storage is
+ * tens of milliseconds of main-thread work. Doing it inside the paint effect put
+ * that on the entering frame, exactly when the page has the least budget to
+ * spare, which is what made the page feel late. It now runs once per weapon when
+ * the browser is idle, and not at all when that frame is already kept.
+ */
+function keepMenuGunFrameLater(cv: HTMLCanvasElement, id: string, key: string) {
+  if (keptMenuGunFrame === key) return;
+  const run = () => {
+    if (latestMenuGunPaint !== key || keptMenuGunFrame === key) return;
+    const png = frameToPng(cv);
+    if (!png) return;
+    try {
+      storage.setItem(MENU_GUN_BITMAP_KEY, JSON.stringify({ v: APP_VERSION, id, png } satisfies MenuGunBitmap));
+      keptMenuGunFrame = key;
+    } catch {
+      // Storage refused: the live artwork is enough.
+    }
+  };
+  const idle = (globalThis as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
+  if (idle) idle(run, { timeout: 1500 });
+  else window.setTimeout(run, 260);
+}
+
 import { juicyAudio } from '../../utils/juicyAudio';
 import DiamondSprite from '../shared/DiamondSprite';
 import CoinSprite from '../shared/CoinSprite';
@@ -68,10 +185,12 @@ import type { HeadKind } from '../perfect-shot/play/HeadArt';
 import { WheelArtBridge } from './components/WheelArtBridge';
 import MenuEnvironment, { type MenuEnvironmentTheme } from './components/MenuEnvironment';
 import { SGA_SPEED_OPTIONS, formatSgaSpeed, getSavedSgaSpeed } from './game/gameSpeed';
+import { useSgaBulletSpeed } from './utils/useSgaBulletSpeed';
+import { useSgaSpotCombo } from './utils/useSgaSpotCombo';
 import { useSgaGameSpeed } from './utils/useSgaGameSpeed';
 import { SGA_BG_THEMES, getSavedSgaBgTheme } from './game/backgroundThemes';
 import { useSgaBgTheme } from './utils/useSgaBgTheme';
-import { SGA_ORIENTATION_OPTIONS, getSavedSgaOrientation } from './game/orientation';
+import { SGA_ORIENTATION_OPTIONS, getSavedSgaOrientation, isLandscape } from './game/orientation';
 import { useSgaOrientation } from './utils/useSgaOrientation';
 import { displaySize } from './game/layout';
 import { getFast2DContext, getOptimalCanvasDpr } from './utils/mobilePerf';
@@ -347,22 +466,44 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   const studioVolumeRef = useRef<number | null>(null);
   const [menuReady, setMenuReady] = useState(false);
 
+  /** When the weapon last fired, for the zip guns' muzzle round. */
+  const zipMuzzleShotAtRef = useRef(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const weaponPivotRef = useRef<HTMLDivElement>(null);
+  /** Landscape-only aim rig for the menu weapon (W/S lift + mouse heading). */
+  const gunAimRef = useRef<HTMLDivElement>(null);
+  const gunTiltRef = useRef<HTMLDivElement>(null);
+  const gunAimState = useRef({ lift: 0, up: false, down: false });
   const gameShellRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Game | null>(null);
   // Runs asked for while the engine chunk is still in flight.
   const engineQueue = useRef<((engine: Game) => void)[]>([]);
+  /**
+   * Starts the engine boot (chunk + constructor).
+   *
+   * The engine canvas sits *behind* the menu, which paints its own room, so
+   * nothing on the title screen needs it. Building it during the entrance used
+   * to land ~300 KB of parsing plus the constructor on the very frames the menus
+   * animate in — the transition stuttered every single time. It now boots when
+   * the menu has settled, and immediately if a run is asked for first.
+   */
+  const engineBootRef = useRef<(() => void) | null>(null);
+  const engineBootingRef = useRef(false);
   // Latest "is the engine allowed to simulate" flag, so a late engine starts
   // in the right state instead of waiting for the next dependency change.
   const activeRef = useRef(false);
   // Gun art for the menu showcase, once its chunk has landed.
-  const [gunArt, setGunArt] = useState<MenuGunArt | null>(null);
+  // Seed from the module already parsed by a previous visit to this page.
+  const [gunArt, setGunArt] = useState<MenuGunArt | null>(menuGunArtModule);
+  /** Bumped when the paint effect found no canvas yet, so it runs again. */
+  const [gunPaintTick, setGunPaintTick] = useState(0);
+  menuGunArtReady.current = Boolean(gunArt);
   useEffect(() => {
+    if (menuGunArtModule) return;
     let alive = true;
     void loadMenuGunArt().then((mod) => {
-      if (alive) setGunArt(mod);
+      if (alive && !menuGunArtModule) setGunArt(mod);
     });
     return () => {
       alive = false;
@@ -372,8 +513,13 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   /** Start a run now, or the moment the engine chunk lands. */
   const whenEngine = (start: (engine: Game) => void) => {
     const engine = gameRef.current;
-    if (engine) start(engine);
-    else engineQueue.current.push(start);
+    if (engine) {
+      start(engine);
+      return;
+    }
+    engineQueue.current.push(start);
+    // A run is waiting: stop waiting for idle and boot now.
+    engineBootRef.current?.();
   };
   // Game B's wheel artwork, rasterised on demand and handed to the engine so
   // every stage shows exactly the wheel the reference game shows.
@@ -471,6 +617,8 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   const [muted, setMutedState] = useState(false);
   const [soundVolume, setSoundVolumeState] = useState<number>(initialSoundVolume);
   const [gameSpeed, setGameSpeed] = useSgaGameSpeed();
+  const [bulletSpeed, setBulletSpeed] = useSgaBulletSpeed();
+  const [spotCombo, setSpotCombo] = useSgaSpotCombo();
   const [menuTheme, setMenuTheme] = useSgaBgTheme();
   const [orientation, setOrientation] = useSgaOrientation();
   // The shell and the canvas are the *display* rectangle: 420x760 portrait, or
@@ -845,6 +993,8 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       },
       onShotFired: (count) => {
         pendingShotsRef.current += count;
+        // The zip weapons hold their round on the muzzle: this is when it leaves.
+        zipMuzzleShotAtRef.current = performance.now();
       },
       onBossDefeated: (bossName, level, coinsEarned, bossHead) => {
         const totalXpBefore = num(LS.playerXp);
@@ -960,13 +1110,29 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     };
     document.addEventListener('visibilitychange', onVisChange);
     window.addEventListener('pagehide', flushShotsToStorage);
-    void boot();
+    // See `engineBootRef`: the menu does not need the engine, so it boots after
+    // the entrance instead of inside it.
+    const startBoot = () => {
+      if (engineBootingRef.current) return;
+      engineBootingRef.current = true;
+      void boot();
+    };
+    engineBootRef.current = startBoot;
+    // The menu's arrival sequence owns the first ~1.7s of this page; the engine
+    // boots when that ends (see the `menuReady` effect). This is only the floor
+    // in case the menu never reports ready (another slide, a replay, a skip).
+    const bootTimer = window.setTimeout(startBoot, 2600);
 
     return () => {
       cancelled = true;
       document.removeEventListener('visibilitychange', onVisChange);
       window.removeEventListener('pagehide', flushShotsToStorage);
       engineQueue.current.length = 0;
+      // A later mount re-arms the boot; a pending idle callback is harmless
+      // because `cancelled` is checked inside `boot`.
+      engineBootRef.current = null;
+      engineBootingRef.current = false;
+      window.clearTimeout(bootTimer);
       g?.destroy();
       gameRef.current = null;
       flushShotsToStorage();
@@ -990,6 +1156,16 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   useEffect(() => {
     gameRef.current?.setGameSpeed(gameSpeed);
   }, [gameSpeed]);
+
+  // Bullet speed (1x–3x) applies to every weapon of every slide.
+  useEffect(() => {
+    gameRef.current?.setBulletSpeed(bulletSpeed);
+  }, [bulletSpeed, screen]);
+
+  // COMBO TITIK scoring mode (SETTING) — same-spot ladder into bonus coins.
+  useEffect(() => {
+    gameRef.current?.setSpotCombo(spotCombo);
+  }, [spotCombo, screen]);
 
   useEffect(() => {
     gameRef.current?.setBackgroundTheme(menuTheme);
@@ -1033,6 +1209,14 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     afterPaint(() => { if (current) studioSfx.menuEnter(0, plan); });
     return () => { current = false; };
   }, [menuReturnKey]);
+
+  // The arrival sequence is over: the page is quiet, which is when the engine
+  // chunk and its constructor cost the player nothing (the menu paints its own
+  // room, so nothing on this screen needs it).
+  useEffect(() => {
+    if (!menuReady) return;
+    engineBootRef.current?.();
+  }, [menuReady]);
 
   // Match Perfect Shot's input lock during the 1.7s menu arrival sequence.
   useEffect(() => {
@@ -1110,15 +1294,67 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     gameRef.current?.setActive(simulate);
   }, [simulate, screen, inGameSettingsOpen]);
 
+  // The boss celebration keeps the live stage behind it and prints its own stage
+  // and reward rows on the edges: the corner HUD would sit right on top of them.
+  useEffect(() => {
+    gameRef.current?.setHudHidden(Boolean(bossDefeatedData));
+  }, [bossDefeatedData, screen]);
+
+  /**
+   * Show the cached frame straight away, then let the live artwork take over.
+   *
+   * The showcase used to be an empty box until the gun artwork chunk landed. The
+   * previous paint is drawn here the moment the menu mounts, so the hero weapon
+   * is never missing; `menuGunArtReady` keeps a slow image decode from painting
+   * over the real thing once it is there.
+   */
+  useEffect(() => {
+    if (gunArt) return;
+    // Zip weapons are live SVG, never a kept bitmap.
+    if (hasZipArt(weapon)) return;
+    if (screen !== 'menu' || arsenalOpen || questOpen || leaderboardOpen || mapOpen || settingsOpen) return;
+    const cv = previewCanvasRef.current;
+    const cached = readMenuGunBitmap();
+    if (!cv || !cached || cached.id !== weapon) return;
+    // Size the canvas exactly like the live paint does, so the shortcut frame
+    // lands in the same box instead of being stretched from the 300x150 default.
+    const dpr = getOptimalCanvasDpr(2);
+    cv.width = Math.round(MENU_GUN_CANVAS_W * dpr);
+    cv.height = Math.round(MENU_GUN_CANVAS_H * dpr);
+    const img = new Image();
+    img.onload = () => {
+      if (menuGunArtReady.current) return;
+      const ctx = getFast2DContext(cv);
+      if (!ctx) return;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, cv.width, cv.height);
+      ctx.drawImage(img, 0, 0, cv.width, cv.height);
+    };
+    img.src = cached.png;
+  }, [gunArt, screen, weapon, arsenalOpen, questOpen, leaderboardOpen, mapOpen, settingsOpen]);
+
   // Upright weapon preview on the main menu (-10% from 374x328 -> 337x295, native VSync FPS)
   useEffect(() => {
     if (!gunArt) return;
     if (screen !== 'menu' || arsenalOpen || questOpen || leaderboardOpen || mapOpen || settingsOpen) return;
     const cv = previewCanvasRef.current;
-    if (!cv) return;
+    if (cv && hasZipArt(weapon)) {
+      // The weapon is drawn by `ZipWeaponArt` (live SVG) in this box; keep the
+      // canvas empty so the two never stack.
+      cv.width = Math.round(MENU_GUN_CANVAS_W * getOptimalCanvasDpr(2));
+      cv.height = Math.round(MENU_GUN_CANVAS_H * getOptimalCanvasDpr(2));
+      return;
+    }
+    if (!cv) {
+      // A menu re-entrance can mount the canvas a frame after this effect runs.
+      // Skipping the paint here used to leave the showcase blank until some
+      // other dependency changed, which is what made the weapon look "late".
+      const retry = window.setTimeout(() => setGunPaintTick((n) => n + 1), 16);
+      return () => window.clearTimeout(retry);
+    }
     const dpr = getOptimalCanvasDpr(2);
-    const pw = 337;
-    const ph = 295;
+    const pw = MENU_GUN_CANVAS_W;
+    const ph = MENU_GUN_CANVAS_H;
     cv.width = Math.round(pw * dpr);
     cv.height = Math.round(ph * dpr);
     const ctx = getFast2DContext(cv);
@@ -1177,34 +1413,45 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     drawStill();
     // Center the aura on the visible weapon ink, not just on the large preview canvas.
     // This also compensates for weapon-specific renderer offsets in the screenshot the user flagged.
-    try {
-      const pixels = ctx.getImageData(0, 0, cv.width, cv.height).data;
-      let weight = 0;
-      let pivotX = 0;
-      let pivotY = 0;
-      for (let y = 0; y < cv.height; y++) {
-        for (let x = 0; x < cv.width; x++) {
-          const alpha = pixels[(y * cv.width + x) * 4 + 3];
-          if (alpha < 160) continue; // ignore the soft ground shadow and the glow fringe
-          weight += alpha;
-          pivotX += (x + 0.5) * alpha;
-          pivotY += (y + 0.5) * alpha;
+    //
+    // Readback and scan are the expensive half of this paint, so both are paid
+    // once per weapon and art (every second pixel is plenty — the pivot lands
+    // within half a CSS pixel of the exact one) and remembered for the visit.
+    const paintKey = `${weapon}|${gunArt.getGunVariant?.(weapon) ?? ''}|${cv.width}x${cv.height}`;
+    latestMenuGunPaint = paintKey;
+    let pivot = menuGunPivot.get(paintKey);
+    if (!pivot) {
+      try {
+        const pixels = ctx.getImageData(0, 0, cv.width, cv.height).data;
+        let weight = 0;
+        let pivotX = 0;
+        let pivotY = 0;
+        for (let y = 0; y < cv.height; y += 2) {
+          for (let x = 0; x < cv.width; x += 2) {
+            const alpha = pixels[(y * cv.width + x) * 4 + 3];
+            if (alpha < 160) continue; // ignore the soft ground shadow and the glow fringe
+            weight += alpha;
+            pivotX += (x + 0.5) * alpha;
+            pivotY += (y + 0.5) * alpha;
+          }
         }
+        if (weight > 0) pivot = { x: pivotX / weight / dpr, y: pivotY / weight / dpr };
+      } catch {
+        // Some low-end canvas contexts disable readback; fall back to the shared frame center.
       }
-      if (weight > 0 && weaponPivotRef.current) {
-        const cssScaleX = (cv.offsetWidth || pw) / pw;
-        const cssScaleY = (cv.offsetHeight || ph) / ph;
-        const centerX = pivotX / weight / dpr;
-        const centerY = pivotY / weight / dpr;
-        const offsetX = `${(centerX - pw / 2) * cssScaleX}px`;
-        const offsetY = `${(centerY - ph / 2) * cssScaleY}px`;
-        weaponPivotRef.current.style.setProperty('--weapon-pivot-x', offsetX);
-        weaponPivotRef.current.style.setProperty('--weapon-pivot-y', offsetY);
-      }
-    } catch {
-      // Some low-end canvas contexts disable readback; fall back to the shared frame center.
+      if (pivot) menuGunPivot.set(paintKey, pivot);
     }
-  }, [gunArt, screen, weapon, arsenalOpen, questOpen, leaderboardOpen, mapOpen, settingsOpen]);
+    if (pivot && weaponPivotRef.current) {
+      const cssScaleX = (cv.offsetWidth || pw) / pw;
+      const cssScaleY = (cv.offsetHeight || ph) / ph;
+      const offsetX = `${(pivot.x - pw / 2) * cssScaleX}px`;
+      const offsetY = `${(pivot.y - ph / 2) * cssScaleY}px`;
+      weaponPivotRef.current.style.setProperty('--weapon-pivot-x', offsetX);
+      weaponPivotRef.current.style.setProperty('--weapon-pivot-y', offsetY);
+    }
+    // Keep this frame for the next cold start, out of this frame's way.
+    keepMenuGunFrameLater(cv, weapon, paintKey);
+  }, [gunArt, gunPaintTick, screen, weapon, arsenalOpen, questOpen, leaderboardOpen, mapOpen, settingsOpen]);
 
   // Roll up score only while the slide is active; pause at the current number.
   useEffect(() => {
@@ -1338,7 +1585,10 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     requestWheelArt(level);
     const fromMap = mapOpen;
     const fromMenu = screenRef.current === 'menu' && !fromMap && !settingsOpen && !fromSettings;
-    const wantsWeaponFlight = fromMenu && captureMenuWeaponFlight();
+    // Landscape keeps the menu weapon exactly where the gameplay gun lands, so
+    // the hand-off there is a straight swap: a flight would have to rotate the
+    // upright menu frame onto the lying gun and land it on a second spot.
+    const wantsWeaponFlight = fromMenu && orientation !== 'landscape' && captureMenuWeaponFlight();
     if (fromMenu) {
       setPlayMenuExiting(true);
       setMenuDeparture('play');
@@ -1360,10 +1610,15 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     const gunEntryDelay = fromMap || fromSettings ? hold / 1000 : 0;
     // Aim the scope lens exactly at the stage target: same centre as the wheel
     // and a radius that frames it (106 normal / 122 boss / 166 boulder).
-    const origin = {
-      x: 50,
-      y: (initialGameplayWheelCenterY(stageConfig.boss, Boolean(specialMode)) / H) * 100,
-    };
+    // Landscape lays the world on its side, so the wheel's display position is
+    // (H - y, CX) rather than (CX, y): the lens has to close on the wheel the
+    // player is about to shoot, not on the empty spot the portrait centre maps to.
+    const wheelWorldY = initialGameplayWheelCenterY(stageConfig.boss, Boolean(specialMode));
+    const origin = orientation === 'landscape'
+      ? { x: ((LAND_W - wheelWorldY) / LAND_W) * 100, y: (WORLD_CX / LAND_H) * 100 }
+      : { x: 50, y: (wheelWorldY / H) * 100 };
+    // The overlay lives inside the shell the whole stage is scaled with, so the
+    // lens can stay in the engine's own stage units.
     const lens = stageConfig.radius + 14;
     const label = `STAGE ${level} · ${stageConfig.name.toUpperCase()}`;
 
@@ -1782,6 +2037,93 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   };
 
   /**
+   * Main menu in landscape.
+   *
+   * The frame is 760x420 there, so the portrait stack (title above a full-size
+   * weapon showcase) no longer fits: the showcase column collapsed to zero
+   * height and the weapon painted right on top of the PERFECT SHOT title.
+   * Landscape therefore gives the weapon its own column on the LEFT — the same
+   * side the gun holds during a landscape run — and stacks the HUD, title,
+   * buttons and nav in the right column. Only placement and type sizes change;
+   * the markup order, the entrance choreography and every animation class stay
+   * exactly as they are, so the intro plan is untouched.
+   */
+  const menuLandscape = isLandscape(orientation);
+  const menuSceneOpen = screen === 'menu' && !mapOpen && !questOpen && !leaderboardOpen && !arsenalOpen && !settingsOpen;
+
+  /**
+   * Landscape menu showcase rig.
+   *
+   * The showcase weapon can be raised/lowered with W and S so the player can
+   * pose it before playing. It deliberately does NOT follow the pointer: the
+   * aiming angle belongs to the run, where the barrel is what the round leaves
+   * from, so a menu preview that swivels would promise a heading the gun never
+   * has. Portrait has no cursor and a shorter menu, so it keeps the still
+   * showcase. The lift is written straight to the DOM inside one rAF loop — this
+   * is a 60fps interaction and must never re-render the whole menu.
+   */
+  useEffect(() => {
+    if (!menuLandscape || !menuSceneOpen) return;
+    const aim = gunAimState.current;
+    const LIFT_MAX = 92;
+    const LIFT_SPEED = 416; // px per second (1.6× the original 260)
+    let last = performance.now();
+    let raf = 0;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      const tag = (event.target as HTMLElement | null)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (event.code === 'KeyW') {
+        aim.up = true;
+        event.preventDefault();
+      } else if (event.code === 'KeyS') {
+        aim.down = true;
+        event.preventDefault();
+      }
+    };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.code === 'KeyW') aim.up = false;
+      else if (event.code === 'KeyS') aim.down = false;
+    };
+    const tick = (now: number) => {
+      const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
+      last = now;
+      const dir = (aim.up ? 1 : 0) - (aim.down ? 1 : 0); // W lifts, S lowers
+      if (dir !== 0) aim.lift = Math.max(-LIFT_MAX, Math.min(LIFT_MAX, aim.lift + dir * LIFT_SPEED * dt));
+
+      const rig = gunAimRef.current;
+      if (rig) rig.style.transform = `translate3d(0, ${(-aim.lift).toFixed(2)}px, 0)`;
+      raf = requestAnimationFrame(tick);
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    raf = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      aim.up = false;
+      aim.down = false;
+      if (gunAimRef.current) gunAimRef.current.style.transform = '';
+    };
+  }, [menuLandscape, menuSceneOpen]);
+  const menuArea = (name: 'gun' | 'hud' | 'title' | 'btns' | 'line' | 'nav'): CSSProperties =>
+    menuLandscape ? { gridArea: name } : {};
+  const menuBodyStyle: CSSProperties = menuLandscape
+    ? {
+        display: 'grid',
+        gridTemplateColumns: '46% 54%',
+        gridTemplateRows: 'auto auto auto auto auto',
+        gridTemplateAreas: '"gun hud" "gun title" "gun btns" "gun line" "gun nav"',
+      }
+    : {};
+  /** The menu weapon box: 337x295 (native art) in portrait, a touch smaller in landscape. */
+  const gunBoxClass = menuLandscape
+    ? 'h-[289px] w-[330px] max-w-full'
+    : 'h-[min(295px,54vh)] w-[min(337px,90vw)] max-w-full';
+
+  /**
    * Android back, top of the pile first: the newest overlay closes, then a live
    * run pauses into the same settings panel as the gear button, and the result
    * screen returns to the menu. Anything this pane does not use is left to the
@@ -1897,6 +2239,15 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       >
         {/* Canvas Engine (zero permanent translucent DOM overlays during gameplay so desynchronized:true scans out directly) */}
         <canvas ref={canvasRef} className="block touch-none" style={{ width: frame.w, height: frame.h }} />
+        {/* Only during a run: on the menu the engine is idle and paints nothing,
+            so the showcase above owns the weapon instead. */}
+        {screen === 'playing' && hasZipArt(weapon) && (
+          <ZipWeaponOverlay
+            id={weapon}
+            read={() => gameRef.current?.getZipGunFrame() ?? null}
+            readShotAt={() => zipMuzzleShotAtRef.current}
+          />
+        )}
         {diamondToast && (
           <div key={diamondToast.id} className="pointer-events-none absolute inset-x-0 top-[34%] z-40 flex flex-col items-center diamond-reward-pop" aria-live="polite">
             <div className="relative flex h-36 w-64 items-center justify-center">
@@ -2055,21 +2406,39 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                   ? { className: 'absolute inset-0', style: {} as CSSProperties }
                   : planMotion('in-bg', 0, 1100, 'absolute inset-0', undefined, 'out-bg', 120, 700))}
               >
-                <MenuEnvironment theme={menuTheme} />
+                {menuTheme === 'auto' || menuTheme === 'forest' ? (
+                  /* Menu dan gameplay satu ruangan: latar yang sama persis.
+                     A covering page transition hides the room anyway, so the menu
+                     stops repainting it 30 times a second while it plays. A fade
+                     leaves the menu visible and keeps it alive. */
+                  <MenuStageBackdrop orientation={orientation} animated={!menuPageTransition || menuPageTransition.variant === 'fade'} />
+                ) : (
+                  <MenuEnvironment theme={menuTheme} vivid={menuLandscape} />
+                )}
               </div>
-              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_46%,rgba(125,211,252,.08),transparent_68%)]" />
-              <div className="absolute inset-0 opacity-60">
-                <Dust count={14} />
-                <SparkleField count={10} spread={1.45} />
+              {(menuTheme !== 'auto' && menuTheme !== 'forest') && (
+                <div className={`absolute inset-0 ${menuLandscape ? 'bg-[radial-gradient(ellipse_at_50%_46%,rgba(125,211,252,.16),transparent_66%)]' : 'bg-[radial-gradient(ellipse_at_50%_46%,rgba(125,211,252,.08),transparent_68%)]'}`} />
+              )}
+              <div className={`absolute inset-0 ${menuLandscape ? 'opacity-95' : 'opacity-60'}`}>
+                <Dust count={menuLandscape ? 20 : 14} />
+                <SparkleField count={menuLandscape ? 16 : 10} spread={1.45} />
               </div>
-              {/* Keep SGA's selectable world art, with the right game's darker top/bottom framing. */}
-              <div className="pointer-events-none absolute inset-0" style={{ background: 'linear-gradient(180deg, rgba(3,7,10,.42) 0%, rgba(3,7,10,.12) 13%, transparent 28%, transparent 76%, rgba(1,5,8,.54) 100%), radial-gradient(ellipse at 50% 46%, transparent 52%, rgba(0,0,0,.24) 100%)' }} />
+              {/* Keep SGA's selectable world art, with a lighter top/bottom framing
+                  in landscape so the sky keeps the vivid blue of the reference. */}
+              <div
+                className="pointer-events-none absolute inset-0"
+                style={{
+                  background: menuLandscape
+                    ? 'linear-gradient(180deg, rgba(3,7,10,.16) 0%, rgba(3,7,10,.04) 13%, transparent 30%, transparent 80%, rgba(1,5,8,.30) 100%), radial-gradient(ellipse at 50% 46%, transparent 58%, rgba(0,0,0,.16) 100%)'
+                    : 'linear-gradient(180deg, rgba(3,7,10,.42) 0%, rgba(3,7,10,.12) 13%, transparent 28%, transparent 76%, rgba(1,5,8,.54) 100%), radial-gradient(ellipse at 50% 46%, transparent 52%, rgba(0,0,0,.24) 100%)',
+                }}
+              />
             </div>
 
             <div {...planMotion('in-shake', 800 + 560 * 0.78, 380, 'absolute inset-0', undefined, '', 0, 0)}>
-              <div className="relative flex h-full flex-col">
+              <div className={`relative flex h-full ${menuLandscape ? '' : 'flex-col'}`} style={menuBodyStyle}>
               {/* SGA coin and diamond artwork stays intact, positioned like Perfect Shot's HUD. */}
-              <div className="relative z-10 flex shrink-0 items-center justify-end gap-3 px-5 pt-4">
+              <div className={`relative z-10 flex shrink-0 items-center justify-end gap-3 ${menuLandscape ? 'px-4 pt-2' : 'px-5 pt-4'}`} style={menuArea('hud')}>
                 <div {...planMotion('in-down', 150, 700, 'font-title flex items-center gap-1.5 text-xl text-amber-300 drop-shadow', undefined, 'out-up', 0, 480)}>
                   <span className="font-title tabular-nums font-black tracking-tight">{totalCoins}</span>
                   <CoinSprite size={25} className="drop-shadow-[0_0_5px_rgba(255,210,80,.7)]" />
@@ -2082,10 +2451,10 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
               </div>
 
               {/* Perfect Shot's two-line title, type, bullet slash and staggered impact. */}
-              <div className="relative z-10 mt-1 flex shrink-0 flex-col items-center text-center">
+              <div className={`relative z-10 mt-1 flex shrink-0 flex-col items-center text-center ${menuLandscape ? 'justify-center' : ''}`} style={menuArea('title')}>
                 <div className="relative flex flex-col items-center">
                   {!menuDeparture && <div className="mm-halo pointer-events-none absolute left-1/2 top-[46%] h-[180px] w-[360px] -translate-x-1/2 -translate-y-1/2 rounded-full" style={{ animationDelay: `${2600 * menuPlan.k}ms` }} />}
-                  <h1 className="font-title relative flex text-[min(15vw,72px)] leading-none tracking-wide text-[#3fdc72]">
+                  <h1 className="font-title relative flex text-[min(15vw,72px)] leading-none tracking-wide text-[#3fdc72]" style={menuLandscape ? { fontSize: '44px' } : undefined}>
                     {!menuDeparture && <span aria-hidden className="mm-shine pointer-events-none absolute inset-0 z-10 flex" style={{ animationDelay: `${2800 * menuPlan.k}ms` }}>PERFECT</span>}
                     {'PERFECT'.split('').map((letter, i) => (
                       <span key={`${letter}-${i}`} className={planStyleMotion(menuPlan.title[i], TL.letter(i), ['in-letter', 'out-letter'], 'inline-block', i < 3 ? -1 : 1).className} style={{ ...planStyleMotion(menuPlan.title[i], TL.letter(i), ['in-letter', 'out-letter'], 'inline-block', i < 3 ? -1 : 1).style, textShadow: '0 2px 0 #23a34e, 0 4px 0 #1d8a42, 0 6px 0 #166f35, 0 8px 0 #0f5427, 0 14px 18px rgba(0,0,0,.55)' } as CSSProperties}>{letter}</span>
@@ -2102,7 +2471,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                     </div>
                   </div>
 
-                  <h2 className="font-title relative -mt-1 flex text-[min(18vw,86px)] leading-none tracking-wider text-[#ffd23f]">
+                  <h2 className="font-title relative -mt-1 flex text-[min(18vw,86px)] leading-none tracking-wider text-[#ffd23f]" style={menuLandscape ? { fontSize: '54px' } : undefined}>
                     {!menuDeparture && <span aria-hidden className="mm-shine pointer-events-none absolute inset-0 z-10 flex" style={{ animationDelay: `${3000 * menuPlan.k}ms` }}>SHOT</span>}
                     {'SHOT'.split('').map((letter, i) => (
                       <span key={`${letter}-${i}`} className={planStyleMotion(menuPlan.title[7 + i], TL.shot(i), ['in-slam', 'out-blast'], 'inline-block', i < 2 ? -1 : 1).className} style={{ ...planStyleMotion(menuPlan.title[7 + i], TL.shot(i), ['in-slam', 'out-blast'], 'inline-block', i < 2 ? -1 : 1).style, textShadow: '0 2px 0 #f0a81c, 0 4px 0 #e0901a, 0 6px 0 #c47414, 0 8px 0 #9c5a10, 0 14px 18px rgba(0,0,0,.55)' } as CSSProperties}>{letter}</span>
@@ -2120,16 +2489,23 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
               {/* Weapon showcase. The light behind the weapon is Gun Hit's own
                   sunburst (`SunburstFX`, the amber-ray burst this menu has
                   always used), never the reference menu's conic ray disc. */}
-              <div className="relative flex min-h-0 flex-1 items-center justify-center">
+              <div className={`relative flex items-center justify-center ${menuLandscape ? '' : 'min-h-0 flex-1'}`} style={menuArea('gun')}>
                 <div {...(menuDeparture === 'play'
-                  ? { className: 'relative z-10 h-[min(295px,54vh)] w-[min(337px,90vw)] max-w-full opacity-0', style: {} as CSSProperties }
-                  : planStyleMotion(menuPlan.gun, gunTiming(menuPlan.gun), ['in-gun', 'out-spin'], 'relative z-10 h-[min(295px,54vh)] w-[min(337px,90vw)] max-w-full', 1))}>
+                  ? {
+                    // Only the captured flight frame replaces the menu weapon; without
+                    // one (landscape, or a blocked capture) it stays on screen until
+                    // the menu itself unmounts instead of blinking out early.
+                    className: `relative z-10 ${gunBoxClass} ${weaponFlight ? 'opacity-0' : ''}`,
+                    style: {} as CSSProperties,
+                  }
+                  : planStyleMotion(menuPlan.gun, gunTiming(menuPlan.gun), ['in-gun', 'out-spin'], `relative z-10 ${gunBoxClass}`, 1))}>
                   {/* No ring or shadow on the floor: the weapon stands on the
                       light of the sunburst alone. */}
                   {!menuDeparture && [18, 42, 64, 82].map((x, i) => <span key={x} className="mm-mote pointer-events-none absolute bottom-[14%] h-1.5 w-1.5 rounded-full bg-[#e0fbff]" style={{ left: `${x}%`, animationDelay: `${(3400 + i * 700) * menuPlan.k}ms` }} />)}
                   <div className="float relative h-full w-full" data-menu-gun>
+                    <div ref={gunAimRef} className="relative h-full w-full" style={{ willChange: 'transform' }} data-menu-aim>
                     <div ref={weaponPivotRef} className="pointer-events-none absolute inset-0" aria-hidden="true">
-                      <SunburstFX size={430} color={gunSunburstColor(getWeapon(weapon).rarity)} intensity={0.44} speed={32} core={false} stars={false} style={{ left: 'calc(50% + var(--weapon-pivot-x, 0px))', top: 'calc(50% + var(--weapon-pivot-y, 0px))' }} />
+                      <SunburstFX size={430} color="255,255,255" intensity={0.44} speed={32} core={false} stars={false} style={{ left: 'calc(50% + var(--weapon-pivot-x, 0px))', top: 'calc(50% + var(--weapon-pivot-y, 0px))' }} />
                       {!menuDeparture && menuPlan.gun === 'combo' && (
                         <div
                           aria-hidden="true"
@@ -2147,19 +2523,25 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                         </div>
                       )}
                     </div>
-                    <canvas ref={previewCanvasRef} style={{ width: 'min(337px, 90vw)', height: 'min(295px, 54vh)' }} className="block cursor-pointer drop-shadow-[0_10px_20px_rgba(0,0,0,.5)] transition-transform hover:scale-105" role="button" tabIndex={0} aria-label={tr(language, 'Buka koleksi senjata')} onClick={() => startArsenalTransition(true)} onKeyDown={(event) => {
+                    <div ref={gunTiltRef} className="relative" style={{ transformOrigin: '50% 78%', willChange: 'transform' }} data-menu-aim-tilt>
+                    {/* The five zip weapons are live SVG: their glow, shimmer and
+                        twinkle keep animating here instead of being baked. */}
+                    {hasZipArt(weapon) && <ZipWeaponArt id={weapon} height={300} anchor="center" className="pointer-events-none" />}
+                    <canvas ref={previewCanvasRef} style={menuLandscape ? { width: '330px', height: '289px' } : { width: 'min(337px, 90vw)', height: 'min(295px, 54vh)' }} className="block cursor-pointer drop-shadow-[0_10px_20px_rgba(0,0,0,.5)] transition-transform hover:scale-105" role="button" tabIndex={0} aria-label={tr(language, 'Buka koleksi senjata')} onClick={() => startArsenalTransition(true)} onKeyDown={(event) => {
                       if (event.key === 'Enter' || event.key === ' ') {
                         event.preventDefault();
                         unlockStudioAudio(true);
                         startArsenalTransition(true);
                       }
                     }} />
+                    </div>
+                    </div>
                   </div>
                 </div>
               </div>
 
               {/* Perfect Shot's glossy paired controls, wired to SGA actions. */}
-              <div className="relative z-10 flex shrink-0 justify-center gap-3 px-6">
+              <div className={`relative z-10 flex shrink-0 justify-center gap-3 ${menuLandscape ? 'items-center px-4' : 'px-6'}`} style={menuArea('btns')}>
                 <div {...planStyleMotion(menuPlan.buttons[0], TL.buttons(0), ['in-left', 'out-left'], 'w-[42%] max-w-[158px]', -1)}>
                   <button type="button" data-gloss="off" onClick={openLevelMap} className="press shine font-ui relative flex h-[54px] w-full items-center justify-center gap-1.5 rounded-2xl bg-gradient-to-b from-[#ff6a3d] to-[#e0331e] text-[20px] text-white shadow-[0_5px_0_#9c1f12,0_10px_18px_rgba(0,0,0,.4)]" style={{ '--shd': '2.4s' } as CSSProperties}>
                     <span className="absolute inset-x-3 top-1.5 h-5 rounded-xl bg-white/25" />
@@ -2176,10 +2558,13 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                 </div>
               </div>
 
-              <div {...planMotion('in-line', 1500, 600, 'relative z-10 mx-auto my-4 h-px w-[70%] bg-gradient-to-r from-transparent via-white/20 to-transparent', undefined, 'out-line', 40, 380)} />
+              {(() => {
+                const line = planMotion('in-line', 1500, 600, `relative z-10 mx-auto ${menuLandscape ? 'my-2' : 'my-4'} h-px w-[70%] bg-gradient-to-r from-transparent via-white/20 to-transparent`, undefined, 'out-line', 40, 380);
+                return <div {...line} style={{ ...line.style, ...menuArea('line') }} />;
+              })()}
 
               {/* Right game's four framed vector icons, retaining SGA menu destinations. */}
-              <div className={`relative z-30 grid shrink-0 grid-cols-4 px-6 pb-5 ${perfectShotIconSet === 'flat' ? 'gap-5' : 'gap-3'}`}>
+              <div className={`relative z-30 grid shrink-0 grid-cols-4 ${menuLandscape ? 'px-4 pb-2' : 'px-6 pb-5'} ${perfectShotIconSet === 'flat' ? 'gap-5' : 'gap-3'}`} style={menuArea('nav')}>
                 {SGA_MENU_NAV.map((item, i) => (
                   <div key={item.id} {...planStyleMotion(menuPlan.nav[i], TL.nav(i), ['in-pop', 'out-down'], 'flex justify-center', i < 2 ? -1 : 1)}>
                     <button type="button" data-gloss="off" onClick={() => {
@@ -2236,6 +2621,10 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
             sfxEnabled={studioSound.sfx}
             musicEnabled={studioSound.music}
             speed={gameSpeed}
+            bulletSpeed={bulletSpeed}
+            onBulletSpeed={setBulletSpeed}
+            spotCombo={spotCombo}
+            onSpotCombo={() => setSpotCombo(!spotCombo)}
             speedOptions={SGA_SPEED_OPTIONS}
             themes={SGA_BG_THEMES}
             theme={menuTheme}
@@ -2282,6 +2671,9 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
             leaving={mapLeaving}
             progress={{ stage: Math.max(1, Math.min(GUN_HIT_MAP_MAX_LEVEL, bestLevel)), stages: SGA_QUEST_STAGES }}
             unlockAll={allStagesOpen}
+            // Landscape runs the map left → right; portrait keeps the corridor
+            // climbing up the screen.
+            axis={menuLandscape ? 'x' : 'y'}
             onBack={closeLevelMap}
             onPlay={(_event, level) => beginStage(level)}
           /></Overlay>
@@ -2498,6 +2890,8 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
             stats={{ stage: bestLevel, score: best, coins: totalCoins }}
             rivals={leaderboardRivals}
             subtitle={tr(language, 'TOP RUNS · OFFLINE')}
+            // Landscape: podium/tabs kiri, daftar peringkat kanan (tidak terpotong).
+            landscape={menuLandscape}
             onBack={closeLeaderboardPage}
           /></Overlay>
         )}
@@ -2539,61 +2933,110 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
           /></Overlay>
         )}
 
-        {/* Game Over Screen (DIBESARKAN TEKSNYA 2X + ANIMASI MEWAH!) */}
+        {/* Game Over Screen — portrait memakai kartu besar, landscape versi
+            ringkas dua kolom supaya semuanya muat di layar 760x420. */}
         {screen === 'over' && (
-          <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/80 px-6 text-white backdrop-blur-lg">
-            <div className="pop-in flex w-full max-w-sm flex-col items-center">
-              {/* Header 2X LEBIH BESAR */}
-              <div className="text-6xl sm:text-7xl font-black italic tracking-wider text-red-500 drop-shadow-[0_6px_0_#991b1b] font-game leading-none">
-                GAME OVER
+          <div className="absolute inset-0 z-30 flex items-center justify-center overflow-hidden bg-black/80 px-6 text-white backdrop-blur-lg">
+            {menuLandscape ? (
+              <div className="pop-in flex w-full max-w-[640px] items-center gap-4">
+                {/* kiri: judul, stage, tombol */}
+                <div className="flex w-[45%] shrink-0 flex-col items-center text-center">
+                  <div className="font-game text-[38px] font-black italic leading-none tracking-wider text-red-500 drop-shadow-[0_4px_0_#991b1b]">
+                    GAME OVER
+                  </div>
+                  <div className="mt-1 font-game text-[13px] font-bold text-white/80">
+                    Bertahan hingga <span className="font-black text-amber-300">STAGE {result.level}</span>
+                  </div>
+                  <button
+                    onClick={play}
+                    className="pulse-btn mt-3 w-full rounded-xl border-b-4 border-emerald-800 bg-gradient-to-b from-[#22c55e] via-[#16a34a] to-[#15803d] py-2.5 font-game text-xl font-black text-white shadow-[0_10px_22px_rgba(34,197,94,0.45)] transition active:translate-y-1 active:border-b-0 hover:brightness-110"
+                  >
+                    ↻ MAIN LAGI
+                  </button>
+                  <button
+                    onClick={goToMainMenuFromPlay}
+                    className="mt-2 w-full rounded-xl border-2 border-white/20 bg-white/15 py-2 font-game text-sm font-black text-white shadow-lg transition hover:bg-white/25 active:scale-95"
+                  >
+                    🏠 MENU UTAMA
+                  </button>
+                </div>
+                {/* kanan: kartu skor kaca */}
+                <div className="flex min-w-0 flex-1 flex-col items-center rounded-2xl border-2 border-white/20 bg-white/10 px-4 py-3 text-center shadow-[0_16px_40px_rgba(0,0,0,0.75)] backdrop-blur-xl">
+                  <div className="font-game text-[11px] font-black tracking-[0.25em] text-white/60">{tr(language, 'SKOR AKHIR')}</div>
+                  <div className="my-1 font-game text-[54px] font-black leading-none text-white drop-shadow-[0_6px_14px_rgba(255,255,255,0.3)]">
+                    {displayScore}
+                  </div>
+                  {result.newBest && (
+                    <div className="float-y rounded-full bg-gradient-to-r from-yellow-300 via-amber-400 to-yellow-300 px-4 py-0.5 font-game text-[11px] font-black text-black shadow-[0_0_12px_#fde047]">
+                      ⭐ REKOR TERBARU! ⭐
+                    </div>
+                  )}
+                  <div className="mt-2 grid w-full grid-cols-2 gap-2 border-t-2 border-white/15 pt-2">
+                    <div className="rounded-xl border-2 border-white/15 bg-black/60 px-2 py-1.5 shadow-inner">
+                      <div className="font-game text-[10px] font-black tracking-wider text-white/50">{tr(language, 'REKOR TERBAIK')}</div>
+                      <div className="mt-0.5 font-mono text-xl font-black text-amber-300 drop-shadow">{best}</div>
+                    </div>
+                    <div className="rounded-xl border-2 border-white/15 bg-black/60 px-2 py-1.5 shadow-inner">
+                      <div className="font-game text-[10px] font-black tracking-wider text-white/50">{tr(language, 'DAPAT KOIN')}</div>
+                      <div className="mt-0.5 flex items-center justify-center gap-1 font-mono text-xl font-black text-amber-300 drop-shadow"><span>+{result.coins}</span><CoinSprite size={20} /></div>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div className="mt-2 text-base sm:text-lg font-bold text-white/80 font-game">
-                Bertahan hingga <span className="font-black text-amber-300">STAGE {result.level}</span>
-              </div>
-
-              {/* Glassmorphism Card DIBESARKAN & TEKS 2X */}
-              <div className="mt-6 w-full rounded-3xl border-2 border-white/20 bg-white/10 p-6 text-center shadow-[0_20px_50px_rgba(0,0,0,0.8)] backdrop-blur-xl">
-                <div className="text-sm font-black tracking-[0.25em] text-white/60 font-game">{tr(language, 'SKOR AKHIR')}</div>
-
-                {/* Score Counter Roll-up (Besar & Bergetar) */}
-                <div className="text-8xl sm:text-9xl font-black leading-none my-2 font-game text-white filter drop-shadow-[0_8px_16px_rgba(255,255,255,0.3)] animate-pulse">
-                  {displayScore}
+            ) : (
+              <div className="pop-in flex max-h-full w-full max-w-sm flex-col items-center overflow-y-auto">
+                {/* Header — besar tapi tetap muat satu layar */}
+                <div className="text-5xl sm:text-6xl font-black italic tracking-wider text-red-500 drop-shadow-[0_6px_0_#991b1b] font-game leading-none">
+                  GAME OVER
+                </div>
+                <div className="mt-1.5 text-sm sm:text-base font-bold text-white/80 font-game">
+                  Bertahan hingga <span className="font-black text-amber-300">STAGE {result.level}</span>
                 </div>
 
-                {result.newBest && (
-                  <div className="float-y mx-auto mt-2 mb-1 inline-block rounded-full bg-gradient-to-r from-yellow-300 via-amber-400 to-yellow-300 px-5 py-1.5 text-sm font-black text-black shadow-[0_0_15px_#fde047] font-game">
-                    ⭐ REKOR TERBARU! ⭐
-                  </div>
-                )}
+                {/* Glassmorphism Card DIBESARKAN & TEKS 2X */}
+                <div className="mt-4 w-full rounded-3xl border-2 border-white/20 bg-white/10 p-5 text-center shadow-[0_20px_50px_rgba(0,0,0,0.8)] backdrop-blur-xl">
+                  <div className="text-xs font-black tracking-[0.25em] text-white/60 font-game">{tr(language, 'SKOR AKHIR')}</div>
 
-                {/* Stat Grid (Teks Diperbesar 2x) */}
-                <div className="mt-5 grid grid-cols-2 gap-3 border-t-2 border-white/15 pt-4">
-                  <div className="rounded-2xl border-2 border-white/15 bg-black/60 px-3 py-3 shadow-inner">
-                    <div className="text-xs font-black tracking-wider text-white/50 font-game">{tr(language, 'REKOR TERBAIK')}</div>
-                    <div className="text-3xl font-black text-amber-300 font-mono mt-1 drop-shadow">{best}</div>
+                  {/* Score Counter Roll-up (Besar & Bergetar) */}
+                  <div className="text-7xl sm:text-8xl font-black leading-none my-1.5 font-game text-white filter drop-shadow-[0_8px_16px_rgba(255,255,255,0.3)] animate-pulse">
+                    {displayScore}
                   </div>
-                  <div className="rounded-2xl border-2 border-white/15 bg-black/60 px-3 py-3 shadow-inner">
-                    <div className="text-xs font-black tracking-wider text-white/50 font-game">{tr(language, 'DAPAT KOIN')}</div>
-                    <div className="mt-1 flex items-center justify-center gap-1 text-3xl font-black text-amber-300 font-mono drop-shadow"><span>+{result.coins}</span><CoinSprite size={30} /></div>
+
+                  {result.newBest && (
+                    <div className="float-y mx-auto mt-1.5 mb-0.5 inline-block rounded-full bg-gradient-to-r from-yellow-300 via-amber-400 to-yellow-300 px-4 py-1 text-xs font-black text-black shadow-[0_0_15px_#fde047] font-game">
+                      ⭐ REKOR TERBARU! ⭐
+                    </div>
+                  )}
+
+                  {/* Stat Grid (Teks Diperbesar 2x) */}
+                  <div className="mt-4 grid grid-cols-2 gap-2.5 border-t-2 border-white/15 pt-3">
+                    <div className="rounded-2xl border-2 border-white/15 bg-black/60 px-2 py-2.5 shadow-inner">
+                      <div className="text-[10px] font-black tracking-wider text-white/50 font-game">{tr(language, 'REKOR TERBAIK')}</div>
+                      <div className="text-2xl font-black text-amber-300 font-mono mt-0.5 drop-shadow">{best}</div>
+                    </div>
+                    <div className="rounded-2xl border-2 border-white/15 bg-black/60 px-2 py-2.5 shadow-inner">
+                      <div className="text-[10px] font-black tracking-wider text-white/50 font-game">{tr(language, 'DAPAT KOIN')}</div>
+                      <div className="mt-0.5 flex items-center justify-center gap-1 text-2xl font-black text-amber-300 font-mono drop-shadow"><span>+{result.coins}</span><CoinSprite size={24} /></div>
+                    </div>
                   </div>
                 </div>
+
+                {/* Action Buttons: DIBESARKAN & TEBAL */}
+                <button
+                  onClick={play}
+                  className="pulse-btn mt-4 w-full rounded-2xl border-b-4 border-emerald-800 bg-gradient-to-b from-[#22c55e] via-[#16a34a] to-[#15803d] py-3.5 text-2xl font-black text-white shadow-[0_12px_28px_rgba(34,197,94,0.5)] transition active:translate-y-1 active:border-b-0 font-game hover:brightness-110"
+                >
+                  ↻ MAIN LAGI
+                </button>
+
+                <button
+                  onClick={goToMainMenuFromPlay}
+                  className="mt-2.5 w-full rounded-2xl border-2 border-white/20 bg-white/15 py-2.5 text-sm sm:text-base font-black text-white transition hover:bg-white/25 active:scale-95 font-game shadow-lg"
+                >
+                  🏠 MENU UTAMA
+                </button>
               </div>
-
-              {/* Action Buttons: DIBESARKAN & TEBAL */}
-              <button
-                onClick={play}
-                className="pulse-btn mt-6 w-full rounded-2xl border-b-4 border-emerald-800 bg-gradient-to-b from-[#22c55e] via-[#16a34a] to-[#15803d] py-4 text-3xl font-black text-white shadow-[0_12px_28px_rgba(34,197,94,0.5)] transition active:translate-y-1 active:border-b-0 font-game hover:brightness-110"
-              >
-                ↻ MAIN LAGI
-              </button>
-
-              <button
-                onClick={goToMainMenuFromPlay}
-                className="mt-3 w-full rounded-2xl border-2 border-white/20 bg-white/15 py-3.5 text-base sm:text-lg font-black text-white transition hover:bg-white/25 active:scale-95 font-game shadow-lg"
-              >
-                🏠 MENU UTAMA
-              </button>
-            </div>
+            )}
           </div>
         )}
         {menuPageTransition && (

@@ -211,26 +211,25 @@ test('no circle is drawn around a boss while it fights', () => {
 });
 
 
-test('a boss hit pings the exact piece of the outline it stopped on', async () => {
+test('a boss hit pings nothing on screen: the blue outline stays hidden', async () => {
   const { game } = await bossStage('pirate', 5);
   game.bossEdgePing = [];
   const before = frame(game);
   game.bossEdgePing = [{ a: 0.7, born: game.time }];
   const after = frame(game);
   let changed = 0;
-  let off = 0;
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       const i = (y * W + x) * 4;
       if (before[i] === after[i] && before[i + 1] === after[i + 1] && before[i + 2] === after[i + 2]) continue;
       changed++;
-      const local = game.worldToArt(x + 0.5, y + 0.5) as { x: number; y: number };
-      if (Math.hypot(local.x, local.y) > (game.level.radius as number) * 1.6) continue;
-      if (!nearEdge(game, local.x, local.y, 4)) off++;
     }
   }
-  assert.ok(changed > 100, `the ping really painted (${changed} px)`);
-  assert.equal(off, 0, `every ping pixel sits on the blue line (${off} elsewhere)`);
+  // Where a hit bit the drawing is still recorded — that is the piece of the
+  // outline the flash would light up — but the boss display no longer paints the
+  // contour, so the frame is byte-for-byte identical.
+  assert.equal(game.bossEdgePing.length, 1, 'hit tetap tercatat di titik garis');
+  assert.equal(changed, 0, `garis biru tidak digambar di play (${changed} px berubah)`);
   game.bossEdgePing = [];
   game.destroy();
 });

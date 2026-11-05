@@ -189,8 +189,8 @@ test('slide 6 fires its own beam: slide 1 only carries the hit to the wheel', ()
     const carrier = (game.projs as { setSix?: true; vy: number }[])[0];
     assert.equal(carrier.setSix, true, 'the carrier belongs to slide 6');
     assert.equal(carrier.vy, -SIX_BEAM_SPEED, 'a hitscan beam crosses the field at once');
-    // Slide 6's trigger interval, not slide 1's.
-    assert.ok(Math.abs((game.cooldown as number) - sixCooldown('sniper')) < 1e-6);
+    // Slide 6's trigger interval, not slide 1's — and never past 0.2 s.
+    assert.ok(Math.abs((game.cooldown as number) - Math.min(0.2, sixCooldown('sniper')!)) < 1e-6);
 
     // The hit paints slide 6's scorch mark and hides slide 1's bullet art.
     const score = game.score as number;

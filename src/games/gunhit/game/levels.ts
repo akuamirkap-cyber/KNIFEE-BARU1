@@ -4,11 +4,16 @@
  * engine — so the menu can build a stage config (and the "GO!!" banner) without
  * loading the whole game.
  */
+import { BOARD_PACKAGE_SCALE } from './layout';
 import { bossDef } from './bossCatalog';
 import { bossNameFor, bossStyleFor } from './bossIdentity';
 import type { Style } from './faces';
 
-export const ROCK_RADIUS = 166; // ~80% of the 420px screen, as on Diamond Breaker's 480px screen.
+/**
+ * The Diamond Breaker rock: ~80% of the screen, as on Diamond Breaker's 480px
+ * screen, then 10% smaller like every other board-side package.
+ */
+export const ROCK_RADIUS = Math.round(166 * BOARD_PACKAGE_SCALE); // 149
 
 export type SpecialMode = 'bonus' | 'treasure';
 export type LevelMode = 'classic' | 'boulder' | 'double' | SpecialMode;
@@ -66,15 +71,27 @@ export function makeLevel(n: number, forcedMode?: LevelMode): LevelCfg {
     : Math.min(1 + Math.floor((n - 4) / 4), 4);
   const coins = (Math.random() < 0.65 ? 1 : 0) + (Math.random() < 0.3 ? 1 : 0);
   // Each five-stage boss cycle is three ordinary stages, one random special,
-  // then a boss: stages 4, 9, 14... use exactly one of the three special modes.
+  // then a boss: stages 4, 9, 14... use one of the two bonus rounds.
+  //
+  // Diamond Breaker (`boulder`) is deliberately *not* in that draw: it is skipped
+  // in the normal progression and only reachable by picking it in Settings, which
+  // hands `makeLevel` a forced mode. Everything that advances on its own —
+  // `continueAfterBoss()` and the stage-clear auto-advance — comes through here
+  // without a forced mode, so this one list keeps the boulder out of the run.
   const mode: LevelMode = forcedMode ?? (boss ? 'classic'
-    : n % 5 === 4 ? pick<LevelMode>(['boulder', 'bonus', 'treasure'])
+    : n % 5 === 4 ? pick<LevelMode>(['bonus', 'treasure'])
     : 'classic');
   return {
     // Diamond Breaker is the tight, fast challenge: a half-size magazine
     // forces saved shots while its rock spins up (BOULDER_SPIN_MULT in Game).
     n, boss, ammo: mode === 'boulder' ? 6 : isSpecial(mode) ? 12 : ammo, base, pattern, dir: Math.random() < 0.5 ? 1 : -1,
-    radius: boss ? 122 : mode === 'boulder' || mode === 'bonus' ? ROCK_RADIUS : 106, style,
+    // The board itself is the "wheel package": its rim, its gems and every round
+    // buried in it are radius-derived, so one scaled radius shrinks them all
+    // — 10% smaller, while the weapon above keeps its own 20%.
+    radius: boss ? Math.round(122 * BOARD_PACKAGE_SCALE) // 110
+      : mode === 'boulder' || mode === 'bonus' ? ROCK_RADIUS // 149
+      : Math.round(106 * BOARD_PACKAGE_SCALE), // 95
+    style,
     name: boss
       ? bossName
       // the HUD prints the level name as-is for non-boss stages

@@ -75,7 +75,11 @@ test('Ghost alternates hand launches in both skins and every effect, including t
     game.destroy();
     const twin = stage('ghost', skin, effect, true);
     shootFresh(twin);
-    assert.deepEqual(twin.projs.map((p: Live) => Math.round(p.x)).sort((a: number, b: number) => a - b), [129, 291]);
+    // Two barrels at TWIN_SPACING (30) plus each hand's own shift, both on the
+    // (now 20% smaller) rig.
+    const twinLane = Math.round(210 + 30 + GHOST_HAND_X * GAMEPLAY_GUN_SCALE);
+    assert.deepEqual(twin.projs.map((p: Live) => Math.round(p.x)).sort((a: number, b: number) => a - b),
+      [420 - twinLane, twinLane]);
     land(twin);
     assert.equal(twin.stuck, 2);
     twin.destroy();

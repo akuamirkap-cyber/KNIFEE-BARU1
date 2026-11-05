@@ -245,11 +245,13 @@ test('semua boss tampil bersih: tanpa disk bayangan, tanpa overlay hitbox Game A
   const gameSrc = read('src/games/gunhit/game/Game.ts');
   assert.ok(gameSrc.includes('if (!isSpecial(this.level.mode) && !this.level.boss)'), 'disk bayangan dihilangkan untuk semua boss');
   // Game A no longer has its own boss renderer or boss PNGs: a boss is only
-  // ever Perfect Shot's head, and the only marker drawn over it is the blue
-  // edge of that drawing. The green fill / red ring / impact dots / legend the
-  // old overlay painted mid-fight are gone (they survive in `?hitbox=1`).
+  // ever Perfect Shot's head, and nothing is painted over it in play — no green
+  // fill, no red ring, no impact dots, no legend, and (player request) no blue
+  // contour either. All of that geometry survives only in `?hitbox=1`.
   assert.ok(!gameSrc.includes('HITBOX = BENTUK GAMBAR'), 'banner hitbox tidak pernah tampil di pertarungan');
   assert.ok(!gameSrc.includes('drawHitboxLegend'), 'tidak ada legend hitbox di layar');
-  assert.match(gameSrc, /if \(this\.hitboxFlag\) this\.drawHitboxDebug\(c\);\n\s*else this\.drawBossSilhouette\(c\);/, 'di play hanya garis biru bentuk bos yang digambar');
-  assert.ok(gameSrc.includes('private drawBossSilhouette('), 'satu-satunya penanda hitbox adalah tepi gambar bos');
+  assert.match(gameSrc, /if \(this\.hitboxFlag\) this\.drawHitboxDebug\(c\);\n\s*c\.restore\(\);/,
+    'di play tidak ada penanda hitbox sama sekali');
+  assert.ok(!/else this\.drawBossSilhouette\(c\);/.test(gameSrc), 'garis biru bentuk bos disembunyikan');
+  assert.ok(gameSrc.includes('private drawBossSilhouette('), 'geometri hitbox tetap ada untuk ?hitbox=1');
 });

@@ -57,7 +57,9 @@ test('level rules and canvas geometry live outside the engine', () => {
   assert.ok(game.includes("} from './levels';"));
   assert.ok(read('src/games/gunhit/game/levels.ts').includes('export function makeLevel'));
   const layout = read('src/games/gunhit/game/layout.ts');
-  for (const constant of ['export const H = 760;', 'export const GAMEPLAY_GUN_SCALE = 1.08;', 'export const GUN_Y']) {
+  for (const constant of ['export const H = 760;', 'export const GUN_PACKAGE_SCALE = GAMEPLAY_GUN_SCALE / TUNED_RIG;',
+    'export const BOARD_PACKAGE_SCALE = 0.9;',
+    'export const GAMEPLAY_GUN_SCALE = TUNED_RIG * 1.037;', 'export const GUN_Y']) {
     assert.ok(layout.includes(constant), `layout keeps ${constant}`);
   }
 });

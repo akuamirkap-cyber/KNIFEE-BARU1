@@ -32,7 +32,8 @@ const { Game } = await import('../src/games/gunhit/game/Game');
 const { setGunVariant, setGunEffect } = await import('../src/games/gunhit/game/art/gunVariants');
 const DT = 1 / 60;
 
-// Explicit IDs/cards ensure this really exercises the player's 30 combinations.
+// Explicit IDs/cards ensure this really exercises the player's 29 combinations
+// (the imported list minus the retired Shrink Ray).
 const loadouts = [
   ['ak47', 'original', 'set11'], ['crossbow', 'original', 'set7'], ['laser', 'set7', 'original'],
   ['fish', 'current', 'set7'], ['rpg', 'original', 'set7'], ['cricket', 'current', 'new'],
@@ -43,7 +44,7 @@ const loadouts = [
   ['banana', 'original', 'new'], ['harpoon', 'set7', 'set7'], ['chicken', 'set7', 'set7'],
   ['confetti', 'set7', 'set7'], ['seed', 'original', 'set7'], ['pizza', 'original', 'set7'],
   ['minigun', 'set7', 'new'], ['railgun', 'set11', 'set7'], ['magnet', 'original', 'set7'],
-  ['shrink', 'set7', 'set7'], ['pirate', 'original', 'set7'], ['card', 'set7', 'set7'],
+  ['pirate', 'original', 'set7'], ['card', 'set7', 'set7'],
 ] as const;
 
 // A deterministic random stream makes target setup and impact particles repeatable.

@@ -11,9 +11,11 @@ import {
 const removed = [
   'helix_pulsar', 'pred', 'yautja', 'chrono_rifle', 'prism_lance',
   'pulse_rifle', 'quantum_destabilizer', 'buster', 'acid', 'anchor',
+  // Player request: the two size rays left the roster too.
+  'shrink', 'grow',
 ] as const;
 
-test('all ten retired weapons stay out of the roster, editor, exports, and quest rewards', () => {
+test('every retired weapon (the ten imports plus the two size rays) stays out of the roster, editor, exports, and quest rewards', () => {
   assert.deepEqual([...RETIRED_WEAPONS].sort(), [...removed].sort());
   for (const id of removed) {
     assert.ok(!WEAPONS.some(weapon => weapon.id === id), `${id} cannot be equipped`);

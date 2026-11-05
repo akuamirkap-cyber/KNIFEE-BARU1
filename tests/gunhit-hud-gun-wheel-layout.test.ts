@@ -50,7 +50,7 @@ test('HUD boss indicator uses a 5-point star instead of a rotated square (wajik)
   assert.ok(!hudSlice.includes('c.rect(-6, -6, 12, 12)'), 'old wajik rotated rect is removed from drawHUD');
 });
 
-test('Gameplay & menu weapons are scaled -10% (1.08x / 337x295) and wheel position is 28% higher up', async () => {
+test('The weapon draws 20% smaller (0.864x) and the wheel position is 28% higher up', async () => {
   const {
     BASE_WHEEL_CY,
     CY,
@@ -62,12 +62,18 @@ test('Gameplay & menu weapons are scaled -10% (1.08x / 337x295) and wheel positi
   } = await import('../src/games/gunhit/game/Game');
 
   assert.equal(BASE_WHEEL_CY, 255);
-  assert.equal(CY, Math.round(255 * (1 - 0.28)), 'wheel CY is 28% higher up (184)');
-  assert.equal(CY, 184);
-  assert.equal(SPECIAL_CY, CY, 'bonus/special stage wheel sits at the exact same Y (184) as normal wheel');
+  // The board was lifted so the bigger rig keeps a gap: it now sits as high as
+  // the top HUD allows (the 15% ask clamps here, see `layout.ts`).
+  assert.equal(CY, 154);
+  assert.equal(SPECIAL_CY, CY, 'bonus/special stage wheel sits on the same line (154) as the normal wheel');
 
-  assert.equal(GAMEPLAY_GUN_SCALE, 1.08, 'gameplay weapon scale is -10% from 1.2x (1.08x)');
-  assert.equal(GUN_Y, H - Math.round(185 * 1.08), 'muzzle Y matches 1.08x weapon height cleanly');
+  // Requested: the gameplay rig is the title screen's size — the roster's
+  // median gun needs 1.12x to fill the menu's ink box — and the board (wheel,
+  // boss head, rock, treasure chest) is pushed as far back as the HUD allows.
+  assert.ok(Math.abs(GAMEPLAY_GUN_SCALE - 1.12) < 5e-3, 'the weapon draws at the menu size (~1.12x)');
+  assert.equal(GUN_Y, 552, 'the muzzle rides at the bottom with the grip flush');
+  const rim = CY + Math.round(106 * 0.9); // 249
+  assert.equal(GUN_Y - rim, 303, 'muzzle-to-rim gap after the bigger rig');
 
   const scales: [number, number][] = [];
   const gradient = { addColorStop: () => undefined };
@@ -111,7 +117,7 @@ test('Gameplay & menu weapons are scaled -10% (1.08x / 337x295) and wheel positi
       render: () => void;
       twinGuns: boolean;
     };
-    assert.equal(internal.targetY, 184, 'normal stage wheel sits at CY=184 (28% higher)');
+    assert.equal(internal.targetY, 154, 'normal stage wheel sits at CY=154');
     assert.equal(game.getWheelStyle(), 'orange', 'stage 3 uses the orange wheel style');
     assert.ok(
       internal.targetY - internal.level.radius > 58,
@@ -121,20 +127,20 @@ test('Gameplay & menu weapons are scaled -10% (1.08x / 337x295) and wheel positi
     scales.length = 0;
     internal.render();
     assert.ok(
-      scales.some(([sx, sy]) => Math.abs(sx - 1.08) < 1e-6 && Math.abs(sy - 1.08) < 1e-6),
-      'single gameplay weapon renders with 1.08x scale',
+      scales.some(([sx, sy]) => Math.abs(sx - GAMEPLAY_GUN_SCALE) < 1e-6 && Math.abs(sy - GAMEPLAY_GUN_SCALE) < 1e-6),
+      'single gameplay weapon renders at the (0.864x) package scale',
     );
 
     scales.length = 0;
     internal.twinGuns = true;
     internal.render();
     assert.ok(
-      scales.some(([sx, sy]) => Math.abs(sx + 1.08) < 1e-6 && Math.abs(sy - 1.08) < 1e-6),
-      'mirrored left twin gun renders with (-1.08, 1.08) scale',
+      scales.some(([sx, sy]) => Math.abs(sx + GAMEPLAY_GUN_SCALE) < 1e-6 && Math.abs(sy - GAMEPLAY_GUN_SCALE) < 1e-6),
+      'mirrored left twin gun renders with (-scale, scale)',
     );
     assert.ok(
-      scales.some(([sx, sy]) => Math.abs(sx - 1.08) < 1e-6 && Math.abs(sy - 1.08) < 1e-6),
-      'right twin gun renders with (1.08, 1.08) scale',
+      scales.some(([sx, sy]) => Math.abs(sx - GAMEPLAY_GUN_SCALE) < 1e-6 && Math.abs(sy - GAMEPLAY_GUN_SCALE) < 1e-6),
+      'right twin gun renders with (scale, scale)',
     );
   } finally {
     game.destroy();

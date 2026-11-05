@@ -52,7 +52,10 @@ test('Gun Hit menu uses PERFECT SHOT branding and keeps special-stage picks in S
   assert.match(menu, /from-\[#ff6a3d\].*to-\[#e0331e\]/s);
   assert.match(menu, /from-\[#4cef6a\].*to-\[#18b93a\]/s);
   assert.doesNotMatch(menu, /🍎|\{getWeapon\(weapon\)\.name\}/);
-  assert.match(app, /const pw = 337;\s+const ph = 295;/);
+  // The showcase canvas stays 337x295 CSS px; the paint reads that from the
+  // shared constants so the cached shortcut frame cannot size it differently.
+  assert.match(app, /const MENU_GUN_CANVAS_W = 337;\s+const MENU_GUN_CANVAS_H = 295;/);
+  assert.match(app, /const pw = MENU_GUN_CANVAS_W;\s+const ph = MENU_GUN_CANVAS_H;/);
   assert.match(menu, /width:\s*'min\(337px,\s*90vw\)',\s*height:\s*'min\(295px,\s*54vh\)'/);
   const bottomBar = menu.slice(menu.indexOf('Right game\'s four framed vector icons'));
   assert.equal((bottomBar.match(/<GameIcon name=\{item\.icon\}/g) ?? []).length, 1);
@@ -63,12 +66,12 @@ test('Gun Hit menu uses PERFECT SHOT branding and keeps special-stage picks in S
   assert.match(app, /id: 'ready', label: 'READY!'/);
   assert.match(app, /id: 'setting', label: 'SETTING'/);
 
-  const game = readFileSync(path.join(process.cwd(), 'src/games/gunhit/game/Game.ts'), 'utf8');
+  const stage = readFileSync(path.join(process.cwd(), 'src/games/gunhit/game/stageBackdrop.ts'), 'utf8');
   const faces = readFileSync(path.join(process.cwd(), 'src/games/gunhit/game/faces.ts'), 'utf8');
   assert.match(faces, /bgTop: '#1b4d59', bgBot: '#153743'/);
-  assert.match(game, /lowerShade\.addColorStop\(0\.58, 'rgba\(2, 10, 18, 0\.045\)'\)/);
-  assert.match(game, /lowerShade\.addColorStop\(1, 'rgba\(2, 10, 18, 0\.12\)'\)/);
-  assert.match(app, /SunburstFX size=\{430\} color=\{gunSunburstColor\(getWeapon\(weapon\)\.rarity\)\} intensity=\{0\.44\}[^>]*core=\{false\}/);
+  assert.match(stage, /lowerShade\.addColorStop\(0\.58, 'rgba\(2, 10, 18, 0\.045\)'\)/);
+  assert.match(stage, /lowerShade\.addColorStop\(1, 'rgba\(2, 10, 18, 0\.12\)'\)/);
+  assert.match(app, /SunburstFX size=\{430\} color="255,255,255" intensity=\{0\.44\}[^>]*core=\{false\}/);
   const coinSprite = readFileSync(path.join(process.cwd(), 'src/games/shared/CoinSprite.tsx'), 'utf8');
   assert.match(coinSprite, /0\.68 \+ Math\.abs\(Math\.cos/);
   assert.match(coinSprite, /false, false/);
@@ -231,7 +234,7 @@ test('menu & game theme choices default to forest and expose all SGA background 
   // The menu scenery is the reference game's backdrop: all twelve designs map
   // onto its theme ids, so every one of them is available in Game A.
   const backdrop = readFileSync(path.join(process.cwd(), 'src/games/gunhit/components/MenuBackdrop.tsx'), 'utf8');
-  assert.match(themes, /import MenuBackdrop from '\.\/MenuBackdrop'/);
+  assert.match(themes, /import MenuBackdrop(?:, \{[^}]+\})? from '\.\/MenuBackdrop'/);
   assert.match(backdrop, /data-menu-environment=\{theme\}/);
   assert.match(backdrop, /import \{ ThemeLayer \} from '\.\.\/\.\.\/perfect-shot\/theme\/Backdrop'/);
   for (const [sga, id] of [

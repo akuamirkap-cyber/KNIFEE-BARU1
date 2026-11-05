@@ -59,8 +59,9 @@ test('SGA menu keeps its intro choreography, art, background and currency', () =
   const app = readFileSync('src/games/gunhit/App.tsx', 'utf8');
   const css = readFileSync('src/index.css', 'utf8');
   const menu = app.slice(app.indexOf("{screen === 'menu' && !mapOpen && !questOpen"), app.indexOf("{screen === 'menu' && settingsOpen && ("));
+  assert.match(menu, /<MenuStageBackdrop orientation=\{orientation\} animated=\{[^}]+\} \/>/);
   assert.match(menu, /MenuEnvironment theme=\{menuTheme\}/);
-  assert.match(menu, /SunburstFX size=\{430\} color=\{gunSunburstColor\(getWeapon\(weapon\)\.rarity\)\} intensity=\{0\.44\}/);
+  assert.match(menu, /SunburstFX size=\{430\} color="255,255,255" intensity=\{0\.44\}/);
   assert.match(menu, /CoinSprite size=\{25\}/);
   assert.match(menu, /DiamondSprite size=\{24\}/);
   assert.match(menu, /font-title relative flex text-\[min\(15vw,72px\)\]/);
@@ -87,7 +88,8 @@ test('SGA menu keeps its intro choreography, art, background and currency', () =
   assert.match(psMotionCss, /\.st-in-combo::after \{ content: none !important; animation: none !important; \}/);
   assert.match(app, /menuPlan\.gun === 'combo'[\s\S]*?menu-pop-burst/);
   assert.match(app, /subscribeMenuPlan\(setMenuPlan\)/);
-  assert.match(app, /initialGameplayWheelCenterY\(stageConfig\.boss, Boolean\(specialMode\)\) \/ H/);
+  assert.match(app, /const wheelWorldY = initialGameplayWheelCenterY\(stageConfig\.boss, Boolean\(specialMode\)\)/);
+  assert.match(app, /orientation === 'landscape'[\s\S]{0,120}LAND_W - wheelWorldY/);
   assert.match(app, /origin=\{playTransition\.origin\}/);
   assert.doesNotMatch(app, /origin=\{\{ x: 50, y: 29 \}\}/);
   assert.match(psMotionCss, /\.gunhit-menu \.in-gun \{ animation-name: sgaGunIn; \}/);

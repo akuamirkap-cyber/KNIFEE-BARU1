@@ -33,7 +33,7 @@ test('default migration waits for embedded storage hydration before writing or r
     assert.deepEqual([m.getGunVariant('honey'), m.getGunEffect('honey')], ['current', 'new']);
     assert.deepEqual([m.getGunVariant('pistol'), m.getGunEffect('pistol')], ['set9', 'set11']);
     assert.deepEqual(m.getMarkedGunDefault('honey'), { variant: 'current', effect: 'new' });
-    assert.equal(m.getMarkedGunDefaultCount(), 32);
+    assert.equal(m.getMarkedGunDefaultCount(), 31);
     assert.equal(values.get('gunhit:requested-defaults:v2'), '1');
   } finally {
     if (oldStore) Object.defineProperty(globalThis, 'localStorage', oldStore);
