@@ -703,6 +703,8 @@ interface Fragment {
   a0: number; a1: number; pitch: number; pitchV: number;
   /** Colour/thickness read from the target artwork for this wedge. */
   side?: string; edge?: string; depth?: number;
+  /** Faces baked once per stage, so the burst only blits them. */
+  sprite?: WedgeSprite | null;
 }
 
 /** Game B's SVG, traced into real paths so hits never depend on pixel reads. */
@@ -1325,6 +1327,147 @@ export function artChips(pix: TargetPixels): string[] | null {
   return colors;
 }
 
+/**
+ * A stage-clear wedge, pre-baked.
+ *
+ * The shatter used to rebuild everything about every chunk on every frame: two
+ * curved `clip()`s, two big `drawImage`s of the wheel artwork, a directional
+ * light gradient and the bevel strokes — per chunk, per frame. Nine chunks for
+ * almost a second is the frame budget of the whole stage-clear cinematic.
+ *
+ * The artwork side of a wedge never changes once the stage starts (only its
+ * pitch, depth and position do), so it is painted once into an offscreen canvas
+ * with the front face and the darker rear face side by side. Per frame the
+ * renderer then just blits each face, which is the same picture for a fraction
+ * of the work: no clip, no per-chunk gradient, no repeated texture scaling.
+ */
+export interface WedgeSprite {
+  /** Front face | rear face, side by side in one canvas. */
+  canvas: HTMLCanvasElement;
+  /** Pixel size of one face. */
+  px: number;
+  /** World half-extent of one face: `radius + pad`. */
+  span: number;
+}
+
+/**
+ * Bake one wedge of the target artwork.
+ *
+ * `pixelScale` is device pixels per world unit, so the sprite is already at the
+ * screen's own resolution and stays crisp when the chunk tumbles toward the
+ * camera.
+ */
+export function bakeWedgeSprite(
+  face: CanvasImageSource,
+  radius: number,
+  pad: number,
+  start: number,
+  end: number,
+  edgeColor: string,
+  pixelScale: number,
+): WedgeSprite | null {
+  if (typeof document === 'undefined') return null;
+  const span = radius + pad;
+  const px = Math.max(16, Math.round(span * 2 * Math.max(0.5, Math.min(2, pixelScale))));
+  const canvas = document.createElement('canvas');
+  canvas.width = px * 2;
+  canvas.height = px;
+  const c = canvas.getContext('2d');
+  if (!c) return null;
+
+  const sector = () => {
+    c.beginPath();
+    c.moveTo(0, 0);
+    c.lineTo(Math.cos(start) * radius, Math.sin(start) * radius);
+    c.arc(0, 0, radius, start, end);
+    c.closePath();
+  };
+
+  const paint = (dx: number, rear: boolean) => {
+    c.save();
+    c.setTransform(pixelScale, 0, 0, pixelScale, dx + px / 2, px / 2);
+    // The artwork, trimmed to the wedge.
+    c.save();
+    sector();
+    c.clip();
+    c.drawImage(face, -span, -span, span * 2, span * 2);
+    c.restore();
+    if (rear) {
+      // The lower face always sits in shade.
+      sector();
+      c.fillStyle = 'rgba(0,0,0,0.14)';
+      c.fill();
+    } else {
+      // One fixed upper-left light, baked into the face. The chunk tumbles, so
+      // the highlight travels with the piece instead of being re-derived for
+      // every frame — at this size the difference is invisible, and it costs
+      // nothing.
+      const lightAngle = -Math.PI * 0.75;
+      const lightX = Math.cos(lightAngle) * radius * 0.82;
+      const lightY = Math.sin(lightAngle) * radius * 0.82;
+      const frontLight = c.createLinearGradient(lightX, lightY, -lightX, -lightY);
+      frontLight.addColorStop(0, 'rgba(255,255,255,0.20)');
+      frontLight.addColorStop(0.22, 'rgba(255,255,255,0.07)');
+      frontLight.addColorStop(0.58, 'rgba(0,0,0,0.01)');
+      frontLight.addColorStop(1, 'rgba(0,0,0,0.14)');
+      c.save();
+      sector();
+      c.clip();
+      c.fillStyle = frontLight;
+      c.fill();
+      c.restore();
+      // Fine bevel glints along the cut edges.
+      sector();
+      c.strokeStyle = 'rgba(0,0,0,0.30)';
+      c.lineWidth = 2;
+      c.stroke();
+      c.save();
+      sector();
+      c.globalAlpha = 0.22;
+      c.strokeStyle = edgeColor;
+      c.lineWidth = 0.9;
+      c.stroke();
+      c.restore();
+      c.beginPath();
+      c.arc(0, 0, radius - 1.5, start + 0.025, end - 0.025);
+      c.strokeStyle = 'rgba(255,255,255,0.46)';
+      c.lineWidth = 1;
+      c.stroke();
+    }
+    c.restore();
+  };
+
+  paint(0, false);
+  paint(px, true);
+  return { canvas, px, span };
+}
+
+/** Wall light gradients, reused across chunks that share a thickness. */
+const wallGradientCache = new WeakMap<CanvasRenderingContext2D, Map<number, CanvasGradient>>();
+
+function wallLightGradient(c: CanvasRenderingContext2D, sideDepth: number): CanvasGradient {
+  let byDepth = wallGradientCache.get(c);
+  if (!byDepth) {
+    byDepth = new Map();
+    wallGradientCache.set(c, byDepth);
+  }
+  // Chunks tumble, so their thickness changes a little every frame. Rounding to
+  // whole pixels keeps this a cache hit instead of a gradient per chunk per
+  // frame; the ramp is smooth enough that the difference is invisible.
+  const rounded = Math.max(2, Math.round(sideDepth));
+  const key = rounded;
+  const hit = byDepth.get(key);
+  if (hit) return hit;
+  const g = c.createLinearGradient(0, 0, 0, rounded);
+  g.addColorStop(0, 'rgba(255,255,255,0.24)');
+  g.addColorStop(0.18, 'rgba(255,255,255,0.08)');
+  g.addColorStop(0.56, 'rgba(0,0,0,0.03)');
+  g.addColorStop(1, 'rgba(0,0,0,0.18)');
+  if (byDepth.size > 48) byDepth.clear();
+  byDepth.set(key, g);
+  return g;
+}
+
 /** Draw the stage-clear wheel chunks as extruded solids, including their textured rear face. */
 export function drawExtrudedWheelFragment(
   c: CanvasRenderingContext2D,
@@ -1338,6 +1481,8 @@ export function drawExtrudedWheelFragment(
   edgeColor: string,
   pitch: number,
   lightAngle: number,
+  /** Pre-baked faces of this wedge; without one the vector path paints them. */
+  sprite?: WedgeSprite | null,
 ) {
   // Pitch the slice away from camera: compress its face and project its depth
   // toward the viewer instead of showing a flat, front-on wedge.
@@ -1366,11 +1511,7 @@ export function drawExtrudedWheelFragment(
 
   const a = point(start);
   const b = point(end);
-  const wallLight = c.createLinearGradient(0, 0, 0, sideDepth);
-  wallLight.addColorStop(0, 'rgba(255,255,255,0.24)');
-  wallLight.addColorStop(0.18, 'rgba(255,255,255,0.08)');
-  wallLight.addColorStop(0.56, 'rgba(0,0,0,0.03)');
-  wallLight.addColorStop(1, 'rgba(0,0,0,0.18)');
+  const wallLight = wallLightGradient(c, sideDepth);
 
   // A small cast shadow separates the rear face from the glowing stage backdrop.
   c.save();
@@ -1381,13 +1522,21 @@ export function drawExtrudedWheelFragment(
 
   // The lower, textured face sits in shadow; the three connecting planes get
   // consistent light on their front bevel and darker shading toward the back.
-  drawTexturedSector(sideDepth);
-  c.save();
-  sector(sideDepth);
-  c.clip();
-  c.fillStyle = 'rgba(0,0,0,0.14)';
-  c.fill();
-  c.restore();
+  // A baked sprite is one blit; the vector path masks and shades it per frame.
+  if (sprite) {
+    c.drawImage(
+      sprite.canvas, sprite.px, 0, sprite.px, sprite.px,
+      -sprite.span, -sprite.span + sideDepth, sprite.span * 2, sprite.span * 2,
+    );
+  } else {
+    drawTexturedSector(sideDepth);
+    c.save();
+    sector(sideDepth);
+    c.clip();
+    c.fillStyle = 'rgba(0,0,0,0.14)';
+    c.fill();
+    c.restore();
+  }
 
   const paintWall = () => {
     c.fillStyle = sideColor;
@@ -1399,23 +1548,21 @@ export function drawExtrudedWheelFragment(
     c.stroke();
   };
 
+  // All three connecting planes go into one path: they share the same fill, the
+  // same wall-light ramp and the same outline, so painting them together is one
+  // fill and one stroke instead of three of each (and the shared edges no longer
+  // blend their alpha twice).
   c.beginPath();
   c.moveTo(0, 0);
   c.lineTo(a.x, a.y);
   c.lineTo(a.x, a.y + sideDepth);
   c.lineTo(0, sideDepth);
   c.closePath();
-  paintWall();
-
-  c.beginPath();
   c.moveTo(0, 0);
   c.lineTo(b.x, b.y);
   c.lineTo(b.x, b.y + sideDepth);
   c.lineTo(0, sideDepth);
   c.closePath();
-  paintWall();
-
-  c.beginPath();
   c.moveTo(a.x, a.y);
   c.arc(0, 0, radius, start, end);
   c.lineTo(b.x, b.y + sideDepth);
@@ -1425,6 +1572,14 @@ export function drawExtrudedWheelFragment(
 
   // Front face: keep the artwork, but shade it from one fixed upper-left light
   // source so the bevel, surface and shadow all agree on the lighting direction.
+  if (sprite) {
+    c.drawImage(
+      sprite.canvas, 0, 0, sprite.px, sprite.px,
+      -sprite.span, -sprite.span, sprite.span * 2, sprite.span * 2,
+    );
+    c.restore();
+    return;
+  }
   drawTexturedSector(0);
   const lightX = Math.cos(lightAngle) * radius * 0.82;
   const lightY = Math.sin(lightAngle) * radius * 0.82;
@@ -1590,6 +1745,13 @@ export class Game {
   /** Metaball acid layer (slide-7 Xenomorph Acid Spitter parity). */
   private acidFluid = new AcidFluid();
   private frags: Fragment[] = [];
+  /** Wedge boundaries, faces and palette for this stage, prepared before the burst. */
+  private wedgePrep: {
+    offset: number;
+    sprites: (WedgeSprite | null)[];
+    ink: ({ side: string; edge: string } | null)[];
+    debris: string[] | null;
+  } | null = null;
   private flyers: Flyer[] = [];
   private ammoLeft = 0;
   private stuck = 0;
@@ -3024,6 +3186,8 @@ export class Game {
   }
 
   private loadLevel(n: number, forcedMode?: LevelMode) {
+    // A new stage brings a new target: its wedges are baked again from scratch.
+    this.wedgePrep = null;
     // A continuing run keeps its weapon in place between stages. startRun()
     // explicitly re-arms the entrance for Play, map and special-stage starts.
     this.gunEntryT = GAMEPLAY_GUN_ENTRY_DURATION;
@@ -3326,6 +3490,8 @@ export class Game {
   }
 
   private buildFace() {
+    // A new raster means new wedges: whatever was baked belongs to the old one.
+    this.wedgePrep = null;
     const R = this.level.radius;
     const S = this.faceScale;
     const pad = this.level.boss ? 40 : 4;
@@ -6336,6 +6502,42 @@ export class Game {
     this.addText('GAGAL!', CX, this.targetY + this.level.radius + 110, '#ff4d4d', 40);
   }
 
+  /**
+   * Prepare this stage's shatter wedges — boundaries, palette, and both baked
+   * faces of each of the nine chunks.
+   *
+   * Everything here depends only on the target artwork and the level, so it is
+   * built once per stage rather than on the frame the wheel breaks. The render
+   * loop asks for it as soon as the artwork exists (during the stage intro), so
+   * the stage-clear cinematic starts with all of it already in hand.
+   */
+  private prepareWedges() {
+    if (this.wedgePrep) return this.wedgePrep;
+    const R = this.level.radius;
+    const pad = this.level.boss ? 40 : 4;
+    const pix = readTargetPixels(this.face ?? null);
+    const offset = rand(0, TAU);
+    const sprites: (WedgeSprite | null)[] = [];
+    const ink: ({ side: string; edge: string } | null)[] = [];
+    // Sprite density follows the screen, so a tumbling chunk is as crisp as the
+    // wheel it came from without ever being larger than it needs to be.
+    // Capped so a large board (a boss span is R+40) cannot allocate a huge canvas
+    // per chunk: the pieces are tumbling, so a slightly lower density is invisible.
+    const density = Math.max(0.75, Math.min(1.5, 320 / (2 * (R + pad)), (this.scale || 1) * (this.dpr || 1)));
+    const k = 9;
+    for (let i = 0; i < k; i++) {
+      const a0 = offset + (i / k) * TAU;
+      const a1 = offset + ((i + 1) / k) * TAU;
+      const wedge = pix ? wedgeInk(pix, R, pad, this.faceScale, a0, a1) : null;
+      ink.push(wedge);
+      sprites.push(this.face
+        ? bakeWedgeSprite(this.face, R, pad, a0, a1, wedge?.edge ?? STYLE_COLORS[this.level.style].chips[0], density)
+        : null);
+    }
+    this.wedgePrep = { offset, sprites, ink, debris: pix ? artChips(pix) : null };
+    return this.wedgePrep;
+  }
+
   private clearLevel() {
     this.state = 'clear';
     this.stageClearBurstMax = this.level.boss ? 1.15 : 0.9;
@@ -6348,20 +6550,23 @@ export class Game {
     // The chunks and debris take their colour from the target that just broke —
     // the wheel's own image, or the boss's image on a boss stage — so the pieces
     // look like they came out of that artwork instead of a fixed stage palette.
-    const pix = readTargetPixels(this.face ?? null);
-    const facePad = this.level.boss ? 40 : 4;
-    const debris = (pix ? artChips(pix) : null) ?? STYLE_COLORS[this.level.style].chips;
+    //
+    // All of that (reading the artwork back, averaging each wedge, baking its two
+    // faces) is prepared during the stage and not here: this runs on the frame
+    // the cinematic starts, which must not spend 20 ms doing still-image work.
+    const prepared = this.prepareWedges();
+    const debris = prepared.debris ?? STYLE_COLORS[this.level.style].chips;
     // Chunk thickness follows the art's own weight: heavier wheels read thicker,
     // and a boss slab is never as deep as it is wide.
     const depth = Math.max(5, Math.min(12, R * 0.07));
     const k = 9;
-    const offs = rand(0, TAU);
+    const offs = prepared.offset;
     for (let i = 0; i < k; i++) {
       const a0 = offs + (i / k) * TAU;
       const a1 = offs + ((i + 1) / k) * TAU;
       const mid = (a0 + a1) / 2 + this.rot;
       const v = rand(260, 520);
-      const ink = pix ? wedgeInk(pix, R, facePad, this.faceScale, a0, a1) : null;
+      const ink = prepared.ink[i];
       this.frags.push({
         x: CX, y: this.targetY, vx: Math.cos(mid) * v, vy: Math.sin(mid) * v - 220,
         rot: this.rot, vr: rand(-6, 6), a0, a1,
@@ -6369,6 +6574,7 @@ export class Game {
         // between two oblique angles so the artwork never reads as a flat front.
         pitch: rand(0.68, 1.3), pitchV: rand(-3.2, 3.2),
         side: ink?.side, edge: ink?.edge, depth,
+        sprite: prepared.sprites[i] ?? null,
       });
     }
     for (const it of this.items) {
@@ -10393,6 +10599,10 @@ export class Game {
     // it: the HA · HA · HA! bursts, the rage aura, steam and the MARAH! pill.
     this.drawBossMood(c);
 
+    // The stage's shatter wedges are baked as soon as the artwork is on screen —
+    // during the intro, never on the frame the wheel breaks.
+    if (!this.wedgePrep && this.face && this.state !== 'clear' && this.state !== 'idle') this.prepareWedges();
+
     // fragments: each chunk keeps the wheel artwork on top and underneath,
     // with dark, highlighted sidewalls that make its thickness obvious in flight.
     for (const f of this.frags) {
@@ -10413,6 +10623,7 @@ export class Game {
         f.edge ?? palette.chips[0],
         f.pitch,
         -Math.PI * 0.75 - f.rot,
+        f.sprite ?? null,
       );
       c.restore();
     }
