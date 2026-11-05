@@ -13,6 +13,8 @@ import { sfx as studioSfx } from './games/perfect-shot/audio/sfx';
 import { installErrorHooks, reportError } from './telemetry/errorHooks';
 import { trackSessionStart } from './telemetry/gameAnalytics';
 import { installDebugSinkFromUrl } from './telemetry/debugSink';
+import PerfectShotV2 from './components/PerfectShotV2';
+import { APP_VERSION_LABEL, initialAppVersion, type AppVersion } from './appVersion';
 
 // Keep the entry bundle small; preload the game behind the intro so parsing does
 // not stall the first menu entrance as the logo disappears.
@@ -72,8 +74,18 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [hasBooted, setHasBooted] = useState(false);
   const [introRunKey, setIntroRunKey] = useState(0);
+  // v1 (Gun Hit, the original) or v2 (Perfect Shot). v1 is the default and is
+  // never removed: v2 is only rendered while it is picked, and the choice is not
+  // persisted, so a reload always lands back on v1.
+  const [appVersion, setAppVersion] = useState<AppVersion>(() => initialAppVersion());
 
   useEffect(() => subscribeSgaOrientation(setGunHitOrientation), []);
+
+  useEffect(() => {
+    // v2 sits behind the intro too; if it was picked before the splash finished,
+    // skip the splash so the chosen version is immediately playable.
+    if (appVersion === 'v2') setLoading(false);
+  }, [appVersion]);
 
   useEffect(() => {
     // Telemetry boot: counts this launch (local only) and starts listening for
@@ -184,6 +196,40 @@ export default function App() {
                   </Suspense>
                 ) : (
                   <GameBootFallback message="MENYIAPKAN SGA" />
+                )}
+                {/* v2 is mounted only while it is the picked version. When v1 is
+                    showing, v2 is not on the page at all — v1 renders alone, the
+                    same way it did before v2 existed. */}
+                {hasBooted && appVersion === 'v2' && (
+                  <PerfectShotV2
+                    active={pageVisible && !loading}
+                    version={appVersion}
+                    onPickVersion={setAppVersion}
+                  />
+                )}
+                {hasBooted && appVersion === 'v1' && (
+                  <div className="absolute right-1 top-1/2 z-10 flex -translate-y-1/2 flex-col gap-1 rounded-full border border-white/15 bg-black/45 p-1 backdrop-blur-sm">
+                    {(['v1', 'v2'] as const).map((v) => (
+                      <button
+                        key={v}
+                        type="button"
+                        onClick={() => setAppVersion(v)}
+                        aria-pressed={appVersion === v}
+                        title={APP_VERSION_LABEL[v]}
+                        className="rounded-full px-2.5 py-2 text-[10px] font-bold leading-none tracking-wider text-slate-300 aria-pressed:bg-sky-400 aria-pressed:text-[#06202c]"
+                      >
+                        {v.toUpperCase()}
+                      </button>
+                    ))}
+                    <a
+                      href="./perfect-shot-v2.zip"
+                      download
+                      title="Unduh Perfect Shot v2 (.zip)"
+                      className="rounded-full px-2.5 py-2 text-[10px] font-bold leading-none text-amber-200"
+                    >
+                      ⬇
+                    </a>
+                  </div>
                 )}
               </div>
             </ScaledFrame>
