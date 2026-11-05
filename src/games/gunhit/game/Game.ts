@@ -9435,7 +9435,15 @@ export class Game {
     // their glow and twinkle keep animating; everything else stays in canvas.
     const zipGun = hasZipArt(this.weapon.id);
     this.zipGunFrame = zipGun
-      ? { x: this.gunX, y: y0, rot: this.gunTiltNow, scale: GAMEPLAY_GUN_SCALE, hidden: false }
+      ? {
+          x: this.gunX,
+          // The page draws the gun, so the shot's kick has to travel with the
+          // pose: without it the zip weapons felt like they never fired.
+          y: y0 + this.recoil * 8,
+          rot: this.gunTiltNow - this.recoil * ((RECOIL_ROT as unknown as Record<string, number>)[this.weapon.id] ?? 0),
+          scale: GAMEPLAY_GUN_SCALE,
+          hidden: false,
+        }
       : null;
 
     // Two upright barrels get two straight sights; a star never steers either.

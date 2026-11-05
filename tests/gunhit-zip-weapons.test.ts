@@ -66,7 +66,10 @@ test('the engine hands the zip weapon to the page instead of drawing it', () => 
   assert.ok(game.includes("import { hasZipArt } from '../zipWeapons/ids';"));
   assert.ok(game.includes('getZipGunFrame(): { x: number; y: number; rot: number; scale: number; hidden: boolean } | null {'));
   assert.ok(game.includes('const zipGun = hasZipArt(this.weapon.id);'));
-  assert.ok(game.includes('? { x: this.gunX, y: y0, rot: this.gunTiltNow, scale: GAMEPLAY_GUN_SCALE, hidden: false }'));
+  // The page draws the gun, so the shot's kick has to ride along with the pose.
+  assert.ok(game.includes('y: y0 + this.recoil * 8,'));
+  assert.ok(game.includes('rot: this.gunTiltNow - this.recoil *'));
+  assert.ok(game.includes('x: this.gunX,') && game.includes('scale: GAMEPLAY_GUN_SCALE,'));
   // Both the single and the twin-gun draw are skipped for these five.
   assert.ok(game.includes('if (zipGun) {\n        // Drawn by the page'));
   // The engine never imports the artwork itself: only the ids, so the 190 KB

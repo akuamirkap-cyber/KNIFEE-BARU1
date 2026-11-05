@@ -42,9 +42,18 @@ export default function ZipWeaponArt({
   }, []);
 
   const art = mod?.zipArt(id) ?? null;
+  // The muzzle crystal gets a name of its own, so the page can fade the round
+  // that has just been fired and let a new one grow back on the muzzle.
+  const markup = useMemo(() => art && art.markup
+    .replace('<g transform="translate(286 -20) scale(1.5)">',
+             '<g class="zip-muzzle-gem" transform="translate(286 -20) scale(1.5)">')
+    // The zip's own muzzle crystal stands down: the page puts design #3's
+    // faceted round there instead, and fires it.
+    .replace('</style>', '.zip-muzzle-gem{opacity:0}</style>'),
+  [art]);
   const still = useMemo(
-    () => (art ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(art.markup)}` : ''),
-    [art],
+    () => (markup ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(markup)}` : ''),
+    [markup],
   );
   if (!mod || !art) return null;
   const place = mod.placeZipArt(art, height, anchor);
@@ -71,7 +80,7 @@ export default function ZipWeaponArt({
         style={{ position: 'absolute', inset: 0 }}
         // The markup is generated from the zip's own components and carries its
         // own <style>; nothing here is user input.
-        dangerouslySetInnerHTML={{ __html: art.markup }}
+        dangerouslySetInnerHTML={{ __html: markup ?? '' }}
       />
     </div>
   );

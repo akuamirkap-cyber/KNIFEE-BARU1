@@ -12,9 +12,9 @@ function MuzzleGem({ innerRef }: { innerRef: RefObject<HTMLDivElement | null> })
       ref={innerRef}
       aria-hidden="true"
       className="pointer-events-none absolute"
-      style={{ left: -9, top: -7, width: 18, height: 18, transformOrigin: '50% 50%' }}
+      style={{ left: -3, top: -7, width: 44, height: 44, transformOrigin: '50% 50%' }}
     >
-      <svg viewBox="-10 -12 20 24" width="18" height="18" style={{ display: 'block', overflow: 'visible' }}>
+      <svg viewBox="-10 -12 20 24" width="44" height="44" style={{ display: 'block', overflow: 'visible' }}>
         <defs>
           <linearGradient id="zip-gem-a" x1="-6" y1="-10" x2="6" y2="10" gradientUnits="userSpaceOnUse">
             <stop offset="0" stopColor="#f2fdff" />
