@@ -47,7 +47,9 @@ type Live = any;
 const near = (a: number, b: number) => Math.abs(a - b) < 1e-7;
 
 test('gameplay weapon rises from below and settles without changing its resting size or muzzle', () => {
-  assert.equal(GAMEPLAY_GUN_SCALE, 1.08 * 0.8, 'the rig is 20% smaller than the tuned 1.08x');
+  // The rig now draws at the title screen's size (the roster median needs
+  // 1.037 of the tuned 1.08x to fill the menu's ink box).
+  assert.ok(Math.abs(GAMEPLAY_GUN_SCALE - 1.12) < 5e-3, `the rig draws at the menu size (${GAMEPLAY_GUN_SCALE})`);
   assert.equal(gameplayGunEntryOffset(0), GAMEPLAY_GUN_ENTRY_DISTANCE);
   const offsets = [0, 0.2, 0.4, 0.6, GAMEPLAY_GUN_ENTRY_DURATION].map(gameplayGunEntryOffset);
   assert.ok(offsets.every((offset, i) => i === 0 || offset < offsets[i - 1]), 'the motion rises steadily');
@@ -97,9 +99,9 @@ test('Perfect Shot wheel intro drops, squashes, pops and lands on the original a
 });
 
 test('scope origin follows the exact SGA wheel center and the arrival gets the timed warm landing burst', () => {
-  assert.equal(initialGameplayWheelCenterY(false, false), 184);
-  assert.equal(initialGameplayWheelCenterY(true, false), 220);
-  assert.equal(initialGameplayWheelCenterY(false, true), 184);
+  assert.equal(initialGameplayWheelCenterY(false, false), 154);
+  assert.equal(initialGameplayWheelCenterY(true, false), 190);
+  assert.equal(initialGameplayWheelCenterY(false, true), 154);
   const before = perfectShotWheelBurst(0.3, 1);
   assert.equal(before.flashOpacity, 0);
   assert.ok(before.waves.every((wave) => wave.opacity === 0));

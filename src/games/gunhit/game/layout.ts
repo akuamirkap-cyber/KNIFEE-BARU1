@@ -8,23 +8,17 @@ export const W = 420;
 export const H = 760;
 export const CX = W / 2;
 export const BASE_WHEEL_CY = 255;
-export const CY = Math.round(BASE_WHEEL_CY * (1 - 0.28)); // 28% higher wheel position (184)
-export const SPECIAL_CY = CY; // Bonus / Special stage wheel sits at the same vertical position as the normal wheel.
-
-export function initialGameplayWheelCenterY(boss = false, special = false) {
-  if (special) return SPECIAL_CY;
-  return boss ? CY + 36 : CY;
-}
-
 /**
- * The weapon package: 20% smaller than the 1.08x rig that was tuned before it.
+ * Where the wheel sat before this pass. The muzzle gap is measured against it,
+ * so the two requests below are pinned to a number instead of drifting with
+ * whatever the rig happens to be.
  */
-export const GUN_PACKAGE_SCALE = 0.8;
+const REFERENCE_CY = Math.round(BASE_WHEEL_CY * (1 - 0.28)); // 184
 
 /**
  * The board-side packages — the wheel it shoots at (rim gems, coins and
  * everything buried in it), the boss head, the Diamond Breaker rock and the
- * treasure chest — are 10% smaller, not 20% (corrected request).
+ * treasure chest — are 10% smaller than the reference board.
  *
  * The board's radius is the single knob behind all four: gems, coins, knives
  * and the boss' artwork are radius-derived, so they shrink together instead of
@@ -32,33 +26,56 @@ export const GUN_PACKAGE_SCALE = 0.8;
  */
 export const BOARD_PACKAGE_SCALE = 0.9;
 
-/** The weapon rig itself. */
-export const GAMEPLAY_GUN_SCALE = 1.08 * GUN_PACKAGE_SCALE; // 0.864
-
 /** The ordinary wheel's radius, kept here so the muzzle gap stays measurable. */
 const WHEEL_RADIUS = 106;
-/** Muzzle Y the 1.08x rig used: the gap it left is the one that grows. */
-const PREVIOUS_GUN_Y = H - Math.round(185 * 1.08); // 560
+/** How far the rim sits from the wheel's centre once the board is scaled. */
+const RIM_R = Math.round(WHEEL_RADIUS * BOARD_PACKAGE_SCALE); // 95
 
 /**
- * The weapon also stands 20% farther from whatever it shoots at.
+ * The weapon package is drawn in play at the size the title screen shows it.
  *
- * The gap is muzzle tip -> nearest rim, so shrinking the board on its own would
- * already open it a little; growing it by a fifth on top is what the request
- * asks for. `GUN_Y` is solved from that gap instead of an art-extent rule, then
- * held above the arm's own reach (muzzle 600 + arm 160 = 760) so the shorter
- * rig is never cut off by the bottom edge.
+ * The menu fits every gun's ink to 0.78 of its 295 px canvas (≈230 px) and the
+ * roster's median gun needs 1.12× to fill that, so the gameplay rig uses 1.12
+ * instead of the 0.864 it shrank to: the gun no longer looks smaller the
+ * moment the menu flight lands.
  */
-export const GUN_GAP_GROWTH = 1.2;
-/** How far this rig's arm reaches below its muzzle (`185 * scale`). */
-const RIG_FOOT = Math.round(185 * GAMEPLAY_GUN_SCALE); // 160
-export const GUN_Y = Math.min(
-  // The bottom of the screen wins: a muzzle lower than this would cut the grip
-  // off, so the gap keeps 1.19x instead of a clipped 1.2x.
-  H - RIG_FOOT,
-  CY + Math.round(WHEEL_RADIUS * BOARD_PACKAGE_SCALE)
-    + Math.round((PREVIOUS_GUN_Y - (CY + WHEEL_RADIUS)) * GUN_GAP_GROWTH),
-); // 600
+/** The 1.08x rig the menu's proportions were tuned against. */
+const TUNED_RIG = 1.08;
+export const GAMEPLAY_GUN_SCALE = TUNED_RIG * 1.037; // 1.11996 ≈ 1.12
+export const GUN_PACKAGE_SCALE = GAMEPLAY_GUN_SCALE / TUNED_RIG; // 1.037
+
+/**
+ * How far this rig's arm reaches below its muzzle (`185 * scale`). The muzzle
+ * rides at the bottom of the screen with the grip flush against the edge, so
+ * the bigger rig grows upwards instead of hanging off the canvas.
+ */
+const RIG_FOOT = Math.ceil(185 * GAMEPLAY_GUN_SCALE); // 208 — never a fraction past the edge
+export const GUN_Y = H - RIG_FOOT; // 552
+
+/**
+ * The enemy — the wheel, the boss head, the Diamond Breaker rock — and the
+ * treasure chest are pushed 15% farther from the muzzle (tip → nearest rim)
+ * than the bigger rig left them.
+ *
+ * A larger gun eats the gap on its own: its muzzle rose 47 px, so the board has
+ * to rise too or the barrel ends up in the wheel. The 15% is asked for, then
+ * clamped to the line the top HUD needs — the score, the level label and the
+ * stage stars own the strip above `HUD_SAFE_TOP`, and the wheel's top edge is
+ * never allowed into it (the same rule the layout always enforced).
+ */
+export const BOARD_GAP_GROWTH = 1.15;
+/** Nothing of the board may rise above this line. */
+const HUD_SAFE_TOP = 59;
+const WANTED_GAP = Math.round((GUN_Y - (REFERENCE_CY + RIM_R)) * BOARD_GAP_GROWTH); // 315
+const WANTED_CY = GUN_Y - WANTED_GAP - RIM_R; // 143 — 15%, but under the HUD
+export const CY = Math.max(WANTED_CY, HUD_SAFE_TOP + RIM_R); // 154
+export const SPECIAL_CY = CY; // Bonus / Special stage wheel sits on the same line as the normal wheel.
+
+export function initialGameplayWheelCenterY(boss = false, special = false) {
+  if (special) return SPECIAL_CY;
+  return boss ? CY + 36 : CY;
+}
+
 /**
  * How far the landscape presentation lifts the weapon rig in world space.
  *

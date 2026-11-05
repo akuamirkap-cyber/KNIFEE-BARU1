@@ -62,16 +62,18 @@ test('The weapon draws 20% smaller (0.864x) and the wheel position is 28% higher
   } = await import('../src/games/gunhit/game/Game');
 
   assert.equal(BASE_WHEEL_CY, 255);
-  assert.equal(CY, Math.round(255 * (1 - 0.28)), 'wheel CY is 28% higher up (184)');
-  assert.equal(CY, 184);
-  assert.equal(SPECIAL_CY, CY, 'bonus/special stage wheel sits at the exact same Y (184) as normal wheel');
+  // The board was lifted so the bigger rig keeps a gap: it now sits as high as
+  // the top HUD allows (the 15% ask clamps here, see `layout.ts`).
+  assert.equal(CY, 154);
+  assert.equal(SPECIAL_CY, CY, 'bonus/special stage wheel sits on the same line (154) as the normal wheel');
 
-  // Requested: the weapon 20% smaller than the tuned 1.08x rig, standing 20%
-  // farther from a board that is itself 10% smaller (rim 279, gap 270 -> 321).
-  assert.ok(Math.abs(GAMEPLAY_GUN_SCALE - 0.864) < 1e-9, 'the weapon draws at 0.864x');
-  assert.equal(GUN_Y, 600, 'muzzle Y grows the muzzle-to-rim gap by a fifth');
-  const rim = CY + Math.round(106 * 0.9); // 279
-  assert.equal(Math.round((GUN_Y - rim) / (560 - (CY + 106)) * 100), 119, 'the gap is ~1.2x');
+  // Requested: the gameplay rig is the title screen's size — the roster's
+  // median gun needs 1.12x to fill the menu's ink box — and the board (wheel,
+  // boss head, rock, treasure chest) is pushed as far back as the HUD allows.
+  assert.ok(Math.abs(GAMEPLAY_GUN_SCALE - 1.12) < 5e-3, 'the weapon draws at the menu size (~1.12x)');
+  assert.equal(GUN_Y, 552, 'the muzzle rides at the bottom with the grip flush');
+  const rim = CY + Math.round(106 * 0.9); // 249
+  assert.equal(GUN_Y - rim, 303, 'muzzle-to-rim gap after the bigger rig');
 
   const scales: [number, number][] = [];
   const gradient = { addColorStop: () => undefined };
@@ -115,7 +117,7 @@ test('The weapon draws 20% smaller (0.864x) and the wheel position is 28% higher
       render: () => void;
       twinGuns: boolean;
     };
-    assert.equal(internal.targetY, 184, 'normal stage wheel sits at CY=184 (28% higher)');
+    assert.equal(internal.targetY, 154, 'normal stage wheel sits at CY=154');
     assert.equal(game.getWheelStyle(), 'orange', 'stage 3 uses the orange wheel style');
     assert.ok(
       internal.targetY - internal.level.radius > 58,
