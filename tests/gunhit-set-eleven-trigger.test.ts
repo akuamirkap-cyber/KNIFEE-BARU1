@@ -126,12 +126,15 @@ test('every plain Slide 7 gun recharges on slide 7’s own cooldown; its other c
     assert.equal(game.projs.length, 0, `${sga}: nothing leaves inside the input handler`);
     game.update(DT);
     assert.ok(game.projs.length > 0, `${sga} fired on the next frame`);
-    assert.ok(Math.abs(game.cooldown - elevenWeapon(id).cooldown) < 1e-9,
-      `${sga}: ${elevenWeapon(id).cooldown} s as on slide 7 (got ${game.cooldown})`);
+    // Slide 7's own interval, cut down to the arsenal's 0.2 s ceiling when it
+    // is slower than that (the beacon's 1.7 s, the phantom's 0.95 s).
+    assert.ok(Math.abs(game.cooldown - Math.min(0.2, elevenWeapon(id).cooldown)) < 1e-9,
+      `${sga}: min(0.2, ${elevenWeapon(id).cooldown}) s as on slide 7 (got ${game.cooldown})`);
   }
   const rail = stage('railgun', 'original');
   tap(rail);
-  assert.ok(Math.abs(rail.cooldown - getWeapon('railgun').cooldown) < 1e-9, 'Sebelumnya: slide 1’s own railgun pace');
+  assert.ok(Math.abs(rail.cooldown - Math.min(0.2, getWeapon('railgun').cooldown)) < 1e-9,
+    'Sebelumnya: slide 1’s own railgun pace, capped the same way');
 });
 
 test('the Mega Buster recharges on slide 7’s 0.13 s after a charged release', () => {
@@ -151,7 +154,7 @@ test('a Slide 7 channel beam keeps one round a press: slide 7’s 0.1 s is only 
     shots = 0;
     game.press();
     assert.equal(shots, 1);
-    assert.ok(Math.abs(game.cooldown - getWeapon('heat_ray').cooldown) < 1e-9, `cooldown ${game.cooldown}`);
+    assert.ok(Math.abs(game.cooldown - Math.min(0.2, getWeapon('heat_ray').cooldown)) < 1e-9, `cooldown ${game.cooldown}`);
     run(game, 1);
     assert.equal(shots, 1, 'holding the beam does not stack rounds on the wheel');
     game.holding = false;
@@ -188,7 +191,8 @@ test('the held Slide 7 bow and rifle repeat at slide 7’s pace, with no slide-1
     assert.equal(bow.charging, false, 'no slide-1 draw-to-charge');
     run(bow, 0.7);
     bow.holding = false;
-    assert.equal(shots, 2, `the bow looses again after 0.62 s (shots ${shots})`);
+    // 0.62 s on slide 7, so the ceiling makes it 0.2 s: four loose in 0.7 s.
+    assert.equal(shots, 4, `the bow looses every 0.2 s once capped (shots ${shots})`);
 
     const rifle = stage('sniper');
     shots = 0;
@@ -200,25 +204,20 @@ test('the held Slide 7 bow and rifle repeat at slide 7’s pace, with no slide-1
   });
 });
 
-test('a Slide 7 tap up to 0.22 s early fires the moment the gun is ready; an earlier one is dropped', () => {
+test('a Slide 7 tap inside the cooldown fires the moment the gun is ready', () => {
   seeded(9, () => {
     const game = stage('railgun');
     shots = 0;
     tapFire(game);
     assert.equal(shots, 1);
-    // Its hit-stop slows the recharge, so wait on the cooldown itself.
-    while (game.cooldown > 0.35) game.update(DT);
-    tapFire(game); // 0.35 s left: too early to be remembered
-    run(game, 0.6);
-    assert.equal(shots, 1, 'a tap 0.35 s early is dropped');
-    assert.ok(game.cooldown <= 0, 'though the rail is ready by now');
+    assert.ok(game.cooldown <= 0.2, `no gun waits longer than 0.2 s (got ${game.cooldown})`);
+    // The rail's own 0.9 s is gone, so every tap while it recharges lands in
+    // slide 7's 0.22 s buffer and is fired the moment the trigger is free.
+    while (game.cooldown > 0.1) game.update(DT);
     tapFire(game);
-    assert.equal(shots, 2, 'ready: the tap fires on the next frame');
-    while (game.cooldown > 0.15) game.update(DT);
-    tapFire(game); // 0.15 s left: remembered
-    assert.equal(shots, 2, 'not yet');
-    run(game, 0.2);
-    assert.equal(shots, 3, 'it fires as soon as the rail has recharged');
+    assert.equal(shots, 1, 'not yet — the trigger is still locked');
+    run(game, 0.25);
+    assert.equal(shots, 2, 'it fires as soon as the rail has recharged');
     assert.equal(game.state, 'play');
   });
 });

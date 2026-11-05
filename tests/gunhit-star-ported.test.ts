@@ -194,7 +194,25 @@ test('the star cards still reach the ported trigger interval', () => {
     rapid.applyBuff('rapid');
     rapid.ammoLeft = 40;
     rapid.shoot();
-    assert.ok(Math.abs(rapid.cooldown - base / 2) < 1e-9, `${weapon}:${effect} must fire twice as fast`);
+    // The buff halves the card's own interval, then the 0.2 s ceiling applies,
+    // so a card already pinned to the ceiling cannot go below it twice over:
+    // what matters is that the buff never slows a card down and that it is
+    // visible on the trigger itself.
+    assert.ok(rapid.cooldown <= base + 1e-9,
+      `${weapon}:${effect} the rapid star must not slow the trigger (${rapid.cooldown} vs ${base})`);
+    assert.ok(rapid.cooldown <= 0.2 + 1e-9, `${weapon}:${effect} stays inside the ceiling`);
+    const fired = (g: typeof rapid) => {
+      let shots = 0;
+      for (let i = 0; i < 60; i++) {
+        g.ammoLeft = 40;
+        g.state = 'play';
+        if (g.cooldown <= 0) { g.shoot(); shots++; }
+        g.update(1 / 60);
+      }
+      return shots;
+    };
+    assert.ok(fired(rapid) >= fired(plain),
+      `${weapon}:${effect} the rapid star must fire at least as often`);
   }
 });
 

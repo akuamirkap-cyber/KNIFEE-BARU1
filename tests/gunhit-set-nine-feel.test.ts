@@ -288,23 +288,18 @@ test('the Slide 5 sniper and plasmacaster fire on the press; their other cards k
 
 });
 
-test('a Slide 5 gun keeps slide 9’s trigger interval and remembers a click made just before it is ready', () => {
+test('a Slide 5 gun keeps slide 9’s trigger interval, capped, and remembers a click inside it', () => {
   const game = stage('pistol');
   shots = 0;
   tap(game);
   assert.equal(shots, 1);
-  assert.ok(Math.abs(game.cooldown - 0.24) < 1e-9, `Beretta: 0.24 s as on slide 9 (got ${game.cooldown})`);
+  // Slide 9's own 0.24 s, cut to the arsenal's 0.2 s ceiling.
+  assert.ok(Math.abs(game.cooldown - 0.2) < 1e-9, `Beretta: capped at 0.2 s (got ${game.cooldown})`);
   game.update(DT);
-  tap(game); // 0.223 s left: too early to be remembered
+  tap(game); // 0.183 s left: inside slide 9's 0.22 s buffer, so it is remembered
+  assert.equal(shots, 1, 'not yet — and an early click is never lost');
   for (let i = 0; i < 20; i++) game.update(DT);
-  assert.equal(shots, 1, 'an early click is dropped');
-  tap(game);
-  assert.equal(shots, 2);
-  for (let i = 0; i < 3; i++) game.update(DT);
-  tap(game); // ~0.19 s left: remembered
-  assert.equal(shots, 2, 'not yet');
-  for (let i = 0; i < 14; i++) game.update(DT);
-  assert.equal(shots, 3, 'it fires the moment the gun is ready');
+  assert.equal(shots, 2, 'it fires the moment the gun is ready');
 });
 
 test('a Slide 5 round flies at slide 9’s own speed; a beam’s carrier only scores', () => {

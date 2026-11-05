@@ -224,11 +224,10 @@ test('a press while the gun is still cooling is ignored, as on slide 3', () => {
     const game = stage('crossbow');
     shots = 0;
     tap(game);
-    run(game, 0.25); // slide 3's crossbow reloads in 0.5 s
+    run(game, 0.1); // the ceiling makes slide 3's 0.5 s crossbow a 0.2 s one
     tap(game);
     assert.equal(shots, 1, 'the early press is dropped, not queued');
-    run(game, 0.45);
-    assert.equal(shots, 1);
+    run(game, 0.15);
     tap(game);
     assert.equal(shots, 2, 'once cooled, the next press fires');
   });

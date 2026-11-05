@@ -220,6 +220,18 @@ const SINGLE_BARREL = [0] as const;
 const TWIN_BARRELS = [-TWIN_SPACING, TWIN_SPACING] as const;
 const CLASSIC_COIN_RADIUS = 13.5 * 1.2; // compact original coin, enlarged only 20%
 const CLASSIC_DIAMOND_SCALE = 1.2;
+/**
+ * The longest a gun may ever wait before it can fire again, in seconds.
+ *
+ * Every layer (slide 1's own table, and slides 2/6/7/9/11 handing back their
+ * own trigger interval) used to set its own cadence — the orbital beacon sat
+ * at 1.7 s, the singularity at 1.4 s, the bazooka at 0.85 s — so half the
+ * arsenal felt like it had stopped responding while the acid spitter fired
+ * 4.5 times a second. A single ceiling at the trigger pull keeps every gun
+ * "ready again" within a fifth of a second; guns that were already faster
+ * (AK-47, nail gun, MP5, ion SMG, pistol) keep their own rhythm untouched.
+ */
+const MAX_WEAPON_COOLDOWN = 0.2;
 const TOTAL_LEN = 42; // total standard bullet length
 const EMBED = 21; // tertancap setengah (50% masuk ke dalam)
 const L = TOTAL_LEN - EMBED; // hanya terlihat setengah (50% di luar)
@@ -4336,12 +4348,24 @@ export class Game {
   shoot() {
     if (this.orientation !== 'landscape' || !this.gunTiltNow) {
       this.shootInner();
+      this.capCooldown();
       return;
     }
     const firstParticle = this.particles.length;
     const firstLight = this.lights.length;
     this.shootInner();
     this.poseShotSpawns(firstParticle, firstLight);
+    this.capCooldown();
+  }
+
+  /**
+   * Whether the gun came from slide 1's table, from slide 2/6/9/11's own
+   * trigger interval or from a held charge, a pull never locks the trigger for
+   * longer than `MAX_WEAPON_COOLDOWN`. Slower guns are cut down to it; faster
+   * ones (AK-47, nail gun, the SMGs) are left exactly as they were.
+   */
+  private capCooldown() {
+    if (this.cooldown > MAX_WEAPON_COOLDOWN) this.cooldown = MAX_WEAPON_COOLDOWN;
   }
 
   private poseShotSpawns(firstParticle: number, firstLight: number) {

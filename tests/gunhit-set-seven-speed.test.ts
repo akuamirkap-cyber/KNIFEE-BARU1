@@ -89,10 +89,12 @@ test('every slide-3 gun (all 71) fires on slide 3’s own trigger interval', () 
     const want = sevenCooldown(s7!);
     assert.ok(want !== null && want > 0, `${s7} has a slide-3 cooldown`);
     const { game } = fireWithSetSeven(id, setSevenIdFor(id) ? 'set7' : 'new');
+    // Slide 3's own interval, cut to the arsenal's 0.2 s ceiling when slower.
+    const capped = Math.min(0.2, want!);
     assert.equal(
       (game as unknown as { cooldown: number }).cooldown,
-      want,
-      `${id} reloads in slide 7's ${want}s, not slide 1's`,
+      capped,
+      `${id} reloads in slide 7's ${want}s (capped at ${capped}), not slide 1's`,
     );
   }
 });
