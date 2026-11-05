@@ -41,7 +41,21 @@ function lin(c: CanvasRenderingContext2D, x0: number, x1: number, stops: string[
   return g;
 }
 
+/**
+ * How much the pistol-family rounds are trimmed at the sides.
+ *
+ * These sprites are authored ±5 px wide (13 px with the base rim) and were drawn
+ * ~1.35x wider than the shot the game actually collides with — `weapon.half` is
+ * 4.75, i.e. a 9.5 px hitbox. A pistol round therefore read as fat as a rifle
+ * round and visibly wider than the thing it hits. Trimming the sides (the length
+ * is untouched, so the flight still reads as a bullet) lines the artwork up with
+ * its own hitbox: 13 px → 10 px.
+ */
+const ROUND_TRIM = 0.78;
+
 function round(c: CanvasRenderingContext2D, len: number, v: 'normal' | 'old' | 'gold') {
+  c.save();
+  c.scale(ROUND_TRIM, 1);
   const head = Math.round(len * 0.38);
   const tip = v === 'old' ? ['#2a1a14', '#8b6a5a', '#2a1a14'] : v === 'gold' ? ['#8a6400', '#fff6c0', '#a07800'] : ['#7a3212', '#f6b07a', '#7a3212'];
   const body = v === 'old' ? ['#2f3236', '#a3a8ad', '#2f3236'] : v === 'gold' ? ['#7a5800', '#ffe46a', '#7a5800'] : ['#8c5e10', '#ffe695', '#8c5e10'];
@@ -65,9 +79,13 @@ function round(c: CanvasRenderingContext2D, len: number, v: 'normal' | 'old' | '
     c.fillStyle = 'rgba(255,255,255,0.8)';
     c.fillRect(-2.5, 4, 1.2, len - 10);
   }
+  c.restore();
 }
 
 function akRound(c: CanvasRenderingContext2D, len: number) {
+  // Same trim as the pistol family: the AK's round shares the base rim width.
+  c.save();
+  c.scale(ROUND_TRIM, 1);
   c.beginPath();
   c.moveTo(-4, 15);
   c.lineTo(-4, 8);
@@ -89,6 +107,7 @@ function akRound(c: CanvasRenderingContext2D, len: number) {
   c.fillRect(-5.5, 23, 11, len - 26.5);
   c.fillStyle = '#596138';
   c.fillRect(-6.5, len - 3.5, 13, 3.5);
+  c.restore();
 }
 
 function glowEllipse(c: CanvasRenderingContext2D, y: number, rx: number, ry: number, rgb: string, a: number) {
