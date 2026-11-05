@@ -59,7 +59,7 @@ test('SGA menu keeps its intro choreography, art, background and currency', () =
   const app = readFileSync('src/games/gunhit/App.tsx', 'utf8');
   const css = readFileSync('src/index.css', 'utf8');
   const menu = app.slice(app.indexOf("{screen === 'menu' && !mapOpen && !questOpen"), app.indexOf("{screen === 'menu' && settingsOpen && ("));
-  assert.match(menu, /<MenuStageBackdrop orientation=\{orientation\} \/>/);
+  assert.match(menu, /<MenuStageBackdrop orientation=\{orientation\} animated=\{[^}]+\} \/>/);
   assert.match(menu, /MenuEnvironment theme=\{menuTheme\}/);
   assert.match(menu, /SunburstFX size=\{430\} color="255,255,255" intensity=\{0\.44\}/);
   assert.match(menu, /CoinSprite size=\{25\}/);

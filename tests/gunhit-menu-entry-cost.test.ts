@@ -62,3 +62,36 @@ test('the ink pivot is measured once per weapon, not on every visit', () => {
   assert.ok(readFileSync(path.join(ROOT, 'src/games/gunhit/game/menuGunArt.ts'), 'utf8')
     .includes("export { getGunVariant } from './art/gunVariants';"));
 });
+
+test('the engine no longer boots inside the menu arrival', () => {
+  // The engine canvas sits behind the menu, which paints its own room: nothing
+  // on the title screen needs it. Its chunk + constructor used to land on the
+  // frames the menu animates in, which is the transition the player feels.
+  assert.ok(app.includes('const engineBootRef = useRef<(() => void) | null>(null);'));
+  assert.ok(app.includes('const engineBootingRef = useRef(false);'));
+  // Booted when the arrival sequence ends …
+  assert.ok(app.includes('if (!menuReady) return;\n    engineBootRef.current?.();'));
+  // … with a floor in case the menu never reports ready.
+  assert.ok(app.includes('const bootTimer = window.setTimeout(startBoot, 2600);'));
+  assert.ok(!app.includes('window.addEventListener(\'pagehide\', flushShotsToStorage);\n    void boot();'),
+    'the entering frame does not boot the engine');
+  // Boot runs once, no matter how many triggers fire.
+  assert.ok(app.includes('if (engineBootingRef.current) return;\n      engineBootingRef.current = true;\n      void boot();'));
+});
+
+test('a run that is asked for first does not wait for the menu', () => {
+  const at = app.indexOf('const whenEngine = (start: (engine: Game) => void) => {');
+  assert.ok(at > 0);
+  const body = app.slice(at, at + 400);
+  assert.ok(body.includes('engineQueue.current.push(start);'));
+  assert.ok(body.includes('engineBootRef.current?.();'), 'the tap boots the engine immediately');
+});
+
+test('a covered page transition stops repainting the menu room', () => {
+  // The doors/cloud/wrap/podium variants hide the menu completely, so the 30 Hz
+  // forest + grass pass is pure waste for the ~1.9s they run. A fade leaves the
+  // menu visible and keeps animating.
+  assert.ok(app.includes("animated={!menuPageTransition || menuPageTransition.variant === 'fade'}"));
+  assert.ok(readFileSync(path.join(ROOT, 'src/games/gunhit/components/MenuStageBackdrop.tsx'), 'utf8')
+    .includes('if (!animated) return () => observer?.disconnect();'));
+});

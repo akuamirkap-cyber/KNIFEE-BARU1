@@ -11,7 +11,7 @@ const css = readFileSync('src/index.css', 'utf8');
 test('the menu room is the gameplay room', () => {
   // Default theme (forest/auto): the menu paints the stage world itself.
   assert.match(app, /menuTheme === 'auto' \|\| menuTheme === 'forest' \? \(/);
-  assert.match(app, /<MenuStageBackdrop orientation=\{orientation\} \/>/);
+  assert.match(app, /<MenuStageBackdrop orientation=\{orientation\} animated=\{[^}]+\} \/>/);
   // A background picked in SETTING still renders its own theme.
   assert.match(app, /<MenuEnvironment theme=\{menuTheme\} vivid=\{menuLandscape\} \/>/);
   assert.match(component, /ctx\.setTransform\(\.\.\.worldTransform\(orientation, k\)\)/);

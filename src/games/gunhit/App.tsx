@@ -474,6 +474,17 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   const gameRef = useRef<Game | null>(null);
   // Runs asked for while the engine chunk is still in flight.
   const engineQueue = useRef<((engine: Game) => void)[]>([]);
+  /**
+   * Starts the engine boot (chunk + constructor).
+   *
+   * The engine canvas sits *behind* the menu, which paints its own room, so
+   * nothing on the title screen needs it. Building it during the entrance used
+   * to land ~300 KB of parsing plus the constructor on the very frames the menus
+   * animate in — the transition stuttered every single time. It now boots when
+   * the menu has settled, and immediately if a run is asked for first.
+   */
+  const engineBootRef = useRef<(() => void) | null>(null);
+  const engineBootingRef = useRef(false);
   // Latest "is the engine allowed to simulate" flag, so a late engine starts
   // in the right state instead of waiting for the next dependency change.
   const activeRef = useRef(false);
@@ -497,8 +508,13 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   /** Start a run now, or the moment the engine chunk lands. */
   const whenEngine = (start: (engine: Game) => void) => {
     const engine = gameRef.current;
-    if (engine) start(engine);
-    else engineQueue.current.push(start);
+    if (engine) {
+      start(engine);
+      return;
+    }
+    engineQueue.current.push(start);
+    // A run is waiting: stop waiting for idle and boot now.
+    engineBootRef.current?.();
   };
   // Game B's wheel artwork, rasterised on demand and handed to the engine so
   // every stage shows exactly the wheel the reference game shows.
@@ -1087,13 +1103,29 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     };
     document.addEventListener('visibilitychange', onVisChange);
     window.addEventListener('pagehide', flushShotsToStorage);
-    void boot();
+    // See `engineBootRef`: the menu does not need the engine, so it boots after
+    // the entrance instead of inside it.
+    const startBoot = () => {
+      if (engineBootingRef.current) return;
+      engineBootingRef.current = true;
+      void boot();
+    };
+    engineBootRef.current = startBoot;
+    // The menu's arrival sequence owns the first ~1.7s of this page; the engine
+    // boots when that ends (see the `menuReady` effect). This is only the floor
+    // in case the menu never reports ready (another slide, a replay, a skip).
+    const bootTimer = window.setTimeout(startBoot, 2600);
 
     return () => {
       cancelled = true;
       document.removeEventListener('visibilitychange', onVisChange);
       window.removeEventListener('pagehide', flushShotsToStorage);
       engineQueue.current.length = 0;
+      // A later mount re-arms the boot; a pending idle callback is harmless
+      // because `cancelled` is checked inside `boot`.
+      engineBootRef.current = null;
+      engineBootingRef.current = false;
+      window.clearTimeout(bootTimer);
       g?.destroy();
       gameRef.current = null;
       flushShotsToStorage();
@@ -1170,6 +1202,14 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     afterPaint(() => { if (current) studioSfx.menuEnter(0, plan); });
     return () => { current = false; };
   }, [menuReturnKey]);
+
+  // The arrival sequence is over: the page is quiet, which is when the engine
+  // chunk and its constructor cost the player nothing (the menu paints its own
+  // room, so nothing on this screen needs it).
+  useEffect(() => {
+    if (!menuReady) return;
+    engineBootRef.current?.();
+  }, [menuReady]);
 
   // Match Perfect Shot's input lock during the 1.7s menu arrival sequence.
   useEffect(() => {
@@ -2342,8 +2382,11 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                   : planMotion('in-bg', 0, 1100, 'absolute inset-0', undefined, 'out-bg', 120, 700))}
               >
                 {menuTheme === 'auto' || menuTheme === 'forest' ? (
-                  /* Menu dan gameplay satu ruangan: latar yang sama persis. */
-                  <MenuStageBackdrop orientation={orientation} />
+                  /* Menu dan gameplay satu ruangan: latar yang sama persis.
+                     A covering page transition hides the room anyway, so the menu
+                     stops repainting it 30 times a second while it plays. A fade
+                     leaves the menu visible and keeps it alive. */
+                  <MenuStageBackdrop orientation={orientation} animated={!menuPageTransition || menuPageTransition.variant === 'fade'} />
                 ) : (
                   <MenuEnvironment theme={menuTheme} vivid={menuLandscape} />
                 )}
