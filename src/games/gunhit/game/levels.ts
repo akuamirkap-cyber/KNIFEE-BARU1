@@ -71,9 +71,15 @@ export function makeLevel(n: number, forcedMode?: LevelMode): LevelCfg {
     : Math.min(1 + Math.floor((n - 4) / 4), 4);
   const coins = (Math.random() < 0.65 ? 1 : 0) + (Math.random() < 0.3 ? 1 : 0);
   // Each five-stage boss cycle is three ordinary stages, one random special,
-  // then a boss: stages 4, 9, 14... use exactly one of the three special modes.
+  // then a boss: stages 4, 9, 14... use one of the two bonus rounds.
+  //
+  // Diamond Breaker (`boulder`) is deliberately *not* in that draw: it is skipped
+  // in the normal progression and only reachable by picking it in Settings, which
+  // hands `makeLevel` a forced mode. Everything that advances on its own —
+  // `continueAfterBoss()` and the stage-clear auto-advance — comes through here
+  // without a forced mode, so this one list keeps the boulder out of the run.
   const mode: LevelMode = forcedMode ?? (boss ? 'classic'
-    : n % 5 === 4 ? pick<LevelMode>(['boulder', 'bonus', 'treasure'])
+    : n % 5 === 4 ? pick<LevelMode>(['bonus', 'treasure'])
     : 'classic');
   return {
     // Diamond Breaker is the tight, fast challenge: a half-size magazine

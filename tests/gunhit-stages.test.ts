@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { allowsStarPowerups, diamondCoreProjectileRadius, Game, makeLevel, projectileSizeMultiplier, SPECIAL_CY } from '../src/games/gunhit/game/Game';
 import { DiamondRock, LARGE_DIAMOND_CORE_RADIUS } from '../src/games/gunhit/game/art/diamondRock';
 import { getWeapon, WEAPONS } from '../src/games/gunhit/game/weapons';
@@ -341,4 +343,31 @@ test('treasure coins bounce and credit gradually without losing or duplicating t
   game.finishSpecialStage();
   game.updateTreasureShower(1 / 60);
   assert.deepEqual(awards, [0]);
+});
+
+test('the Diamond Breaker is skipped by the rotation but still pickable in Settings', () => {
+  // Requested: the boulder round is out of normal play. Everything that advances
+  // on its own goes through `makeLevel` without a forced mode, so the rotation
+  // pool is what keeps it out of a run.
+  const seen = new Set<string>();
+  for (let n = 1; n <= 100; n++) {
+    const draws = n % 5 === 4 ? 40 : 3;
+    for (let draw = 0; draw < draws; draw++) {
+      const level = makeLevel(n);
+      assert.notEqual(level.mode, 'boulder', `stage ${n} never becomes a Diamond Breaker round`);
+      if (n % 5 === 4) seen.add(level.mode);
+    }
+  }
+  assert.deepEqual([...seen].sort(), ['bonus', 'treasure'], 'the pre-boss slot still rotates both bonus rounds');
+
+  // The Settings button hands over a forced mode, and that still wins.
+  for (const n of [4, 9, 24]) {
+    const forced = makeLevel(n, 'boulder');
+    assert.equal(forced.mode, 'boulder', `stage ${n} can still be started as a boulder round`);
+    assert.equal(forced.ammo, 6, 'the boulder keeps its half-size magazine');
+    assert.equal(forced.radius, 149, 'and its full board radius');
+  }
+
+  const levels = readFileSync(path.resolve(import.meta.dirname, '../src/games/gunhit/game/levels.ts'), 'utf8');
+  assert.ok(levels.includes("pick<LevelMode>(['bonus', 'treasure'])"), 'the boulder is not in the rotation draw');
 });
