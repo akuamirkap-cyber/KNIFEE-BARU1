@@ -21,8 +21,17 @@ import { gunSunburstColor } from './game/sunburstPalette';
  */
 type MenuGunArt = typeof import('./game/menuGunArt');
 let menuGunArtPromise: Promise<MenuGunArt> | null = null;
+/**
+ * The art module itself, once the chunk has parsed.
+ *
+ * The page is mounted again every time the player enters it, and React state
+ * starts empty each time. Keeping the resolved module here lets the second and
+ * every later entry paint the live weapon on its first frame, instead of
+ * replaying a 260 KB snapshot and painting over it a moment later.
+ */
+let menuGunArtModule: MenuGunArt | null = null;
 const loadMenuGunArt = () => (menuGunArtPromise ??= import('./game/menuGunArt'));
-void loadMenuGunArt();
+void loadMenuGunArt().then((mod) => { menuGunArtModule = mod; });
 /**
  * Why the artwork is asked for here, at module scope, and not in an effect.
  *
@@ -91,14 +100,38 @@ function frameToPng(cv: HTMLCanvasElement): string | null {
   }
 }
 
-function rememberMenuGunBitmap(cv: HTMLCanvasElement, id: string) {
-  try {
+/** Weapon pivot (CSS px from the canvas centre) already measured by a live paint. */
+const menuGunPivot = new Map<string, { x: number; y: number }>();
+/** The frame already encoded for the cold-start snapshot (`weapon|art|canvas`). */
+let keptMenuGunFrame = '';
+/** Key of the newest paint, so a deferred snapshot never keeps a stale weapon. */
+let latestMenuGunPaint = '';
+
+/**
+ * Keep the painted frame for the next cold start — after the menu is up.
+ *
+ * Encoding a 674x590 canvas to PNG and writing the base64 into web storage is
+ * tens of milliseconds of main-thread work. Doing it inside the paint effect put
+ * that on the entering frame, exactly when the page has the least budget to
+ * spare, which is what made the page feel late. It now runs once per weapon when
+ * the browser is idle, and not at all when that frame is already kept.
+ */
+function keepMenuGunFrameLater(cv: HTMLCanvasElement, id: string, key: string) {
+  if (keptMenuGunFrame === key) return;
+  const run = () => {
+    if (latestMenuGunPaint !== key || keptMenuGunFrame === key) return;
     const png = frameToPng(cv);
     if (!png) return;
-    storage.setItem(MENU_GUN_BITMAP_KEY, JSON.stringify({ v: APP_VERSION, id, png } satisfies MenuGunBitmap));
-  } catch {
-    // Storage refused: the live artwork is enough.
-  }
+    try {
+      storage.setItem(MENU_GUN_BITMAP_KEY, JSON.stringify({ v: APP_VERSION, id, png } satisfies MenuGunBitmap));
+      keptMenuGunFrame = key;
+    } catch {
+      // Storage refused: the live artwork is enough.
+    }
+  };
+  const idle = (globalThis as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
+  if (idle) idle(run, { timeout: 1500 });
+  else window.setTimeout(run, 260);
 }
 
 import { juicyAudio } from '../../utils/juicyAudio';
@@ -445,14 +478,16 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   // in the right state instead of waiting for the next dependency change.
   const activeRef = useRef(false);
   // Gun art for the menu showcase, once its chunk has landed.
-  const [gunArt, setGunArt] = useState<MenuGunArt | null>(null);
+  // Seed from the module already parsed by a previous visit to this page.
+  const [gunArt, setGunArt] = useState<MenuGunArt | null>(menuGunArtModule);
   /** Bumped when the paint effect found no canvas yet, so it runs again. */
   const [gunPaintTick, setGunPaintTick] = useState(0);
   menuGunArtReady.current = Boolean(gunArt);
   useEffect(() => {
+    if (menuGunArtModule) return;
     let alive = true;
     void loadMenuGunArt().then((mod) => {
-      if (alive) setGunArt(mod);
+      if (alive && !menuGunArtModule) setGunArt(mod);
     });
     return () => {
       alive = false;
@@ -1322,35 +1357,44 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     drawStill();
     // Center the aura on the visible weapon ink, not just on the large preview canvas.
     // This also compensates for weapon-specific renderer offsets in the screenshot the user flagged.
-    try {
-      const pixels = ctx.getImageData(0, 0, cv.width, cv.height).data;
-      let weight = 0;
-      let pivotX = 0;
-      let pivotY = 0;
-      for (let y = 0; y < cv.height; y++) {
-        for (let x = 0; x < cv.width; x++) {
-          const alpha = pixels[(y * cv.width + x) * 4 + 3];
-          if (alpha < 160) continue; // ignore the soft ground shadow and the glow fringe
-          weight += alpha;
-          pivotX += (x + 0.5) * alpha;
-          pivotY += (y + 0.5) * alpha;
+    //
+    // Readback and scan are the expensive half of this paint, so both are paid
+    // once per weapon and art (every second pixel is plenty — the pivot lands
+    // within half a CSS pixel of the exact one) and remembered for the visit.
+    const paintKey = `${weapon}|${gunArt.getGunVariant?.(weapon) ?? ''}|${cv.width}x${cv.height}`;
+    latestMenuGunPaint = paintKey;
+    let pivot = menuGunPivot.get(paintKey);
+    if (!pivot) {
+      try {
+        const pixels = ctx.getImageData(0, 0, cv.width, cv.height).data;
+        let weight = 0;
+        let pivotX = 0;
+        let pivotY = 0;
+        for (let y = 0; y < cv.height; y += 2) {
+          for (let x = 0; x < cv.width; x += 2) {
+            const alpha = pixels[(y * cv.width + x) * 4 + 3];
+            if (alpha < 160) continue; // ignore the soft ground shadow and the glow fringe
+            weight += alpha;
+            pivotX += (x + 0.5) * alpha;
+            pivotY += (y + 0.5) * alpha;
+          }
         }
+        if (weight > 0) pivot = { x: pivotX / weight / dpr, y: pivotY / weight / dpr };
+      } catch {
+        // Some low-end canvas contexts disable readback; fall back to the shared frame center.
       }
-      if (weight > 0 && weaponPivotRef.current) {
-        const cssScaleX = (cv.offsetWidth || pw) / pw;
-        const cssScaleY = (cv.offsetHeight || ph) / ph;
-        const centerX = pivotX / weight / dpr;
-        const centerY = pivotY / weight / dpr;
-        const offsetX = `${(centerX - pw / 2) * cssScaleX}px`;
-        const offsetY = `${(centerY - ph / 2) * cssScaleY}px`;
-        weaponPivotRef.current.style.setProperty('--weapon-pivot-x', offsetX);
-        weaponPivotRef.current.style.setProperty('--weapon-pivot-y', offsetY);
-      }
-    } catch {
-      // Some low-end canvas contexts disable readback; fall back to the shared frame center.
+      if (pivot) menuGunPivot.set(paintKey, pivot);
     }
-    // Keep this frame for the next cold start.
-    rememberMenuGunBitmap(cv, weapon);
+    if (pivot && weaponPivotRef.current) {
+      const cssScaleX = (cv.offsetWidth || pw) / pw;
+      const cssScaleY = (cv.offsetHeight || ph) / ph;
+      const offsetX = `${(pivot.x - pw / 2) * cssScaleX}px`;
+      const offsetY = `${(pivot.y - ph / 2) * cssScaleY}px`;
+      weaponPivotRef.current.style.setProperty('--weapon-pivot-x', offsetX);
+      weaponPivotRef.current.style.setProperty('--weapon-pivot-y', offsetY);
+    }
+    // Keep this frame for the next cold start, out of this frame's way.
+    keepMenuGunFrameLater(cv, weapon, paintKey);
   }, [gunArt, gunPaintTick, screen, weapon, arsenalOpen, questOpen, leaderboardOpen, mapOpen, settingsOpen]);
 
   // Roll up score only while the slide is active; pause at the current number.

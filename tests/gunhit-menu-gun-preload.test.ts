@@ -79,22 +79,25 @@ test('the menu asks for the artwork as soon as its own module loads', () => {
   const at = app.indexOf(loader);
   assert.ok(at > 0, 'the lazy loader is still there');
   // Eager kick-off: queued with the shell instead of waiting for the first
-  // commit of the menu component.
-  assert.ok(app.slice(at, at + 220).includes('void loadMenuGunArt();'));
+  // commit of the menu component. The module itself is kept once it resolves,
+  // so the next visit to the page paints the live weapon at once.
+  const kickOff = app.slice(at, at + 220);
+  assert.ok(kickOff.includes('void loadMenuGunArt()'));
+  assert.ok(app.includes('void loadMenuGunArt().then((mod) => { menuGunArtModule = mod; });'));
 });
 
 test('the last painted weapon is drawn before the artwork chunk lands', () => {
   const app = read('src/games/gunhit/App.tsx');
   assert.ok(app.includes("const MENU_GUN_BITMAP_KEY = 'sga_menu_gun_frame';"));
   assert.ok(app.includes('function readMenuGunBitmap()'));
-  assert.ok(app.includes('function rememberMenuGunBitmap(cv: HTMLCanvasElement, id: string)'));
+  assert.ok(app.includes('function keepMenuGunFrameLater(cv: HTMLCanvasElement, id: string, key: string)'));
   // Guarded so a slow image decode can never paint over the live artwork.
   assert.ok(app.includes('if (menuGunArtReady.current) return;'));
   // The frame is stored per weapon and per app version, so a new build or a new
   // gun can never show the old picture.
   assert.ok(app.includes('parsed.v !== APP_VERSION'));
   assert.ok(app.includes('cached.id !== weapon'));
-  assert.ok(app.includes('rememberMenuGunBitmap(cv, weapon);'));
+  assert.ok(app.includes('keepMenuGunFrameLater(cv, weapon, paintKey);'));
   // The shortcut is optional: it must never be able to break the menu, and it
   // goes through the safe store (a thrown `SecurityError` used to blank the hub).
   assert.ok(app.includes('function frameToPng(cv: HTMLCanvasElement): string | null {'));
