@@ -103,11 +103,13 @@ test('the artwork is a lazy chunk, so the page still paints first', () => {
 
 test('the play overlay is visible from its first frame, and only during a run', () => {
   const overlay = read('src/games/gunhit/components/ZipWeaponOverlay.tsx');
-  // The element ships at opacity 0; seeding the "already shown" flag with `true`
-  // skipped the one write that makes it visible, so the gun never appeared.
-  assert.ok(overlay.includes('let shown: boolean | null = null;'));
+  // The element ships at opacity 0, so it is switched on every frame instead of
+  // "when it changes" — a changed?-check left the gun invisible for a whole run.
   assert.ok(overlay.includes("el.style.opacity = visible ? '1' : '0';"));
-  assert.ok(!/let shown = true;/.test(overlay));
+  assert.ok(!/let shown\b/.test(overlay), 'no cached visibility flag to go stale');
+  // And a pose the engine has not reported yet still stands the weapon up.
+  assert.ok(overlay.includes('const pose = frame ?? STAND;'));
+  assert.ok(overlay.includes('x: CX, y: GUN_Y, rot: 0, scale: GAMEPLAY_GUN_SCALE'));
 
   const app = read('src/games/gunhit/App.tsx');
   assert.ok(app.includes("screen === 'playing' && hasZipArt(weapon) && ("),
@@ -116,4 +118,13 @@ test('the play overlay is visible from its first frame, and only during a run', 
   const game = read('src/games/gunhit/game/Game.ts');
   assert.ok(game.includes("if (this.state === 'idle') return null;"),
     'a frame left over from the last run cannot float over the title screen');
+});
+
+test('the weapon also exists as a plain <img>, so it can never go missing', () => {
+  const art = read('src/games/gunhit/components/ZipWeaponArt.tsx');
+  // The same vector rides underneath as an image: identical pixels when the live
+  // layer paints, and the weapon is still on screen if a device refuses it.
+  assert.ok(art.includes('data:image/svg+xml;charset=utf-8,'));
+  assert.ok(art.includes('<img src={still}'));
+  assert.ok(art.includes('dangerouslySetInnerHTML'), 'the animated copy is still mounted');
 });

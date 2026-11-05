@@ -1,10 +1,14 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import ZipWeaponArt from './ZipWeaponArt';
+import { CX, GAMEPLAY_GUN_SCALE, GUN_Y } from '../game/layout';
 
 /** Ink height of a zip weapon in play, before the rig's 1.12x pose. */
 export const ZIP_GUN_INK_HEIGHT = 185;
 
 type Frame = { x: number; y: number; rot: number; scale: number; hidden: boolean };
+
+/** Where the gun stands when the engine has not reported a pose yet. */
+const STAND: Frame = { x: CX, y: GUN_Y, rot: 0, scale: GAMEPLAY_GUN_SCALE, hidden: false };
 
 /**
  * The player's weapon during a run, for the five zip weapons.
@@ -16,25 +20,33 @@ type Frame = { x: number; y: number; rot: number; scale: number; hidden: boolean
  */
 export default function ZipWeaponOverlay({ id, read }: { id: string; read: () => Frame | null }) {
   const poseRef = useRef<HTMLDivElement>(null);
+  const [debug, setDebug] = useState('');
 
   useEffect(() => {
     let raf = 0;
-    // `null`, not `true`: the element starts at opacity 0, so the first frame
-    // that finds the gun on screen has to write the opacity. Seeding this with
-    // the assumed state skipped exactly that write, and the weapon stayed
-    // invisible for the whole run.
-    let shown: boolean | null = null;
+    const showDebug = typeof location !== 'undefined' && /[?&]zipdebug=1/.test(location.search);
+    let ticks = 0;
     const tick = () => {
       const el = poseRef.current;
       const frame = read();
+      // A pose the engine has not reported yet is not a reason to hide the
+      // weapon: it stands on the layout's own anchor until the engine speaks.
+      const pose = frame ?? STAND;
+      const visible = !pose.hidden;
       if (el) {
-        const visible = Boolean(frame && !frame.hidden);
-        if (visible) {
-          el.style.transform = `translate3d(${frame!.x}px, ${frame!.y}px, 0) rotate(${frame!.rot}rad) scale(${frame!.scale})`;
-        }
-        if (visible !== shown) {
-          el.style.opacity = visible ? '1' : '0';
-          shown = visible;
+        el.style.transform = `translate3d(${pose.x}px, ${pose.y}px, 0) rotate(${pose.rot}rad) scale(${pose.scale})`;
+        // Written every frame: the element ships hidden, so the very first frame
+        // that finds the gun must switch it on (a "changed?" check once left the
+        // weapon invisible for the whole run).
+        el.style.opacity = visible ? '1' : '0';
+        if (showDebug && ticks++ % 30 === 0) {
+          const svg = el.querySelector('svg');
+          const img = el.querySelector('img');
+          setDebug(
+            `frame=${frame ? 'ok' : 'null'} pose=${pose.x.toFixed(0)},${pose.y.toFixed(0)} ` +
+            `op=${el.style.opacity} svg=${svg ? `${Math.round(svg.getBoundingClientRect().width)}w` : 'none'} ` +
+            `img=${img && img.complete ? `${img.naturalWidth}w` : 'loading'}`,
+          );
         }
       }
       raf = requestAnimationFrame(tick);
@@ -44,13 +56,20 @@ export default function ZipWeaponOverlay({ id, read }: { id: string; read: () =>
   }, [read]);
 
   return (
-    <div
-      ref={poseRef}
-      data-zip-gun-overlay={id}
-      className="pointer-events-none absolute left-0 top-0 z-[6]"
-      style={{ transformOrigin: '0 0', willChange: 'transform', opacity: 0 }}
-    >
-      <ZipWeaponArt id={id} height={ZIP_GUN_INK_HEIGHT} anchor="muzzle" />
-    </div>
+    <>
+      <div
+        ref={poseRef}
+        data-zip-gun-overlay={id}
+        className="pointer-events-none absolute left-0 top-0 z-[6]"
+        style={{ transformOrigin: '0 0', willChange: 'transform', opacity: 0 }}
+      >
+        <ZipWeaponArt id={id} height={ZIP_GUN_INK_HEIGHT} anchor="muzzle" />
+      </div>
+      {debug && (
+        <div className="pointer-events-none absolute bottom-1 left-1 z-[7] rounded bg-black/70 px-1.5 py-1 text-[10px] font-mono text-lime-300">
+          {debug}
+        </div>
+      )}
+    </>
   );
 }

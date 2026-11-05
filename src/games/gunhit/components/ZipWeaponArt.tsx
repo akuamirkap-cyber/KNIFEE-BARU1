@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import type * as ZipArtModule from '../zipWeapons';
 
 /**
@@ -10,6 +10,11 @@ import type * as ZipArtModule from '../zipWeapons';
  * is: the browser runs the zip's CSS exactly like the zip's own page does. Only
  * placement is ours — the ink is scaled by its measured height and anchored by
  * the barrel tip, so the same numbers work in the menu, the armory and play.
+ *
+ * An identical copy of the artwork also rides underneath as an `<img>`. It is
+ * the same vector, so nothing changes when the live layer paints; if a device
+ * refuses to run the inline copy, the weapon is still on screen instead of
+ * missing.
  */
 let zipArtPromise: Promise<typeof ZipArtModule> | null = null;
 const loadZipArt = () => (zipArtPromise ??= import('../zipWeapons'));
@@ -37,6 +42,10 @@ export default function ZipWeaponArt({
   }, []);
 
   const art = mod?.zipArt(id) ?? null;
+  const still = useMemo(
+    () => (art ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(art.markup)}` : ''),
+    [art],
+  );
   if (!mod || !art) return null;
   const place = mod.placeZipArt(art, height, anchor);
   return (
@@ -53,10 +62,18 @@ export default function ZipWeaponArt({
         ...style,
       }}
       data-zip-weapon={id}
-      // The markup is generated from the zip's own components and carries its
-      // own <style>; nothing here is user input.
-      dangerouslySetInnerHTML={{ __html: art.markup }}
-    />
+    >
+      {/* Same vector, no script: the weapon cannot go missing. */}
+      <img src={still} alt="" aria-hidden="true" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', userSelect: 'none' }} />
+      {/* The animated copy: the zip's own markup, its own CSS, its own keyframes. */}
+      <div
+        aria-hidden="true"
+        style={{ position: 'absolute', inset: 0 }}
+        // The markup is generated from the zip's own components and carries its
+        // own <style>; nothing here is user input.
+        dangerouslySetInnerHTML={{ __html: art.markup }}
+      />
+    </div>
   );
 }
 
