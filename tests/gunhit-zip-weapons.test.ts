@@ -248,3 +248,85 @@ test('the Martian Heat-Ray stands upright and fires Martian green', () => {
   assert.ok(round.includes("heat_ray: { core: '#f6ffe8', hot: '#b6ff5a', deep: '#4fbf18', glow: '141,255,59' }"),
     'the Heat-Ray round is the same lime');
 });
+
+test('no zip weapon stands at an angle: every bore is a quarter turn from the art', () => {
+  // Every zip SVG is wrapped in `rotate(-45 256 256)`. The art inside is built in
+  // its own frame, so the *inner* rotation has to finish the quarter turn: -45 in
+  // that frame is what puts the barrel on screen's vertical. Anything else and the
+  // gun goes into play visibly miring — Shark Launcher shipped at -22 (net -67°,
+  // 23° off the barrel line) and Wars Blaster at -40 (net -85°, 5° off).
+  const inner: Record<string, number> = {};
+  for (const id of ZIP_WEAPON_IDS) {
+    const markup = ZIP_ART[id].markup;
+    assert.ok(markup.startsWith('<svg'), `${id}: it is SVG`);
+    const outer = markup.match(/<g transform="rotate\((-?[\d.]+) 256 256\)">/);
+    assert.ok(outer, `${id}: the upright wrap is there`);
+    assert.equal(Number(outer[1]), -45, `${id}: the wrap is a -45° quarter turn`);
+    const frame = markup.match(/<g transform="translate\([^)]*\) rotate\((-?[\d.]+)\)(?: scale\([\d.]+\))?/);
+    assert.ok(frame, `${id}: the art sits in its own frame`);
+    inner[id] = Number(frame[1]);
+  }
+  // Net rotation on screen. Every zip gun but the Heat-Ray is built in a frame
+  // whose -y runs up the barrel, so the nets below are the barrel's own angle:
+  // -90° is dead vertical. Shark Launcher's art is drawn 6° off inside its frame
+  // (its torpedo is not parallel to the frame's y-axis), so its net is -84 and
+  // that is what measures straight on screen.
+  const net: Record<string, number> = {};
+  for (const id of ZIP_WEAPON_IDS) net[id] = -45 + inner[id];
+  assert.equal(net.diamond, -90, 'Diamond Gun is the reference: dead vertical');
+  assert.equal(net.blaster, -90, 'Wars Blaster finishes the quarter turn');
+  assert.equal(net.paintball, -90, 'Paintball Gun was already square');
+  assert.equal(net.shark, -84, 'Shark Launcher: 6° of art offset, barrel vertical');
+  for (const id of ['diamond', 'blaster', 'paintball', 'shark'] as const) {
+    assert.ok(net[id] <= -84 && net[id] >= -90,
+      `${id}: net ${net[id]}° is within 6° of vertical, never leaning the other way`);
+  }
+  // Martian Heat-Ray is the one gun whose frame points the other way (+45): its
+  // spike is the -y end of a tail that grows the other way, and it reads upright.
+  assert.equal(inner.heat_ray, 45);
+});
+
+test('the barrel tip the game anchors on is the bore, not the muzzle flash', () => {
+  // The anchor sits on the container's (0,0), and the aim line, the muzzle FX and
+  // every round are drawn from there — so it has to be the mouth of the bore.
+  // Wars Blaster's old anchor was the tip of its animated lightning wisp and
+  // Shark Launcher's was 100 units to the right of its mouth: both left the gun
+  // hanging off the aim line even when its barrel was vertical.
+  for (const id of ZIP_WEAPON_IDS) {
+    const { ink } = ZIP_ART[id];
+    // The full width of the art's ink, as measured off the rendered SVG.
+    assert.ok(ink.x1 > ink.x0 && ink.y1 > ink.y0, `${id}: a real box`);
+    assert.ok(ink.muzzleY <= ink.y0 + 4, `${id}: the muzzle is the top of the ink`);
+    // The muzzle is inside the ink, near its horizontal middle: a bore is a
+    // narrow tube, so its mouth is not out at the edge of the fins or the stock.
+    assert.ok(ink.muzzleX > ink.x0 && ink.muzzleX < ink.x1, `${id}: the muzzle is inside the ink`);
+  }
+  // Measured on the rendered art, these two were the anchors that were wrong.
+  assert.equal(ZIP_ART.blaster.ink.muzzleX, 204, 'Wars Blaster anchors on its bore');
+  assert.equal(ZIP_ART.blaster.ink.muzzleY, -142);
+  assert.equal(ZIP_ART.shark.ink.muzzleX, 259, 'Shark Launcher anchors on its mouth');
+  assert.equal(ZIP_ART.shark.ink.muzzleY, -57);
+});
+
+test('the three guns that looked miring are recentred on the aim line', () => {
+  // Ink centre versus the muzzle: how far the mass of the gun hangs off the
+  // barrel line. Measured off the rendered SVG, in units of the ink height.
+  const art = read('src/games/gunhit/zipWeapons/warsBlaster.ts')
+    + read('src/games/gunhit/zipWeapons/paintballGun.ts')
+    + read('src/games/gunhit/zipWeapons/sharkLauncher.ts');
+  // Wars Blaster: the art was rotated a further -5° off the wrap, so its barrel
+  // leaned in play. It now shares the Diamond Gun's -45 frame.
+  assert.ok(art.includes('translate(187 254) rotate(-45) scale(1.08)'),
+    'Wars Blaster finishes the quarter turn');
+  // Shark Launcher: -22 left the whole torpedo 23° off; -39 puts the mouth, the
+  // hull and the throat's centre line on one vertical.
+  assert.ok(art.includes('translate(250 226) rotate(-39) scale(0.94)'),
+    'Shark Launcher stands its torpedo up');
+  assert.ok(!art.includes('rotate(-22)'), 'the 23°-off rotation is gone');
+  // Paintball Gun: its frame was already square to the screen; the barrel really
+  // is vertical, so nothing about its rotation may be touched to "fix" it.
+  assert.ok(art.includes('translate(212 298) rotate(-45)'),
+    'Paintball Gun keeps its square body frame');
+  assert.ok(art.includes('translate(256 262) scale(0.92) translate(-256 -262)'),
+    'Paintball Gun keeps its whole-gun fit');
+});
