@@ -1,0 +1,21 @@
+{
+  "name": "perfect-shot-v2",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "description": "PERFECT SHOT v2 \u2014 gameplay-only core (wheel + knives), no menus, no shop, no audio.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "proof": "tsx proof.ts",
+    "smoke": "tsx smoke.ts"
+  },
+  "devDependencies": {
+    "tsx": "^4.21.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0",
+    "vite-plugin-singlefile": "^2.3.0"
+  }
+}
