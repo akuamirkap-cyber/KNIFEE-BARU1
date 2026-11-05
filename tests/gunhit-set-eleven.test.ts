@@ -261,6 +261,15 @@ test('slide 11 is the newest design and shot of its guns (with pistol keeping Sl
       assert.equal(effects.at(-1)?.label, 'Efek 4');
       continue;
     }
+    if (slide1 === 'heat_ray') {
+      // MARTIAN HEAT-RAY is one of the five zip guns: its "Skin 3" card closes
+      // the list, and it is that card the profile wears by default.
+      assert.equal(effects.at(-2)?.id, 'set11');
+      assert.equal(effects.at(-1)?.id, 'zip');
+      assert.equal(getGunVariant(slide1 as never), 'zip');
+      assert.equal(getGunEffect(slide1 as never), 'zip');
+      continue;
+    }
     assert.equal(effects.at(-1)?.id, 'set11');
     assert.equal(effects.at(-1)?.label, 'Slide 5');
     if (slide1 === 'pistol') {

@@ -4,6 +4,7 @@ import { getGunEffect, hasNoNewShot, isFixedClassicGun, supportsGunVariants, typ
 import { drawClassicProjectile, hasClassicProjectile } from './classicProjectiles';
 import { drawSlide3BazookaEmbedded, drawSlide3BazookaShell } from '../bazookaSlideFx';
 import { gunState } from './kit';
+import { drawZipCrystalRound, isZipShot } from '../zipShotFx';
 
 const TAU = Math.PI * 2;
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
@@ -14,6 +15,12 @@ export function drawProjectile(c: CanvasRenderingContext2D, kind: ProjKind, len:
   if (supportsGunVariants(kind) && (isFixedClassicGun(kind)
     || ((effect === 'original' || (effect === 'new' && hasNoNewShot(kind))) && hasClassicProjectile(kind)))) {
     drawClassicProjectile(c, kind, len, t);
+    c.restore();
+    return;
+  }
+  // The zip weapons ("Skin 3") fire the zip's own faceted crystal round.
+  if (isZipShot(kind, effect)) {
+    drawZipCrystalRound(c, len, t, gunState.diamondSeed, gunState.diamondFlash, embedded);
     c.restore();
     return;
   }

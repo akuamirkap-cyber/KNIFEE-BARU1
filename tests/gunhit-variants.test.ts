@@ -6,6 +6,7 @@ import {
   hasSlide7Update, slide7UpdateSet, hasSlide9Update, SET_NINE_DESIGN_WEAPONS,
   hasSlide11Update, SET_ELEVEN_DESIGN_WEAPONS,
   GUN_VARIANTS, GUN_EFFECTS, getGunVariantOptions, getGunEffectOptions,
+  getGunSkinAndEffectPosition,
   type GunVariant, type GunEffect, type VariantWeapon,
 } from '../src/games/gunhit/game/art/gunVariants';
 import { drawSetNineShotShell } from '../src/games/gunhit/game/setNineFx';
@@ -109,6 +110,10 @@ test('user loadouts use the requested classic/new combination; only real alterna
     seed: ['original', 'set7'], pizza: ['original', 'set7'], minigun: ['set7', 'new'], railgun: ['set11', 'set7'],
     magnet: ['original', 'set7'], pirate: ['original', 'set7'], card: ['set7', 'set7'],
     gauntlet_cannon: ['original', 'set7'], photon_saber: ['set11', 'set9'], ironman_hand: ['set11', 'ironman_combo'],
+    // The zip artwork is a card of its own ("Skin 3") and the shipped design of
+    // exactly the five guns `svg-weapons-with-glow-animation.zip` draws.
+    diamond: ['zip', 'zip'], blaster: ['zip', 'zip'], paintball: ['zip', 'zip'],
+    shark: ['zip', 'zip'], heat_ray: ['zip', 'zip'],
   };
   for (const id of EDITABLE_WEAPONS) {
     assert.equal(canChooseGunDesign(id), true);
@@ -170,8 +175,11 @@ test('user loadouts use the requested classic/new combination; only real alterna
   }
   // HEAT RAY existed on slide 6 first (`Tripod Heat-Ray`), so slide 6's card
   // opens the list: the earliest look of the gun, then slide 9, then slide 11.
-  assert.deepEqual(getGunVariantOptions('heat_ray').map(v => v.id), ['set6', 'set9', 'set11']);
-  assert.deepEqual(getGunEffectOptions('heat_ray').map(v => v.id), ['set6', 'set9', 'set11']);
+  // Its "Skin 3" card is filed third, like the other four zip guns', so the
+  // design card walks back to fourth: this is the card the player asked for.
+  assert.deepEqual(getGunVariantOptions('heat_ray').map(v => v.id), ['set6', 'set9', 'zip', 'set11']);
+  // The shot cards keep their age order; the zip round is the newest of them.
+  assert.deepEqual(getGunEffectOptions('heat_ray').map(v => v.id), ['set6', 'set9', 'set11', 'zip']);
   assert.deepEqual(getGunVariantOptions('gauntlet_cannon').map(v => v.id), ['original', 'set6', 'set7', 'set9']);
   assert.deepEqual(getGunVariantOptions('yautja'), []);
   assert.deepEqual(getGunEffectOptions('yautja'), []);
@@ -179,6 +187,25 @@ test('user loadouts use the requested classic/new combination; only real alterna
   // slide 1 only ever drew it one way, so it gets two honest cards.
   assert.deepEqual(getGunVariantOptions('xeno').map(v => v.label), ['Sebelumnya', 'Slide 5']);
   assert.deepEqual(getGunEffectOptions('xeno').map(v => v.label), ['Sebelumnya', 'Baru', 'Slide 5', 'Efek 4']);
+  // The zip's own artwork ("Skin 3") closes the list of the five guns it draws,
+  // and its faceted crystal round is a shot card next to theirs.
+  // It is filed third ("SKIN NO. 3"), and every other card stays.
+  assert.deepEqual(getGunVariantOptions('diamond').map(v => v.id),
+    ['original', 'current', 'zip', 'latest', 'set7']);
+  assert.deepEqual(getGunVariantOptions('diamond').map(v => v.label),
+    ['Sebelumnya', 'Sekarang', 'Skin 3', 'Terbaru', 'Slide 3']);
+  assert.equal(getGunSkinAndEffectPosition('diamond').skinNo, 3);
+  assert.deepEqual(getGunEffectOptions('diamond').map(v => v.label),
+    ['Sebelumnya', 'Baru', 'Slide 3', 'Skin 3']);
+  // The zip card is filed third on all five, so it reads "SKIN NO. 3" even on the
+  // guns that have only two other designs.
+  assert.deepEqual(getGunVariantOptions('blaster').map(v => v.id), ['original', 'set7', 'zip']);
+  assert.deepEqual(getGunVariantOptions('blaster').map(v => v.label), ['Sebelumnya', 'Slide 3', 'Skin 3']);
+  assert.deepEqual(getGunVariantOptions('paintball').map(v => v.id), ['original', 'set7', 'zip']);
+  assert.deepEqual(getGunVariantOptions('shark').map(v => v.id), ['original', 'set7', 'zip', 'set2']);
+  // Every other gun is untouched by the zip.
+  assert.equal(getGunVariantOptions('snowball').some(v => v.id === 'zip'), false);
+  assert.equal(getGunEffectOptions('snowball').some(v => v.id === 'zip'), false);
   // The ten guns slide 11 added never existed on slide 1: one card each.
   for (const id of ['mega_buster', 'harmonic_disruptor', 'absolute_zero', 'helios_flare',
     'orbital_beacon', 'singularity', 'nano_swarm'] as const) {
@@ -197,7 +224,12 @@ test('every offered design is a distinct full renderer without modifying weapon 
   for (const id of EDITABLE_WEAPONS) {
     const weapon = getWeapon(id);
     const before = { speed: weapon.speed, stick: weapon.stick, rarity: weapon.rarity, perk: weapon.perk };
-    const signatures = getGunVariantOptions(id).map(({ id: variant }) => pathsFor(id, variant));
+    // The zip's "Skin 3" card is the zip's own animated SVG, mounted by the
+    // page (`ZipWeaponArt`) instead of a canvas drawing, so it is not part of
+    // the canvas-signature comparison: that is a different renderer on purpose.
+    const signatures = getGunVariantOptions(id)
+      .filter(({ id: variant }) => variant !== 'zip')
+      .map(({ id: variant }) => pathsFor(id, variant));
     assert.ok(signatures.every(s => s.length > 100), `${id} must draw a whole gun`);
     assert.equal(new Set(signatures).size, signatures.length, `${id} must not label one drawing as two designs`);
     assert.deepEqual({ speed: weapon.speed, stick: weapon.stick, rarity: weapon.rarity, perk: weapon.perk }, before);

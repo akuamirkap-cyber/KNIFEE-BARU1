@@ -10,6 +10,7 @@ import { createCrispBolt, renderCrispBolt } from '../game/kerisSlideFx';
 import { star } from '../game/art/kit';
 import { useSlideActive } from '../../shared/SlideActivity';
 import { getGunVariant, type GunEffect } from '../game/art/gunVariants';
+import { isZipShot } from '../game/zipShotFx';
 import { setOneIdFor } from '../game/setOneArt';
 import { setSevenIdFor } from '../game/setSevenArt';
 import { setElevenIdFor } from '../game/setElevenArt';
@@ -135,6 +136,15 @@ export default function ShotEffectCanvas({ weapon, effect }: { weapon: Weapon; e
               c.restore();
               if (active) frame = requestAnimationFrame(paint);
               return;
+            }
+            // The zip weapons' own card: their ice-blue crystal round.
+            if (isZipShot(weapon.id, effect)) {
+              const trail = c.createLinearGradient(0, 14, 0, 80);
+              trail.addColorStop(0, 'rgba(120,225,255,0.75)');
+              trail.addColorStop(1, 'rgba(120,225,255,0)');
+              c.fillStyle = trail;
+              c.beginPath(); c.moveTo(-7, 17); c.lineTo(7, 17);
+              c.lineTo(0, 82); c.closePath(); c.fill();
             }
             if (!drawMaterialTrail(c, weapon.id, effect)) {
               const trail = c.createLinearGradient(0, 14, 0, 80);

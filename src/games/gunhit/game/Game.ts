@@ -84,6 +84,7 @@ import { drawWetSurface } from './art/waterSurface';
 import { drawFace, STYLE_COLORS, type Style } from './faces';
 import { paintStageForest, paintStageGrass, paintStageVignette } from './stageBackdrop';
 import { hasZipArt } from '../zipWeapons/ids';
+import { zipKick } from '../zipWeapons/motion';
 import { drawGun, drawProjectile } from './weaponDraw';
 import { WEAPONS, getWeapon, type Weapon, type WeaponId, type ProjKind } from './weapons';
 import { drawStar, drawRockFragment } from './art/boulder';
@@ -2395,6 +2396,14 @@ export class Game {
       },
       wheel: () => this.wheelHookRot({ dir: this.rotDir, marks: !isSpecial(this.level.mode) }),
     };
+  }
+
+  /**
+   * The zip's "Skin 3" card is the design in use, so the page draws this gun as
+   * the zip's live animated SVG. Every other card is ordinary canvas art.
+   */
+  private get zipCardLive(): boolean {
+    return hasZipArt(this.weapon.id) && getGunVariant(this.weapon.id) === 'zip';
   }
 
   /** The slide-3 weapon (SET 1..7) behind the equipped slide-1 gun, if any. */
@@ -9433,15 +9442,19 @@ export class Game {
     const R = this.level.radius;
     // The zip's five weapons are drawn by the page, in their own DOM layer, so
     // their glow and twinkle keep animating; everything else stays in canvas.
-    const zipGun = hasZipArt(this.weapon.id);
+    // Only the "Skin 3" card is the zip's live SVG; every other card is drawn
+    // into this canvas like any other gun.
+    const zipGun = hasZipArt(this.weapon.id) && this.zipCardLive;
     this.zipGunFrame = zipGun
       ? {
           x: this.gunX,
-          // The page draws the gun, so the shot's kick has to travel with the
-          // pose: without it the zip weapons felt like they never fired.
-          y: y0 + this.recoil * 8,
-          rot: this.gunTiltNow - this.recoil * ((RECOIL_ROT as unknown as Record<string, number>)[this.weapon.id] ?? 0),
-          scale: GAMEPLAY_GUN_SCALE,
+          // The page draws the gun, so the shot's kick has to ride along with
+          // the pose. The zip's own page travels its whole card back when it
+          // fires, so the gun slides down the barrel axis, tips back and
+          // punches out — that is the "senjata mundur" feel.
+          y: y0 + this.recoil * zipKick(this.weapon.id).y,
+          rot: this.gunTiltNow + this.recoil * zipKick(this.weapon.id).rot,
+          scale: GAMEPLAY_GUN_SCALE * (1 + this.recoil * zipKick(this.weapon.id).punch),
           hidden: false,
         }
       : null;

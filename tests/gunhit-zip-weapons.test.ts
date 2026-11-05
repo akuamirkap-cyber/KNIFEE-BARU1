@@ -61,15 +61,21 @@ test('an anchor lands on the barrel tip, and the ink is exactly as tall as asked
   assert.ok(Math.abs(cx) < 1e-6 && Math.abs(cy) < 1e-6, 'the ink centre lands on the anchor');
 });
 
-test('the engine hands the zip weapon to the page instead of drawing it', () => {
+test('the engine hands the zip weapon to the page only on its own card', () => {
   const game = read('src/games/gunhit/game/Game.ts');
   assert.ok(game.includes("import { hasZipArt } from '../zipWeapons/ids';"));
   assert.ok(game.includes('getZipGunFrame(): { x: number; y: number; rot: number; scale: number; hidden: boolean } | null {'));
-  assert.ok(game.includes('const zipGun = hasZipArt(this.weapon.id);'));
-  // The page draws the gun, so the shot's kick has to ride along with the pose.
-  assert.ok(game.includes('y: y0 + this.recoil * 8,'));
-  assert.ok(game.includes('rot: this.gunTiltNow - this.recoil *'));
-  assert.ok(game.includes('x: this.gunX,') && game.includes('scale: GAMEPLAY_GUN_SCALE,'));
+  // The zip art is a design card of its own: on every other card the gun is
+  // ordinary canvas art, so picking a design really changes the weapon.
+  assert.ok(game.includes("const zipGun = hasZipArt(this.weapon.id) && this.zipCardLive;"));
+  assert.ok(game.includes("return hasZipArt(this.weapon.id) && getGunVariant(this.weapon.id) === 'zip';"));
+  // The page draws the gun, so the shot's kick has to ride along with the pose,
+  // and the zip's own page kicks hard: the gun travels down the barrel axis,
+  // tips back and punches out.
+  assert.ok(game.includes('y: y0 + this.recoil * zipKick(this.weapon.id).y,'));
+  assert.ok(game.includes('rot: this.gunTiltNow + this.recoil * zipKick(this.weapon.id).rot,'));
+  assert.ok(game.includes('scale: GAMEPLAY_GUN_SCALE * (1 + this.recoil * zipKick(this.weapon.id).punch),'));
+  assert.ok(game.includes('x: this.gunX,') && game.includes('scale: GAMEPLAY_GUN_SCALE * (1 + this.recoil * zipKick(this.weapon.id).punch),'));
   // Both the single and the twin-gun draw are skipped for these five.
   assert.ok(game.includes('if (zipGun) {\n        // Drawn by the page'));
   // The engine never imports the artwork itself: only the ids, so the 190 KB
@@ -85,12 +91,13 @@ test('the three screens all show the zip art', () => {
   // Play: the page draws the gun on the engine's anchor.
   assert.ok(app.includes('<ZipWeaponOverlay'));
   assert.ok(app.includes('read={() => gameRef.current?.getZipGunFrame() ?? null}'));
-  // Menu: the showcase canvas stays empty and the live SVG takes its place.
-  assert.ok(app.includes('{hasZipArt(weapon) && <ZipWeaponArt id={weapon} height={300} anchor="center" className="pointer-events-none" />}'));
-  assert.ok(app.includes('if (cv && hasZipArt(weapon)) {'));
-  assert.ok(app.includes('if (hasZipArt(weapon)) return;'), 'the kept bitmap never replays an old gun');
-  // Armory: thumbnail and spotlight.
-  assert.ok(arsenal.includes('if (hasZipArt(weapon.id)) {'));
+  // Menu: on the zip card the showcase canvas stays empty and the live SVG takes
+  // its place; on any other card the canvas draws that card's own art.
+  assert.ok(app.includes('{zipCardWeapon === weapon && <ZipWeaponArt id={weapon} height={300} anchor="center" className="pointer-events-none" />}'));
+  assert.ok(app.includes('if (cv && zipCardWeapon === weapon) {'));
+  assert.ok(app.includes('if (zipCardWeapon === weapon) return;'), 'the kept bitmap never replays an old gun');
+  // Armory: thumbnail and spotlight, each on the zip card alone.
+  assert.equal((arsenal.match(/if \(hasZipArt\(weapon\.id\) && variant === 'zip'\)/g) ?? []).length, 2);
   assert.equal((arsenal.match(/<ZipWeaponArt /g) ?? []).length, 2);
 });
 
@@ -115,8 +122,12 @@ test('the play overlay is visible from its first frame, and only during a run', 
   assert.ok(overlay.includes('x: CX, y: GUN_Y, rot: 0, scale: GAMEPLAY_GUN_SCALE'));
 
   const app = read('src/games/gunhit/App.tsx');
-  assert.ok(app.includes("screen === 'playing' && hasZipArt(weapon) && ("),
-    'the overlay belongs to a run, not to the menu');
+  assert.ok(app.includes("screen === 'playing' && hasZipArt(weapon) && zipCardWeapon === weapon && ("),
+    'the overlay belongs to a run on the zip card, not to the menu or another card');
+  // The zip's own one-shot fire animation is re-applied on every shot: without
+  // it a shot only slid the gun back, with no flash at all.
+  assert.ok(overlay.includes('svg.classList.add(fireClass);'));
+  assert.ok(overlay.includes('window.setTimeout(() => svg.classList.remove(fireClass), ZIP_FIRE_MS);'));
 
   const game = read('src/games/gunhit/game/Game.ts');
   assert.ok(game.includes("if (this.state === 'idle') return null;"),

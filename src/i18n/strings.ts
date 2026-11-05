@@ -345,6 +345,18 @@ const CORE_EN: Record<string, string> = {
     '{label}: {w} with its shape, shot effect and original sound from slide 3',
   '{label}: {w} dengan bentuk, efek tembakan dan suara asli dari Firework 8-Gun':
     '{label}: {w} with its shape, shot effect and original sound from Firework 8-Gun',
+  '{label}: art SVG animasi (glow, kilau dan flash) dari svg-weapons-with-glow-animation.zip':
+    '{label}: animated SVG art (glow, shimmer and flash) from svg-weapons-with-glow-animation.zip',
+  'Gun kristal putih-marmer dengan filigree emas, berlian biru menyala dan kristal besar berputar di moncong (SVG animasi)':
+    'A white-marble crystal gun with gold filigree, glowing blue diamonds and a big spinning crystal on the muzzle (animated SVG)',
+  'Blaster galaksi bersel energi dengan muara plasma merah yang berkedip (SVG animasi)':
+    'A galactic blaster with glowing energy cells and a flickering red plasma muzzle (animated SVG)',
+  'Paintball gun neon dengan tabung cat, kilau pink dan cipratan cat (SVG animasi)':
+    'A neon paintball gun with a paint tank, pink glow and paint splats (animated SVG)',
+  'Shark launcher dengan rahang menggigit, mata menyala dan jet biru (SVG animasi)':
+    'A shark launcher with snapping jaws, glowing eyes and a blue jet (animated SVG)',
+  'Martian heat-ray dengan ekor manik hijau meliuk dan busur petir (SVG animasi)':
+    'A martian heat-ray with a writhing green bead tail and lightning arcs (animated SVG)',
   '{label}: desain {w} di slide 1': '{label}: the slide 1 design of {w}',
   'Peluru, jejak, beam dan percikan berubah; damage, ammo, dan buff tetap.':
     'Bullets, trails, beams and sparks change; damage, ammo and buffs stay the same.',

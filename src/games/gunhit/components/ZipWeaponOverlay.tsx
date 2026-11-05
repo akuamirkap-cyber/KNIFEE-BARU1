@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import ZipWeaponArt from './ZipWeaponArt';
 import { CX, GAMEPLAY_GUN_SCALE, GUN_Y } from '../game/layout';
+import { ZIP_FIRE_MS, zipFireClass } from '../zipWeapons/motion';
 
 /**
- * The cyan faceted round Diamond Gun holds on its muzzle (design #3): it leaves
- * with the shot and grows back, so the gun is never seen firing "empty".
+ * The cyan faceted round Diamond Gun holds on its muzzle (design #3, the zip's
+ * "Skin 3"): it leaves with the shot and grows back, so the gun is never seen
+ * firing "empty".
  */
 function MuzzleGem({ innerRef }: { innerRef: RefObject<HTMLDivElement | null> }) {
   return (
@@ -44,12 +46,17 @@ type Frame = { x: number; y: number; rot: number; scale: number; hidden: boolean
 const STAND: Frame = { x: CX, y: GUN_Y, rot: 0, scale: GAMEPLAY_GUN_SCALE, hidden: false };
 
 /**
- * The player's weapon during a run, for the five zip weapons.
+ * The player's weapon during a run, when the equipped gun wears its zip card.
  *
  * The engine reports where the gun stands (`getZipGunFrame`) and stops drawing
- * that weapon into its canvas; this layer puts the zip's own animated SVG on
- * that anchor. The transform is written straight to the DOM inside one rAF loop,
- * so the 60 fps pose never re-renders React.
+ * that gun into its canvas; this layer puts the zip's own animated SVG on that
+ * anchor. The transform is written straight to the DOM inside one rAF loop, so
+ * the 60 fps pose never re-renders React.
+ *
+ * On every shot the zip's own one-shot animation is restarted (`.dg-fire`,
+ * `.wb-fire`, …: muzzle flashes, sheen, spin, chomp) — that is the animation the
+ * zip's page plays when you click its card, and without it a shot only slid the
+ * gun back with no flash at all.
  */
 export default function ZipWeaponOverlay({
   id,
@@ -62,6 +69,7 @@ export default function ZipWeaponOverlay({
   readShotAt?: () => number;
 }) {
   const poseRef = useRef<HTMLDivElement>(null);
+  const artRef = useRef<HTMLDivElement>(null);
   const gemRef = useRef<HTMLDivElement>(null);
   const [debug, setDebug] = useState('');
 
@@ -69,6 +77,10 @@ export default function ZipWeaponOverlay({
     let raf = 0;
     const showDebug = typeof location !== 'undefined' && /[?&]zipdebug=1/.test(location.search);
     let ticks = 0;
+    let firedAt = -Infinity;
+    let fireTimer = 0;
+    const fireClass = zipFireClass(id);
+    const svgOf = () => artRef.current?.querySelector('svg') ?? null;
     const tick = () => {
       const el = poseRef.current;
       const frame = read();
@@ -90,21 +102,40 @@ export default function ZipWeaponOverlay({
           gemRef.current.style.opacity = String(back.toFixed(3));
           gemRef.current.style.transform = `scale(${(0.55 + 0.45 * back).toFixed(3)})`;
         }
-        if (showDebug && ticks++ % 30 === 0) {
-          const svg = el.querySelector('svg');
-          const img = el.querySelector('img');
-          setDebug(
-            `frame=${frame ? 'ok' : 'null'} pose=${pose.x.toFixed(0)},${pose.y.toFixed(0)} ` +
-            `op=${el.style.opacity} svg=${svg ? `${Math.round(svg.getBoundingClientRect().width)}w` : 'none'} ` +
-            `img=${img && img.complete ? `${img.naturalWidth}w` : 'loading'}`,
-          );
+      }
+      // The zip's own fire animation, restarted on the shot's own beat: the
+      // SVG carries the keyframes, this only re-applies the class.
+      const shotAt = readShotAt?.() ?? 0;
+      const svg = artRef.current ? svgOf() : null;
+      if (svg && fireClass) {
+        if (shotAt > firedAt + 1) {
+          firedAt = shotAt;
+          svg.classList.remove(fireClass);
+          // Force a style flush so the keyframes start again from 0 %.
+          void (svg as unknown as SVGElement).getBoundingClientRect();
+          svg.classList.add(fireClass);
+          window.clearTimeout(fireTimer);
+          fireTimer = window.setTimeout(() => svg.classList.remove(fireClass), ZIP_FIRE_MS);
         }
+      }
+      if (showDebug && ticks++ % 30 === 0) {
+        const mounted = svgOf();
+        const img = el?.querySelector('img');
+        setDebug(
+          `frame=${frame ? 'ok' : 'null'} pose=${pose.x.toFixed(0)},${pose.y.toFixed(0)} ` +
+          `op=${el?.style.opacity} svg=${mounted ? `${Math.round(mounted.getBoundingClientRect().width)}w` : 'none'} ` +
+          `fire=${mounted?.classList.contains(fireClass ?? '-') ? 'on' : 'off'} ` +
+          `img=${img && img.complete ? `${img.naturalWidth}w` : 'loading'}`,
+        );
       }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [read]);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(fireTimer);
+    };
+  }, [read, readShotAt, id]);
 
   return (
     <>
@@ -114,7 +145,9 @@ export default function ZipWeaponOverlay({
         className="pointer-events-none absolute left-0 top-0 z-[6]"
         style={{ transformOrigin: '0 0', willChange: 'transform', opacity: 0 }}
       >
-        <ZipWeaponArt id={id} height={ZIP_GUN_INK_HEIGHT} anchor="muzzle" />
+        <div ref={artRef} className="pointer-events-none absolute left-0 top-0">
+          <ZipWeaponArt id={id} height={ZIP_GUN_INK_HEIGHT} anchor="muzzle" />
+        </div>
         {id === 'diamond' && <MuzzleGem innerRef={gemRef} />}
       </div>
       {debug && (

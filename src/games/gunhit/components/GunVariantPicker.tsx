@@ -15,6 +15,7 @@ import {
   type EditableWeapon,
 } from '../game/art/gunVariants';
 import ShotEffectCanvas from './ShotEffectCanvas';
+import ZipWeaponArt from './ZipWeaponArt';
 
 type Description = Partial<Record<EditableWeapon, readonly string[]>>;
 const DESCRIPTIONS: Description = {
@@ -53,6 +54,18 @@ const DESCRIPTIONS: Description = {
 };
 
 /**
+ * What the zip's animated SVG shows, per weapon — read from the zip's own
+ * artwork, so the card tells the player what they are about to pick.
+ */
+const ZIP_DESCRIPTIONS: Partial<Record<EditableWeapon, string>> = {
+  diamond: 'Gun kristal putih-marmer dengan filigree emas, berlian biru menyala dan kristal besar berputar di moncong (SVG animasi)',
+  blaster: 'Blaster galaksi bersel energi dengan muara plasma merah yang berkedip (SVG animasi)',
+  paintball: 'Paintball gun neon dengan tabung cat, kilau pink dan cipratan cat (SVG animasi)',
+  shark: 'Shark launcher dengan rahang menggigit, mata menyala dan jet biru (SVG animasi)',
+  heat_ray: 'Martian heat-ray dengan ekor manik hijau meliuk dan busur petir (SVG animasi)',
+};
+
+/**
  * Every imported card explains itself even without a hand-written paragraph:
  * it names the hub slide its shape, its shot and (where ported) its sound come
  * from, by the hub's current numbering — set11 = Slide 5, set9 = Slide 4,
@@ -75,12 +88,19 @@ function describeFallback(weapon: Weapon, variant: GunVariant, label: string, la
   if (variant === 'set2') {
     return tr(language, '{label}: {w} dengan bentuk, efek tembakan dan suara asli dari Firework 8-Gun').replace('{label}', label).replace('{w}', weapon.name);
   }
+  if (variant === 'zip') {
+    return tr(language, '{label}: art SVG animasi (glow, kilau dan flash) dari svg-weapons-with-glow-animation.zip').replace('{label}', label);
+  }
   return tr(language, '{label}: desain {w} di slide 1').replace('{label}', label).replace('{w}', weapon.name);
 }
 
 function VariantCanvas({ weapon, variant }: { weapon: Weapon; variant: GunVariant }) {
   const ref = useRef<HTMLCanvasElement>(null);
+  // The zip's "Skin 3" is the zip's own animated SVG, not a canvas drawing: the
+  // card has to show the same artwork the game will.
+  const zipCard = variant === 'zip';
   useEffect(() => {
+    if (zipCard) return;
     const cv = ref.current;
     if (!cv) return;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -95,7 +115,16 @@ function VariantCanvas({ weapon, variant }: { weapon: Weapon; variant: GunVarian
     const m = getGunMetrics(weapon.id, variant);
     ctx.scale((h * 0.94) / Math.max(m.span, 130), (h * 0.94) / Math.max(m.span, 130));
     drawGunCentered(ctx, weapon.id, 0.8, 0, true, variant);
-  }, [weapon.id, variant]);
+  }, [weapon.id, variant, zipCard]);
+  if (zipCard) {
+    return (
+      <div className="relative h-[116px] w-[121px] shrink-0 sm:h-[132px] sm:w-[138px]" aria-hidden="true">
+        <div className="absolute inset-0" style={{ transform: 'rotate(45deg)' }}>
+          <ZipWeaponArt id={weapon.id} height={118} anchor="center" />
+        </div>
+      </div>
+    );
+  }
   return <canvas ref={ref} width={138} height={132} className="block h-[116px] w-[121px] shrink-0 sm:h-[132px] sm:w-[138px]" />;
 }
 
@@ -212,7 +241,8 @@ export default function GunVariantPicker({
                   </span>
                   <span className="text-base font-black text-white sm:text-lg">{label}</span>
                   <span className="text-[11px] leading-snug text-indigo-200 sm:text-xs">
-                    {tr(language, DESCRIPTIONS[variantId]?.[index] ?? describeFallback(weapon, id, label, language))}
+                    {tr(language, (id === 'zip' ? ZIP_DESCRIPTIONS[variantId] : DESCRIPTIONS[variantId]?.[index])
+                      ?? describeFallback(weapon, id, label, language))}
                   </span>
                   <span className={`w-fit rounded-full px-2 py-0.5 text-[10px] font-black ${selected === id ?
                     'bg-amber-300 text-[#271528]' : 'bg-white/10 text-white/80'}`}>

@@ -142,12 +142,18 @@ test('slide 9 keeps its card on all 17 guns, newest wherever slide 11 has no new
     assert.ok(EDITABLE_WEAPONS.includes(id as never), `${id} is selectable`);
     assert.equal(hasSlide9Update(id), true, `${id} carries the NEW badge`);
     const newest = elevenNewer(id) ? 'set11' : 'set9';
+    // MARTIAN HEAT-RAY is one of the five zip guns: the zip's "Skin 3" card and
+    // its crystal round are what the shipped profile wears.
+    const isZipGun = id === 'heat_ray';
     assert.equal(
       getGunVariant(id as never),
-      id === 'pistol' || id === 'ak47' || id === 'sniper' || id === 'gauntlet_cannon' ? 'original' : newest,
+      isZipGun ? 'zip'
+        : id === 'pistol' || id === 'ak47' || id === 'sniper' || id === 'gauntlet_cannon' ? 'original' : newest,
       `${id} shows its expected default art`,
     );
-    assert.equal(getGunEffect(id as never), id === 'sniper' || id === 'photon_saber' ? 'set9' : id === 'railgun' || id === 'gauntlet_cannon' ? 'set7' : newest, `${id} fires its requested shot by default`);
+    assert.equal(getGunEffect(id as never), isZipGun ? 'zip'
+      : id === 'sniper' || id === 'photon_saber' ? 'set9' : id === 'railgun' || id === 'gauntlet_cannon' ? 'set7' : newest,
+    `${id} fires its requested shot by default`);
     // Slide 9's own card is always there, labelled, and pickable.
     const designs = getGunVariantOptions(id as never);
     const design = designs.find((o) => o.id === 'set9');
