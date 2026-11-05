@@ -14,6 +14,9 @@ import { useSlideActive } from '../shared/SlideActivity';
 import { useAndroidBack } from '../../utils/androidBack';
 import { Burst, Dust, Flare, Shockwave, SparkleField, SunburstFX } from '../knife-hit/components/Effects';
 import MenuStageBackdrop from './components/MenuStageBackdrop';
+import ZipWeaponArt from './components/ZipWeaponArt';
+import ZipWeaponOverlay from './components/ZipWeaponOverlay';
+import { hasZipArt } from './zipWeapons/ids';
 import { gunSunburstColor } from './game/sunburstPalette';
 /**
  * Weapon artwork for the menu showcase: a dynamic import, so the title screen
@@ -1303,6 +1306,8 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
    */
   useEffect(() => {
     if (gunArt) return;
+    // Zip weapons are live SVG, never a kept bitmap.
+    if (hasZipArt(weapon)) return;
     if (screen !== 'menu' || arsenalOpen || questOpen || leaderboardOpen || mapOpen || settingsOpen) return;
     const cv = previewCanvasRef.current;
     const cached = readMenuGunBitmap();
@@ -1329,6 +1334,13 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     if (!gunArt) return;
     if (screen !== 'menu' || arsenalOpen || questOpen || leaderboardOpen || mapOpen || settingsOpen) return;
     const cv = previewCanvasRef.current;
+    if (cv && hasZipArt(weapon)) {
+      // The weapon is drawn by `ZipWeaponArt` (live SVG) in this box; keep the
+      // canvas empty so the two never stack.
+      cv.width = Math.round(MENU_GUN_CANVAS_W * getOptimalCanvasDpr(2));
+      cv.height = Math.round(MENU_GUN_CANVAS_H * getOptimalCanvasDpr(2));
+      return;
+    }
     if (!cv) {
       // A menu re-entrance can mount the canvas a frame after this effect runs.
       // Skipping the paint here used to leave the showcase blank until some
@@ -2223,6 +2235,12 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       >
         {/* Canvas Engine (zero permanent translucent DOM overlays during gameplay so desynchronized:true scans out directly) */}
         <canvas ref={canvasRef} className="block touch-none" style={{ width: frame.w, height: frame.h }} />
+        {hasZipArt(weapon) && (
+          <ZipWeaponOverlay
+            id={weapon}
+            read={() => gameRef.current?.getZipGunFrame() ?? null}
+          />
+        )}
         {diamondToast && (
           <div key={diamondToast.id} className="pointer-events-none absolute inset-x-0 top-[34%] z-40 flex flex-col items-center diamond-reward-pop" aria-live="polite">
             <div className="relative flex h-36 w-64 items-center justify-center">
@@ -2499,6 +2517,9 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                       )}
                     </div>
                     <div ref={gunTiltRef} className="relative" style={{ transformOrigin: '50% 78%', willChange: 'transform' }} data-menu-aim-tilt>
+                    {/* The five zip weapons are live SVG: their glow, shimmer and
+                        twinkle keep animating here instead of being baked. */}
+                    {hasZipArt(weapon) && <ZipWeaponArt id={weapon} height={230} anchor="center" className="pointer-events-none" />}
                     <canvas ref={previewCanvasRef} style={menuLandscape ? { width: '330px', height: '289px' } : { width: 'min(337px, 90vw)', height: 'min(295px, 54vh)' }} className="block cursor-pointer drop-shadow-[0_10px_20px_rgba(0,0,0,.5)] transition-transform hover:scale-105" role="button" tabIndex={0} aria-label={tr(language, 'Buka koleksi senjata')} onClick={() => startArsenalTransition(true)} onKeyDown={(event) => {
                       if (event.key === 'Enter' || event.key === ' ') {
                         event.preventDefault();

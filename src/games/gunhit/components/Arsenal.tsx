@@ -18,6 +18,8 @@ import { getSavedSgaSpeed } from '../game/gameSpeed';
 import { isLandscape } from '../game/orientation';
 import { useSgaOrientation } from '../utils/useSgaOrientation';
 import { getFast2DContext, getOptimalCanvasDpr } from '../utils/mobilePerf';
+import ZipWeaponArt from './ZipWeaponArt';
+import { hasZipArt } from '../zipWeapons/ids';
 import {
   UNIQUE_EDITABLE_WEAPONS,
   getGunVariant,
@@ -148,6 +150,17 @@ function GunItemCanvas({ weapon, isSelected, variant, size = 110, eager = false 
     return () => { cancelAnimationFrame(raf); reducedMotion?.removeEventListener?.('change', onMotionChange); };
   }, [weapon.id, size, isSelected, active, variant, visible]);
 
+  if (hasZipArt(weapon.id)) {
+    // The zip's five weapons are live SVG (their glow keeps animating), shown at
+    // the same 45° the canvas thumbnails are drawn at.
+    return (
+      <div style={{ width: size, height: size, position: 'relative' }} className="pointer-events-none overflow-visible">
+        <div className="absolute inset-0" style={{ transform: 'rotate(45deg)' }}>
+          <ZipWeaponArt id={weapon.id} height={size * 0.72} anchor="center" />
+        </div>
+      </div>
+    );
+  }
   return (
     <canvas
       ref={canvasRef}
@@ -208,6 +221,15 @@ function SpotlightGun({ weapon, variant, box }: { weapon: Weapon; variant: GunVa
     return () => { cancelAnimationFrame(raf); reducedMotion?.removeEventListener?.('change', onMotionChange); };
   }, [weapon.id, active, variant, box.w, box.h]);
 
+  if (hasZipArt(weapon.id)) {
+    return (
+      <div style={{ width: box.w, height: box.h, position: 'relative' }} className="pointer-events-none overflow-visible">
+        <div className="absolute inset-0" style={{ transform: 'rotate(45deg)' }}>
+          <ZipWeaponArt id={weapon.id} height={box.h * 0.7} anchor="center" />
+        </div>
+      </div>
+    );
+  }
   return (
     <canvas
       ref={canvasRef}

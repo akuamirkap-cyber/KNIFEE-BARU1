@@ -83,6 +83,7 @@ import { getGunEffect, getGunVariant } from './art/gunVariants';
 import { drawWetSurface } from './art/waterSurface';
 import { drawFace, STYLE_COLORS, type Style } from './faces';
 import { paintStageForest, paintStageGrass, paintStageVignette } from './stageBackdrop';
+import { hasZipArt } from '../zipWeapons/ids';
 import { drawGun, drawProjectile } from './weaponDraw';
 import { WEAPONS, getWeapon, type Weapon, type WeaponId, type ProjKind } from './weapons';
 import { drawStar, drawRockFragment } from './art/boulder';
@@ -9399,6 +9400,22 @@ export class Game {
     return [p.x, p.y];
   }
 
+  /**
+   * Where the page must draw the zip's weapon, for the five weapons whose art
+   * lives in the DOM so its own CSS animation can run (see `ZipWeaponArt`).
+   *
+   * Null for every other weapon: those are drawn into this canvas.
+   */
+  private zipGunFrame: { x: number; y: number; rot: number; scale: number; hidden: boolean } | null = null;
+
+  /** The zip weapon's anchor for the page overlay, in canvas px. */
+  getZipGunFrame(): { x: number; y: number; rot: number; scale: number; hidden: boolean } | null {
+    const frame = this.zipGunFrame;
+    if (!frame) return null;
+    // The menu's captured frame owns the weapon while it travels in.
+    return this.gunHiddenT > 0 ? { ...frame, hidden: true } : frame;
+  }
+
   private drawGunNow(c: CanvasRenderingContext2D) {
     // One weapon only: the captured menu frame is still travelling here.
     if (this.gunHiddenT > 0) return;
@@ -9411,6 +9428,12 @@ export class Game {
     const entryOffset = gameplayGunEntryOffset(this.gunEntryT);
     const y0 = this.gunBaseY + ry + entryOffset;
     const R = this.level.radius;
+    // The zip's five weapons are drawn by the page, in their own DOM layer, so
+    // their glow and twinkle keep animating; everything else stays in canvas.
+    const zipGun = hasZipArt(this.weapon.id);
+    this.zipGunFrame = zipGun
+      ? { x: this.gunX, y: y0, rot: this.gunTiltNow, scale: GAMEPLAY_GUN_SCALE, hidden: false }
+      : null;
 
     // Two upright barrels get two straight sights; a star never steers either.
     if (this.state === 'play' || this.state === 'intro') {
@@ -9648,7 +9671,9 @@ export class Game {
       // Only this live game draw supplies a particle sink. Menu and arsenal
       // previews can draw the same gun without mutating a paused game.
       const liveGunFx = this.weapon.id === 'blackhole' && s3Variant === 'latest' ? this.s2 : undefined;
-      if (this.hasTwinGuns) {
+      if (zipGun) {
+        // Drawn by the page: `getZipGunFrame()` above is the only thing it needs.
+      } else if (this.hasTwinGuns) {
         // Left gun mirrored and right gun normal: their grips/magazines face OUT,
         // matching the side-by-side AK-47 silhouette rather than overlapping.
         for (const ox of this.gunOffsets) {
