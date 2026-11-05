@@ -466,6 +466,8 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   const studioVolumeRef = useRef<number | null>(null);
   const [menuReady, setMenuReady] = useState(false);
 
+  /** When the weapon last fired, for the zip guns' muzzle round. */
+  const zipMuzzleShotAtRef = useRef(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const weaponPivotRef = useRef<HTMLDivElement>(null);
@@ -991,6 +993,8 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       },
       onShotFired: (count) => {
         pendingShotsRef.current += count;
+        // The zip weapons hold their round on the muzzle: this is when it leaves.
+        zipMuzzleShotAtRef.current = performance.now();
       },
       onBossDefeated: (bossName, level, coinsEarned, bossHead) => {
         const totalXpBefore = num(LS.playerXp);
@@ -2241,6 +2245,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
           <ZipWeaponOverlay
             id={weapon}
             read={() => gameRef.current?.getZipGunFrame() ?? null}
+            readShotAt={() => zipMuzzleShotAtRef.current}
           />
         )}
         {diamondToast && (
@@ -2521,7 +2526,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                     <div ref={gunTiltRef} className="relative" style={{ transformOrigin: '50% 78%', willChange: 'transform' }} data-menu-aim-tilt>
                     {/* The five zip weapons are live SVG: their glow, shimmer and
                         twinkle keep animating here instead of being baked. */}
-                    {hasZipArt(weapon) && <ZipWeaponArt id={weapon} height={230} anchor="center" className="pointer-events-none" />}
+                    {hasZipArt(weapon) && <ZipWeaponArt id={weapon} height={300} anchor="center" className="pointer-events-none" />}
                     <canvas ref={previewCanvasRef} style={menuLandscape ? { width: '330px', height: '289px' } : { width: 'min(337px, 90vw)', height: 'min(295px, 54vh)' }} className="block cursor-pointer drop-shadow-[0_10px_20px_rgba(0,0,0,.5)] transition-transform hover:scale-105" role="button" tabIndex={0} aria-label={tr(language, 'Buka koleksi senjata')} onClick={() => startArsenalTransition(true)} onKeyDown={(event) => {
                       if (event.key === 'Enter' || event.key === ' ') {
                         event.preventDefault();

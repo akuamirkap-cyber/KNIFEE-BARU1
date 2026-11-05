@@ -83,7 +83,7 @@ test('the three screens all show the zip art', () => {
   assert.ok(app.includes('<ZipWeaponOverlay'));
   assert.ok(app.includes('read={() => gameRef.current?.getZipGunFrame() ?? null}'));
   // Menu: the showcase canvas stays empty and the live SVG takes its place.
-  assert.ok(app.includes('{hasZipArt(weapon) && <ZipWeaponArt id={weapon} height={230} anchor="center" className="pointer-events-none" />}'));
+  assert.ok(app.includes('{hasZipArt(weapon) && <ZipWeaponArt id={weapon} height={300} anchor="center" className="pointer-events-none" />}'));
   assert.ok(app.includes('if (cv && hasZipArt(weapon)) {'));
   assert.ok(app.includes('if (hasZipArt(weapon)) return;'), 'the kept bitmap never replays an old gun');
   // Armory: thumbnail and spotlight.
@@ -127,4 +127,26 @@ test('the weapon also exists as a plain <img>, so it can never go missing', () =
   assert.ok(art.includes('data:image/svg+xml;charset=utf-8,'));
   assert.ok(art.includes('<img src={still}'));
   assert.ok(art.includes('dangerouslySetInnerHTML'), 'the animated copy is still mounted');
+});
+
+test('the zip weapons fill the frame like a rifle, not a pistol', () => {
+  const overlay = read('src/games/gunhit/components/ZipWeaponOverlay.tsx');
+  assert.ok(overlay.includes('export const ZIP_GUN_INK_HEIGHT = 250;'));
+  const app = read('src/games/gunhit/App.tsx');
+  assert.ok(app.includes('height={300} anchor="center"'), 'the menu showcase scales up with it');
+  const arsenal = read('src/games/gunhit/components/Arsenal.tsx');
+  assert.ok(arsenal.includes('height={size * 0.92}'));
+  assert.ok(arsenal.includes('height={box.h * 0.92}'));
+});
+
+test('Diamond Gun keeps its round on the muzzle, and fires it', () => {
+  const overlay = read('src/games/gunhit/components/ZipWeaponOverlay.tsx');
+  assert.ok(overlay.includes("{id === 'diamond' && <MuzzleGem innerRef={gemRef} />}"));
+  assert.ok(overlay.includes('function MuzzleGem('));
+  // Gone for a beat after the shot, then grown back on the muzzle.
+  assert.ok(overlay.includes('const since = performance.now() - (readShotAt?.() ?? 0);'));
+  assert.ok(overlay.includes('const back = since < 90 ? 0 : since < 320 ? (since - 90) / 230 : 1;'));
+  const app = read('src/games/gunhit/App.tsx');
+  assert.ok(app.includes('zipMuzzleShotAtRef.current = performance.now();'), 'the shot timestamp comes from the engine');
+  assert.ok(app.includes('readShotAt={() => zipMuzzleShotAtRef.current}'));
 });

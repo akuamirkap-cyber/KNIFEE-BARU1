@@ -156,7 +156,7 @@ function GunItemCanvas({ weapon, isSelected, variant, size = 110, eager = false 
     return (
       <div style={{ width: size, height: size, position: 'relative' }} className="pointer-events-none overflow-visible">
         <div className="absolute inset-0" style={{ transform: 'rotate(45deg)' }}>
-          <ZipWeaponArt id={weapon.id} height={size * 0.72} anchor="center" />
+          <ZipWeaponArt id={weapon.id} height={size * 0.92} anchor="center" />
         </div>
       </div>
     );
@@ -225,7 +225,7 @@ function SpotlightGun({ weapon, variant, box }: { weapon: Weapon; variant: GunVa
     return (
       <div style={{ width: box.w, height: box.h, position: 'relative' }} className="pointer-events-none overflow-visible">
         <div className="absolute inset-0" style={{ transform: 'rotate(45deg)' }}>
-          <ZipWeaponArt id={weapon.id} height={box.h * 0.7} anchor="center" />
+          <ZipWeaponArt id={weapon.id} height={box.h * 0.92} anchor="center" />
         </div>
       </div>
     );
