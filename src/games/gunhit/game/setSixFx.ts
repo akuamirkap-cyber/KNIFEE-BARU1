@@ -20,6 +20,20 @@ import { withSplinterClip } from './fx';
 const TAU = Math.PI * 2;
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 
+/**
+ * The Martian Heat-Ray's own green.
+ *
+ * Slide 6 authored its tripod as `col: '90,255,120'` — a mint green. The gun the
+ * player actually sees is the zip's `MartianHeatray` SVG, whose head, orb and
+ * bead tail are lime (`#8dff3b`, `#b6ff5a`, highlights `#c4ff6a`). Its shot is
+ * tinted with the artwork's own greens so the beam reads as coming out of *that*
+ * gun; the beam's shape, width and timing stay slide 6's.
+ */
+const LIME = '141,255,59';
+const LIME_LIGHT = '182,255,90';
+const LIME_HOT = '214,255,138';
+const LIME_CORE = '244,255,224';
+
 /** What slide 1 does for slide 6 (the parts slide 6 needs from its game). */
 export interface SixHooks {
   /** Camera/wheel shake, in slide-6 units (0..16). */
@@ -151,8 +165,8 @@ export class SetSixFx {
         this.add({ t: 'smoke', x, y, vx: rnd(-60, 60), vy: rnd(-40, 10), life: 0.8, size: 8, col: '255,170,170', drag: 0.93 });
       }
     } else if (w.flash === 'tripod') {
-      this.add({ t: 'glow', x, y, life: 0.4, size: 90, col: w.col, add: true });
-      this.add({ t: 'ring', x, y, life: 0.4, size: 50, col: w.col, add: true });
+      this.add({ t: 'glow', x, y, life: 0.4, size: 90, col: LIME, add: true });
+      this.add({ t: 'ring', x, y, life: 0.4, size: 50, col: LIME_LIGHT, add: true });
     } else {
       // 'iron'
       this.add({ t: 'glow', x, y, life: 0.3, size: 90, col: w.col, add: true });
@@ -197,8 +211,8 @@ export class SetSixFx {
         break;
       case 'tripod':
         chips(18, 1.2);
-        this.add({ t: 'glow', x, y, life: 0.5, size: 160, col: w.col, add: true });
-        this.add({ t: 'ring', x, y, life: 0.45, size: 80, col: w.col, add: true });
+        this.add({ t: 'glow', x, y, life: 0.5, size: 160, col: LIME, add: true });
+        this.add({ t: 'ring', x, y, life: 0.45, size: 80, col: LIME_LIGHT, add: true });
         for (let i = 0; i < 30; i++) {
           const a = rnd(0, TAU), sp = rnd(60, 300);
           this.add({ t: 'fire', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 50, life: rnd(0.3, 0.7), size: rnd(8, 18), col: 'g', drag: 0.92, add: true });
@@ -352,14 +366,14 @@ export class SetSixFx {
           }
           break;
         case 'tripod':
-          line(40 * k, `rgba(60,255,100,${0.12 * k})`, 4, 0.04);
-          line(16 * k, `rgba(90,255,130,${0.45 * k})`, 3, 0.05);
-          line(5, `rgba(235,255,235,${k})`, 2, 0.07);
+          line(40 * k, `rgba(${LIME},${0.14 * k})`, 4, 0.04);
+          line(16 * k, `rgba(${LIME_LIGHT},${0.5 * k})`, 3, 0.05);
+          line(5, `rgba(${LIME_CORE},${k})`, 2, 0.07);
           for (let i = 0; i < 2; i++) {
             const yy = rnd(y2, y1);
             this.add({ t: 'fire', x: x1 + rnd(-6, 6), y: yy, vx: rnd(-40, 40), vy: rnd(-40, 10), life: 0.3, size: rnd(5, 10), col: 'g', add: true, drag: 0.9 });
           }
-          glow(c, x2, y2, 60, '90,255,120', 0.7 * k);
+          glow(c, x2, y2, 60, LIME, 0.7 * k);
           break;
         default:
           // 'iron'
@@ -445,10 +459,10 @@ export class SetSixFx {
         case 'fire': {
           const sz = p.size * (0.4 + k * 0.8);
           const col = p.col === 'g'
-            ? (k > 0.6 ? '220,255,220' : k > 0.3 ? '90,255,120' : '20,120,40')
+            ? (k > 0.6 ? LIME_CORE : k > 0.3 ? LIME_LIGHT : '26,122,18')
             : (k > 0.7 ? '255,240,180' : k > 0.4 ? '255,150,40' : '220,50,10');
           glow(c, p.x, p.y, sz * 1.3, col, k * 0.8);
-          glow(c, p.x, p.y, sz * 0.55, '255,220,120', k * 0.9);
+          glow(c, p.x, p.y, sz * 0.55, p.col === 'g' ? LIME_HOT : '255,220,120', k * 0.9);
           const ang = Math.atan2(p.vy, p.vx);
           c.save();
           c.translate(p.x, p.y);
@@ -549,7 +563,7 @@ export function drawSetSixShotShell(
   for (const b of fx.beams) b.life = Math.max(0.02, b.max - age);
   fx.drawBeam(c);
   // The scorch slide 6 burns into the wheel, where the beam lands.
-  fx.marks.push({ a: Math.PI / 2, col: sixWeapon(id).col, born: 0, seed: 1 });
+  fx.marks.push({ a: Math.PI / 2, col: id === 'tripod' ? LIME : sixWeapon(id).col, born: 0, seed: 1 });
   fx.drawWheel(c, fx.cx, fx.cy, fx.wheelR, 0);
   fx.draw(c);
 }

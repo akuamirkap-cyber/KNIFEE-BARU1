@@ -20,7 +20,7 @@ export function drawProjectile(c: CanvasRenderingContext2D, kind: ProjKind, len:
   }
   // The zip weapons ("Skin 3") fire the zip's own faceted crystal round.
   if (isZipShot(kind, effect)) {
-    drawZipCrystalRound(c, len, t, gunState.diamondSeed, gunState.diamondFlash, embedded);
+    drawZipCrystalRound(c, len, t, gunState.diamondSeed, gunState.diamondFlash, embedded, kind, gunState.tint);
     c.restore();
     return;
   }

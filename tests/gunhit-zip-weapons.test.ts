@@ -164,3 +164,87 @@ test('Diamond Gun keeps its round on the muzzle, and fires it', () => {
   assert.ok(app.includes('zipMuzzleShotAtRef.current = performance.now();'), 'the shot timestamp comes from the engine');
   assert.ok(app.includes('readShotAt={() => zipMuzzleShotAtRef.current}'));
 });
+
+test('the Diamond Gun’s round sits ON the muzzle crystal, not beside it', () => {
+  // The overlay is anchored on the barrel tip, so the round has to be placed in
+  // that same space. It used to sit at the overlay's origin (up and to the
+  // right of the muzzle), which left a second bright diamond floating next to
+  // the crystal — and the crystal itself still dark navy underneath.
+  const overlay = read('src/games/gunhit/components/ZipWeaponOverlay.tsx');
+  assert.ok(overlay.includes('const MUZZLE_GEM_CENTRE = { x: 0.25, y: 28.04 };'),
+    'the round is centred on the muzzle crystal');
+  assert.ok(overlay.includes('left: MUZZLE_GEM_CENTRE.x - half'),
+    'and drawn around it, not at 0,0');
+  assert.ok(!overlay.includes('style={{ left: -3, top: -7, width: 44, height: 44'),
+    'the detached gem box is gone');
+
+  // Work the placement out from the artwork, so the numbers cannot drift apart:
+  // the crystal is drawn at (304,-7) in the zip's arm-local units.
+  const art = ZIP_ART.diamond;
+  const height = 250;
+  const scale = height / inkHeight(art);
+  const rot = (deg: number, x: number, y: number): [number, number] => {
+    const a = (deg * Math.PI) / 180, c = Math.cos(a), s = Math.sin(a);
+    return [c * x - s * y, s * x + c * y];
+  };
+  const place = ([x0, y0]: [number, number]): [number, number] => {
+    // g translate(238 270) rotate(-45) scale(0.87), inside rotate(-45 256 256)
+    const [sx, sy] = rot(-45, x0 * 0.87, y0 * 0.87);
+    const arm: [number, number] = [sx + 238 - 256, sy + 270 - 256];
+    const [rx, ry] = rot(-45, arm[0], arm[1]);
+    return [rx + 256, ry + 256];
+  };
+  const crystal = place([304, -7]);
+  const centre = { x: (crystal[0] - art.ink.muzzleX) * scale, y: (crystal[1] - art.ink.muzzleY) * scale };
+  assert.ok(Math.abs(centre.x - 0.25) < 0.5 && Math.abs(centre.y - 28.04) < 0.6,
+    `the round is centred on the crystal (got ${centre.x.toFixed(2)}, ${centre.y.toFixed(2)})`);
+});
+
+test('the muzzle crystal is bright, with no dark-navy facets left on it', () => {
+  const markup = ZIP_ART.diamond.markup;
+  const muzzle = markup.slice(markup.indexOf('<g class="zip-muzzle-round">'));
+  const crystal = muzzle.slice(0, muzzle.indexOf('</g>'));
+  for (const dark of ['#1c55d8', '#0b3097', '#2f77ea']) {
+    assert.ok(!crystal.includes(dark), `${dark} was one of the muzzle crystal's faces`);
+  }
+  // The crown's faces are the bright ice/azure the design card shows.
+  for (const bright of ['#f0fbff', '#fdfeff', '#4fc3ff', '#93ddff', '#b5ebff']) {
+    assert.ok(crystal.includes(bright), `${bright} paints the crystal`);
+  }
+});
+
+test('each zip weapon fires its own round — only the Diamond Gun fires diamonds', () => {
+  // The round belongs to the gun that fires it: a Wars Blaster that carried the
+  // Diamond Gun's ice crystal around was the bug this pins.
+  const fx = read('src/games/gunhit/game/zipShotFx.ts');
+  for (const id of ['blaster', 'paintball', 'shark', 'heat_ray']) {
+    assert.ok(fx.includes(`id === '${id}'`), `${id} has a round of its own`);
+  }
+  assert.ok(fx.includes('else drawSlide2DiamondBullet(c, r, t, seed, flash);'),
+    'the Diamond Gun is the only one that falls through to the faceted crystal');
+  // The engine hands the round the gun it was fired from.
+  const proj = read('src/games/gunhit/game/art/projectiles.ts');
+  assert.ok(proj.includes('embedded, kind, gunState.tint)'),
+    'the painter knows which gun fired, and the shot paint for a paint ball');
+  // The effect card's trail follows the round's own colour.
+  const card = read('src/games/gunhit/components/ShotEffectCanvas.tsx');
+  assert.ok(card.includes('zipRoundPaint(weapon.id).glow'));
+});
+
+test('the Martian Heat-Ray stands upright and fires Martian green', () => {
+  // The zip drew its heatray at 35.5° inside its own 45° tilt, so the staff
+  // leaned 9.5° off the barrel the game stands up. 45 cancels it exactly.
+  const ray = read('src/games/gunhit/zipWeapons/martianHeatray.ts');
+  assert.ok(ray.includes('rotate(45) scale(1.05)'), 'the head sits on the barrel axis');
+  const pose = ray.slice(ray.indexOf('export const markup'));
+  assert.ok(!pose.includes('rotate(35.5)'), 'the leaning pose is gone');
+  // Its shot is tinted with the artwork's own lime, not slide 6's mint or fire red.
+  const six = read('src/games/gunhit/game/setSixFx.ts');
+  assert.ok(six.includes("const LIME = '141,255,59';"), 'the lime comes from #8dff3b');
+  assert.ok(six.includes('case \'tripod\':'));
+  const paint = six.slice(six.indexOf('const LIME ='));
+  assert.ok(!paint.includes("'90,255,120'"), 'the mint green is no longer painted');
+  const round = read('src/games/gunhit/game/zipShotFx.ts');
+  assert.ok(round.includes("heat_ray: { core: '#f6ffe8', hot: '#b6ff5a', deep: '#4fbf18', glow: '141,255,59' }"),
+    'the Heat-Ray round is the same lime');
+});

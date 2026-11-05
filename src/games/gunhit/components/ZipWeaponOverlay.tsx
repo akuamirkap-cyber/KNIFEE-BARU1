@@ -4,34 +4,72 @@ import { CX, GAMEPLAY_GUN_SCALE, GUN_Y } from '../game/layout';
 import { ZIP_FIRE_MS, zipFireClass } from '../zipWeapons/motion';
 
 /**
- * The cyan faceted round Diamond Gun holds on its muzzle (design #3, the zip's
- * "Skin 3"): it leaves with the shot and grows back, so the gun is never seen
- * firing "empty".
+ * Where the muzzle crystal sits inside the overlay's own coordinates.
+ *
+ * The overlay is anchored on the barrel tip (`ZipWeaponArt`'s `muzzle` anchor),
+ * and the zip's diamond crystal is drawn at `(304,-7)` in the artwork's own
+ * units. Scaled to `ZIP_GUN_INK_HEIGHT` and pulled back onto that anchor, its
+ * centre lands on this point — the one spot the round may be drawn at.
+ */
+export const MUZZLE_GEM_BOX = 48;
+const MUZZLE_GEM_CENTRE = { x: 0.25, y: 28.04 };
+
+/**
+ * The bright crystal round Diamond Gun holds on its muzzle (design #3, the
+ * zip's "Skin 3"): it leaves with the shot and grows back, so the gun is never
+ * seen firing "empty".
+ *
+ * It is drawn *on* the muzzle crystal, not beside it: the box is centred on
+ * `MUZZLE_GEM_CENTRE`, so the round reads as the crystal's own bright core. It
+ * used to sit at the overlay's origin (up and to the right of the muzzle),
+ * which left a second, detached diamond floating next to the muzzle and the
+ * muzzle crystal itself still dark navy — the two things the design card was
+ * pulled up for.
  */
 function MuzzleGem({ innerRef }: { innerRef: RefObject<HTMLDivElement | null> }) {
+  const half = MUZZLE_GEM_BOX / 2;
   return (
     <div
       ref={innerRef}
       aria-hidden="true"
       className="pointer-events-none absolute"
-      style={{ left: -3, top: -7, width: 44, height: 44, transformOrigin: '50% 50%' }}
+      style={{
+        left: MUZZLE_GEM_CENTRE.x - half,
+        top: MUZZLE_GEM_CENTRE.y - half,
+        width: MUZZLE_GEM_BOX,
+        height: MUZZLE_GEM_BOX,
+        transformOrigin: '50% 50%',
+      }}
     >
-      <svg viewBox="-10 -12 20 24" width="44" height="44" style={{ display: 'block', overflow: 'visible' }}>
+      <svg
+        viewBox={`${-half} ${-half} ${MUZZLE_GEM_BOX} ${MUZZLE_GEM_BOX}`}
+        width={MUZZLE_GEM_BOX}
+        height={MUZZLE_GEM_BOX}
+        style={{ display: 'block', overflow: 'visible' }}
+      >
         <defs>
-          <linearGradient id="zip-gem-a" x1="-6" y1="-10" x2="6" y2="10" gradientUnits="userSpaceOnUse">
-            <stop offset="0" stopColor="#f2fdff" />
-            <stop offset="0.45" stopColor="#9fe8ff" />
-            <stop offset="1" stopColor="#2086e0" />
+          <radialGradient id="zip-gem-glow" cx="0.5" cy="0.5" r="0.5">
+            <stop offset="0" stopColor="#ffffff" stopOpacity="0.95" />
+            <stop offset="0.55" stopColor="#bdeeff" stopOpacity="0.55" />
+            <stop offset="1" stopColor="#5ec8ff" stopOpacity="0" />
+          </radialGradient>
+          <linearGradient id="zip-gem-a" x1="-6" y1="-14" x2="7" y2="14" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stopColor="#ffffff" />
+            <stop offset="0.45" stopColor="#dcf8ff" />
+            <stop offset="1" stopColor="#5cc8f5" />
           </linearGradient>
-          <linearGradient id="zip-gem-b" x1="-8" y1="0" x2="8" y2="0" gradientUnits="userSpaceOnUse">
-            <stop offset="0" stopColor="#5cc8f5" />
-            <stop offset="0.5" stopColor="#d9f7ff" />
-            <stop offset="1" stopColor="#2f9be6" />
+          <linearGradient id="zip-gem-b" x1="-9" y1="0" x2="9" y2="0" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stopColor="#a9e8ff" />
+            <stop offset="0.5" stopColor="#eafcff" />
+            <stop offset="1" stopColor="#3aa8ef" />
           </linearGradient>
         </defs>
-        <polygon points="0,-11 8,-2 0,11 -8,-2" fill="url(#zip-gem-a)" stroke="#bfefff" strokeWidth="0.8" />
-        <polygon points="0,-11 0,11 -8,-2" fill="url(#zip-gem-b)" opacity="0.75" />
-        <polygon points="0,-6 4,-1 0,5 -4,-1" fill="#ffffff" opacity="0.85" />
+        {/* The muzzle crystal's own silhouette, bright: the round *is* the gem the
+            barrel sits in, so it reads as one crystal rather than two. */}
+        <ellipse rx="20" ry="25" fill="url(#zip-gem-glow)" />
+        <polygon points="-9.89,22.81 -15.59,0 0,-22.81 15.59,0 10.65,22.81" fill="url(#zip-gem-a)" stroke="#ffffff" strokeWidth="0.7" strokeLinejoin="round" />
+        <polygon points="-9.89,22.81 -15.59,0 0,-22.81 0,22.81" fill="url(#zip-gem-b)" opacity="0.55" />
+        <polygon points="-4.15,10.46 -6.55,0.88 0,-8.7 6.55,0.88 4.47,10.46" fill="#ffffff" opacity="0.9" />
       </svg>
     </div>
   );
