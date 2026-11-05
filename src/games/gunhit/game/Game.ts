@@ -9412,6 +9412,9 @@ export class Game {
   getZipGunFrame(): { x: number; y: number; rot: number; scale: number; hidden: boolean } | null {
     const frame = this.zipGunFrame;
     if (!frame) return null;
+    // The menu never draws the gun (see `drawGunNow`'s caller), so a frame left
+    // over from the last run must not float over the title screen.
+    if (this.state === 'idle') return null;
     // The menu's captured frame owns the weapon while it travels in.
     return this.gunHiddenT > 0 ? { ...frame, hidden: true } : frame;
   }

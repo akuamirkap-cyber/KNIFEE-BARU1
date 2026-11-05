@@ -2235,7 +2235,9 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       >
         {/* Canvas Engine (zero permanent translucent DOM overlays during gameplay so desynchronized:true scans out directly) */}
         <canvas ref={canvasRef} className="block touch-none" style={{ width: frame.w, height: frame.h }} />
-        {hasZipArt(weapon) && (
+        {/* Only during a run: on the menu the engine is idle and paints nothing,
+            so the showcase above owns the weapon instead. */}
+        {screen === 'playing' && hasZipArt(weapon) && (
           <ZipWeaponOverlay
             id={weapon}
             read={() => gameRef.current?.getZipGunFrame() ?? null}

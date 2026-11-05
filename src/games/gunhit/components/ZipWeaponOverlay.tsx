@@ -19,7 +19,11 @@ export default function ZipWeaponOverlay({ id, read }: { id: string; read: () =>
 
   useEffect(() => {
     let raf = 0;
-    let shown = true;
+    // `null`, not `true`: the element starts at opacity 0, so the first frame
+    // that finds the gun on screen has to write the opacity. Seeding this with
+    // the assumed state skipped exactly that write, and the weapon stayed
+    // invisible for the whole run.
+    let shown: boolean | null = null;
     const tick = () => {
       const el = poseRef.current;
       const frame = read();

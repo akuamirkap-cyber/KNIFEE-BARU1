@@ -100,3 +100,20 @@ test('the artwork is a lazy chunk, so the page still paints first', () => {
   const vite = read('vite.config.ts');
   assert.ok(!/zipWeapons/.test(vite), 'the preload list does not drag it into the entry');
 });
+
+test('the play overlay is visible from its first frame, and only during a run', () => {
+  const overlay = read('src/games/gunhit/components/ZipWeaponOverlay.tsx');
+  // The element ships at opacity 0; seeding the "already shown" flag with `true`
+  // skipped the one write that makes it visible, so the gun never appeared.
+  assert.ok(overlay.includes('let shown: boolean | null = null;'));
+  assert.ok(overlay.includes("el.style.opacity = visible ? '1' : '0';"));
+  assert.ok(!/let shown = true;/.test(overlay));
+
+  const app = read('src/games/gunhit/App.tsx');
+  assert.ok(app.includes("screen === 'playing' && hasZipArt(weapon) && ("),
+    'the overlay belongs to a run, not to the menu');
+
+  const game = read('src/games/gunhit/game/Game.ts');
+  assert.ok(game.includes("if (this.state === 'idle') return null;"),
+    'a frame left over from the last run cannot float over the title screen');
+});
