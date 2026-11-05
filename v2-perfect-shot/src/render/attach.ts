@@ -1,129 +1,103 @@
-/**
- * PERFECT SHOT — v2 canvas driver.
- *
- * Wires a `Game` to a `<canvas>` and a tap: the same 25 lines a host needs,
- * including the only two things that usually go wrong — device pixel ratio and
- * a board that has to fit a screen of a different shape.
- */
+/** Canvas lifecycle, letterboxing, DPR, input and one-shot event delivery. */
 import { GH, GW } from '../config';
-import { draw } from './draw';
-import { Game, type Outcome } from '../game';
+import { Game, type GameEvent, type Outcome } from '../game';
+import { draw, type DrawOptions } from './draw';
+import { createSpriteCache } from './cache';
 
 export interface MountOptions {
-  /** Called once per finished level. After this the page can show its own screen. */
-  onEnd?: (outcome: Outcome, game: Game) => void;
-  /** Weapon id for `game.ts`'s catalogue. */
+  game?: Game;
   weapon?: string;
-  /** Start the loop paused; `resume()` is safe to call at any time. */
   paused?: boolean;
+  /** Disable shots while menus are open without destroying the run. */
+  input?: () => boolean;
+  presentation?: () => DrawOptions;
+  onGesture?: () => void;
+  onEvent?: (event: GameEvent, game: Game) => void;
+  onEnd?: (outcome: Outcome, game: Game) => void;
 }
-
 export interface Mounted {
   game: Game;
-  /** Stop the loop, drop the listeners. */
   destroy(): void;
   pause(): void;
   resume(): void;
-  /** Fire once (also bound to pointerdown / space). */
-  fire(): void;
-  /** Draw a single frame — for a paused preview or a screenshot. */
+  fire(): boolean;
   paint(): void;
+  resize(): void;
+  readonly running: boolean;
 }
 
-/** Mount the game on a canvas and start its loop. */
 export function mount(canvas: HTMLCanvasElement, opts: MountOptions = {}): Mounted {
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('perfect-shot-v2: 2D context unavailable');
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('perfect-shot-v2: 2D canvas unavailable');
+  const ctx = context;
+  const game = opts.game ?? new Game(opts.weapon);
+  const cache = createSpriteCache(() => canvas.ownerDocument.createElement('canvas'));
+  let raf = 0, last: number | null = null, running = false, destroyed = false, delivered = false;
+  let needsFit = true, width = 1, height = 1, scale = 1, ox = 0, oy = 0;
 
-  const game = new Game(opts.weapon ?? 'knife');
-  let raf = 0;
-  let last = 0;
-  let running = false;
-  let ended = false;
-
-  /** Fit the 480×960 board inside the canvas, letterboxed, at device pixel ratio. */
-  const fit = () => {
+  function fit(): void {
+    if (!needsFit) return;
+    needsFit = false;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const rect = canvas.getBoundingClientRect();
-    const w = Math.max(1, Math.round(rect.width * dpr));
-    const h = Math.max(1, Math.round(rect.height * dpr));
-    if (canvas.width !== w || canvas.height !== h) {
-      canvas.width = w;
-      canvas.height = h;
+    width = Math.max(1, Math.round(rect.width * dpr));
+    height = Math.max(1, Math.round(rect.height * dpr));
+    if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
+    scale = Math.min(width / GW, height / GH); ox = (width - GW * scale) / 2; oy = (height - GH * scale) / 2;
+  }
+  function paint(): void {
+    if (destroyed) return;
+    fit();ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,width,height);
+    ctx.setTransform(scale,0,0,scale,ox,oy);draw(ctx,game.scene,{...opts.presentation?.(),cache});
+  }
+  function flushEvents(): void { for (const event of game.takeEvents()) opts.onEvent?.(event,game); }
+  function tick(now: number): void {
+    if (!running || destroyed) return;
+    const dt = last === null ? 1/60 : (now-last)/1000;last = now;
+    game.update(dt);flushEvents();paint();
+    if (game.scene.status === 'play') delivered = false;
+    if (!delivered && game.ended) {
+      delivered = true;
+      if (game.scene.outcome) opts.onEnd?.(game.scene.outcome,game);
     }
-    const scale = Math.min(w / GW, h / GH);
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, w, h);
-    ctx.setTransform(scale, 0, 0, scale, (w - GW * scale) / 2, (h - GH * scale) / 2);
+    // The host may have paused or destroyed us from a callback.
+    if (running && !destroyed) raf = requestAnimationFrame(tick);
+  }
+  function fire(): boolean {
+    if (!running || destroyed || opts.input?.() === false) return false;
+    opts.onGesture?.();const fired = game.fire();flushEvents();return fired;
+  }
+  const onPointer = (event: PointerEvent) => {
+    if (event.isPrimary === false || opts.input?.() === false || !running) return;
+    event.preventDefault();event.stopPropagation();fire();
   };
-
-  const paint = () => {
-    fit();
-    draw(ctx, game.scene);
+  const onKey = (event: KeyboardEvent) => {
+    if (!['Space','ArrowUp','Enter'].includes(event.code) || opts.input?.() === false || !running) return;
+    const target = event.target as Element | null;
+    if (target?.closest?.('input,textarea,select,[contenteditable="true"]')) return;
+    // Buttons retain native Enter/Space behaviour (e.g. the accessible fire
+    // button). Neither that key nor an arena shot should leak to a v1 beneath us.
+    event.stopImmediatePropagation();
+    if (target?.closest?.('button,a')) return;
+    event.preventDefault();if (!event.repeat) fire();
   };
-
-  const tick = (now: number) => {
-    if (!running) return;
-    const dt = last ? (now - last) / 1000 : 1 / 60;
-    last = now;
-    game.update(dt);
-    paint();
-    // Hand the outcome to the page exactly once, and stop simulating: the host
-    // owns whatever comes next (retry screen, next level, reward…).
-    if (!ended && game.ended) {
-      ended = true;
-      running = false;
-      const outcome = game.scene.outcome;
-      if (outcome) opts.onEnd?.(outcome, game);
-      return;
-    }
-    raf = requestAnimationFrame(tick);
-  };
-
-  const onPointer = (e: PointerEvent) => {
-    e.preventDefault();
-    if (running) game.fire();
-  };
-  const onKey = (e: KeyboardEvent) => {
-    if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'Enter') {
-      e.preventDefault();
-      if (running) game.fire();
-    }
-  };
-  const onResize = () => paint();
-
-  canvas.addEventListener('pointerdown', onPointer);
-  window.addEventListener('keydown', onKey);
-  window.addEventListener('resize', onResize);
-
+  const resize = () => { needsFit = true;paint(); };
+  const pause = () => { running = false;cancelAnimationFrame(raf);last = null; };
   const resume = () => {
-    if (running) return;
-    running = true;
-    ended = false;
-    last = 0;
-    paint();
-    raf = requestAnimationFrame(tick);
+    if (running || destroyed) return;
+    running = true;last = null;paint();raf = requestAnimationFrame(tick);
   };
-
+  canvas.addEventListener('pointerdown',onPointer);
+  window.addEventListener('keydown',onKey,true);
+  window.addEventListener('resize',resize);
   const api: Mounted = {
-    game,
-    paint,
-    fire: () => game.fire(),
-    resume,
-    pause: () => {
-      running = false;
-      cancelAnimationFrame(raf);
-    },
-    destroy: () => {
-      running = false;
-      cancelAnimationFrame(raf);
-      canvas.removeEventListener('pointerdown', onPointer);
-      window.removeEventListener('keydown', onKey);
-      window.removeEventListener('resize', onResize);
+    game,paint,fire,pause,resume,resize,get running() { return running; },
+    destroy() {
+      if (destroyed) return;pause();destroyed = true;
+      canvas.removeEventListener('pointerdown',onPointer);
+      window.removeEventListener('keydown',onKey,true);window.removeEventListener('resize',resize);cache.clear();
     },
   };
-
-  if (!opts.paused) resume();
-  else paint();
+  if (!opts.paused) resume(); else paint();
   return api;
 }

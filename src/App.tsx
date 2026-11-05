@@ -13,13 +13,14 @@ import { sfx as studioSfx } from './games/perfect-shot/audio/sfx';
 import { installErrorHooks, reportError } from './telemetry/errorHooks';
 import { trackSessionStart } from './telemetry/gameAnalytics';
 import { installDebugSinkFromUrl } from './telemetry/debugSink';
-import PerfectShotV2 from './components/PerfectShotV2';
 import { APP_VERSION_LABEL, initialAppVersion, type AppVersion } from './appVersion';
 
 // Keep the entry bundle small; preload the game behind the intro so parsing does
 // not stall the first menu entrance as the logo disappears.
 const loadGunHitGame = () => import('./games/gunhit/App');
 const GunHitGame = lazy(loadGunHitGame);
+// Full v2 is loaded only when picked; v1's startup doesn't pay for its art/UI.
+const PerfectShotV2 = lazy(() => import('./components/PerfectShotV2'));
 const SansStudioLoading = lazy(() => import('./components/SansStudioLoading'));
 
 function GameBootFallback({ message = 'MEMUAT GAME' }: { message?: string }) {
@@ -84,7 +85,25 @@ export default function App() {
   useEffect(() => {
     // v2 sits behind the intro too; if it was picked before the splash finished,
     // skip the splash so the chosen version is immediately playable.
-    if (appVersion === 'v2') setLoading(false);
+    if (appVersion === 'v2') {
+      setLoading(false);
+      // Direct ?v=2 links skip the intro, so they must also open the boot gate.
+      setHasBooted(true);
+    }
+  }, [appVersion]);
+
+  useEffect(() => {
+    if (appVersion !== 'v2') return;
+    // Sleep an already-playing v1 music device without changing its settings or
+    // save. Restore it when leaving v2; the two games never play over each other.
+    const ctx = studioSfx.ctx;
+    if (!ctx || ctx.state !== 'running') return;
+    const asleep = ctx.suspend().catch(() => undefined);
+    return () => {
+      void asleep.then(() => {
+        if (ctx.state === 'suspended' && !document.hidden) return ctx.resume();
+      }).catch(() => undefined);
+    };
   }, [appVersion]);
 
   useEffect(() => {
@@ -163,11 +182,15 @@ export default function App() {
   // scales the right shape into the viewport (portrait 420x760, landscape
   // 760x420). The canvas inside sizes itself from the same source of truth.
   const frame = displaySize(gunHitOrientation);
+  // Keep v1's saved orientation intact; the independent v2 board is portrait.
+  if (appVersion === 'v2') Object.assign(frame, displaySize('portrait'));
 
   return (
     <div
       className="fixed inset-0 flex h-dvh w-full flex-col overflow-hidden bg-[#05060a] select-none touch-manipulation"
       onPointerDownCapture={(event) => {
+        // v2 owns its own sound device; don't wake v1 music behind its menu.
+        if (appVersion === 'v2') return;
         const target = event.target as Element | null;
         if (!target?.closest('button, [role="button"]')) return;
         studioSfx.init();
@@ -186,7 +209,7 @@ export default function App() {
         data-game-name="GUNHIT"
         aria-label="Gun Hit SGA"
       >
-        <SlideActivityProvider active={pageVisible && !loading}>
+        <SlideActivityProvider active={pageVisible && !loading && appVersion === 'v1'}>
           <GameLoadBoundary>
             <ScaledFrame baseWidth={frame.w} baseHeight={frame.h}>
               <div className="relative overflow-hidden" style={{ width: frame.w, height: frame.h }}>
@@ -201,11 +224,13 @@ export default function App() {
                     showing, v2 is not on the page at all — v1 renders alone, the
                     same way it did before v2 existed. */}
                 {hasBooted && appVersion === 'v2' && (
-                  <PerfectShotV2
-                    active={pageVisible && !loading}
-                    version={appVersion}
-                    onPickVersion={setAppVersion}
-                  />
+                  <Suspense fallback={<GameBootFallback message="MEMUAT V2" />}>
+                    <PerfectShotV2
+                      active={pageVisible && !loading}
+                      version={appVersion}
+                      onPickVersion={setAppVersion}
+                    />
+                  </Suspense>
                 )}
                 {hasBooted && appVersion === 'v1' && (
                   <div className="absolute right-1 top-1/2 z-10 flex -translate-y-1/2 flex-col gap-1 rounded-full border border-white/15 bg-black/45 p-1 backdrop-blur-sm">

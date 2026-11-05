@@ -1,21 +1,29 @@
 {
   "name": "perfect-shot-v2",
   "private": true,
-  "version": "2.0.0",
+  "version": "2.1.0",
   "type": "module",
-  "description": "PERFECT SHOT v2 \u2014 gameplay-only core (wheel + knives), no menus, no shop, no audio.",
+  "description": "Perfect Shot v2 Full Arcade: 30 levels, 3 bosses, 10 weapons, combo, coins, audio, and offline saves. Independent of v1.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "proof": "tsx proof.ts",
-    "smoke": "tsx smoke.ts"
+    "smoke": "tsx smoke.ts",
+    "test": "npm run typecheck && npm run proof && npm run smoke",
+    "zip": "npm run build && python3 package.py"
   },
   "devDependencies": {
+    "@napi-rs/canvas": "^1.1.0",
+    "@types/node": "^22.20.5",
+    "linkedom": "^0.18.15",
     "tsx": "^4.21.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.0",
     "vite-plugin-singlefile": "^2.3.0"
+  },
+  "engines": {
+    "node": ">=22.12.0"
   }
 }
