@@ -1,0 +1,41 @@
+{
+  "name": "perfect-shot-v2",
+  "private": true,
+  "version": "2.2.0",
+  "type": "module",
+  "description": "A lightweight duplicate of original Perfect Shot: the original UI, Pistol only, and replayable level 1 only. V1 stays separate.",
+  "scripts": {
+    "dev": "vite",
+    "build": "npm run styles && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "proof": "tsx proof.ts",
+    "smoke": "tsx smoke.tsx",
+    "test": "npm run typecheck && npm run proof && npm run smoke",
+    "zip": "npm run build && python3 package.py",
+    "styles": "node scripts/styles.mjs",
+    "predev": "npm run styles"
+  },
+  "devDependencies": {
+    "@napi-rs/canvas": "^1.1.0",
+    "@types/node": "^22.20.5",
+    "linkedom": "^0.18.15",
+    "tsx": "^4.21.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0",
+    "vite-plugin-singlefile": "^2.3.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "postcss": "^8.5.6",
+    "@tailwindcss/postcss": "^4.1.0",
+    "tailwindcss": "^4.1.0",
+    "postcss-prefix-selector": "^2.1.1"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  }
+}

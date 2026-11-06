@@ -360,6 +360,9 @@ export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss(), preloadMenuGunArt(), standbyControlPlugin()],
     resolve: {
+      // The standalone Lite folder installs its own dev dependencies.
+      // Embedded v2 must share the host's React instance (hooks/context).
+      dedupe: ['react', 'react-dom'],
       alias: {
         '@': path.resolve(process.cwd(), './src'),
       },

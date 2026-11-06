@@ -61,15 +61,21 @@ test('an anchor lands on the barrel tip, and the ink is exactly as tall as asked
   assert.ok(Math.abs(cx) < 1e-6 && Math.abs(cy) < 1e-6, 'the ink centre lands on the anchor');
 });
 
-test('the engine hands the zip weapon to the page instead of drawing it', () => {
+test('the engine hands the zip weapon to the page only on its own card', () => {
   const game = read('src/games/gunhit/game/Game.ts');
   assert.ok(game.includes("import { hasZipArt } from '../zipWeapons/ids';"));
   assert.ok(game.includes('getZipGunFrame(): { x: number; y: number; rot: number; scale: number; hidden: boolean } | null {'));
-  assert.ok(game.includes('const zipGun = hasZipArt(this.weapon.id);'));
-  // The page draws the gun, so the shot's kick has to ride along with the pose.
-  assert.ok(game.includes('y: y0 + this.recoil * 8,'));
-  assert.ok(game.includes('rot: this.gunTiltNow - this.recoil *'));
-  assert.ok(game.includes('x: this.gunX,') && game.includes('scale: GAMEPLAY_GUN_SCALE,'));
+  // The zip art is a design card of its own: on every other card the gun is
+  // ordinary canvas art, so picking a design really changes the weapon.
+  assert.ok(game.includes("const zipGun = hasZipArt(this.weapon.id) && this.zipCardLive;"));
+  assert.ok(game.includes("return hasZipArt(this.weapon.id) && getGunVariant(this.weapon.id) === 'zip';"));
+  // The page draws the gun, so the shot's kick has to ride along with the pose,
+  // and the zip's own page kicks hard: the gun travels down the barrel axis,
+  // tips back and punches out.
+  assert.ok(game.includes('y: y0 + this.recoil * zipKick(this.weapon.id).y,'));
+  assert.ok(game.includes('rot: this.gunTiltNow + this.recoil * zipKick(this.weapon.id).rot,'));
+  assert.ok(game.includes('scale: GAMEPLAY_GUN_SCALE * (1 + this.recoil * zipKick(this.weapon.id).punch),'));
+  assert.ok(game.includes('x: this.gunX,') && game.includes('scale: GAMEPLAY_GUN_SCALE * (1 + this.recoil * zipKick(this.weapon.id).punch),'));
   // Both the single and the twin-gun draw are skipped for these five.
   assert.ok(game.includes('if (zipGun) {\n        // Drawn by the page'));
   // The engine never imports the artwork itself: only the ids, so the 190 KB
@@ -85,12 +91,13 @@ test('the three screens all show the zip art', () => {
   // Play: the page draws the gun on the engine's anchor.
   assert.ok(app.includes('<ZipWeaponOverlay'));
   assert.ok(app.includes('read={() => gameRef.current?.getZipGunFrame() ?? null}'));
-  // Menu: the showcase canvas stays empty and the live SVG takes its place.
-  assert.ok(app.includes('{hasZipArt(weapon) && <ZipWeaponArt id={weapon} height={300} anchor="center" className="pointer-events-none" />}'));
-  assert.ok(app.includes('if (cv && hasZipArt(weapon)) {'));
-  assert.ok(app.includes('if (hasZipArt(weapon)) return;'), 'the kept bitmap never replays an old gun');
-  // Armory: thumbnail and spotlight.
-  assert.ok(arsenal.includes('if (hasZipArt(weapon.id)) {'));
+  // Menu: on the zip card the showcase canvas stays empty and the live SVG takes
+  // its place; on any other card the canvas draws that card's own art.
+  assert.ok(app.includes('{zipCardWeapon === weapon && <ZipWeaponArt id={weapon} height={300} anchor="center" className="pointer-events-none" />}'));
+  assert.ok(app.includes('if (cv && zipCardWeapon === weapon) {'));
+  assert.ok(app.includes('if (zipCardWeapon === weapon) return;'), 'the kept bitmap never replays an old gun');
+  // Armory: thumbnail and spotlight, each on the zip card alone.
+  assert.equal((arsenal.match(/if \(hasZipArt\(weapon\.id\) && variant === 'zip'\)/g) ?? []).length, 2);
   assert.equal((arsenal.match(/<ZipWeaponArt /g) ?? []).length, 2);
 });
 
@@ -115,8 +122,12 @@ test('the play overlay is visible from its first frame, and only during a run', 
   assert.ok(overlay.includes('x: CX, y: GUN_Y, rot: 0, scale: GAMEPLAY_GUN_SCALE'));
 
   const app = read('src/games/gunhit/App.tsx');
-  assert.ok(app.includes("screen === 'playing' && hasZipArt(weapon) && ("),
-    'the overlay belongs to a run, not to the menu');
+  assert.ok(app.includes("screen === 'playing' && hasZipArt(weapon) && zipCardWeapon === weapon && ("),
+    'the overlay belongs to a run on the zip card, not to the menu or another card');
+  // The zip's own one-shot fire animation is re-applied on every shot: without
+  // it a shot only slid the gun back, with no flash at all.
+  assert.ok(overlay.includes('svg.classList.add(fireClass);'));
+  assert.ok(overlay.includes('window.setTimeout(() => svg.classList.remove(fireClass), ZIP_FIRE_MS);'));
 
   const game = read('src/games/gunhit/game/Game.ts');
   assert.ok(game.includes("if (this.state === 'idle') return null;"),
@@ -152,4 +163,170 @@ test('Diamond Gun keeps its round on the muzzle, and fires it', () => {
   const app = read('src/games/gunhit/App.tsx');
   assert.ok(app.includes('zipMuzzleShotAtRef.current = performance.now();'), 'the shot timestamp comes from the engine');
   assert.ok(app.includes('readShotAt={() => zipMuzzleShotAtRef.current}'));
+});
+
+test('the Diamond Gun’s round sits ON the muzzle crystal, not beside it', () => {
+  // The overlay is anchored on the barrel tip, so the round has to be placed in
+  // that same space. It used to sit at the overlay's origin (up and to the
+  // right of the muzzle), which left a second bright diamond floating next to
+  // the crystal — and the crystal itself still dark navy underneath.
+  const overlay = read('src/games/gunhit/components/ZipWeaponOverlay.tsx');
+  assert.ok(overlay.includes('const MUZZLE_GEM_CENTRE = { x: 0.25, y: 28.04 };'),
+    'the round is centred on the muzzle crystal');
+  assert.ok(overlay.includes('left: MUZZLE_GEM_CENTRE.x - half'),
+    'and drawn around it, not at 0,0');
+  assert.ok(!overlay.includes('style={{ left: -3, top: -7, width: 44, height: 44'),
+    'the detached gem box is gone');
+
+  // Work the placement out from the artwork, so the numbers cannot drift apart:
+  // the crystal is drawn at (304,-7) in the zip's arm-local units.
+  const art = ZIP_ART.diamond;
+  const height = 250;
+  const scale = height / inkHeight(art);
+  const rot = (deg: number, x: number, y: number): [number, number] => {
+    const a = (deg * Math.PI) / 180, c = Math.cos(a), s = Math.sin(a);
+    return [c * x - s * y, s * x + c * y];
+  };
+  const place = ([x0, y0]: [number, number]): [number, number] => {
+    // g translate(238 270) rotate(-45) scale(0.87), inside rotate(-45 256 256)
+    const [sx, sy] = rot(-45, x0 * 0.87, y0 * 0.87);
+    const arm: [number, number] = [sx + 238 - 256, sy + 270 - 256];
+    const [rx, ry] = rot(-45, arm[0], arm[1]);
+    return [rx + 256, ry + 256];
+  };
+  const crystal = place([304, -7]);
+  const centre = { x: (crystal[0] - art.ink.muzzleX) * scale, y: (crystal[1] - art.ink.muzzleY) * scale };
+  assert.ok(Math.abs(centre.x - 0.25) < 0.5 && Math.abs(centre.y - 28.04) < 0.6,
+    `the round is centred on the crystal (got ${centre.x.toFixed(2)}, ${centre.y.toFixed(2)})`);
+});
+
+test('the muzzle crystal is bright, with no dark-navy facets left on it', () => {
+  const markup = ZIP_ART.diamond.markup;
+  const muzzle = markup.slice(markup.indexOf('<g class="zip-muzzle-round">'));
+  const crystal = muzzle.slice(0, muzzle.indexOf('</g>'));
+  for (const dark of ['#1c55d8', '#0b3097', '#2f77ea']) {
+    assert.ok(!crystal.includes(dark), `${dark} was one of the muzzle crystal's faces`);
+  }
+  // The crown's faces are the bright ice/azure the design card shows.
+  for (const bright of ['#f0fbff', '#fdfeff', '#4fc3ff', '#93ddff', '#b5ebff']) {
+    assert.ok(crystal.includes(bright), `${bright} paints the crystal`);
+  }
+});
+
+test('each zip weapon fires its own round — only the Diamond Gun fires diamonds', () => {
+  // The round belongs to the gun that fires it: a Wars Blaster that carried the
+  // Diamond Gun's ice crystal around was the bug this pins.
+  const fx = read('src/games/gunhit/game/zipShotFx.ts');
+  for (const id of ['blaster', 'paintball', 'shark', 'heat_ray']) {
+    assert.ok(fx.includes(`id === '${id}'`), `${id} has a round of its own`);
+  }
+  assert.ok(fx.includes('else drawSlide2DiamondBullet(c, r, t, seed, flash);'),
+    'the Diamond Gun is the only one that falls through to the faceted crystal');
+  // The engine hands the round the gun it was fired from.
+  const proj = read('src/games/gunhit/game/art/projectiles.ts');
+  assert.ok(proj.includes('embedded, kind, gunState.tint)'),
+    'the painter knows which gun fired, and the shot paint for a paint ball');
+  // The effect card's trail follows the round's own colour.
+  const card = read('src/games/gunhit/components/ShotEffectCanvas.tsx');
+  assert.ok(card.includes('zipRoundPaint(weapon.id).glow'));
+});
+
+test('the Martian Heat-Ray stands upright and fires Martian green', () => {
+  // The zip drew its heatray at 35.5° inside its own 45° tilt, so the staff
+  // leaned 9.5° off the barrel the game stands up. 45 cancels it exactly.
+  const ray = read('src/games/gunhit/zipWeapons/martianHeatray.ts');
+  assert.ok(ray.includes('rotate(45) scale(1.05)'), 'the head sits on the barrel axis');
+  const pose = ray.slice(ray.indexOf('export const markup'));
+  assert.ok(!pose.includes('rotate(35.5)'), 'the leaning pose is gone');
+  // Its shot is tinted with the artwork's own lime, not slide 6's mint or fire red.
+  const six = read('src/games/gunhit/game/setSixFx.ts');
+  assert.ok(six.includes("const LIME = '141,255,59';"), 'the lime comes from #8dff3b');
+  assert.ok(six.includes('case \'tripod\':'));
+  const paint = six.slice(six.indexOf('const LIME ='));
+  assert.ok(!paint.includes("'90,255,120'"), 'the mint green is no longer painted');
+  const round = read('src/games/gunhit/game/zipShotFx.ts');
+  assert.ok(round.includes("heat_ray: { core: '#f6ffe8', hot: '#b6ff5a', deep: '#4fbf18', glow: '141,255,59' }"),
+    'the Heat-Ray round is the same lime');
+});
+
+test('no zip weapon stands at an angle: every bore is a quarter turn from the art', () => {
+  // Every zip SVG is wrapped in `rotate(-45 256 256)`. The art inside is built in
+  // its own frame, so the *inner* rotation has to finish the quarter turn: -45 in
+  // that frame is what puts the barrel on screen's vertical. Anything else and the
+  // gun goes into play visibly miring — Shark Launcher shipped at -22 (net -67°,
+  // 23° off the barrel line) and Wars Blaster at -40 (net -85°, 5° off).
+  const inner: Record<string, number> = {};
+  for (const id of ZIP_WEAPON_IDS) {
+    const markup = ZIP_ART[id].markup;
+    assert.ok(markup.startsWith('<svg'), `${id}: it is SVG`);
+    const outer = markup.match(/<g transform="rotate\((-?[\d.]+) 256 256\)">/);
+    assert.ok(outer, `${id}: the upright wrap is there`);
+    assert.equal(Number(outer[1]), -45, `${id}: the wrap is a -45° quarter turn`);
+    const frame = markup.match(/<g transform="translate\([^)]*\) rotate\((-?[\d.]+)\)(?: scale\([\d.]+\))?/);
+    assert.ok(frame, `${id}: the art sits in its own frame`);
+    inner[id] = Number(frame[1]);
+  }
+  // Net rotation on screen. Every zip gun but the Heat-Ray is built in a frame
+  // whose -y runs up the barrel, so the nets below are the barrel's own angle:
+  // -90° is dead vertical. Shark Launcher's art is drawn 6° off inside its frame
+  // (its torpedo is not parallel to the frame's y-axis), so its net is -84 and
+  // that is what measures straight on screen.
+  const net: Record<string, number> = {};
+  for (const id of ZIP_WEAPON_IDS) net[id] = -45 + inner[id];
+  assert.equal(net.diamond, -90, 'Diamond Gun is the reference: dead vertical');
+  assert.equal(net.blaster, -90, 'Wars Blaster finishes the quarter turn');
+  assert.equal(net.paintball, -90, 'Paintball Gun was already square');
+  assert.equal(net.shark, -84, 'Shark Launcher: 6° of art offset, barrel vertical');
+  for (const id of ['diamond', 'blaster', 'paintball', 'shark'] as const) {
+    assert.ok(net[id] <= -84 && net[id] >= -90,
+      `${id}: net ${net[id]}° is within 6° of vertical, never leaning the other way`);
+  }
+  // Martian Heat-Ray is the one gun whose frame points the other way (+45): its
+  // spike is the -y end of a tail that grows the other way, and it reads upright.
+  assert.equal(inner.heat_ray, 45);
+});
+
+test('the barrel tip the game anchors on is the bore, not the muzzle flash', () => {
+  // The anchor sits on the container's (0,0), and the aim line, the muzzle FX and
+  // every round are drawn from there — so it has to be the mouth of the bore.
+  // Wars Blaster's old anchor was the tip of its animated lightning wisp and
+  // Shark Launcher's was 100 units to the right of its mouth: both left the gun
+  // hanging off the aim line even when its barrel was vertical.
+  for (const id of ZIP_WEAPON_IDS) {
+    const { ink } = ZIP_ART[id];
+    // The full width of the art's ink, as measured off the rendered SVG.
+    assert.ok(ink.x1 > ink.x0 && ink.y1 > ink.y0, `${id}: a real box`);
+    assert.ok(ink.muzzleY <= ink.y0 + 4, `${id}: the muzzle is the top of the ink`);
+    // The muzzle is inside the ink, near its horizontal middle: a bore is a
+    // narrow tube, so its mouth is not out at the edge of the fins or the stock.
+    assert.ok(ink.muzzleX > ink.x0 && ink.muzzleX < ink.x1, `${id}: the muzzle is inside the ink`);
+  }
+  // Measured on the rendered art, these two were the anchors that were wrong.
+  assert.equal(ZIP_ART.blaster.ink.muzzleX, 204, 'Wars Blaster anchors on its bore');
+  assert.equal(ZIP_ART.blaster.ink.muzzleY, -142);
+  assert.equal(ZIP_ART.shark.ink.muzzleX, 259, 'Shark Launcher anchors on its mouth');
+  assert.equal(ZIP_ART.shark.ink.muzzleY, -57);
+});
+
+test('the three guns that looked miring are recentred on the aim line', () => {
+  // Ink centre versus the muzzle: how far the mass of the gun hangs off the
+  // barrel line. Measured off the rendered SVG, in units of the ink height.
+  const art = read('src/games/gunhit/zipWeapons/warsBlaster.ts')
+    + read('src/games/gunhit/zipWeapons/paintballGun.ts')
+    + read('src/games/gunhit/zipWeapons/sharkLauncher.ts');
+  // Wars Blaster: the art was rotated a further -5° off the wrap, so its barrel
+  // leaned in play. It now shares the Diamond Gun's -45 frame.
+  assert.ok(art.includes('translate(187 254) rotate(-45) scale(1.08)'),
+    'Wars Blaster finishes the quarter turn');
+  // Shark Launcher: -22 left the whole torpedo 23° off; -39 puts the mouth, the
+  // hull and the throat's centre line on one vertical.
+  assert.ok(art.includes('translate(250 226) rotate(-39) scale(0.94)'),
+    'Shark Launcher stands its torpedo up');
+  assert.ok(!art.includes('rotate(-22)'), 'the 23°-off rotation is gone');
+  // Paintball Gun: its frame was already square to the screen; the barrel really
+  // is vertical, so nothing about its rotation may be touched to "fix" it.
+  assert.ok(art.includes('translate(212 298) rotate(-45)'),
+    'Paintball Gun keeps its square body frame');
+  assert.ok(art.includes('translate(256 262) scale(0.92) translate(-256 -262)'),
+    'Paintball Gun keeps its whole-gun fit');
 });

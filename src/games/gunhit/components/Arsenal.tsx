@@ -150,9 +150,10 @@ function GunItemCanvas({ weapon, isSelected, variant, size = 110, eager = false 
     return () => { cancelAnimationFrame(raf); reducedMotion?.removeEventListener?.('change', onMotionChange); };
   }, [weapon.id, size, isSelected, active, variant, visible]);
 
-  if (hasZipArt(weapon.id)) {
-    // The zip's five weapons are live SVG (their glow keeps animating), shown at
-    // the same 45° the canvas thumbnails are drawn at.
+  if (hasZipArt(weapon.id) && variant === 'zip') {
+    // On its "Skin 3" card the zip's weapons are live SVG (their glow keeps
+    // animating), shown at the same 45° the canvas thumbnails are drawn at.
+    // Every other card is ordinary canvas art, so the picked design shows.
     return (
       <div style={{ width: size, height: size, position: 'relative' }} className="pointer-events-none overflow-visible">
         <div className="absolute inset-0" style={{ transform: 'rotate(45deg)' }}>
@@ -221,7 +222,7 @@ function SpotlightGun({ weapon, variant, box }: { weapon: Weapon; variant: GunVa
     return () => { cancelAnimationFrame(raf); reducedMotion?.removeEventListener?.('change', onMotionChange); };
   }, [weapon.id, active, variant, box.w, box.h]);
 
-  if (hasZipArt(weapon.id)) {
+  if (hasZipArt(weapon.id) && variant === 'zip') {
     return (
       <div style={{ width: box.w, height: box.h, position: 'relative' }} className="pointer-events-none overflow-visible">
         <div className="absolute inset-0" style={{ transform: 'rotate(45deg)' }}>

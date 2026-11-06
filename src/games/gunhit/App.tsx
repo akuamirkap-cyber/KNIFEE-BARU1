@@ -17,6 +17,7 @@ import MenuStageBackdrop from './components/MenuStageBackdrop';
 import ZipWeaponArt from './components/ZipWeaponArt';
 import ZipWeaponOverlay from './components/ZipWeaponOverlay';
 import { hasZipArt } from './zipWeapons/ids';
+import { setGunLookChangeListener } from './game/art/lookChange';
 import { gunSunburstColor } from './game/sunburstPalette';
 /**
  * Weapon artwork for the menu showcase: a dynamic import, so the title screen
@@ -498,6 +499,25 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
   const [gunArt, setGunArt] = useState<MenuGunArt | null>(menuGunArtModule);
   /** Bumped when the paint effect found no canvas yet, so it runs again. */
   const [gunPaintTick, setGunPaintTick] = useState(0);
+  /**
+   * Bumped whenever the player picks a different skin or shot in the arsenal.
+   * The menu keeps its painted frame AND its ink pivot keyed on the design, so a
+   * stale picture (or a pivot measured on another gun) would otherwise survive
+   * the change: with the zip art now one card among several, picking another
+   * card has to repaint and re-measure.
+   */
+  const [gunLookTick, setGunLookTick] = useState(0);
+  useEffect(() => {
+    setGunLookChangeListener(() => setGunLookTick((n) => n + 1));
+    return () => setGunLookChangeListener(null);
+  }, []);
+
+  /**
+   * The gun whose live zip SVG currently owns the menu showcase (null when the
+   * equipped gun is not on its "Skin 3" card), read from the same chooser the
+   * engine uses, and re-read on every pick.
+   */
+  const [zipCardWeapon, setZipCardWeapon] = useState<string | null>(null);
   menuGunArtReady.current = Boolean(gunArt);
   useEffect(() => {
     if (menuGunArtModule) return;
@@ -1283,6 +1303,17 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     return () => window.removeEventListener('keydown', onEsc);
   }, [starBuffOpen, bonusStageOpen, bossDefeatedData]);
 
+  /**
+   * Which gun's live zip SVG owns the menu showcase. Read through the same
+   * chooser the engine uses, every time the gun or the picked skin changes —
+   * the zip art is one card of five designs now, not the artwork of all of them.
+   */
+  useEffect(() => {
+    const mod = gunArt;
+    if (!mod || !hasZipArt(weapon)) { setZipCardWeapon(null); return; }
+    setZipCardWeapon(mod.getGunVariant(weapon) === 'zip' ? weapon : null);
+  }, [gunArt, weapon, gunLookTick]);
+
   // The menu, results and modal screens use their own lightweight effects;
   // the heavy level canvas has nothing to simulate behind those overlays.
   const gameplayModalOpen = inGameSettingsOpen || arsenalOpen || questOpen || leaderboardOpen || starBuffOpen || bonusStageOpen || Boolean(bossDefeatedData);
@@ -1310,8 +1341,8 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
    */
   useEffect(() => {
     if (gunArt) return;
-    // Zip weapons are live SVG, never a kept bitmap.
-    if (hasZipArt(weapon)) return;
+    // While the zip art is the live card it is live SVG, never a kept bitmap.
+    if (zipCardWeapon === weapon) return;
     if (screen !== 'menu' || arsenalOpen || questOpen || leaderboardOpen || mapOpen || settingsOpen) return;
     const cv = previewCanvasRef.current;
     const cached = readMenuGunBitmap();
@@ -1331,14 +1362,14 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
       ctx.drawImage(img, 0, 0, cv.width, cv.height);
     };
     img.src = cached.png;
-  }, [gunArt, screen, weapon, arsenalOpen, questOpen, leaderboardOpen, mapOpen, settingsOpen]);
+  }, [gunArt, screen, weapon, zipCardWeapon, arsenalOpen, questOpen, leaderboardOpen, mapOpen, settingsOpen]);
 
   // Upright weapon preview on the main menu (-10% from 374x328 -> 337x295, native VSync FPS)
   useEffect(() => {
     if (!gunArt) return;
     if (screen !== 'menu' || arsenalOpen || questOpen || leaderboardOpen || mapOpen || settingsOpen) return;
     const cv = previewCanvasRef.current;
-    if (cv && hasZipArt(weapon)) {
+    if (cv && zipCardWeapon === weapon) {
       // The weapon is drawn by `ZipWeaponArt` (live SVG) in this box; keep the
       // canvas empty so the two never stack.
       cv.width = Math.round(MENU_GUN_CANVAS_W * getOptimalCanvasDpr(2));
@@ -1451,7 +1482,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
     }
     // Keep this frame for the next cold start, out of this frame's way.
     keepMenuGunFrameLater(cv, weapon, paintKey);
-  }, [gunArt, gunPaintTick, screen, weapon, arsenalOpen, questOpen, leaderboardOpen, mapOpen, settingsOpen]);
+  }, [gunArt, gunPaintTick, screen, weapon, zipCardWeapon, gunLookTick, arsenalOpen, questOpen, leaderboardOpen, mapOpen, settingsOpen]);
 
   // Roll up score only while the slide is active; pause at the current number.
   useEffect(() => {
@@ -2241,7 +2272,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
         <canvas ref={canvasRef} className="block touch-none" style={{ width: frame.w, height: frame.h }} />
         {/* Only during a run: on the menu the engine is idle and paints nothing,
             so the showcase above owns the weapon instead. */}
-        {screen === 'playing' && hasZipArt(weapon) && (
+        {screen === 'playing' && hasZipArt(weapon) && zipCardWeapon === weapon && (
           <ZipWeaponOverlay
             id={weapon}
             read={() => gameRef.current?.getZipGunFrame() ?? null}
@@ -2526,7 +2557,7 @@ function GunHitGame({ onExit, introReady }: { onExit?: () => void; introReady: b
                     <div ref={gunTiltRef} className="relative" style={{ transformOrigin: '50% 78%', willChange: 'transform' }} data-menu-aim-tilt>
                     {/* The five zip weapons are live SVG: their glow, shimmer and
                         twinkle keep animating here instead of being baked. */}
-                    {hasZipArt(weapon) && <ZipWeaponArt id={weapon} height={300} anchor="center" className="pointer-events-none" />}
+                    {zipCardWeapon === weapon && <ZipWeaponArt id={weapon} height={300} anchor="center" className="pointer-events-none" />}
                     <canvas ref={previewCanvasRef} style={menuLandscape ? { width: '330px', height: '289px' } : { width: 'min(337px, 90vw)', height: 'min(295px, 54vh)' }} className="block cursor-pointer drop-shadow-[0_10px_20px_rgba(0,0,0,.5)] transition-transform hover:scale-105" role="button" tabIndex={0} aria-label={tr(language, 'Buka koleksi senjata')} onClick={() => startArsenalTransition(true)} onKeyDown={(event) => {
                       if (event.key === 'Enter' || event.key === ' ') {
                         event.preventDefault();

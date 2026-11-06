@@ -69,6 +69,17 @@ store/                  aset & teks Play Console
 references/             zip referensi visual (arsip, tidak ikut bundel)
 ```
 
+## Perfect Shot v2 — Lite (opsional)
+
+V1 tetap **utuh dan default**. Pilih **V2** di Gun Hit Arcade untuk duplikasi
+ringan dengan tampilan asli: **GUN hanya Pistol, QUEST hanya level 1** yang bisa
+diulang. Senjata/level/aset lainnya benar-benar tidak dimasukkan ke paket Lite,
+bukan sekadar dikunci. Tombol **ZIP ↓** mengunduh source + satu HTML offline.
+
+Folder mandiri: [`v2-perfect-shot/`](v2-perfect-shot/README.md). Implementasi
+in-app dan ZIP memakai komponen yang sama; save Lite terpisah dari v1. Baca
+README folder tersebut untuk `npm ci`, tes, build, dan penggabungan ke proyek lain.
+
 ## CI
 
 `.github/workflows/ci.yml` — setiap push/PR: `npm ci` → `tsc --noEmit` → `npm test`

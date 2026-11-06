@@ -1,0 +1,8 @@
+.ps-lite { font-family: 'Inter', sans-serif; font-weight: 400; color: #fff; background: #10242a; touch-action: manipulation; -webkit-tap-highlight-color: transparent; --font-title: 'Russo One', system-ui, sans-serif; --font-ui: 'Russo One', system-ui, sans-serif; }
+.ps-lite .font-title, .ps-lite .font-ui, .ps-lite .font-arsenal-title { font-family: 'Russo One', system-ui, sans-serif; }
+.ps-lite .svg-asset > svg { display: block; width: 100%; height: 100%; }
+.ps-lite button, .ps-lite canvas[role='button'] { cursor: pointer; }
+.ps-lite button:disabled { cursor: default; }
+.ps-lite [data-active='false'] *, .ps-lite[data-active='false'] * { animation-play-state: paused !important; }
+.ps-lite button:focus-visible, .ps-lite a:focus-visible, .ps-lite canvas[role='button']:focus-visible { outline: 3px solid #ffd23f; outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) { .ps-lite *, .ps-lite *::before, .ps-lite *::after { animation-duration: .01ms !important; animation-delay: 0ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
