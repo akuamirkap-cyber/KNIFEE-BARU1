@@ -1,88 +1,37 @@
-/** Versioned, isolated save. Nothing here reads or writes any v1 storage key. */
-import { FREE_WEAPONS, WEAPONS } from './weapons';
-
-export interface SaveData {
-  v: 1;
-  coins: number;
-  best: number;
-  bestLevel: number;
-  owned: string[];
-  gun: string;
-  muted: boolean;
-  cleared: number;
-  hits: number;
-  perfects: number;
-  maxCombo: number;
-  /** Best rating for a campaign stage; laps share the same 30-stage map. */
-  stars: Record<string, number>;
+export const SAVE_KEY = 'perfect-shot.v2.lite.save';
+export interface Run { score: number; coins: number; won: boolean; at: number }
+export interface Save {
+  schema: 1; weapon: 'pistol'; stage: 1; coins: number; diamonds: number;
+  best: number; clears: number; stars: number; sound: boolean; volume: number;
+  rewardClaimed: boolean; runs: Run[];
 }
-
-export const SAVE_KEY = 'perfect-shot.v2.save';
-
-export function defaultSave(): SaveData {
-  return {
-    v: 1, coins: 0, best: 0, bestLevel: 1, owned: [...FREE_WEAPONS], gun: 'knife',
-    muted: false, cleared: 0, hits: 0, perfects: 0, maxCombo: 0, stars: {},
-  };
-}
-
-function natural(v: unknown, fallback = 0): number {
-  return typeof v === 'number' && Number.isFinite(v) ? Math.max(0, Math.min(999_999_999, Math.floor(v))) : fallback;
-}
-
-/** Validate even well-formed JSON: negative coins and unknown guns aren't saves. */
-export function normaliseSave(value: unknown): SaveData {
-  const base = defaultSave();
-  if (!value || typeof value !== 'object') return base;
-  const p = value as Partial<SaveData>;
-  if (p.v !== 1) return base;
-  const known = new Set(WEAPONS.map((w) => w.id));
-  const owned = [...new Set([
-    ...FREE_WEAPONS,
-    ...(Array.isArray(p.owned) ? p.owned.filter((id): id is string => typeof id === 'string' && known.has(id)) : []),
-  ])];
-  const stars: Record<string, number> = {};
-  if (p.stars && typeof p.stars === 'object') {
-    for (const [key, value] of Object.entries(p.stars)) {
-      if (/^([1-9]|[12][0-9]|30)$/.test(key) && natural(value) >= 1) stars[key] = Math.min(3, natural(value));
-    }
-  }
-  return {
-    v: 1, coins: natural(p.coins), best: natural(p.best), bestLevel: Math.max(1, natural(p.bestLevel, 1)),
-    owned, gun: typeof p.gun === 'string' && owned.includes(p.gun) ? p.gun : 'knife',
-    muted: typeof p.muted === 'boolean' ? p.muted : false,
-    cleared: natural(p.cleared), hits: natural(p.hits), perfects: natural(p.perfects),
-    maxCombo: natural(p.maxCombo), stars,
-  };
-}
-
-/** The property itself can throw in a blocked third-party frame. */
-export function loadSave(): SaveData {
+export interface StorageLike { getItem(key: string): string | null; setItem(key: string, value: string): void }
+const nat = (n: unknown, fallback = 0) => typeof n === 'number' && Number.isFinite(n) ? Math.min(999999999, Math.max(0, Math.floor(n))) : fallback;
+export const freshSave = (): Save => ({ schema: 1, weapon: 'pistol', stage: 1, coins: 120, diamonds: 0, best: 0, clears: 0, stars: 0, sound: true, volume: 0.65, rewardClaimed: false, runs: [] });
+/** Never read, migrate or reset v1's keys (or the rejected Full Arcade save). */
+export function loadSave(store?: StorageLike): Save {
+  const base = freshSave();
   try {
-    const raw = globalThis.localStorage?.getItem(SAVE_KEY);
-    return raw ? normaliseSave(JSON.parse(raw)) : defaultSave();
-  } catch { return defaultSave(); }
+    const raw = store?.getItem(SAVE_KEY);
+    if (!raw) return base;
+    const d = JSON.parse(raw);
+    if (!d || d.schema !== 1) return base;
+    return {
+      ...base,
+      coins: nat(d.coins, 120), diamonds: nat(d.diamonds), best: nat(d.best), clears: nat(d.clears),
+      stars: Math.min(3, nat(d.stars)), sound: typeof d.sound === 'boolean' ? d.sound : true,
+      volume: typeof d.volume === 'number' && Number.isFinite(d.volume) ? Math.max(0, Math.min(1, d.volume)) : base.volume,
+      rewardClaimed: d.rewardClaimed === true,
+      runs: Array.isArray(d.runs) ? d.runs.slice(0, 20).filter((r: unknown): r is Run => !!r && typeof r === 'object' && typeof (r as Run).won === 'boolean').map((r: Run) => ({ score: nat(r.score), coins: nat(r.coins), won: r.won, at: natDate(r.at) })) : [],
+      // stage/weapon are deliberately NOT restored from JSON. This package is always 1/PISTOL.
+    };
+  } catch { return base; }
 }
-
-export function saveSave(data: SaveData): void {
-  try { globalThis.localStorage?.setItem(SAVE_KEY, JSON.stringify(data)); }
-  catch { /* Private mode or no storage: the in-memory game still works. */ }
+const natDate = (n: unknown) => typeof n === 'number' && Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
+export function storeSave(save: Save, store?: StorageLike): void {
+  try { store?.setItem(SAVE_KEY, JSON.stringify({ ...save, schema: 1, stage: 1, weapon: 'pistol' })); } catch { /* Private/offline browsing must still work. */ }
 }
-
-export function clearSave(): void {
-  try { globalThis.localStorage?.removeItem(SAVE_KEY); } catch { /* unavailable */ }
+export function bankRun(save: Save, run: Run): Save {
+  return { ...save, stage: 1, weapon: 'pistol', coins: save.coins + run.coins, best: Math.max(save.best, run.score), clears: save.clears + Number(run.won), stars: run.won ? 3 : save.stars, runs: [run, ...save.runs].slice(0, 20) };
 }
-
-export type PurchaseResult = 'bought' | 'equipped' | 'insufficient' | 'unknown';
-
-/** Pure wallet transaction; the caller chooses when to persist and play a cue. */
-export function purchase(data: SaveData, id: string): PurchaseResult {
-  const weapon = WEAPONS.find((w) => w.id === id);
-  if (!weapon) return 'unknown';
-  if (data.owned.includes(id)) { data.gun = id; return 'equipped'; }
-  if (data.coins < weapon.price) return 'insufficient';
-  data.coins -= weapon.price;
-  data.owned.push(id);
-  data.gun = id;
-  return 'bought';
-}
+export function browserStorage(): StorageLike | undefined { try { return globalThis.localStorage; } catch { return undefined; } }

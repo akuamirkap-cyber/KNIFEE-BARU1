@@ -1,0 +1,130 @@
+{
+  "name": "Perfect Shot Lite",
+  "sourceCommit": "643f0ce",
+  "scope": {
+    "weapons": [
+      "pistol"
+    ],
+    "levels": [
+      1
+    ]
+  },
+  "files": [
+    {
+      "file": "src/art/pistol.ts",
+      "source": "src/games/gunhit/game/art/guns.ts",
+      "note": "Only native pistol(); exact geometry, gradients and shot motion.",
+      "sourceSha256": "9cd598aad75cc8ddefcde67673bb89edf8b09d3e430b968f4794d25e25f41ec2"
+    },
+    {
+      "file": "src/art/kit.ts",
+      "source": "src/games/gunhit/game/art/kit.ts",
+      "note": "Only Pistol shot/reload state; no cross-game state or external helpers.",
+      "sourceSha256": "9d89f488add239054104a6c167e8455e8c84b5fc3b4aec6585cad8ce34a6b0bc"
+    },
+    {
+      "file": "src/art/motion.ts",
+      "source": "src/games/gunhit/game/art/commonGunMotion.ts",
+      "note": "Pistol preview/shot clock only.",
+      "sourceSha256": "b8428250cc3049144a11f1bbd602d5dc47d45ada5de3c664d1bc6db2bc03761a"
+    },
+    {
+      "file": "src/art/stageBackdrop.ts",
+      "source": "src/games/gunhit/game/stageBackdrop.ts",
+      "note": "Same forest, grass and vignette. Only level-1 palette.",
+      "sourceSha256": "22f8a77680bc7895c624b63641a9a238b7e6c172d9e53c239f5b375b96aad993"
+    },
+    {
+      "file": "src/art/coinArt.ts",
+      "source": "src/games/shared/coinArt.ts",
+      "note": "Original wallet art; no external images.",
+      "sourceSha256": "2154cdbd407607178353dee6eedbb056d03d0976adfead2b333b3b51f694771c"
+    },
+    {
+      "file": "src/art/diamondArt.ts",
+      "source": "src/games/shared/diamondArt.ts",
+      "note": "Original wallet art; no external images.",
+      "sourceSha256": "2ae9b49b7069b368a8f2a840849287df261b57b40aa63a641a017602fa314251"
+    },
+    {
+      "file": "src/ui/CoinSprite.tsx",
+      "source": "src/games/shared/CoinSprite.tsx",
+      "note": "Same animated wallet sprite, v2-only activity context.",
+      "sourceSha256": "8c943df878ee42f87a1e124f82df7075ef463e6fbbebab72e685452f615b75b4"
+    },
+    {
+      "file": "src/ui/DiamondSprite.tsx",
+      "source": "src/games/shared/DiamondSprite.tsx",
+      "note": "Same animated wallet sprite, v2-only activity context.",
+      "sourceSha256": "bc178cefd6b0fb95c378c4b3668299bfc2e0457e75b96935adb72026911ecfb9"
+    },
+    {
+      "file": "src/ui/GameIcons.tsx",
+      "source": "src/games/perfect-shot/ui/GameIcons.tsx",
+      "note": "Original vector UI art.",
+      "sourceSha256": "cbf12c73ac27dcabb13c31113a648607f7a1f17b7e9066d21c89108f274aa042"
+    },
+    {
+      "file": "src/ui/FlatIcons.tsx",
+      "source": "src/games/perfect-shot/ui/FlatIcons.tsx",
+      "note": "Only 14 remaining navigation/HUD glyphs. All monster/boss and unused glyph artwork omitted.",
+      "sourceSha256": "1c46150cfa14032a4edc5711e8cff9fd8e50db97845bfd727d1de4453ddaadb9"
+    },
+    {
+      "file": "src/ui/MenuStageBackdrop.tsx",
+      "source": "src/games/gunhit/components/MenuStageBackdrop.tsx",
+      "note": "Original 30fps menu forest.",
+      "sourceSha256": "12c209c3d3c1e8a4d97806c0f37ac6bf7409860f840a828beecae903c7c400f7"
+    },
+    {
+      "file": "src/ui/Effects.tsx",
+      "source": "src/games/knife-hit/components/Effects.tsx",
+      "note": "Only original menu sunburst, dust and sparkle components; no other effects.",
+      "sourceSha256": "72b159d8ce4a4fde58a514091b221b0db7469847e83f0e99844eaecc47c92b81"
+    },
+    {
+      "file": "src/ui/TargetArt.tsx",
+      "source": "src/games/perfect-shot/play/TargetArt.tsx",
+      "note": "Exactly the original orange branch, with all other target kinds removed.",
+      "sourceSha256": "fc46ca6a572fcbc08517232a4151986738e75b45b68cf3294f73de90191cb320"
+    },
+    {
+      "file": "src/art/orange.ts",
+      "source": "src/games/gunhit/game/faces.ts",
+      "note": "Only original orange drawing, verbatim canvas fallback.",
+      "sourceSha256": "2cf9414969dc751769b65f6ed85d492d22d7a01bfd703302544eb2b630eee558"
+    },
+    {
+      "file": "src/ui/QuestMap.tsx",
+      "source": "src/games/perfect-shot/components/QuestMap.tsx",
+      "note": "Original perspective/pillar/avatar presentation. Only stage1 data; no other target/head/island assets. Water tiles pre-baked from original SVGs.",
+      "sourceSha256": "7a01fa83434e4d5062bfbef6f487cf8a1856ef010ac3d4e4c05a2c4424d5a44e"
+    },
+    {
+      "file": "src/art/round.ts",
+      "source": "src/games/gunhit/game/art/projectiles.ts",
+      "note": "Only round(normal), used for the original Pistol ammo HUD and exposed casings.",
+      "sourceSha256": "7624dddaa5b288dd0b5b75edf087c0fec0cb0a1b4a83261362e0e1588e85ecb8"
+    },
+    {
+      "file": "src/ui/Menu.tsx",
+      "source": "src/games/gunhit/App.tsx",
+      "note": "Original PERFECT SHOT main menu markup and Pistol showcase, with independent Lite state and no other gun/theme art.",
+      "sourceSha256": "f834a1bd034475290848c92d8d64b922fcf1c7bd6c0199abebbf3d6df0176f1c"
+    },
+    {
+      "file": "src/ui/GunPage.tsx",
+      "source": "src/games/gunhit/components/Arsenal.tsx",
+      "note": "Original purple Armory presentation, pruned to one Pistol card and two relevant category tabs.",
+      "sourceSha256": "95f6b17a6b216e44de1094b35fad6e1bc7d064f0ea50f8b61f4c2f2a17b1b613"
+    }
+  ],
+  "pistolFunctionSha256": "ea184c4b21398cbf4ebdfb35ed7a0717393cd413d6a6e6014924948d6d0bd7cf",
+  "assetOrigins": {
+    "src/assets/orange.svg": "src/games/perfect-shot/play/TargetArt.tsx \u00b7 orange branch only",
+    "src/assets/player.svg": "src/games/perfect-shot/rank/Avatar.tsx \u00b7 seed999/me/bgfalse only",
+    "src/assets/water-caustic.png": "src/games/perfect-shot/components/QuestMap.tsx \u00b7 original CAUSTIC SVG pre-baked at240x240",
+    "src/assets/water-waves.png": "src/games/perfect-shot/components/QuestMap.tsx \u00b7 original WAVES SVG pre-baked at220x160"
+  },
+  "levelMapLabelOrigin": "src/games/gunhit/game/stageMap.ts \u00b7 first record only: Gentong"
+}

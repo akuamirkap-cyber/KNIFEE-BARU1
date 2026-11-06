@@ -30,5 +30,5 @@ export function initialAppVersion(): AppVersion {
 /** Label tiap versi, buat tombol pemilih. */
 export const APP_VERSION_LABEL: Record<AppVersion, string> = {
   v1: 'v1 · Gun Hit (asli)',
-  v2: 'v2 · Perfect Shot',
+  v2: 'v2 · Perfect Shot Lite',
 };

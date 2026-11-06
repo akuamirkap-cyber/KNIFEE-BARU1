@@ -1,280 +1,121 @@
-/**
- * PERFECT SHOT v2 — deterministic rules, independent of DOM, canvas, and audio.
- *
- * A run carries its score, combo and three lives across levels. A collision
- * costs a life, not the whole run; clearing a boss restores one life. Cosmetics
- * live in Juice; externally visible effects are queued as typed events, drained
- * once by the host. Nothing in here reads storage or starts a timer.
- */
-import { COLLIDE, CX, CY, END_HOLD, FLIGHT, LIVES, MUZZLE, RADIUS, SCORE, TAU, clamp } from './config';
-import { levelConfig, openingKnife, speedAt, type Level } from './levels';
-import { Juice } from './juice';
-import { weaponById, type Shape, type Weapon } from './weapons';
+import { CX, CY, GUN_Y, TAU } from './config';
+import { makeLevel1 } from './levels';
+import { PISTOL, PISTOL_EFFECT } from './weapons';
 
-export type Status = 'play' | 'win' | 'lose';
-export type Outcome = 'win' | 'lose';
-export interface Shot { t: number; shape: Shape; rgb: string; spin: number }
-export interface Stuck { angle: number; shape: Shape; rgb: string; born: number }
-export interface Token { angle: number; collected: boolean }
-export interface Reward { score: number; coins: number; perfect: boolean; stars: number; healed: boolean }
+export type Phase = 'intro' | 'play' | 'clear' | 'over';
+export type GameEvent = 'shot' | 'hit' | 'coin' | 'clear' | 'fail';
+export interface Projectile { y: number }
+export interface Mark { angle: number; at: number }
+export interface Coin { angle: number; taken: boolean }
+export interface Particle { x: number; y: number; vx: number; vy: number; life: number; max: number; size: number; color: string }
+export const angleDifference = (a: number, b: number) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
 
-export type GameEvent =
-  | { type: 'fire'; weapon: Weapon }
-  | { type: 'land'; points: number; coins: number; combo: number; token: boolean }
-  | { type: 'miss'; lives: number }
-  | { type: 'clear'; level: number; reward: Reward }
-  | { type: 'gameover' }
-  | { type: 'level'; level: number };
+/** Pistol + v1 classic level-1 rules only. No campaign generator or other gun dispatch. */
+export class PistolGame {
+  readonly level;
+  phase: Phase = 'intro';
+  elapsed = 0;
+  phaseTime = 0;
+  rotation = 0;
+  ammo = 5;
+  score = 0;
+  coins = 0;
+  hits = 0;
+  combo = 0;
+  lastHit = -99;
+  sinceShot = 99;
+  cooldown = 0;
+  recoil = 0;
+  bump = 0;
+  shake = 0;
+  projectiles: Projectile[] = [];
+  marks: Mark[] = [];
+  rimCoins: Coin[] = [];
+  particles: Particle[] = [];
+  events: GameEvent[] = [];
+  private readonly random: () => number;
 
-export interface Scene {
-  status: Status;
-  level: Level;
-  rot: number;
-  time: number;
-  /** Brief level introduction; no input or spin until it is finished. */
-  intro: number;
-  hits: number;
-  stuck: Stuck[];
-  shots: Shot[];
-  tokens: Token[];
-  weapon: Weapon;
-  cooldown: number;
-  flash: number;
-  bump: number;
-  shake: number;
-  recoil: number;
-  /** Brief recovery after losing a life; prevents another accidental shot. */
-  hurt: number;
-  endT: number;
-  outcome: Outcome | null;
-  juice: Juice;
-  lives: number;
-  score: number;
-  runCoins: number;
-  combo: number;
-  maxCombo: number;
-  totalHits: number;
-  clears: number;
-  misses: number;
-  reward: Reward | null;
-}
-
-export interface GameOptions { level?: number; intro?: boolean }
-
-/** Signed angular difference, wrapping around ±π. */
-export function angleDelta(a: number, b: number): number {
-  let d = (a - b) % TAU;
-  if (d > Math.PI) d -= TAU;
-  if (d <= -Math.PI) d += TAU;
-  return d;
-}
-
-export function multiplier(combo: number): number {
-  return Math.min(SCORE.comboMax, 1 + Math.max(0, combo - 1) * SCORE.comboStep);
-}
-
-function freshScene(weapon: Weapon, options: GameOptions = {}): Scene {
-  const level = levelConfig(options.level ?? 1);
-  const stuck: Stuck[] = Array.from({ length: level.obstacles }, (_, i) => ({
-    ...openingKnife(level.n, i), rgb: '211,221,232', born: -5,
-  }));
-  // Tokens only spawn in clear spots, never hidden behind an opening blade.
-  const tokens: Token[] = [];
-  for (let i = 0; i < 24 && tokens.length < 3; i++) {
-    const angle = (level.n * 0.93 + i * 2.399963) % TAU;
-    if (stuck.every((k) => Math.abs(angleDelta(k.angle, angle)) > 0.36)
-      && tokens.every((c) => Math.abs(angleDelta(c.angle, angle)) > 0.65)) {
-      tokens.push({ angle, collected: false });
-    }
+  constructor(random = Math.random) {
+    this.random = random;
+    this.level = makeLevel1(random);
+    for (let i = 0; i < this.level.coins; i++) this.rimCoins.push({ angle: (i + 0.32 + random() * 0.35) / Math.max(1, this.level.coins) * TAU, taken: false });
   }
-  return {
-    status: 'play', level, rot: 0, time: 0, intro: options.intro === false ? 0 : 1.15,
-    hits: 0, stuck, shots: [], tokens, weapon, cooldown: 0,
-    flash: 0, bump: 0, shake: 0, recoil: 0, hurt: 0, endT: 0, outcome: null,
-    juice: new Juice(), lives: LIVES, score: 0, runCoins: 0, combo: 0,
-    maxCombo: 0, totalHits: 0, clears: 0, misses: 0, reward: null,
-  };
-}
-
-export class Game {
-  /** Its identity is stable across restart/nextLevel, so a host can retain it. */
-  readonly scene: Scene;
-  private events: GameEvent[] = [];
-
-  constructor(weaponId = 'knife', options: GameOptions = {}) {
-    this.scene = freshScene(weaponById(weaponId), options);
-  }
-
-  setWeapon(id: string): void {
-    this.scene.weapon = weaponById(id);
-    // Changing gun must not bypass an existing cooldown. A projectile already
-    // in flight keeps its own shape and colour, regardless of this selection.
-  }
-
-  spinAt(time = this.scene.time): number { return speedAt(this.scene.level, time); }
-  get rimPoint(): { x: number; y: number } { return { x: CX, y: CY + RADIUS }; }
-  get muzzle(): { x: number; y: number } { return { x: CX, y: MUZZLE + this.scene.recoil * 14 }; }
-  get flight(): number { return FLIGHT; }
-
   fire(): boolean {
-    const s = this.scene;
-    if (s.status !== 'play' || s.intro > 0 || s.hurt > 0 || s.cooldown > 0 || s.shots.length) return false;
-    s.cooldown = s.weapon.cooldown;
-    s.recoil = 1;
-    s.shots.push({ t: 0, shape: s.weapon.shape, rgb: s.weapon.rgb, spin: 0 });
-    this.emit({ type: 'fire', weapon: s.weapon });
+    if (this.phase !== 'play' || this.cooldown > 0 || this.ammo <= 0) return false;
+    this.ammo--;
+    this.cooldown = PISTOL_EFFECT.cooldown;
+    this.sinceShot = 0;
+    this.recoil = 1;
+    this.shake = PISTOL.shake;
+    this.projectiles.push({ y: GUN_Y - 5 });
+    this.events.push('shot');
+    this.burst(CX + 20, GUN_Y + 48, 2, ['#e0ad40'], 90);
     return true;
   }
-
-  update(dt: number): void {
-    // Hidden tabs, invalid deltas, and clock changes must not teleport a shot.
-    const step = Number.isFinite(dt) && dt > 0 ? Math.min(dt, 0.1) : 0;
-    if (!step) return;
-    const s = this.scene;
-    s.juice.update(step);
-    s.flash = Math.max(0, s.flash - step * 4.2);
-    s.bump = Math.max(0, s.bump - step * 4.5);
-    s.shake = Math.max(0, s.shake - step * 38);
-    s.recoil = Math.max(0, s.recoil - step * 5.5);
-    s.cooldown = Math.max(0, s.cooldown - step);
-    s.hurt = Math.max(0, s.hurt - step);
-
-    if (s.status !== 'play') {
-      s.endT += step;
-      return;
-    }
-    if (s.intro > 0) {
-      s.intro = Math.max(0, s.intro - step);
-      return;
-    }
-    s.time += step;
-    s.rot = (s.rot + this.spinAt(s.time) * step) % TAU;
-    // At most one shot, because every cooldown exceeds the flight time.
-    for (let i = s.shots.length - 1; i >= 0; i--) {
-      const shot = s.shots[i];
-      shot.t += step / FLIGHT;
-      shot.spin += step * 12;
-      if (shot.t >= 1) {
-        s.shots.splice(i, 1);
-        this.land(shot);
+  update(delta: number): void {
+    if (!Number.isFinite(delta) || delta <= 0) return;
+    // Fixed microsteps also test the protruding rounds; fast bullets cannot tunnel through them.
+    const dt = Math.min(delta, 0.05);
+    const n = Math.ceil(dt / (1 / 240));
+    for (let i = 0; i < n; i++) this.step(dt / n);
+  }
+  takeEvents(): GameEvent[] { const out = this.events; this.events = []; return out; }
+  private step(dt: number): void {
+    this.elapsed += dt;
+    this.phaseTime += dt;
+    this.sinceShot += dt;
+    this.cooldown = Math.max(0, this.cooldown - dt);
+    this.recoil *= Math.exp(-15 * dt);
+    this.bump *= Math.exp(-15 * dt);
+    this.shake *= Math.exp(-20 * dt);
+    for (const p of this.particles) { p.life -= dt; p.vy += 900 * dt; p.x += p.vx * dt; p.y += p.vy * dt; }
+    this.particles = this.particles.filter(p => p.life > 0);
+    if (this.phase === 'intro') { if (this.phaseTime >= 0.95) { this.phase = 'play'; this.phaseTime = 0; } return; }
+    if (this.phase !== 'play') return;
+    this.rotation += this.level.base * this.level.dir * dt;
+    for (const p of [...this.projectiles]) {
+      p.y -= PISTOL_EFFECT.speed * dt;
+      const reach = p.y - CY;
+      const local = Math.PI / 2 - this.rotation;
+      for (const c of this.rimCoins) {
+        if (c.taken) continue;
+        const a = c.angle + this.rotation;
+        const r = this.level.radius + 18;
+        if (Math.hypot(CX - (CX + Math.cos(a) * r), p.y - (CY + Math.sin(a) * r)) < PISTOL.coinRadius + 8) {
+          c.taken = true; this.coins++; this.events.push('coin'); this.burst(CX, p.y, 8, ['#ffd23f', '#fff3b0'], 140);
+        }
+      }
+      // Same tangential clearance and exposed half-length as v1's classic collision.
+      const arc = (PISTOL.half * 2) / Math.max(50, this.level.radius);
+      const protrusion = (PISTOL.stick + 12) * 0.5;
+      if (reach <= this.level.radius + protrusion && reach >= this.level.radius - 8 && this.marks.some(m => angleDifference(local, m.angle) < arc)) {
+        this.phase = 'over'; this.phaseTime = 0; this.events.push('fail');
+        this.shake = 12; this.combo = 0; this.burst(CX, p.y, 22, ['#ffffff', '#ffda60', '#e26537'], 260);
+        this.projectiles = [];
+        return;
+      }
+      if (reach <= this.level.radius) {
+        this.projectiles.splice(this.projectiles.indexOf(p), 1);
+        this.marks.push({ angle: local, at: this.elapsed });
+        this.combo = this.elapsed - this.lastHit < 0.5 ? this.combo + 1 : 1;
+        this.lastHit = this.elapsed;
+        this.score += PISTOL.points * (this.combo >= 3 ? 2 : 1);
+        this.hits++; this.bump = 1; this.shake = 6;
+        this.events.push('hit');
+        this.burst(CX, CY + this.level.radius, 14, ['#fff4dc', '#fb923c', '#ffd23f'], 180);
+        if (this.ammo === 0 && this.projectiles.length === 0) {
+          this.phase = 'clear'; this.phaseTime = 0; this.events.push('clear');
+          this.burst(CX, CY, 46, ['#fff4dc', '#fb923c', '#ffd23f'], 330);
+          // Intentionally no next-level/unlock/auto-advance path. Replay makes another level 1.
+        }
       }
     }
   }
-
-  private land(shot: Shot): void {
-    const s = this.scene;
-    if (s.status !== 'play') return;
-    const angle = Math.PI / 2 - s.rot;
-    const hit = s.stuck.some((k) => Math.abs(angleDelta(k.angle, angle)) < COLLIDE);
-    const rim = this.rimPoint;
-    if (hit) {
-      s.lives = Math.max(0, s.lives - 1);
-      s.misses += 1;
-      s.combo = 0;
-      s.hurt = 0.72;
-      s.shake = 15;
-      s.flash = 0.55;
-      s.juice.burst(rim.x, rim.y, 24, '255,116,123', { speed: 240, size: 4 });
-      s.juice.text(CX, CY + RADIUS + 75, '−1 NYAWA', '#ff8f9c', 23);
-      s.juice.kickDamage();
-      this.emit({ type: 'miss', lives: s.lives });
-      if (!s.lives) {
-        s.status = 'lose'; s.endT = 0; s.outcome = 'lose';
-        this.emit({ type: 'gameover' });
-      }
-      return;
+  private burst(x: number, y: number, count: number, colors: string[], speed: number): void {
+    for (let i = 0; i < count; i++) {
+      const a = this.random() * TAU, v = speed * (0.25 + this.random() * 0.75), life = 0.3 + this.random() * 0.4;
+      this.particles.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 100, life, max: life, size: 1.5 + this.random() * 3, color: colors[i % colors.length] });
     }
-
-    s.stuck.push({ angle, shape: shot.shape, rgb: shot.rgb, born: s.time });
-    s.hits += 1;
-    s.totalHits += 1;
-    s.combo += 1;
-    s.maxCombo = Math.max(s.maxCombo, s.combo);
-    let token = false;
-    for (const c of s.tokens) {
-      if (!c.collected && Math.abs(angleDelta(c.angle, angle)) < 0.20) {
-        c.collected = true;
-        token = true;
-      }
-    }
-    const points = Math.round(SCORE.hit * s.level.n * multiplier(s.combo)) + (token ? 250 : 0);
-    const coins = 1 + (token ? SCORE.token : 0);
-    s.score += points;
-    s.runCoins += coins;
-    s.flash = 0.7; s.bump = 1; s.shake = Math.max(s.shake, 4);
-    s.juice.burst(rim.x, rim.y, token ? 22 : 12, token ? '255,211,117' : shot.rgb, {
-      speed: 150, spread: Math.PI * 1.3, dir: -Math.PI / 2, size: 3,
-    });
-    s.juice.text(CX + 64, CY + RADIUS + 15, `+${points}`, token ? '#ffd77a' : '#b3ffdd', 22);
-    if (token) s.juice.text(CX - 64, CY + RADIUS + 48, `+${SCORE.token} KOIN`, '#ffd77a', 15);
-    if (s.combo % 5 === 0) s.juice.text(CX, CY + 24, `${s.combo} COMBO!`, '#79ffe0', 31);
-    this.emit({ type: 'land', points, coins, combo: s.combo, token });
-
-    if (s.hits >= s.level.aim) this.clearLevel();
+    if (this.particles.length > 140) this.particles.splice(0, this.particles.length - 140);
   }
-
-  private clearLevel(): void {
-    const s = this.scene;
-    const perfect = s.misses === 0;
-    const healed = s.level.boss && s.lives < LIVES;
-    if (healed) s.lives += 1;
-    const reward: Reward = {
-      score: (SCORE.clear + (perfect ? SCORE.perfect : 0) + (s.level.boss ? 500 : 0)) * s.level.n,
-      coins: SCORE.coinsPerLevel + (perfect ? SCORE.coinsPerfect : 0) + (s.level.boss ? 30 : 0),
-      perfect, stars: perfect ? 3 : s.misses === 1 ? 2 : 1, healed,
-    };
-    s.score += reward.score;
-    s.runCoins += reward.coins;
-    s.clears += 1;
-    s.reward = reward;
-    s.status = 'win'; s.endT = 0; s.outcome = 'win'; s.shake = 18; s.flash = 1;
-    s.juice.kickFlash(0.42, '158,255,217');
-    s.juice.burst(CX, CY, 88, s.level.boss ? '202,151,255' : '255,198,113', { speed: 360, size: 6 });
-    s.juice.burst(CX, CY, 30, '125,255,209', { speed: 270, g: 130, shard: false, size: 3 });
-    this.emit({ type: 'clear', level: s.level.n, reward });
-  }
-
-  get ended(): boolean { return this.scene.status !== 'play' && this.scene.endT >= END_HOLD; }
-
-  clearOutcome(): Outcome | null {
-    const out = this.scene.outcome;
-    this.scene.outcome = null;
-    return out;
-  }
-
-  /** Only a completed clear can advance. Score, lives and combo carry over. */
-  nextLevel(): boolean {
-    const s = this.scene;
-    if (s.status !== 'win' || !this.ended) return false;
-    const next = freshScene(s.weapon, { level: s.level.n + 1 });
-    for (const key of ['lives', 'score', 'runCoins', 'combo', 'maxCombo', 'totalHits', 'clears'] as const) next[key] = s[key];
-    Object.assign(s, next);
-    this.emit({ type: 'level', level: s.level.n });
-    return true;
-  }
-
-  restart(weaponId?: string, options: GameOptions = {}): void {
-    const weapon = weaponId ? weaponById(weaponId) : this.scene.weapon;
-    this.events.length = 0;
-    Object.assign(this.scene, freshScene(weapon, options));
-    this.emit({ type: 'level', level: this.scene.level.n });
-  }
-
-  /** Consumers drain once per frame; headless users may safely ignore effects. */
-  takeEvents(): GameEvent[] {
-    const out = this.events;
-    this.events = [];
-    return out;
-  }
-
-  private emit(event: GameEvent): void {
-    // A host that never drains cannot build an unbounded queue in an endless run.
-    if (this.events.length >= 64) this.events.shift();
-    this.events.push(event);
-  }
-}
-
-/** Normalised cooldown, exposed for hosts that draw their own HUD. */
-export function readiness(scene: Scene): number {
-  return clamp(1 - scene.cooldown / scene.weapon.cooldown, 0, 1);
 }
